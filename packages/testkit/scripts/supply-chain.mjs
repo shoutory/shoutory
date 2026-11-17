@@ -80,8 +80,10 @@ export function exclusionProblems(workspaceText, today) {
 export function cardProblems(manifests, cardsText) {
   const cards = new Set([...cardsText.matchAll(/^## (\S+)/gm)].map((match) => match[1]));
   return manifests.flatMap(({ file, dependencies = {} }) =>
-    Object.keys(dependencies)
-      .filter((name) => !cards.has(name))
+    // A workspace package is our own code, not a third-party dependency, so it has no card.
+    Object.entries(dependencies)
+      .filter(([name, range]) => !cards.has(name) && !String(range).startsWith("workspace:"))
+      .map(([name]) => name)
       .map((name) => `${file}: runtime dependency ${name} has no card in docs/dependencies.md`),
   );
 }

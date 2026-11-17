@@ -9,7 +9,7 @@
     "node": "26.13.0"
   },
   "scripts": {
-    "typecheck": "tsc -b apps/api packages/core packages/db packages/testkit",
+    "typecheck": "tsc -b",
     "lint": "biome check .",
     "test": "vitest run --passWithNoTests && node --test \"packages/testkit/test/*/*.test.mjs\"",
     "test:unit": "vitest run --passWithNoTests --project unit --project unit-chatham",

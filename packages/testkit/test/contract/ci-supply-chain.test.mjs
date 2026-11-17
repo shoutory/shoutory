@@ -71,6 +71,12 @@ const CASES = [
   ["an integrity-only resolution passes", () => resolution({ integrity: "sha512-abc" }), 0],
   ["a runtime dependency without a card fails", () => card("# Dependencies\n"), 1],
   ["a runtime dependency with a card passes", () => card("## hono 1.0.0\n"), 0],
+  [
+    "a workspace dependency needs no card",
+    () =>
+      cardProblems([{ file: "apps/api/package.json", dependencies: { "@shoutory/db": "workspace:*" } }], ""),
+    0,
+  ],
 ];
 
 for (const [title, check, expected] of CASES) {

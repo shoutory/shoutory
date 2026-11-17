@@ -84,6 +84,22 @@ test("placeholder steps run a named package script and image-smoke and upgrade s
   assert.notDeepEqual(find("upgrade").globs, find("image-smoke").globs);
 });
 
+test("a placeholder step scans only the files that make it live, so earlier files never break it", () => {
+  const globs = (name) => STEPS.find((step) => step.name === name).globs;
+  assert.deepEqual(globs("image-smoke"), ["docker/Dockerfile*"]);
+  assert.deepEqual(globs("build"), ["apps/api/src/main.ts"]);
+});
+
+test("the integration job runs the role script twice, probes the database on the loopback address and keeps the admin URL out of the job env", () => {
+  const job = jobs.integration;
+  const roleSteps = job.steps.filter((step) => (step.run ?? "").includes("docker/postgres/init.sql"));
+  assert.ok(roleSteps.length >= 2, "the role script must run twice to prove it is idempotent");
+  assert.match(job.services.postgres.options, /pg_isready -h 127\.0\.0\.1/);
+  assert.equal(job.env.SHOUTORY_TEST_ADMIN_URL, undefined);
+  const verify = job.steps.find((step) => checkCommand.test(step.run ?? ""));
+  assert.ok(verify.env.SHOUTORY_TEST_ADMIN_URL, "only the step that runs the tests holds the admin URL");
+});
+
 test("the package manager is set up before node and no job restores a package cache", () => {
   for (const [id, job] of Object.entries(jobs)) {
     const uses = job.steps.map((step) => step.uses ?? "");

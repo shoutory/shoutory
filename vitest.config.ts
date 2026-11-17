@@ -14,6 +14,9 @@ export default defineConfig({
       {
         test: {
           name: "integration",
+          // The migrated template database is built once; hooks that clone it get a longer limit than a test.
+          globalSetup: ["packages/db/test/global-setup.ts"],
+          hookTimeout: 30_000,
           include: [
             "{apps,packages}/*/test/integration/**/*.test.ts",
             "packages/providers/*/test/integration/**/*.test.ts",

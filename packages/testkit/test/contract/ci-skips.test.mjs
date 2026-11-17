@@ -79,6 +79,22 @@ for (const [title, variables] of NO_DOCKER) {
   });
 }
 
+test("a step that needs environment variables fails by name before running when one is missing", () => {
+  const name = "SHOUTORY_STEP_ENV_TEST";
+  const saved = process.env[name];
+  delete process.env[name];
+  try {
+    const marker = { ...testFile(""), ran: "" };
+    const write = node("-e", 'require("fs").writeFileSync("ran", "yes")');
+    const { status, lines, after } = inFolder(marker, step({ env: [name], command: write }));
+    assert.equal(status, 1);
+    assert.ok(lines.join("\n").includes(`${name} is not set`));
+    assert.equal(after.ran, "", "the command must not start without its environment");
+  } finally {
+    if (saved !== undefined) process.env[name] = saved;
+  }
+});
+
 test("a placeholder step reports it to the job output and prints its reason in words", () => {
   const options = (cwd) => ({
     placeholders: ["alpha"],

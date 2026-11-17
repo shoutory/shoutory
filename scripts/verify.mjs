@@ -95,14 +95,8 @@ export const STEPS = [
   {
     name: "typecheck",
     globs: sources,
-    command: node(
-      binOf("typescript", "tsc"),
-      "-b",
-      "apps/api",
-      "packages/core",
-      "packages/db",
-      "packages/testkit",
-    ),
+    // The root tsconfig.json lists the projects that have sources, so an empty package never fails the build.
+    command: node(binOf("typescript", "tsc"), "-b"),
   },
   {
     name: "lint",
@@ -122,6 +116,11 @@ export const STEPS = [
     globs: [
       "{apps,packages}/*/test/integration/**/*.test.ts",
       "packages/providers/*/test/integration/**/*.test.ts",
+    ],
+    // The names read by readTestEnv in packages/db/src/testing/template.ts.
+    env: [
+      "SHOUTORY_TEST_ADMIN_URL",
+      ...["OWNER", "APP", "WORKER", "AUTH", "READONLY"].map((role) => `SHOUTORY_DATABASE_URL_${role}`),
     ],
     ...vitest("integration"),
   },
@@ -150,9 +149,10 @@ export const STEPS = [
     globs: ["scripts/check-no-planning-paths.mjs"],
     command: node("scripts/check-no-planning-paths.mjs"),
   },
-  { name: "build", globs: ["{apps,packages}/*/src/**/*.{ts,tsx}"], command: pnpm("run", "build") },
+  // The entry files that make a placeholder step live; other files that arrive earlier must not break it.
+  { name: "build", globs: ["apps/api/src/main.ts"], command: pnpm("run", "build") },
   { name: "e2e", globs: ["e2e/**/*.spec.ts"], command: pnpm("run", "e2e") },
-  { name: "image-smoke", globs: ["docker/**"], command: pnpm("run", "image-smoke") },
+  { name: "image-smoke", globs: ["docker/Dockerfile*"], command: pnpm("run", "image-smoke") },
   { name: "upgrade", globs: ["e2e/upgrade/**"], command: pnpm("run", "upgrade") },
   {
     name: "semgrep",
@@ -250,8 +250,17 @@ function skippedTests(step, stdout, cwd) {
   return report.numPendingTests + report.numTodoTests;
 }
 
+// Vitest cannot print an error thrown by the TypeScript global setup (a vite module-runner crash hides it), so a
+// missing variable is named here instead of surfacing as "No test files found".
+function missingEnv(step) {
+  const name = (step.env ?? []).find((variable) => !process.env[variable]);
+  return name ? `${name} is not set; this step needs the local database of the README` : null;
+}
+
 function execute(step, files, cwd) {
   if (step.docker && !dockerRuns()) return "Docker is not running; start it, this step runs a container";
+  const unset = missingEnv(step);
+  if (unset) return unset;
   if (step.skips?.json) rmSync(join(cwd, step.skips.json), { force: true }); // a stale report proves nothing
   const [bin, ...args] = step.command;
   const input = step.input?.();

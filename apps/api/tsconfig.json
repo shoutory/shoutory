@@ -1,5 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "outDir": "dist" },
   "include": ["src/**/*", "test/**/*.ts"],
-  "references": [{ "path": "../../packages/core" }, { "path": "../../packages/db" }]
+  "references": [{ "path": "../../packages/db" }]
 }
