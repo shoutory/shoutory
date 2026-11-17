@@ -69,3 +69,7 @@ A test run without a reachable database fails; it never skips. Remove the contai
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Report vulnerabilities as described in
 [SECURITY.md](SECURITY.md), never in a public issue.
+
+## License
+
+Copyright (C) 2026 Mohamed Shaban. Licensed under the GNU Affero General Public License v3.0; see [LICENSE](LICENSE).

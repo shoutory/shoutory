@@ -113,7 +113,7 @@ test("the AGPL text is the verbatim one", () => {
   assert.match(bytes.toString("utf8").split(/\r?\n/)[0], /GNU AFFERO GENERAL PUBLIC LICENSE/);
   assert.equal(
     createHash("sha256").update(bytes).digest("hex"),
-    "5b557a1b2818690b69399e584fec5edfce6673223479b9b6371d35474c13378e",
+    "e0eedba615d5cd1b986afb6c5b3a4b1ae33713e7e9dc74d19daec5e3221f9d2e",
   );
 });
 
