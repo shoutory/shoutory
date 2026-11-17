@@ -1,0 +1,31 @@
+name: label-sync
+
+# Makes the repository's labels equal .github/labels.yml, on a push to main that touches the file or on a
+# manual run. Any other event only reports what would change.
+on:
+  push:
+    branches: [main]
+    paths: [.github/labels.yml]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: label-sync-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: sync
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read # check out the label file
+      issues: write # create, rename and delete labels
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: crazy-max/ghaction-github-labeler@548a7c3603594ec17c819e1239f281a3b801ab4d # v6.0.0
+        with:
+          yaml-file: .github/labels.yml
+          dry-run: ${{ github.event_name != 'push' && github.event_name != 'workflow_dispatch' }}

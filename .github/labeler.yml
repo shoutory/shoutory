@@ -1,0 +1,28 @@
+# Area labels for pull requests, from the changed paths. A pull request may match several areas.
+"area:web":
+  - changed-files:
+      - any-glob-to-any-file: ["apps/web/**"]
+"area:api":
+  - changed-files:
+      - any-glob-to-any-file: ["apps/api/**", "packages/core/**"]
+"area:worker":
+  - changed-files:
+      - any-glob-to-any-file: ["apps/api/src/jobs/**"]
+"area:mcp":
+  - changed-files:
+      - any-glob-to-any-file: ["apps/api/src/mcp/**"]
+"area:db":
+  - changed-files:
+      - any-glob-to-any-file: ["packages/db/**"]
+"area:sdk":
+  - changed-files:
+      - any-glob-to-any-file: ["packages/sdk-node/**"]
+"area:cli":
+  - changed-files:
+      - any-glob-to-any-file: ["packages/cli/**", "apps/api/src/cli/**"]
+"area:docs":
+  - changed-files:
+      - any-glob-to-any-file: ["docs/**", "**/*.md"]
+"area:ci":
+  - changed-files:
+      - any-glob-to-any-file: [".github/**", ".semgrep/**", "packages/testkit/scripts/**"]

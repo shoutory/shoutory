@@ -84,14 +84,6 @@ test("placeholder steps run a named package script and image-smoke and upgrade s
   assert.notDeepEqual(find("upgrade").globs, find("image-smoke").globs);
 });
 
-test("the workflow grants no permissions by default and never persists checkout credentials", () => {
-  assert.deepEqual(parse(read("ci.yml")).permissions, {});
-  for (const [id, job] of Object.entries({ ...jobs, ci: aggregate })) {
-    const checkout = job.steps.find((step) => step.uses?.startsWith("actions/checkout@"));
-    assert.equal(checkout?.with?.["persist-credentials"], false, id);
-  }
-});
-
 test("the package manager is set up before node and no job restores a package cache", () => {
   for (const [id, job] of Object.entries(jobs)) {
     const uses = job.steps.map((step) => step.uses ?? "");

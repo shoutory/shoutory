@@ -5,7 +5,9 @@ name: ci
 # placeholder that .github/ci-placeholders.json does not list.
 on:
   pull_request:
-  workflow_call:
+  push:
+    branches: [main]
+    tags: ["v*"]
 
 permissions: {}
 

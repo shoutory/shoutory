@@ -1,0 +1,57 @@
+name: Bug report
+description: Something does not work as documented.
+labels: ["type:bug"]
+body:
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps that start from a clean state.
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The version shown in the admin screen, or the image tag.
+    validations: { required: true }
+  - type: dropdown
+    id: channel
+    attributes:
+      label: Release channel
+      options: [stable, beta, nightly]
+    validations: { required: true }
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment
+      options: [Cloud, Self-host]
+    validations: { required: true }
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider
+      description: Pick the network involved, if any. A maintainer adds the provider label.
+      options: [Not provider related, Bluesky, Mastodon, Telegram, Discord]
+    validations: { required: true }
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      render: shell
+  - type: checkboxes
+    id: secrets
+    attributes:
+      label: Before you submit
+      options:
+        - label: I removed secrets and tokens from everything I pasted.
+          required: true

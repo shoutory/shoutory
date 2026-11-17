@@ -1,0 +1,14 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["helpers:pinGitHubActionDigests", "schedule:weekly"],
+  "minimumReleaseAge": "14 days",
+  "labels": ["dependencies"],
+  "vulnerabilityAlerts": { "minimumReleaseAge": "14 days" },
+  "packageRules": [
+    {
+      "description": "One weekly pull request for the development tools",
+      "matchDepTypes": ["devDependencies"],
+      "groupName": "development tools"
+    }
+  ]
+}

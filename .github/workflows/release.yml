@@ -1,0 +1,31 @@
+name: release
+
+# Opens and updates the release pull request from the conventional commits on main; merging it creates the
+# tag and the release notes. A pull request or tag made with the workflow token starts no workflow, so the
+# release pull request has no checks: a maintainer merges it with the ruleset bypass, or closes and reopens
+# it to start them.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: release-please
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write # create the tag and the release
+      pull-requests: write # open and update the release pull request
+      issues: write # move the release labels
+    steps:
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

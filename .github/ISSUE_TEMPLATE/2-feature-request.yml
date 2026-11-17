@@ -1,0 +1,25 @@
+name: Feature request
+description: Suggest a capability or an improvement.
+labels: ["type:feature"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what stops you?
+    validations: { required: true }
+  - type: dropdown
+    id: persona
+    attributes:
+      label: Who has this problem
+      options: [Agency, Team, Creator, Developer]
+    validations: { required: true }
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour
+    validations: { required: true }
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or idea
+    url: https://github.com/shoutory/shoutory/discussions
+    about: Ask a usage question or talk about an idea in Discussions.
+  - name: Report a vulnerability
+    url: https://github.com/shoutory/shoutory/security/advisories/new
+    about: Send security reports privately. Do not open a public issue.
