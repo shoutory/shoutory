@@ -39,3 +39,13 @@ Each card records: the package and its exact pin, what it is used for, its licen
 - Licence: MIT. Published 2026-08-17, more than 14 days before adoption. Types only, no runtime code.
 - Advisories: none reported by `pnpm audit --audit-level=high` at adoption.
 - Rejected: hand-written declarations (they drift from the library).
+
+## zod 4.6.7
+
+- Used for: parsing the tenant context in `withTenant` at the boundary (`packages/db`); the same library validates every
+  other boundary of the project.
+- Licence: MIT. Published 2026-10-12 (registry `time` field), more than 14 days before adoption. It has no runtime
+  dependencies.
+- Advisories: none reported by `pnpm audit --audit-level=high` at adoption (to be re-read at each upgrade).
+- Rejected: Valibot (one schema library across the project); hand-written validation (parsers are infrastructure we do not
+  reinvent).

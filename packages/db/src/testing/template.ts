@@ -89,6 +89,23 @@ export function emptyDatabase(env: TestEnv): Promise<TestDatabase> {
 async function open(env: TestEnv, template?: string): Promise<TestDatabase> {
   const name = await createDatabase(env, template);
   const pools: Pool[] = [];
+  // pool.end() resolves before each socket has closed; dropping the database with FORCE in that gap kills a
+  // connection that is still shutting down and the client reports it as an uncaught error.
+  const closed: Promise<void>[] = [];
+  const trackClose = (pool: Pool): void => {
+    pool.on("connect", (client) => {
+      closed.push(
+        new Promise<void>((resolve) => {
+          const onRemove = (removed: unknown): void => {
+            if (removed !== client) return;
+            pool.off("remove", onRemove);
+            resolve();
+          };
+          pool.on("remove", onRemove);
+        }),
+      );
+    });
+  };
   const url = (role: DbRole): string => withDatabase(env.roleUrls[role], name);
   return {
     name,
@@ -99,11 +116,13 @@ async function open(env: TestEnv, template?: string): Promise<TestDatabase> {
         connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
         max: 4,
       });
+      trackClose(pool);
       pools.push(pool);
       return pool;
     },
     async drop() {
       await Promise.all(pools.map((pool) => pool.end()));
+      await Promise.all(closed);
       await dropDatabase(env, name);
     },
   };

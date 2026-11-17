@@ -18,7 +18,7 @@ describe("start-up migration check", () => {
     blank = await emptyDatabase(env);
     dir = await mkdtemp(join(tmpdir(), "startup-"));
     for (const { name } of await loadMigrations()) await writeFile(join(dir, name), "SELECT 1;");
-    await writeFile(join(dir, "0003_not_applied_yet.sql"), "SELECT 1;");
+    await writeFile(join(dir, "0004_not_applied_yet.sql"), "SELECT 1;");
   });
   afterAll(async () => {
     await migrated.drop();
@@ -33,7 +33,7 @@ describe("start-up migration check", () => {
   it("refuses to start when a required migration is missing", async () => {
     const check = assertMigrationsApplied(migrated.pool("app"), dir);
     await expect(check).rejects.toThrow(MissingMigrationError);
-    await expect(check).rejects.toThrow("0003_not_applied_yet.sql");
+    await expect(check).rejects.toThrow("0004_not_applied_yet.sql");
   });
 
   it("refuses to start on a migration folder with a gap, by the runner's named error", async () => {
