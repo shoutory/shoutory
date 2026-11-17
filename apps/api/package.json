@@ -5,6 +5,15 @@
   "type": "module",
   "license": "AGPL-3.0-only",
   "dependencies": {
-    "@shoutory/db": "workspace:*"
+    "@opentelemetry/api": "1.10.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.300.0",
+    "@opentelemetry/instrumentation-http": "0.300.0",
+    "@opentelemetry/instrumentation-pg": "0.77.0",
+    "@opentelemetry/instrumentation-undici": "0.34.0",
+    "@opentelemetry/sdk-node": "0.300.0",
+    "@opentelemetry/sdk-trace": "3.0.0",
+    "@shoutory/core": "workspace:*",
+    "@shoutory/db": "workspace:*",
+    "pino": "10.4.0"
   }
 }

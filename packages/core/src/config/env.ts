@@ -68,6 +68,9 @@ const schema = z.object({
   ...rolePairs("SHOUTORY_DATABASE_URL_", databaseUrl),
 });
 
+/** The names of the secret variables, kept here so the logger's registered values come from the one list. */
+export const SECRET_VARIABLES: readonly string[] = Object.keys(schema.shape);
+
 export interface Config {
   keys: KeyProvider;
   hmacPepper: SealedSecret;

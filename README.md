@@ -92,6 +92,12 @@ export SHOUTORY_HMAC_PEPPER=example-pepper-do-not-use-in-production-0001
 export SHOUTORY_SESSION_SECRET=example-session-secret-do-not-use-in-production-0001
 ```
 
+### Logs and telemetry
+
+Logs are JSON lines on standard output. Secrets, tokens, cookies and credentials in URLs are removed before a line is
+written. OpenTelemetry tracing is off. It starts only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set to an `http` or `https`
+collector address; query strings and userinfo are removed from URL attributes before a span is exported.
+
 ## Layout
 
 - `apps/api`: the HTTP API and background workers

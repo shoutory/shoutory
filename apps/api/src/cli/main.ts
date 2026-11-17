@@ -1,0 +1,49 @@
+import { SECRET_VARIABLES } from "@shoutory/core/config";
+import { createScrubber } from "../logging/scrub.js";
+import { migrateCommand } from "./migrate.js";
+
+export interface CliIo {
+  readonly stdout: (line: string) => void;
+  readonly stderr: (line: string) => void;
+}
+
+const USAGE = "usage: shoutory <command>; commands: migrate";
+const KEK_PREFIX = "SHOUTORY_KEK_";
+const MIN_SECRET_LENGTH = 8;
+
+function decodedPassword(value: string): string | undefined {
+  if (!URL.canParse(value)) return undefined;
+  try {
+    return decodeURIComponent(new URL(value).password);
+  } catch (error) {
+    if (error instanceof URIError) return undefined;
+    throw error;
+  }
+}
+
+/** The values the logger must never print: every set secret variable, every KEK and the password inside a URL. */
+export function collectSecrets(env: NodeJS.ProcessEnv): string[] {
+  const names = [...SECRET_VARIABLES, ...Object.keys(env).filter((name) => name.startsWith(KEK_PREFIX))];
+  const values = names.flatMap((name) => {
+    const value = env[name];
+    return value ? [value, decodedPassword(value)] : [];
+  });
+  const usable = values.filter((v): v is string => v !== undefined && v.length >= MIN_SECRET_LENGTH);
+  return [...new Set(usable)];
+}
+
+/** Runs one command and returns its exit code; starting a process around it is the server slice's job. */
+export async function run(argv: readonly string[], env: NodeJS.ProcessEnv, io: CliIo): Promise<number> {
+  if (argv[0] !== "migrate") {
+    io.stderr(USAGE);
+    return 2;
+  }
+  try {
+    await migrateCommand(env, io.stdout);
+    return 0;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "the command failed";
+    io.stderr(String(createScrubber(collectSecrets(env))(message)));
+    return 1;
+  }
+}

@@ -23,3 +23,5 @@ audit:
 # Packages allowed to run install scripts.
 allowBuilds:
   esbuild: false
+  # Pulled in by the OTLP exporter; its postinstall only checks a version and installs nothing.
+  protobufjs: false

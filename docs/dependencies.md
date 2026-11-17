@@ -49,3 +49,54 @@ Each card records: the package and its exact pin, what it is used for, its licen
 - Advisories: none reported by `pnpm audit --audit-level=high` at adoption (to be re-read at each upgrade).
 - Rejected: Valibot (one schema library across the project); hand-written validation (parsers are infrastructure we do not
   reinvent).
+
+## pino 10.4.0
+
+- Used for: the structured JSON logger of `apps/api`. Every line passes one scrubber (`hooks.logMethod` and
+  `formatters.bindings`) before Pino writes it; Pino's own `redact` is not used because its paths cover one level per `*`.
+- Licence: MIT. Published 2026-10-02, more than 14 days before adoption.
+- Advisories: none reported by `pnpm audit --audit-level=high` at adoption (to be re-read at each upgrade).
+- Rejected: winston and bunyan (slower, no hook before serialization); `console` (banned in `src` by Biome); a hand-written
+  logger (infrastructure we do not reinvent).
+
+Opt-in tracing in `apps/api` uses the seven OpenTelemetry packages below. They start only when
+`OTEL_EXPORTER_OTLP_ENDPOINT` is non-empty. Each is Apache-2.0, was published 2026-10-20 (more than 14 days before
+adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (re-read at each upgrade).
+
+## @opentelemetry/api 1.10.0
+
+- Used for: the tracer API types and the global tracer registration the telemetry tests read.
+- Rejected: none; every other package here requires it as a peer.
+
+## @opentelemetry/sdk-node 0.300.0
+
+- Used for: starting the SDK with explicit span processors and instrumentations.
+- Rejected: its auto-configured exporter (it exports to a default address when no endpoint is set), so the SDK is never
+  started without an endpoint; a vendor agent (a second egress path).
+
+## @opentelemetry/sdk-trace 3.0.0
+
+- Used for: the span processor contract and `BatchSpanProcessor`; the processor that strips query strings and userinfo from
+  URL attributes wraps it.
+- Rejected: `sdk-trace-base`, which is deprecated and whose peer range excludes api 1.10.0.
+
+## @opentelemetry/exporter-trace-otlp-http 0.300.0
+
+- Used for: sending spans to the operator's collector over Node `http`/`https`. `protobufjs`, which it pulls in, has a
+  postinstall that only checks a version; it is not allowed to run (`pnpm-workspace.yaml`).
+- Rejected: the gRPC and protobuf exporters (more dependencies for the same job).
+
+## @opentelemetry/instrumentation-http 0.300.0
+
+- Used for: spans for incoming and outgoing Node `http` requests.
+- Rejected: `auto-instrumentations-node` (a large bundle; instrumentations are listed explicitly).
+
+## @opentelemetry/instrumentation-pg 0.77.0
+
+- Used for: spans for PostgreSQL queries.
+- Rejected: `auto-instrumentations-node`, as above.
+
+## @opentelemetry/instrumentation-undici 0.34.0
+
+- Used for: spans for outgoing `fetch` and undici requests.
+- Rejected: `auto-instrumentations-node`, as above.
