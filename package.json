@@ -1,0 +1,33 @@
+{
+  "name": "shoutory",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "packageManager": "pnpm@12.17.0",
+  "engines": {
+    "node": "26.13.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -b apps/api packages/core packages/db packages/testkit",
+    "lint": "biome check .",
+    "test": "vitest run --passWithNoTests && node --test \"packages/testkit/test/*/*.test.mjs\"",
+    "test:unit": "vitest run --passWithNoTests --project unit --project unit-chatham",
+    "test:integration": "vitest run --passWithNoTests --project integration",
+    "test:contract": "vitest run --passWithNoTests --project contract && node --test \"packages/testkit/test/contract/*.test.mjs\"",
+    "test:focus": "vitest run --passWithNoTests",
+    "e2e": "playwright test --config e2e/playwright.config.ts --pass-with-no-tests",
+    "build": "turbo run build",
+    "knip": "knip",
+    "verify": "node scripts/verify.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.4",
+    "@playwright/test": "1.64.1",
+    "@types/node": "26.6.6",
+    "knip": "6.44.1",
+    "turbo": "2.11.10",
+    "typescript": "7.0.2",
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
+  }
+}

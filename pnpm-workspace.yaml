@@ -1,0 +1,18 @@
+packages:
+  - apps/*
+  - packages/*
+  - packages/providers/*
+
+# 14 days in minutes. An exclusion is a time-boxed emergency and carries a dated comment.
+minimumReleaseAge: 20160
+minimumReleaseAgeExclude: []
+
+strictDepBuilds: true
+trustPolicy: no-downgrade
+blockExoticSubdeps: true
+saveExact: true
+strictPeerDependencies: true
+
+# Packages allowed to run install scripts.
+allowBuilds:
+  esbuild: false

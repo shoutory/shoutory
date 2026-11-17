@@ -11,10 +11,10 @@ const EXCLUDED_FILES = new Set([
   ".gitignore",
 ]);
 
-const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export const PATTERNS = [
-  { name: "planning path", regex: new RegExp(["PLAN", ".md"].map(escape).join("")) },
+  { name: "planning path", regex: new RegExp(["PLAN", ".md"].map(escapeRegex).join("")) },
   { name: "planning path", regex: new RegExp(["docs", "[/\\\\]", "plans"].join("")) },
   { name: "planning path", regex: new RegExp(["docs", "[/\\\\]", "prd"].join("")) },
   { name: "planning path", regex: new RegExp(["docs", "[/\\\\]", "tasks"].join("")) },
@@ -57,7 +57,7 @@ export function scan() {
     scanLine(file, file, 0, findings);
     const text = readText(file);
     if (text === null) continue;
-    text.split(/\r?\n/).forEach((line, index) => scanLine(file, line, index + 1, findings));
+    for (const [index, line] of text.split(/\r?\n/).entries()) scanLine(file, line, index + 1, findings);
   }
   return findings;
 }

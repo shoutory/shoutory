@@ -1,0 +1,77 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": { "includes": ["**", "!pnpm-lock.yaml", "!LICENSE"] },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 110,
+    "lineEnding": "lf"
+  },
+  "javascript": { "formatter": { "quoteStyle": "double" } },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "suspicious": { "noConsole": "off", "noEmptyBlockStatements": "error" },
+      "complexity": {
+        "noUselessCatch": "error",
+        "noExcessiveCognitiveComplexity": { "level": "error", "options": { "maxAllowedComplexity": 15 } },
+        "noExcessiveLinesPerFunction": { "level": "error", "options": { "maxLines": 50 } }
+      },
+      "style": {
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "paths": {
+              "hono/jwt": "Hono's jwt middleware is banned; use the Better-Auth session.",
+              "hono/cors": "Hono's cors middleware is banned; use the in-house origin list.",
+              "hono/serve-static": "Hono's serveStatic is banned; use the in-house static handler.",
+              "@hono/node-server/serve-static": "serveStatic is banned; use the in-house static handler.",
+              "hono/aws-lambda": "The ALB adapter is banned.",
+              "better-auth/plugins": "Import an allowed plugin from its own subpath."
+            },
+            "patterns": [
+              {
+                "group": ["@react-router/dev", "@react-router/dev/*"],
+                "message": "React Router runs in library mode."
+              },
+              {
+                "group": ["better-auth/plugins/*", "!better-auth/plugins/two-factor"],
+                "message": "Only the allowed Better-Auth plugins may be imported."
+              },
+              {
+                "group": [
+                  "@better-auth/*",
+                  "!@better-auth/oauth-provider",
+                  "!@better-auth/cimd",
+                  "!@better-auth/sso"
+                ],
+                "message": "Only the allowed Better-Auth plugins may be imported."
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["**/src/**"],
+      "linter": {
+        "rules": {
+          "suspicious": { "noConsole": "error" },
+          "nursery": {
+            "noJsRestrictedProperties": {
+              "level": "error",
+              "options": {
+                "entries": [{ "object": "Math", "property": "random", "message": "Use an injected source." }]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

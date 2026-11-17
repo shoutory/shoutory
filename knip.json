@@ -1,0 +1,12 @@
+{
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/*.mjs"],
+      "project": ["scripts/**", "e2e/**"]
+    },
+    "packages/testkit": {
+      "entry": ["test/*/*.test.mjs"],
+      "project": ["test/**"]
+    }
+  }
+}

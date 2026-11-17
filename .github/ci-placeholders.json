@@ -1,0 +1,8 @@
+[
+  { "name": "typecheck", "reason": "no typescript sources exist yet" },
+  { "name": "unit", "reason": "no colocated unit tests exist yet" },
+  { "name": "unit-chatham", "reason": "no colocated unit tests exist yet" },
+  { "name": "integration", "reason": "no database tests exist yet" },
+  { "name": "contract", "reason": "no vitest contract tests exist yet" },
+  { "name": "invariants", "reason": "no invariant tests exist yet" }
+]
