@@ -16,6 +16,9 @@ export default defineConfig({
           name: "integration",
           // The migrated template database is built once; hooks that clone it get a longer limit than a test.
           globalSetup: ["packages/db/test/global-setup.ts"],
+          // Vitest 5.0.5 hands Vite a Buffer for modules read from its cache, which crashes the printing of any
+          // global-setup error (vitest-dev/vitest#11682). Remove when the pinned Vitest includes that fix.
+          fsModuleCache: false,
           hookTimeout: 30_000,
           include: [
             "{apps,packages}/*/test/integration/**/*.test.ts",
