@@ -13,6 +13,13 @@ blockExoticSubdeps: true
 saveExact: true
 strictPeerDependencies: true
 
+# 2026-11-17: GHSA-fc5q-39xc-vjpf (picomatch <= 4.0.7, ReDoS through repeated extglobs) reaches development tooling
+# only (vitest > vite, tinyglobby), and its glob patterns come from repository config, never from input. No patched
+# picomatch exists. Remove this ignore when the patched release lands; it expires on 2026-12-17.
+audit:
+  ignore:
+    - GHSA-fc5q-39xc-vjpf
+
 # Packages allowed to run install scripts.
 allowBuilds:
   esbuild: false

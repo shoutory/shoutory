@@ -42,6 +42,8 @@ docker run -d --name shoutory-pg -p 5432:5432 \
   postgres:18.6-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
 ```
 
+These development database values are for the container and the tests only; the API refuses them at start-up.
+
 Then point the connection settings at it. Each role has its own URL, and the tests also take an administrator URL that
 only they read:
 
@@ -55,6 +57,40 @@ export SHOUTORY_TEST_ADMIN_URL=postgres://postgres:postgres-dev-password@localho
 ```
 
 A test run without a reachable database fails; it never skips. Remove the container with `docker rm -f shoutory-pg`.
+
+`docker/compose.yml` starts the same PostgreSQL bound to `127.0.0.1` only. It takes every credential from the
+environment and refuses to start when one is unset, so export the five `SHOUTORY_DATABASE_PASSWORD_*` values above and a
+superuser password first, then run `docker compose -f docker/compose.yml up -d`:
+
+```sh
+export SHOUTORY_POSTGRES_PASSWORD=postgres-dev-password
+```
+
+## Configuration
+
+The process refuses to start when a secret is missing, empty, shorter than its floor, all zero, or equal to an example
+value shown in this file. No secret has a default, and the error names the variable, never its value. The process also
+requires `TZ=UTC`.
+
+| Variable                                                                    | Holds                                                                                        |
+| --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `SHOUTORY_ACTIVE_KEY_ID`                                                    | The id of the key that seals new secrets: 1-32 characters from `a-z`, `0-9` and `-`          |
+| `SHOUTORY_KEK_<ID>`                                                         | A key-encryption key: base64 of exactly 32 random bytes; the id in uppercase with `-` as `_` |
+| `SHOUTORY_HMAC_PEPPER`                                                      | The pepper for API-key and token digests: at least 32 bytes                                  |
+| `SHOUTORY_SESSION_SECRET`                                                   | The session and two-factor secret: at least 32 bytes                                         |
+| `SHOUTORY_SMTP_URL`                                                         | The mail server, `smtp://` or `smtps://` with its credentials                                |
+| `SHOUTORY_DATABASE_URL_OWNER`, `_APP`, `_WORKER`, `_AUTH`, `_READONLY`      | One connection URL per database role                                                         |
+| `SHOUTORY_DATABASE_PASSWORD_OWNER`, `_APP`, `_WORKER`, `_AUTH`, `_READONLY` | The password each database role is created with                                              |
+
+Generate real values with `openssl rand -base64 32`. The values below are examples only and are refused at start-up. To
+rotate, add a new `SHOUTORY_KEK_<ID>`, point `SHOUTORY_ACTIVE_KEY_ID` at it and keep the old key until no row uses it.
+
+```sh
+export SHOUTORY_ACTIVE_KEY_ID=example
+export SHOUTORY_KEK_EXAMPLE=c2hvdXRvcnktZXhhbXBsZS1rZWstMDEyMzQ1Njc4OSE=
+export SHOUTORY_HMAC_PEPPER=example-pepper-do-not-use-in-production-0001
+export SHOUTORY_SESSION_SECRET=example-session-secret-do-not-use-in-production-0001
+```
 
 ## Layout
 

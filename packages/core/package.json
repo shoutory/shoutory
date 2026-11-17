@@ -3,5 +3,13 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "license": "AGPL-3.0-only"
+  "license": "AGPL-3.0-only",
+  "exports": {
+    "./config": "./src/config/env.ts",
+    "./crypto": "./src/crypto/envelope.ts",
+    "./keys": "./src/crypto/keys.ts"
+  },
+  "dependencies": {
+    "zod": "4.6.7"
+  }
 }
