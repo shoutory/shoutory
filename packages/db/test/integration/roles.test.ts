@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { Client, type Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
-import { cloneTemplate, readTestEnv, type TestDatabase, withDatabase } from "../../src/testing/template.js";
+import {
+  cloneTemplate,
+  readTestEnv,
+  type TestDatabase,
+  withAdminClient,
+  withDatabase,
+} from "../../src/testing/template.js";
 
 const env = readTestEnv();
 
@@ -63,8 +69,10 @@ async function createViolations(pool: Pool, role: string): Promise<string[]> {
     [role],
   );
   const row = create.rows[0];
+  // The NOLOGIN definer holds CREATE on app (R30): ALTER FUNCTION ... OWNER TO needs it. Nothing else may.
+  const exempt = role === "shoutory_definer" ? "app" : undefined;
   return (["app", "auth", "database"] as const)
-    .filter((place) => row[place])
+    .filter((place) => row[place] && place !== exempt)
     .map((place) => `CREATE on ${place}`);
 }
 
@@ -108,6 +116,39 @@ describe("database roles", () => {
         [role],
       );
     expect(usage.rows).toEqual([{ app, auth }]);
+  });
+});
+
+// The one CREATE exemption: the definer holds CREATE on app and cannot log in; any other CREATE is still named.
+describe("the definer's CREATE exemption", () => {
+  let db: TestDatabase;
+  beforeAll(async () => {
+    db = await cloneTemplate(env, inject("shoutoryTemplate"));
+  });
+  afterAll(() => db.drop());
+
+  it("shoutory_definer holds CREATE on app, not on auth or the database, and cannot log in", async () => {
+    const found = await db.pool("owner").query(
+      `SELECT has_schema_privilege('shoutory_definer', 'app', 'CREATE') AS app,
+              has_schema_privilege('shoutory_definer', 'auth', 'CREATE') AS auth,
+              has_database_privilege('shoutory_definer', current_database(), 'CREATE') AS database,
+              (SELECT rolcanlogin FROM pg_roles WHERE rolname = 'shoutory_definer') AS login`,
+    );
+    expect(found.rows).toEqual([{ app: true, auth: false, database: false, login: false }]);
+  });
+
+  it.each([
+    ["GRANT CREATE ON SCHEMA auth TO shoutory_definer", "shoutory_definer", "CREATE on auth"],
+    ["GRANT CREATE ON SCHEMA app TO shoutory_app", "shoutory_app", "CREATE on app"],
+  ])("a planted %s is named", async (statement, role, expected) => {
+    await withAdminClient(env, db.name, async (admin) => {
+      await admin.query(statement);
+      try {
+        expect(await violations(db.pool("owner"), role, role === "shoutory_app")).toContain(expected);
+      } finally {
+        await admin.query(statement.replace("GRANT", "REVOKE").replace(" TO ", " FROM "));
+      }
+    });
   });
 });
 

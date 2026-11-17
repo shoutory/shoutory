@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
-import type { Pool, QueryResult } from "pg";
+import type { Client, Pool, QueryResult } from "pg";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
-import { cloneTemplate, readTestEnv, type TestDatabase } from "../../src/testing/template.js";
+import {
+  cloneTemplate,
+  readTestEnv,
+  type TestDatabase,
+  withAdminClient,
+} from "../../src/testing/template.js";
 
 const env = readTestEnv();
 
@@ -199,5 +204,119 @@ describe("apply_rls_template refuses hostile input", () => {
     await expect(apply).rejects.toMatchObject({ code: "42703" });
     const found = await owner.query("SELECT to_regclass('app.pwned') AS pwned");
     expect(found.rows[0].pwned).toBeNull();
+  });
+});
+
+// Templates U, I and D (security floor). Real tables, seeded as the superuser because a runtime role cannot write
+// them. U shows a user only their own rows; I and D answer a runtime role "permission denied", for reads and writes.
+const U1 = randomUUID();
+const U2 = randomUUID();
+const KEY = "a".repeat(64);
+const user = (id: string, kind = "user"): Settings => ({
+  "app.principal_id": id,
+  "app.principal_kind": kind,
+});
+
+type Runtime = "app" | "worker";
+const RUNTIME: Runtime[] = ["app", "worker"];
+
+async function seedAuthData(admin: Client): Promise<void> {
+  for (const id of [U1, U2]) {
+    await admin.query(
+      `INSERT INTO auth."user" (id, name, email) VALUES ($1::uuid, $1::text, $1::text || '@example.test')`,
+      [id],
+    );
+    await admin.query("INSERT INTO app.user_profiles (user_id) VALUES ($1)", [id]);
+    await admin.query(
+      "INSERT INTO app.session_step_ups (session_id, user_id, method) VALUES ($1, $2, 'password')",
+      [randomUUID(), id],
+    );
+  }
+  await admin.query("INSERT INTO app.instance_admins (user_id) VALUES ($1)", [U1]);
+  await admin.query("INSERT INTO app.rate_buckets (scope, key, tokens) VALUES ('login_ip', $1, 1)", [KEY]);
+}
+
+/** One clone per describe, seeded as the superuser; the returned function reads a role's answer. */
+function useSeeded(plant?: string): (role: Runtime, settings: Settings, sql: string) => Promise<QueryResult> {
+  let db: TestDatabase;
+  beforeAll(async () => {
+    db = await cloneTemplate(env, inject("shoutoryTemplate"));
+    await withAdminClient(env, db.name, async (admin) => {
+      await seedAuthData(admin);
+      if (plant) await admin.query(plant);
+    });
+  });
+  afterAll(() => db.drop());
+  return (role, settings, sql) => inTransaction(db.pool(role), settings, (query) => query(sql));
+}
+
+describe("template U on user_profiles and session_step_ups", () => {
+  const read = useSeeded();
+
+  it.each(
+    RUNTIME.flatMap((role) => ["user_profiles", "session_step_ups"].map((table) => [role, table] as const)),
+  )("template U: %s sees a user's own %s rows and no other user's", async (role, table) => {
+    const own = await read(role, user(U1), `SELECT user_id FROM app.${table}`);
+    expect(own.rows).toEqual([{ user_id: U1 }]);
+  });
+
+  it.each([
+    ["no context", {}],
+    ["a service principal with the user's id", user(U1, "service")],
+    ["a portal principal with the user's id", user(U1, "portal")],
+    ["a user principal with an id that owns nothing", user(randomUUID())],
+  ] as [string, Settings][])("template U: %s reads 0 rows", async (_title, settings) => {
+    for (const table of ["user_profiles", "session_step_ups"]) {
+      expect((await read("app", settings, `SELECT 1 FROM app.${table}`)).rows).toHaveLength(0);
+    }
+  });
+
+  it.each([
+    ["INSERT", "INSERT INTO app.user_profiles (user_id) VALUES (gen_random_uuid())"],
+    ["UPDATE", "UPDATE app.user_profiles SET password_recheck_at = now()"],
+    ["DELETE", "DELETE FROM app.user_profiles"],
+    [
+      "INSERT",
+      "INSERT INTO app.session_step_ups (session_id, user_id, method) VALUES (gen_random_uuid(), gen_random_uuid(), 'totp')",
+    ],
+    ["UPDATE", "UPDATE app.session_step_ups SET method = 'totp'"],
+    ["DELETE", "DELETE FROM app.session_step_ups"],
+  ])("template U: a runtime role cannot %s directly (permission denied): %s", async (_verb, sql) => {
+    for (const role of RUNTIME)
+      await expect(read(role, user(U1), sql)).rejects.toMatchObject({ code: "42501" });
+  });
+});
+
+describe("templates I and D on instance_admins and rate_buckets", () => {
+  const read = useSeeded();
+
+  it.each(
+    RUNTIME.flatMap((role) =>
+      ["instance_admins", "rate_buckets"].flatMap((table) => [
+        [role, table, `SELECT * FROM app.${table}`],
+        [role, table, `DELETE FROM app.${table}`],
+      ]),
+    ),
+  )("%s is refused with permission denied on %s: %s", async (role, _table, sql) => {
+    await expect(read(role as Runtime, user(U1), sql)).rejects.toMatchObject({ code: "42501" });
+  });
+});
+
+// Template U carries no write policy of its own: a write grant planted by mistake still writes nothing.
+describe("template U holds even if a write grant is planted", () => {
+  const read = useSeeded("GRANT INSERT, UPDATE, DELETE ON app.user_profiles TO shoutory_app");
+
+  it.each([
+    ["UPDATE touches 0 rows", "UPDATE app.user_profiles SET password_recheck_at = now()", 0],
+    ["DELETE touches 0 rows", "DELETE FROM app.user_profiles", 0],
+    [
+      "INSERT of another user's row is refused",
+      `INSERT INTO app.user_profiles (user_id) VALUES ('${U2}')`,
+      -1,
+    ],
+  ])("%s", async (_title, sql, touched) => {
+    const run = read("app", user(U1), sql);
+    if (touched < 0) await expect(run).rejects.toMatchObject({ code: "42501" });
+    else expect((await run).rowCount).toBe(touched);
   });
 });

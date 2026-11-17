@@ -88,6 +88,27 @@ export async function createAppLogin(env: TestEnv): Promise<AppLogin> {
   };
 }
 
+/**
+ * Runs `run` as the bootstrap superuser inside one test database. Seeding rows the runtime roles cannot write and
+ * moving time need it: the migration owner sees no rows of a FORCE table without a policy.
+ */
+export async function withAdminClient<T>(
+  env: TestEnv,
+  database: string,
+  run: (client: Client) => Promise<T>,
+): Promise<T> {
+  const client = new Client({
+    connectionString: withDatabase(env.adminUrl, database),
+    connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
+  });
+  await client.connect();
+  try {
+    return await run(client);
+  } finally {
+    await client.end();
+  }
+}
+
 export async function dropDatabase(env: TestEnv, name: string): Promise<void> {
   await asAdmin(env, (client) => client.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`));
 }

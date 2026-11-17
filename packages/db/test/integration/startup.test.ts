@@ -12,13 +12,17 @@ describe("start-up migration check", () => {
   let migrated: TestDatabase;
   let blank: TestDatabase;
   let dir: string;
+  let pending: string;
 
   beforeAll(async () => {
     migrated = await cloneTemplate(env, inject("shoutoryTemplate"));
     blank = await emptyDatabase(env);
     dir = await mkdtemp(join(tmpdir(), "startup-"));
-    for (const { name } of await loadMigrations()) await writeFile(join(dir, name), "SELECT 1;");
-    await writeFile(join(dir, "0004_not_applied_yet.sql"), "SELECT 1;");
+    const shipped = await loadMigrations();
+    for (const { name } of shipped) await writeFile(join(dir, name), "SELECT 1;");
+    // The next free number, so a new shipped migration never collides with the planted one.
+    pending = `${String(shipped.length + 1).padStart(4, "0")}_not_applied_yet.sql`;
+    await writeFile(join(dir, pending), "SELECT 1;");
   });
   afterAll(async () => {
     await migrated.drop();
@@ -33,7 +37,7 @@ describe("start-up migration check", () => {
   it("refuses to start when a required migration is missing", async () => {
     const check = assertMigrationsApplied(migrated.pool("app"), dir);
     await expect(check).rejects.toThrow(MissingMigrationError);
-    await expect(check).rejects.toThrow("0004_not_applied_yet.sql");
+    await expect(check).rejects.toThrow(pending);
   });
 
   it("refuses to start on a migration folder with a gap, by the runner's named error", async () => {
