@@ -2,10 +2,11 @@
   "workspaces": {
     ".": {
       "entry": ["scripts/*.mjs"],
-      "project": ["scripts/**", "e2e/**"]
+      "project": ["scripts/**", "e2e/**"],
+      "ignoreDependencies": ["@commitlint/cli"]
     },
     "packages/testkit": {
-      "entry": ["test/*/*.test.mjs"],
+      "entry": ["test/*/*.test.mjs", "scripts/*.mjs"],
       "project": ["test/**"]
     }
   }

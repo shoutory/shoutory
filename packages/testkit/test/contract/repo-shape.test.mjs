@@ -70,6 +70,8 @@ const PINS = {
   knip: "6.44.1",
   "@playwright/test": "1.64.1",
   "@types/node": "26.6.6",
+  "@commitlint/cli": "21.2.4",
+  "@commitlint/config-conventional": "21.2.4",
 };
 
 test("root devDependencies are exact pins from the register", () => {

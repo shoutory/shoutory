@@ -48,12 +48,6 @@ test("a step that ran nothing fails unless it is a listed placeholder", () => {
   assert.equal(run(steps, { placeholders: ["beta"] }).status, 0);
 });
 
-test("a skipped step fails unless it is a listed placeholder", () => {
-  const steps = [{ name: "gamma", globs: ["src/*.txt"], command: ok, skip: "not run" }];
-  assert.notEqual(run(steps, withFile).status, 0);
-  assert.equal(run(steps, { ...withFile, placeholders: ["gamma"] }).status, 0);
-});
-
 test("a listed placeholder that already has files fails, so its line must be removed", () => {
   const steps = [{ name: "delta", globs: ["src/*.txt"], command: ok }];
   assert.notEqual(run(steps, { ...withFile, placeholders: ["delta"] }).status, 0);

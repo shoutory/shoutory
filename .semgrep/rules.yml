@@ -1,0 +1,76 @@
+rules:
+  - id: shell-child-process
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      A child process is started through a shell. Pass the program and its arguments to execFile or spawn
+      without a shell instead.
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: import {..., exec, ...} from "$M"
+              - pattern: import {..., execSync, ...} from "$M"
+              - pattern: |
+                  import * as $CP from "$M"
+                  ...
+                  $CP.exec(...)
+              - pattern: |
+                  import * as $CP from "$M"
+                  ...
+                  $CP.execSync(...)
+              - pattern: |
+                  import $CP from "$M"
+                  ...
+                  $CP.exec(...)
+              - pattern: |
+                  import $CP from "$M"
+                  ...
+                  $CP.execSync(...)
+              - pattern: |
+                  $CP = require("$M")
+                  ...
+                  $CP.exec(...)
+              - pattern: |
+                  $CP = require("$M")
+                  ...
+                  $CP.execSync(...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(node:)?child_process$
+      - patterns:
+          - pattern: "$FN(..., {..., shell: $SHELL, ...}, ...)"
+          - pattern-not: "$FN(..., {..., shell: false, ...}, ...)"
+
+  - id: tls-verification-disabled
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: TLS certificate verification is turned off; keep it on and trust the right certificate authority.
+    pattern-either:
+      - pattern: "$FN(..., {..., rejectUnauthorized: false, ...}, ...)"
+      - pattern: $O.rejectUnauthorized = false
+      - pattern: process.env.NODE_TLS_REJECT_UNAUTHORIZED = $V
+      - pattern: process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = $V
+
+  - id: code-from-string
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Code is built from a string; call a function that exists in the source instead.
+    pattern-either:
+      - pattern: new Function(...)
+      - pattern: Function(...)
+      - patterns:
+          - pattern-either:
+              - pattern: import {..., runInNewContext, ...} from "$M"
+              - pattern: import {..., runInThisContext, ...} from "$M"
+              - pattern: import {..., runInContext, ...} from "$M"
+              - pattern: |
+                  import * as $VM from "$M"
+                  ...
+                  $VM.$RUN(...)
+              - pattern: |
+                  import $VM from "$M"
+                  ...
+                  $VM.$RUN(...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(node:)?vm$

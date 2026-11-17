@@ -2,7 +2,7 @@
 // The one check command. Runs every step over the files it expands, prints those files, and fails a step that
 // ran nothing or was skipped unless the step is listed in .github/ci-placeholders.json.
 import { spawnSync } from "node:child_process";
-import { globSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, globSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -28,8 +28,68 @@ const sources = [
   "{apps,packages}/*/{src,test}/**/*.{ts,tsx}",
   "packages/providers/*/{src,test}/**/*.{ts,tsx}",
 ];
+const workflowFiles = [".github/workflows/*.{yml,yaml}", ".github/actions/**/action.{yml,yaml}"];
 const unitTests = ["{apps,packages}/*/src/**/*.test.ts", "packages/providers/*/src/**/*.test.ts"];
-const vitest = (project) => node(binOf("vitest", "vitest"), "run", "--project", project);
+// A vitest step writes a JSON report so a skipped or todo test fails the step.
+const vitestReport = (project) => `.artifacts/vitest-${project}.json`;
+const vitest = (project) => ({
+  command: node(
+    binOf("vitest", "vitest"),
+    "run",
+    "--project",
+    project,
+    "--reporter=default",
+    "--reporter=json",
+    `--outputFile.json=${vitestReport(project)}`,
+  ),
+  skips: { json: vitestReport(project) },
+});
+const nodeTests = { command: [process.execPath, "--test", "--test-reporter=tap"], skips: "node-test" };
+
+// Every scanner runs as its project's official container, pinned by index digest. The workflow pulls the
+// same references, so a local run and a CI run are the same tool.
+export const IMAGES = {
+  semgrep: "semgrep/semgrep:1.183.0@sha256:2e45517a85e13a9cca14a2a00df6bb48affd66b8ebfae1b0991cd57578362fb0",
+  gitleaks:
+    "ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f",
+  actionlint:
+    "rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667",
+  zizmor:
+    "ghcr.io/zizmorcore/zizmor:1.32.0@sha256:3014cc8f68f663935f69b3c3e0e41f5ce102b268d97db13db0f62208747f860d",
+  "osv-scanner":
+    "ghcr.io/google/osv-scanner:v2.7.0@sha256:4f3b7e2c64b9d38a5febc5a7e4a3dfef1d1362f726dea7a2ef4762b46469fcd0",
+};
+
+// The repository is mounted read-only at /src. Git needs the mount trusted to read the history.
+const container = (name, args, options = []) => [
+  "docker",
+  "run",
+  "--rm",
+  "--mount",
+  `type=bind,source=${root},target=/src,readonly`,
+  "-w",
+  "/src",
+  ...options,
+  IMAGES[name],
+  ...args,
+];
+const trustMount = [
+  "-e",
+  "GIT_CONFIG_COUNT=1",
+  "-e",
+  "GIT_CONFIG_KEY_0=safe.directory",
+  "-e",
+  "GIT_CONFIG_VALUE_0=/src",
+];
+// The history of the checked-out branch; a pull request passes its own base..head range.
+const gitleaksRange = [`--log-opts=${process.env.GITLEAKS_LOG_OPTS || "HEAD"}`];
+const pnpm = (...args) => {
+  const exe = process.env.npm_execpath ?? "pnpm";
+  return /\.c?js$/.test(exe) ? [process.execPath, exe, ...args] : [exe, ...args];
+};
+const gitMessage = () =>
+  process.env.PR_TITLE ||
+  spawnSync("git", ["log", "-1", "--format=%B"], { cwd: root, encoding: "utf8" }).stdout;
 
 export const STEPS = [
   {
@@ -55,15 +115,15 @@ export const STEPS = [
     globs: ["knip.json", "package.json", "{apps,packages}/*/package.json"],
     command: node(binOf("knip", "knip")),
   },
-  { name: "unit", globs: unitTests, command: vitest("unit") },
-  { name: "unit-chatham", globs: unitTests, command: vitest("unit-chatham") },
+  { name: "unit", globs: unitTests, ...vitest("unit") },
+  { name: "unit-chatham", globs: unitTests, ...vitest("unit-chatham") },
   {
     name: "integration",
     globs: [
       "{apps,packages}/*/test/integration/**/*.test.ts",
       "packages/providers/*/test/integration/**/*.test.ts",
     ],
-    command: vitest("integration"),
+    ...vitest("integration"),
   },
   {
     name: "contract",
@@ -71,24 +131,91 @@ export const STEPS = [
       "{apps,packages}/*/test/contract/**/*.test.ts",
       "packages/providers/*/test/contract/**/*.test.ts",
     ],
-    command: vitest("contract"),
+    ...vitest("contract"),
   },
   {
     name: "testkit-contract",
     globs: ["packages/testkit/test/contract/*.test.mjs", "scripts/*.test.mjs"],
-    command: [process.execPath, "--test"],
+    ...nodeTests,
     appendFiles: true,
   },
   {
     name: "invariants",
     globs: ["packages/testkit/test/invariants/*.test.mjs"],
-    command: [process.execPath, "--test"],
+    ...nodeTests,
     appendFiles: true,
   },
   {
     name: "guard",
     globs: ["scripts/check-no-planning-paths.mjs"],
     command: node("scripts/check-no-planning-paths.mjs"),
+  },
+  { name: "build", globs: ["{apps,packages}/*/src/**/*.{ts,tsx}"], command: pnpm("run", "build") },
+  { name: "e2e", globs: ["e2e/**/*.spec.ts"], command: pnpm("run", "e2e") },
+  { name: "image-smoke", globs: ["docker/**"], command: pnpm("run", "image-smoke") },
+  { name: "upgrade", globs: ["e2e/upgrade/**"], command: pnpm("run", "upgrade") },
+  {
+    name: "semgrep",
+    docker: true,
+    globs: ["**/*.{js,mjs,cjs,ts,tsx}"],
+    command: container("semgrep", [
+      "semgrep",
+      "scan",
+      "--config",
+      ".semgrep",
+      "--error",
+      "--metrics=off",
+      "--disable-version-check",
+      "--exclude",
+      "node_modules",
+      "--exclude",
+      ".artifacts",
+      "--exclude",
+      "dist",
+      ".",
+    ]),
+  },
+  {
+    name: "gitleaks",
+    docker: true,
+    globs: ["**/*"],
+    command: container(
+      "gitleaks",
+      ["git", "--redact", "--no-banner", "--exit-code", "1", ...gitleaksRange, "."],
+      trustMount,
+    ),
+  },
+  {
+    name: "osv-scanner",
+    docker: true,
+    globs: ["pnpm-lock.yaml"],
+    command: container("osv-scanner", ["scan", "source", "--lockfile", "pnpm-lock.yaml"]),
+  },
+  {
+    name: "actionlint",
+    docker: true,
+    globs: [workflowFiles[0]],
+    command: container("actionlint", ["-color"]),
+    appendFiles: true,
+  },
+  {
+    name: "zizmor",
+    docker: true,
+    globs: workflowFiles,
+    command: container("zizmor", ["--pedantic", "--offline", "--no-progress"]),
+    appendFiles: true,
+  },
+  { name: "audit", globs: ["pnpm-lock.yaml"], command: pnpm("audit", "--audit-level=high") },
+  {
+    name: "supply-chain",
+    globs: ["pnpm-lock.yaml", "pnpm-workspace.yaml", "package.json", "{apps,packages}/*/package.json"],
+    command: node("packages/testkit/scripts/supply-chain.mjs"),
+  },
+  {
+    name: "commit-message",
+    globs: ["commitlint.config.mjs"],
+    command: node(binOf("@commitlint/cli", "commitlint"), "--config", "commitlint.config.mjs"),
+    input: gitMessage,
   },
 ];
 
@@ -104,19 +231,48 @@ function expand(globs, cwd) {
 
 // Returns the failure reason of a step before it runs, or null when it may run.
 function refusal(step, files, isPlaceholder) {
-  if (step.skip) return isPlaceholder ? null : `skipped (${step.skip})`;
   if (isPlaceholder)
     return files.length > 0 ? "listed as a placeholder but already has files; remove its line" : null;
   return files.length === 0 ? "ran nothing" : null;
 }
 
-function execute(step, files, cwd) {
-  const [bin, ...args] = step.command;
-  const run = spawnSync(bin, step.appendFiles ? [...args, ...files] : args, { cwd, stdio: "inherit" });
-  return run.status === 0 ? null : `command exited with ${run.status ?? run.signal}`;
+const dockerRuns = () => spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
+
+// The number of skipped and todo tests a test step reported; NaN when it printed no count.
+function skippedTests(step, stdout, cwd) {
+  if (step.skips === "node-test") {
+    const count = (key) => Number(new RegExp(`^# ${key} (\\d+)\\s*$`, "m").exec(stdout)?.[1]);
+    return count("skipped") + count("todo");
+  }
+  const file = join(cwd, step.skips.json);
+  if (!existsSync(file)) return Number.NaN;
+  const report = JSON.parse(readFileSync(file, "utf8"));
+  return report.numPendingTests + report.numTodoTests;
 }
 
-function runStep(step, { cwd, placeholders, log }) {
+function execute(step, files, cwd) {
+  if (step.docker && !dockerRuns()) return "Docker is not running; start it, this step runs a container";
+  if (step.skips?.json) rmSync(join(cwd, step.skips.json), { force: true }); // a stale report proves nothing
+  const [bin, ...args] = step.command;
+  const input = step.input?.();
+  const capture = step.skips === "node-test";
+  const run = spawnSync(bin, step.appendFiles ? [...args, ...files] : args, {
+    cwd,
+    stdio: [input === undefined ? "inherit" : "pipe", capture ? "pipe" : "inherit", "inherit"],
+    input,
+    encoding: "utf8",
+    maxBuffer: 256 * 1024 * 1024,
+  });
+  if (capture) process.stdout.write(run.stdout ?? "");
+  if (run.error) return `command could not start: ${run.error.message}`;
+  if (run.status !== 0) return `command exited with ${run.status ?? run.signal}`;
+  if (!step.skips) return null;
+  const skipped = skippedTests(step, run.stdout, cwd);
+  if (Number.isNaN(skipped)) return "the test run printed no skip count";
+  return skipped === 0 ? null : `${skipped} skipped or todo test(s) reported; a skipped test is a failure`;
+}
+
+function runStep(step, { cwd, placeholders, reasons, outputFile, log }) {
   const isPlaceholder = placeholders.includes(step.name);
   const files = expand(step.globs ?? [], cwd);
   log(`== ${step.name}: ${files.length} file(s)`);
@@ -127,7 +283,8 @@ function runStep(step, { cwd, placeholders, log }) {
     return false;
   }
   if (isPlaceholder) {
-    log(`-- ${step.name}: not applicable yet (placeholder)`);
+    log(`-- ${step.name}: not applicable yet: ${reasons[step.name] ?? "listed as a placeholder"}`);
+    if (outputFile) appendFileSync(outputFile, "placeholder=true\n");
     return true;
   }
   const error = execute(step, files, cwd);
@@ -135,12 +292,28 @@ function runStep(step, { cwd, placeholders, log }) {
   return error === null;
 }
 
-export function runSteps(steps, { cwd = root, placeholders = [], log = console.log } = {}) {
-  const results = steps.map((step) => runStep(step, { cwd, placeholders, log }));
+// `outputFile` is the job output file of the workflow, where a placeholder step reports itself.
+export function runSteps(
+  steps,
+  { cwd = root, placeholders = [], reasons = {}, outputFile, log = console.log } = {},
+) {
+  const results = steps.map((step) => runStep(step, { cwd, placeholders, reasons, outputFile, log }));
   return results.every(Boolean) ? 0 : 1;
 }
 
+function selectSteps(argv) {
+  const at = argv.indexOf("--only");
+  if (at < 0) return STEPS;
+  const chosen = STEPS.filter((step) => step.name === argv[at + 1]);
+  if (chosen.length === 0)
+    throw new Error(`unknown step ${argv[at + 1]}; steps: ${STEPS.map((s) => s.name)}`);
+  return chosen;
+}
+
 if (import.meta.main) {
-  const names = loadPlaceholders(join(root, ".github/ci-placeholders.json")).map((entry) => entry.name);
-  process.exit(runSteps(STEPS, { placeholders: names }));
+  const entries = loadPlaceholders(join(root, ".github/ci-placeholders.json"));
+  const reasons = Object.fromEntries(entries.map((entry) => [entry.name, entry.reason]));
+  const placeholders = entries.map((entry) => entry.name);
+  const outputFile = process.env.GITHUB_OUTPUT;
+  process.exit(runSteps(selectSteps(process.argv.slice(2)), { placeholders, reasons, outputFile }));
 }
