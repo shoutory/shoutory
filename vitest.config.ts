@@ -4,14 +4,19 @@ import { defineConfig } from "vitest/config";
 const exclude = ["**/node_modules/**", "**/dist/**", "**/*.test.mjs"];
 const unit = ["{apps,packages}/*/src/**/*.test.ts", "packages/providers/*/src/**/*.test.ts"];
 
+// Tests read workspace packages from `src` through the `source` export condition; Node reads `dist`.
+const ssr = { resolve: { conditions: ["source"], externalConditions: ["source"] } };
+
 export default defineConfig({
   test: {
     projects: [
-      { test: { name: "unit", include: unit, exclude } },
+      { ssr, test: { name: "unit", include: unit, exclude } },
       {
+        ssr,
         test: { name: "unit-chatham", include: unit, exclude, pool: "forks", env: { TZ: "Pacific/Chatham" } },
       },
       {
+        ssr,
         test: {
           name: "integration",
           // The migrated template database is built once; hooks that clone it get a longer limit than a test.
@@ -28,6 +33,7 @@ export default defineConfig({
         },
       },
       {
+        ssr,
         test: {
           name: "contract",
           include: [

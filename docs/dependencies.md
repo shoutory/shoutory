@@ -100,3 +100,33 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
 
 - Used for: spans for outgoing `fetch` and undici requests.
 - Rejected: `auto-instrumentations-node`, as above.
+
+## hono 4.13.16
+
+- Used for: the HTTP framework of `apps/api` (routing, `bodyLimit`, `secureHeaders`, `getConnInfo` through the node adapter).
+- Licence: MIT. Published 2026-11-01, more than 14 days before adoption (the first release that fixes five advisories of 4.13.14). It has no
+  runtime dependencies and one npm maintainer.
+- Advisories: the five high advisories of earlier lines are all in optional middleware (JWT, serveStatic, CORS, ALB adapter),
+  which an import rule bans; `pnpm audit --audit-level=high` reported none at adoption.
+- Rejected: Fastify (kept as the fallback); Express (no typed validation layer).
+
+## @hono/node-server 2.1.6
+
+- Used for: serving the Hono app on Node (`serve`) and reading the socket peer address (`getConnInfo`).
+- Licence: MIT. Published 2026-11-02, more than 14 days before adoption (the first release that fixes two advisories of 2.1.5). It has no
+  runtime dependencies.
+- Advisories: none reported by `pnpm audit --audit-level=high` at adoption. Its `serve-static` export is not used.
+- Rejected: a hand-written `node:http` adapter (infrastructure we do not reinvent).
+
+## @hono/zod-openapi 1.6.3
+
+- Used for: declaring each route with its Zod schemas (`createRoute`, `openapi`) so validation and the OpenAPI document
+  come from one definition. Its transitive `@hono/zod-validator` is never imported directly.
+- Licence: MIT. Published 2026-09-04, more than 14 days before adoption. Runtime dependencies: `openapi3-ts`,
+  `@asteasolutions/zod-to-openapi`, `@hono/zod-validator`.
+- Advisories: none reported by `pnpm audit --audit-level=high` at adoption.
+- Rejected: hand-written route validation (parsers are infrastructure we do not reinvent).
+
+## zod (apps/api)
+
+- `apps/api` now declares `zod` 4.6.7 too: its route schemas are `z.strictObject`. The card above holds the evaluation.

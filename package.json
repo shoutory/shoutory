@@ -17,7 +17,7 @@
     "test:contract": "vitest run --passWithNoTests --project contract && node --test \"packages/testkit/test/contract/*.test.mjs\"",
     "test:focus": "vitest run --passWithNoTests",
     "e2e": "playwright test --config e2e/playwright.config.ts --pass-with-no-tests",
-    "build": "turbo run build",
+    "build": "tsc -b",
     "knip": "knip",
     "verify": "node scripts/verify.mjs"
   },

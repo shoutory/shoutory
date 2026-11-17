@@ -72,15 +72,20 @@ The process refuses to start when a secret is missing, empty, shorter than its f
 value shown in this file. No secret has a default, and the error names the variable, never its value. The process also
 requires `TZ=UTC`.
 
-| Variable                                                                    | Holds                                                                                        |
-| --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `SHOUTORY_ACTIVE_KEY_ID`                                                    | The id of the key that seals new secrets: 1-32 characters from `a-z`, `0-9` and `-`          |
-| `SHOUTORY_KEK_<ID>`                                                         | A key-encryption key: base64 of exactly 32 random bytes; the id in uppercase with `-` as `_` |
-| `SHOUTORY_HMAC_PEPPER`                                                      | The pepper for API-key and token digests: at least 32 bytes                                  |
-| `SHOUTORY_SESSION_SECRET`                                                   | The session and two-factor secret: at least 32 bytes                                         |
-| `SHOUTORY_SMTP_URL`                                                         | The mail server, `smtp://` or `smtps://` with its credentials                                |
-| `SHOUTORY_DATABASE_URL_OWNER`, `_APP`, `_WORKER`, `_AUTH`, `_READONLY`      | One connection URL per database role                                                         |
-| `SHOUTORY_DATABASE_PASSWORD_OWNER`, `_APP`, `_WORKER`, `_AUTH`, `_READONLY` | The password each database role is created with                                              |
+| Variable                                                                    | Holds                                                                                                                             |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `SHOUTORY_ACTIVE_KEY_ID`                                                    | The id of the key that seals new secrets: 1-32 characters from `a-z`, `0-9` and `-`                                               |
+| `SHOUTORY_KEK_<ID>`                                                         | A key-encryption key: base64 of exactly 32 random bytes; the id in uppercase with `-` as `_`                                      |
+| `SHOUTORY_HMAC_PEPPER`                                                      | The pepper for API-key and token digests: at least 32 bytes                                                                       |
+| `SHOUTORY_SESSION_SECRET`                                                   | The session and two-factor secret: at least 32 bytes                                                                              |
+| `SHOUTORY_SMTP_URL`                                                         | The mail server, `smtp://` or `smtps://` with its credentials                                                                     |
+| `SHOUTORY_DATABASE_URL_OWNER`, `_APP`, `_WORKER`, `_AUTH`, `_READONLY`      | One connection URL per database role                                                                                              |
+| `SHOUTORY_DATABASE_PASSWORD_OWNER`, `_APP`, `_WORKER`, `_AUTH`, `_READONLY` | The password each database role is created with                                                                                   |
+| `SHOUTORY_PUBLIC_ORIGIN`                                                    | The exact origin the web app is served from (`https://host[:port]`, no path, query or userinfo); no default; a worker may omit it |
+| `SHOUTORY_PORT`                                                             | The port the API listens on, 1-65535; default 3000                                                                                |
+| `SHOUTORY_TRUSTED_PROXIES`                                                  | Comma-separated CIDR ranges of the reverse proxies whose `X-Forwarded-For` is believed; empty (the default) trusts none           |
+| `SHOUTORY_HOST`                                                             | The IPv4 or IPv6 address to listen on; unset (the default) listens on all interfaces                                              |
+| `SHOUTORY_ROLE`                                                             | `api`, `worker` or `all` (default); `worker` is not runnable yet                                                                  |
 
 Generate real values with `openssl rand -base64 32`. The values below are examples only and are refused at start-up. To
 rotate, add a new `SHOUTORY_KEK_<ID>`, point `SHOUTORY_ACTIVE_KEY_ID` at it and keep the old key until no row uses it.
@@ -91,6 +96,11 @@ export SHOUTORY_KEK_EXAMPLE=c2hvdXRvcnktZXhhbXBsZS1rZWstMDEyMzQ1Njc4OSE=
 export SHOUTORY_HMAC_PEPPER=example-pepper-do-not-use-in-production-0001
 export SHOUTORY_SESSION_SECRET=example-session-secret-do-not-use-in-production-0001
 ```
+
+### Running the API
+
+`pnpm build` compiles every package, then `node apps/api/dist/main.js` starts the server for the configured role. It checks the
+time zone, the configuration and the applied migrations before it listens, and answers `/healthz` and `/readyz`.
 
 ### Logs and telemetry
 

@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "composite": false, "declaration": false, "noEmit": true, "rootDir": "../.." },
+  "include": ["src/**/*.test.ts", "test/**/*.ts", "../../packages/db/test/global-setup.ts"],
+  "references": [
+    { "path": "./tsconfig.json" },
+    { "path": "../../packages/core" },
+    { "path": "../../packages/db" }
+  ]
+}

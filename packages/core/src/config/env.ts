@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 import { z } from "zod";
 import { SealedSecret } from "../crypto/envelope.js";
 import { EnvKeyProvider, KeyError, type KeyProvider } from "../crypto/keys.js";
@@ -71,7 +72,69 @@ const schema = z.object({
 /** The names of the secret variables, kept here so the logger's registered values come from the one list. */
 export const SECRET_VARIABLES: readonly string[] = Object.keys(schema.shape);
 
+const MAX_PORT = 65535;
+const isOrigin = (value: string) => {
+  if (!URL.canParse(value)) return false;
+  const url = new URL(value);
+  const plain = !url.username && !url.password && !url.search && !url.hash && url.pathname === "/";
+  return plain && ["http:", "https:"].includes(url.protocol);
+};
+/** `address/prefix`; a bare address is not a CIDR, so a proxy list never trusts a whole range by accident. */
+const isCidr = (value: string) => {
+  const [address, prefix, ...rest] = value.split("/");
+  const family = isIP(address ?? "");
+  const limit = family === 4 ? 32 : 128;
+  return rest.length === 0 && family > 0 && /^[0-9]{1,3}$/.test(prefix ?? "") && Number(prefix) <= limit;
+};
+const cidrList = z
+  .string()
+  .default("")
+  .transform((value) =>
+    value
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean),
+  )
+  .pipe(z.array(z.string().refine(isCidr, "must be a comma-separated list of CIDR ranges")));
+
+// The non-secret HTTP settings (R41). The origin has no default: a default would let CSRF accept a wrong origin.
+const httpSchema = z
+  .object({
+    SHOUTORY_ROLE: z.enum(["api", "worker", "all"]).default("all"),
+    SHOUTORY_PUBLIC_ORIGIN: z
+      .string()
+      .refine(isOrigin, "must be an http or https origin with no path, query or userinfo")
+      .optional(),
+    SHOUTORY_PORT: z
+      .string()
+      .regex(/^[0-9]{1,5}$/, "must be a port from 1 to 65535")
+      .default("3000")
+      .transform(Number)
+      .pipe(
+        z.number().min(1, "must be a port from 1 to 65535").max(MAX_PORT, "must be a port from 1 to 65535"),
+      ),
+    SHOUTORY_TRUSTED_PROXIES: cidrList,
+    SHOUTORY_HOST: z
+      .string()
+      .refine((value) => isIP(value) > 0, "must be an IPv4 or IPv6 address")
+      .optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.SHOUTORY_ROLE !== "worker" && value.SHOUTORY_PUBLIC_ORIGIN === undefined) {
+      ctx.addIssue({ code: "custom", path: ["SHOUTORY_PUBLIC_ORIGIN"], message: "is required" });
+    }
+  });
+
+export type ServerRole = z.infer<typeof httpSchema>["SHOUTORY_ROLE"];
+
 export interface Config {
+  role: ServerRole;
+  /** Set for every role that serves HTTP; only a worker may lack it. */
+  publicOrigin: string | undefined;
+  port: number;
+  /** The address to listen on; unset means the Node default (all interfaces). */
+  host: string | undefined;
+  trustedProxies: readonly string[];
   keys: KeyProvider;
   hmacPepper: SealedSecret;
   sessionSecret: SealedSecret;
@@ -95,20 +158,29 @@ function parseKeys(env: Env): KeyProvider {
   }
 }
 
+function refusal(error: z.ZodError): ConfigError {
+  const issue = error.issues[0];
+  const variable = String(issue?.path[0] ?? "environment");
+  return new ConfigError(variable, `${variable} ${issue?.message ?? "is invalid"}`);
+}
+
 /**
  * Parses the process environment, or refuses to start. Secrets have no default: a missing, empty, weak,
  * all-zero or example value raises a `ConfigError` that names the variable and never prints the value.
  */
 export function parseEnv(env: Env): Config {
   const parsed = schema.safeParse(env);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    const variable = String(issue?.path[0] ?? "environment");
-    throw new ConfigError(variable, `${variable} ${issue?.message ?? "is invalid"}`);
-  }
+  if (!parsed.success) throw refusal(parsed.error);
+  const http = httpSchema.safeParse(env);
+  if (!http.success) throw refusal(http.error);
   const value = parsed.data as Record<string, string>;
   const secret = (name: string) => new SealedSecret(value[name] as string);
   return {
+    role: http.data.SHOUTORY_ROLE,
+    publicOrigin: http.data.SHOUTORY_PUBLIC_ORIGIN && new URL(http.data.SHOUTORY_PUBLIC_ORIGIN).origin,
+    port: http.data.SHOUTORY_PORT,
+    host: http.data.SHOUTORY_HOST,
+    trustedProxies: http.data.SHOUTORY_TRUSTED_PROXIES,
     keys: parseKeys(env),
     hmacPepper: secret("SHOUTORY_HMAC_PEPPER"),
     sessionSecret: secret("SHOUTORY_SESSION_SECRET"),

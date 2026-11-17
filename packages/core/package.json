@@ -5,9 +5,22 @@
   "type": "module",
   "license": "AGPL-3.0-only",
   "exports": {
-    "./config": "./src/config/env.ts",
-    "./crypto": "./src/crypto/envelope.ts",
-    "./keys": "./src/crypto/keys.ts"
+    "./config": {
+      "source": "./src/config/env.ts",
+      "default": "./dist/config/env.js"
+    },
+    "./crypto": {
+      "source": "./src/crypto/envelope.ts",
+      "default": "./dist/crypto/envelope.js"
+    },
+    "./errors": {
+      "source": "./src/errors/codes.ts",
+      "default": "./dist/errors/codes.js"
+    },
+    "./keys": {
+      "source": "./src/crypto/keys.ts",
+      "default": "./dist/crypto/keys.js"
+    }
   },
   "dependencies": {
     "zod": "4.6.7"

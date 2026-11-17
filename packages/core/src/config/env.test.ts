@@ -13,6 +13,7 @@ const valid: Record<string, string> = {
   SHOUTORY_HMAC_PEPPER: "pepper-for-config-tests-0123456789",
   SHOUTORY_SESSION_SECRET: "session-for-config-tests-0123456789",
   SHOUTORY_SMTP_URL: "smtp://mailer-test:smtp-test-secret-1@mail.invalid:587",
+  SHOUTORY_PUBLIC_ORIGIN: "https://app.example.test",
   ...Object.fromEntries(
     ROLES.map((r) => [`SHOUTORY_DATABASE_PASSWORD_${r}`, `${r.toLowerCase()}-test-secret-1`]),
   ),
@@ -125,7 +126,9 @@ describe("start-up: shipped examples and printing", () => {
   it("never prints a secret value in the parsed config", () => {
     const config = parseEnv(valid);
     const shown = [JSON.stringify(config), String(config), inspect(config, { depth: 6 })].join("\n");
-    for (const key of Object.keys(valid).filter((k) => k !== "SHOUTORY_ACTIVE_KEY_ID")) {
+    for (const key of Object.keys(valid).filter(
+      (k) => k !== "SHOUTORY_ACTIVE_KEY_ID" && k !== "SHOUTORY_PUBLIC_ORIGIN",
+    )) {
       expect(shown).not.toContain(valid[key] as string);
     }
   });
@@ -158,5 +161,61 @@ describe("start-up: time zone and key ids", () => {
     const run = () => assertKeyIdsLoaded(inUse, ring);
     if (ok) expect(run).not.toThrow();
     else expect(run).toThrow(KeyError);
+  });
+});
+
+describe("start-up: HTTP settings", () => {
+  it("reads the origin as an exact origin, the port with its default and the proxy list with an empty default", () => {
+    const config = parseEnv(withValue("SHOUTORY_PUBLIC_ORIGIN", "HTTPS://App.Example.test"));
+    expect(config.publicOrigin).toBe("https://app.example.test");
+    expect(config.port).toBe(3000);
+    expect(config.trustedProxies).toEqual([]);
+    expect(parseEnv(withValue("SHOUTORY_PUBLIC_ORIGIN", "http://localhost:5173")).publicOrigin).toBe(
+      "http://localhost:5173",
+    );
+  });
+
+  it("reads a set port and a comma-separated CIDR list", () => {
+    const config = parseEnv({
+      ...valid,
+      SHOUTORY_PORT: "8080",
+      SHOUTORY_TRUSTED_PROXIES: "10.0.0.0/8, fd00::/8,192.0.2.7/32",
+    });
+    expect(config.port).toBe(8080);
+    expect(config.trustedProxies).toEqual(["10.0.0.0/8", "fd00::/8", "192.0.2.7/32"]);
+  });
+
+  it.each(["127.0.0.1", "::1"])("reads the listen address %s; unset means no host", (host) => {
+    expect(parseEnv({ ...valid, SHOUTORY_HOST: host }).host).toBe(host);
+    expect(parseEnv(valid).host).toBeUndefined();
+  });
+
+  it.each([
+    ["an origin with a path", "SHOUTORY_PUBLIC_ORIGIN", "https://app.example.test/app"],
+    ["an origin with userinfo", "SHOUTORY_PUBLIC_ORIGIN", "https://user:pw@app.example.test"],
+    ["an origin with a query", "SHOUTORY_PUBLIC_ORIGIN", "https://app.example.test?x=1"],
+    ["an origin with a fragment", "SHOUTORY_PUBLIC_ORIGIN", "https://app.example.test#top"],
+    ["an origin that is not http or https", "SHOUTORY_PUBLIC_ORIGIN", "ftp://app.example.test"],
+    ["an origin that is not a URL", "SHOUTORY_PUBLIC_ORIGIN", "app.example.test"],
+    ["a port of 0", "SHOUTORY_PORT", "0"],
+    ["a port over 65535", "SHOUTORY_PORT", "65536"],
+    ["a port that is not an integer", "SHOUTORY_PORT", "80.5"],
+    ["a proxy entry that is not a CIDR", "SHOUTORY_TRUSTED_PROXIES", "10.0.0.0/8,not-a-network"],
+    ["a proxy entry with a prefix out of range", "SHOUTORY_TRUSTED_PROXIES", "10.0.0.0/33"],
+    ["a proxy entry that is a bare address", "SHOUTORY_TRUSTED_PROXIES", "10.0.0.1"],
+    ["a role outside api, worker and all", "SHOUTORY_ROLE", "scheduler"],
+    ["a listen address that is a host name", "SHOUTORY_HOST", "localhost"],
+  ])("refuses %s and names the variable", (_name, key, value) => {
+    expect(refusedVariable(withValue(key, value))).toBe(key);
+  });
+
+  it("requires the origin for the api and all roles but not for a worker", () => {
+    expect(refusedVariable({ ...without("SHOUTORY_PUBLIC_ORIGIN"), SHOUTORY_ROLE: "api" })).toBe(
+      "SHOUTORY_PUBLIC_ORIGIN",
+    );
+    expect(refusedVariable(without("SHOUTORY_PUBLIC_ORIGIN"))).toBe("SHOUTORY_PUBLIC_ORIGIN");
+    expect(
+      refusedVariable({ ...without("SHOUTORY_PUBLIC_ORIGIN"), SHOUTORY_ROLE: "worker" }),
+    ).toBeUndefined();
   });
 });

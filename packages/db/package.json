@@ -5,11 +5,30 @@
   "type": "module",
   "license": "AGPL-3.0-only",
   "exports": {
-    "./context": "./src/context/with-tenant.ts",
-    "./schema": "./src/schema.ts",
-    "./migrate": "./src/migrate/runner.ts",
-    "./startup": "./src/migrate/startup.ts",
-    "./testing": "./src/testing/template.ts"
+    "./context": {
+      "source": "./src/context/with-tenant.ts",
+      "default": "./dist/context/with-tenant.js"
+    },
+    "./migrate": {
+      "source": "./src/migrate/runner.ts",
+      "default": "./dist/migrate/runner.js"
+    },
+    "./pool": {
+      "source": "./src/pool.ts",
+      "default": "./dist/pool.js"
+    },
+    "./schema": {
+      "source": "./src/schema.ts",
+      "default": "./dist/schema.js"
+    },
+    "./startup": {
+      "source": "./src/migrate/startup.ts",
+      "default": "./dist/migrate/startup.js"
+    },
+    "./testing": {
+      "source": "./src/testing/template.ts",
+      "default": "./dist/testing/template.js"
+    }
   },
   "dependencies": {
     "drizzle-orm": "0.45.4",

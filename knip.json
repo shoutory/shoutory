@@ -3,11 +3,15 @@
     ".": {
       "entry": ["scripts/*.mjs"],
       "project": ["scripts/**", "e2e/**"],
-      "ignoreDependencies": ["@commitlint/cli"]
+      "ignoreDependencies": ["@commitlint/cli", "turbo"]
     },
     "packages/testkit": {
       "entry": ["test/*/*.test.mjs", "scripts/*.mjs"],
       "project": ["test/**"]
+    },
+    "apps/api": {
+      "entry": ["src/main.ts"],
+      "project": ["src/**", "test/**"]
     }
   }
 }
