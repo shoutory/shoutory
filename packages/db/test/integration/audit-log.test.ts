@@ -8,6 +8,7 @@ import {
   type TestDatabase,
   withAdminClient,
 } from "../../src/testing/template.js";
+import { HASH_BAD, holdThenRace, openTx } from "../support/race.js";
 
 const env = readTestEnv();
 
@@ -75,10 +76,6 @@ const writeInstance = (pool: Pool) =>
 
 const CHAIN = `SELECT workspace_id, at, prev_hash, hash FROM app.audit_logs
                WHERE workspace_id IS NOT DISTINCT FROM $1 ORDER BY at, id`;
-// The R178 hash, recomputed in SQL from the stored columns: counts the rows whose hash is not what the spec says.
-const HASH_BAD = `SELECT count(*)::int AS bad FROM app.audit_logs WHERE hash <> sha256(prev_hash || convert_to(
-  jsonb_build_array(id, workspace_id, organization_id, (extract(epoch FROM at) * 1000000)::bigint, actor_kind,
-    actor_ref, action, resource_kind, resource_id, request_id, encode(ip_hmac, 'hex'), metadata)::text, 'UTF8'))`;
 
 describe("writes and who may make them", () => {
   const t = useDatabase();
@@ -251,49 +248,6 @@ describe("the hash chain", () => {
   });
 });
 
-async function openTx(pool: Pool, ctx: ReturnType<typeof ctxOf> | null): Promise<PoolClient> {
-  const client = await pool.connect();
-  await client.query("BEGIN");
-  if (ctx === null) return client;
-  await client.query(
-    `SELECT set_config('app.organization_id', $1, true), set_config('app.workspace_ids', $2, true),
-            set_config('app.write_workspace_id', $3, true), set_config('app.principal_kind', 'user', true),
-            set_config('app.principal_id', $4, true)`,
-    [ctx.organizationId, `{${ctx.workspaceIds[0]}}`, ctx.writeWorkspaceId, ctx.principalId],
-  );
-  return client;
-}
-
-async function waitsForLock(t: Fixture, pid: number): Promise<void> {
-  const deadline = Date.now() + 10_000;
-  while (Date.now() < deadline) {
-    if ((await t.rows("SELECT 1 FROM pg_locks WHERE pid = $1 AND NOT granted", [pid])).length) return;
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  throw new Error("the second writer never waited for the head lock");
-}
-
-/** tx1 writes and holds, tx2 starts its write and is seen waiting in pg_locks, then tx1 commits and tx2 finishes. */
-async function holdThenRace(
-  t: Fixture,
-  first: PoolClient,
-  second: PoolClient,
-  write: (client: PoolClient, n: 1 | 2) => Promise<unknown>,
-): Promise<void> {
-  try {
-    await write(first, 1);
-    const pid = (await second.query("SELECT pg_backend_pid() AS pid")).rows[0].pid as number;
-    const pending = write(second, 2);
-    await waitsForLock(t, pid);
-    await first.query("COMMIT");
-    await pending;
-    await second.query("COMMIT");
-  } finally {
-    first.release();
-    second.release();
-  }
-}
-
 describe("concurrent writers", () => {
   const t = useDatabase();
   const insert = (action: string) => (client: PoolClient) =>
@@ -305,9 +259,10 @@ describe("concurrent writers", () => {
     await writeAudit(app(), ctxA);
     const first = await openTx(app(), ctxA);
     const second = await openTx(app(), ctxA);
-    await holdThenRace(t, first, second, (client, n) =>
+    const outcome = await holdThenRace(t.rows, first, second, (client, n) =>
       insert(n === 1 ? "post.created" : "post.updated")(client),
     );
+    expect(outcome.secondError).toBeUndefined();
     const rows = await t.rows(CHAIN, [WA]);
     expect(rows).toHaveLength(3);
     expect(rows[1]?.prev_hash).toEqual(rows[0]?.hash);
@@ -329,7 +284,7 @@ describe("concurrent writers", () => {
     );
     const first = await openTx(app(), ctxOf(fresh));
     const second = await openTx(app(), ctxOf(fresh));
-    await holdThenRace(t, first, second, insert("post.created"));
+    expect((await holdThenRace(t.rows, first, second, insert("post.created"))).secondError).toBeUndefined();
     const rows = await t.rows(CHAIN, [fresh]);
     expect(rows).toHaveLength(2);
     expect(rows[0]?.prev_hash).toEqual(GENESIS);
@@ -343,9 +298,10 @@ describe("the instance chain and rows with no workspace", () => {
   it("two first sign-in rows both succeed and link, from the genesis", async () => {
     const first = await openTx(t.db().pool("auth"), null);
     const second = await openTx(t.db().pool("auth"), null);
-    await holdThenRace(t, first, second, (client) =>
+    const outcome = await holdThenRace(t.rows, first, second, (client) =>
       client.query("SELECT app.audit_insert_instance('auth.sign_in', 'user', $1, 'req-2', NULL, '{}')", [UA]),
     );
+    expect(outcome.secondError).toBeUndefined();
     const rows = await t.rows(CHAIN, [null]);
     expect(rows).toHaveLength(2);
     expect(rows[0]?.prev_hash).toEqual(GENESIS);

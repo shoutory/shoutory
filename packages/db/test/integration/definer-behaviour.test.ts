@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Pool } from "pg";
+import type { Client, Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import {
   cloneTemplate,
@@ -7,6 +7,7 @@ import {
   type TestDatabase,
   withAdminClient,
 } from "../../src/testing/template.js";
+import { openTx } from "../support/race.js";
 
 const env = readTestEnv();
 
@@ -82,6 +83,74 @@ describe("every 0005 definer restores the caller's job purpose", () => {
     const client = await t.auth().connect();
     try {
       await client.query("BEGIN");
+      if (prior) await client.query("SELECT set_config('app.job_purpose', $1, true)", [prior]);
+      await client.query(sql, args as unknown[]);
+      const after = await client.query("SELECT current_setting('app.job_purpose', true) AS purpose");
+      expect(after.rows[0].purpose || undefined).toBe(prior);
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
+  });
+});
+
+/** One user who owns an organization and its one workspace. */
+async function seedOwnerOfWorkspace(
+  admin: Client,
+  user: string,
+  organization: string,
+  workspace: string,
+): Promise<void> {
+  await admin.query(
+    `INSERT INTO auth."user" (id, name, email) VALUES ($1, 'behaviour-3', 'behaviour-3@example.test')`,
+    [user],
+  );
+  await admin.query(
+    `INSERT INTO app.organizations (id, name, slug, type) VALUES ('${organization}', 'behaviour-org', 'behaviour-org', 'team');
+     INSERT INTO app.organization_members (organization_id, user_id, org_role) VALUES ('${organization}', '${user}', 'owner');
+     INSERT INTO app.workspaces (id, organization_id, name, slug) VALUES ('${workspace}', '${organization}', 'behaviour-ws', 'behaviour-ws');
+     INSERT INTO app.workspace_members (workspace_id, user_id, role_id)
+       SELECT '${workspace}', '${user}', id FROM app.roles WHERE key = 'owner' AND workspace_id IS NULL`,
+  );
+}
+
+/** One call of each 0009 definer, for a user who owns the organization and its workspace. */
+const accessCalls = (organization: string, workspace: string): [string, string, unknown[]][] => [
+  ["resolve_workspace_access", "SELECT * FROM app.resolve_workspace_access()", []],
+  ["my_workspaces", "SELECT * FROM app.my_workspaces(10, NULL)", []],
+  ["my_organizations", "SELECT * FROM app.my_organizations(10, NULL)", []],
+  ["member_directory", "SELECT * FROM app.member_directory($1::uuid, 10, NULL)", [workspace]],
+  [
+    "workspace_create",
+    "SELECT app.workspace_create($1::uuid, 'n', $2::text, 'UTC', NULL, NULL)",
+    [organization, "b-slug"],
+  ],
+  ["organization_create", "SELECT app.organization_create('n', 'team', NULL, NULL)", []],
+];
+
+// The 0009 definers, as a signed-in user. member_directory and my_workspaces call resolve_workspace_access inside,
+// so their rows also prove that a nested call puts the outer purpose back.
+describe("every 0009 definer restores the caller's job purpose", () => {
+  const user = randomUUID();
+  const organization = randomUUID();
+  const workspace = randomUUID();
+  let db: TestDatabase;
+  beforeAll(async () => {
+    db = await cloneTemplate(env, inject("shoutoryTemplate"));
+    await withAdminClient(env, db.name, (admin) =>
+      seedOwnerOfWorkspace(admin, user, organization, workspace),
+    );
+  });
+  afterAll(() => db.drop());
+
+  it.each(
+    accessCalls(organization, workspace).flatMap(([name, sql, args]) => [
+      [name, "x", sql, args] as const,
+      [name, undefined, sql, args] as const,
+    ]),
+  )("%s (prior %s)", async (_name, prior, sql, args) => {
+    const client = await openTx(db.pool("app"), { principalKind: "user", principalId: user });
+    try {
       if (prior) await client.query("SELECT set_config('app.job_purpose', $1, true)", [prior]);
       await client.query(sql, args as unknown[]);
       const after = await client.query("SELECT current_setting('app.job_purpose', true) AS purpose");

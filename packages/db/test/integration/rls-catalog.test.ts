@@ -172,7 +172,22 @@ const DEFINERS: Definer[] = [
     callers: [],
   },
   { name: "audit_immutable", args: "", callers: [], helper: true },
+  { name: "resolve_workspace_access", args: "", callers: ["shoutory_app"] },
+  { name: "my_workspaces", args: "lim integer, after uuid", callers: ["shoutory_app"] },
+  { name: "my_organizations", args: "lim integer, after uuid", callers: ["shoutory_app"] },
+  {
+    name: "workspace_create",
+    args: "organization_id uuid, name text, slug text, tz text, request_id text, ip_hmac bytea",
+    callers: ["shoutory_app"],
+  },
+  {
+    name: "organization_create",
+    args: "name text, type text, request_id text, ip_hmac bytea",
+    callers: ["shoutory_app"],
+  },
+  { name: "member_directory", args: "workspace_id uuid, lim integer, after uuid", callers: ["shoutory_app"] },
 ];
+const TENANCY_TABLES = ["organizations", "organization_members", "workspaces", "workspace_members", "roles"];
 const RUNTIME_AND_OWNER_ROLES = [
   "shoutory_owner",
   "shoutory_definer",
@@ -266,6 +281,22 @@ describe("row security catalog: definers", () => {
     );
     expect(purposeProblems(found.rows)).toEqual([]);
   });
+});
+
+describe("row security catalog: what the definer role may do to the tenancy tables", () => {
+  const owner = useOwnerPool();
+
+  // R199: the access definers read and create rows; nothing changes or removes a tenancy row through them.
+  it.each(["UPDATE", "DELETE", "TRUNCATE"])(
+    "the definer role holds no %s on a tenancy table",
+    async (privilege) => {
+      const found = await owner().query(
+        `SELECT t AS tbl FROM unnest($1::text[]) AS t WHERE has_table_privilege('shoutory_definer', 'app.' || t, $2)`,
+        [TENANCY_TABLES, privilege],
+      );
+      expect(found.rows).toEqual([]);
+    },
+  );
 });
 
 describe("row security catalog: tables and roles", () => {

@@ -124,8 +124,9 @@ describe("instance_admin_claim: who may call it and what the definer reads", () 
     },
   );
 
-  // The definer reads these columns of auth.user and no others (matrix row, R58). Later slices add columns here.
-  const DEFINER_USER_COLUMNS = ["email_verified", "id"];
+  // The definer role reads these columns of auth.user and no others: id and email_verified (granted with the claim
+  // definer) and name and image (granted with the access definers). A later grant adds its columns here.
+  const DEFINER_USER_COLUMNS = ["email_verified", "id", "image", "name"];
 
   it("the definer role holds column SELECT on exactly the matrix columns of auth.user", async () => {
     const found = await t
