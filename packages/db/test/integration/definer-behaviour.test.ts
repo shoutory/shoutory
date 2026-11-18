@@ -59,8 +59,8 @@ describe("password_recheck_set", () => {
   });
 });
 
-// R91: a definer sets its purpose at entry and puts the caller's value back at exit, so a job's own purpose does
-// not change under it.
+// A definer sets its purpose at entry and puts the caller's value back at exit, so a job's own purpose does not
+// change under it.
 describe("every 0005 definer restores the caller's job purpose", () => {
   const t = useUser();
   const key = "c".repeat(64);
@@ -90,5 +90,102 @@ describe("every 0005 definer restores the caller's job purpose", () => {
       await client.query("ROLLBACK");
       client.release();
     }
+  });
+});
+
+type Principal = { id?: string; kind?: string };
+
+/** One instance_setting_set call in its own transaction, with the settings of a session; returns the purpose after. */
+async function setInstanceSetting(
+  t: Fixture,
+  who: Principal,
+  key: string,
+  value: unknown,
+  extra: Record<string, string> = {},
+): Promise<string> {
+  const settings = { "app.principal_id": who.id ?? "", "app.principal_kind": who.kind ?? "", ...extra };
+  const client = await t.db().pool("app").connect();
+  try {
+    await client.query("BEGIN");
+    for (const [name, setting] of Object.entries(settings)) {
+      await client.query("SELECT set_config($1, $2, true)", [name, setting]);
+    }
+    await client.query("SELECT app.instance_setting_set($1, $2::jsonb)", [key, JSON.stringify(value)]);
+    const after = await client.query("SELECT current_setting('app.job_purpose', true) AS purpose");
+    await client.query("COMMIT");
+    return after.rows[0].purpose as string;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+const storedSettings = (t: Fixture) =>
+  withAdminClient(
+    env,
+    t.db().name,
+    async (admin) => (await admin.query("SELECT key, value, updated_by FROM app.instance_settings")).rows,
+  );
+
+describe("instance_setting_set", () => {
+  const t = useUser();
+  const outsider = randomUUID();
+  const call = (who: Principal, key: string, value: unknown, extra?: Record<string, string>) =>
+    setInstanceSetting(t, who, key, value, extra);
+  const stored = () => storedSettings(t);
+
+  beforeAll(async () => {
+    await withAdminClient(env, t.db().name, async (admin) => {
+      await admin.query(
+        `INSERT INTO auth."user" (id, name, email) VALUES ($1, 'behaviour-2', 'behaviour-2@example.test')`,
+        [outsider],
+      );
+      await admin.query("INSERT INTO app.instance_admins (user_id) VALUES ($1)", [t.user]);
+    });
+  });
+
+  it("an admin sets the value and sets it again", async () => {
+    const admin = { id: t.user, kind: "user" };
+    await call(admin, "signup_enabled", true);
+    expect(await stored()).toEqual([{ key: "signup_enabled", value: true, updated_by: t.user }]);
+    await call(admin, "signup_enabled", false);
+    expect(await stored()).toEqual([{ key: "signup_enabled", value: false, updated_by: t.user }]);
+  });
+
+  it.each([
+    ["a user who is not an admin", { id: outsider, kind: "user" }, "signup_enabled", true, "42501"],
+    [
+      "an admin's id under a service principal",
+      { id: t.user, kind: "service" },
+      "signup_enabled",
+      true,
+      "42501",
+    ],
+    ["no principal at all", {}, "signup_enabled", true, "42501"],
+    ["an unknown key", { id: t.user, kind: "user" }, "other_setting", true, "22023"],
+  ] as [string, Principal, string, unknown, string][])(
+    "%s is refused and changes nothing",
+    async (_title, who, key, value, code) => {
+      const before = await stored();
+      await expect(call(who, key, value)).rejects.toMatchObject({ code });
+      expect(await stored()).toEqual(before);
+    },
+  );
+
+  it.each([["yes"], [1], [null]])("the value %j is not a boolean and is refused", async (value) => {
+    const before = await stored();
+    await expect(call({ id: t.user, kind: "user" }, "signup_enabled", value)).rejects.toMatchObject({
+      code: "22023",
+    });
+    expect(await stored()).toEqual(before);
+  });
+
+  it("the caller's purpose is back after the call", async () => {
+    const purpose = await call({ id: t.user, kind: "user" }, "signup_enabled", true, {
+      "app.job_purpose": "x",
+    });
+    expect(purpose).toBe("x");
   });
 });

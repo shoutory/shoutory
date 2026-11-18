@@ -4,6 +4,7 @@ import {
   customType,
   doublePrecision,
   integer,
+  interval,
   jsonb,
   pgSchema,
   primaryKey,
@@ -149,4 +150,71 @@ export const instanceAdmins = app.table("instance_admins", {
     .references(() => authUser.id, { onDelete: "cascade" }),
   grantedBy: uuid("granted_by"),
   grantedAt: stamp("granted_at").notNull().defaultNow(),
+});
+
+// Tenancy: the runtime role reads these tables; organization and membership writes come from definer functions.
+export const organizations = app.table("organizations", {
+  id: id(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  type: text("type").notNull(),
+  region: text("region").notNull().default("default"),
+  planRef: text("plan_ref"),
+  deletionRequestedAt: stamp("deletion_requested_at"),
+});
+
+export const organizationMembers = app.table(
+  "organization_members",
+  {
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    userId: userId(),
+    orgRole: text("org_role").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.organizationId, table.userId] })],
+);
+
+export const workspaces = app.table("workspaces", {
+  id: id(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  colour: text("colour"),
+  avatar: uuid("avatar"),
+  defaultTz: text("default_tz").notNull().default("UTC"),
+  latenessTolerance: interval("lateness_tolerance").notNull().default("2 hours"),
+  region: text("region").notNull().default("default"),
+  deletionRequestedAt: stamp("deletion_requested_at"),
+  archivedAt: stamp("archived_at"),
+});
+
+// workspaceId is NULL for a built-in role.
+export const roles = app.table("roles", {
+  id: id(),
+  workspaceId: uuid("workspace_id").references(() => workspaces.id),
+  key: text("key").notNull(),
+  name: text("name").notNull(),
+  permissions: text("permissions").array().notNull(),
+});
+
+export const workspaceMembers = app.table("workspace_members", {
+  id: id(),
+  workspaceId: uuid("workspace_id")
+    .notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  userId: userId(),
+  roleId: uuid("role_id")
+    .notNull()
+    .references(() => roles.id),
+  status: text("status").notNull().default("active"),
+});
+
+export const instanceSettings = app.table("instance_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedBy: uuid("updated_by"),
+  updatedAt: stamp("updated_at").notNull().default(sql`clock_timestamp()`),
 });

@@ -10,17 +10,8 @@ import {
 
 const env = readTestEnv();
 
-// Security floor of migration 0006: the outbox holds a sealed link that only definer functions may touch. The
-// runtime roles hold no table privilege; each definer is owned by the definer role, pins its search path and is
-// executable by exactly its callers; each purpose policy opens only the read it names.
-const PRIVILEGES = ["SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER", "MAINTAIN"];
-const RUNTIME_ROLES = ["shoutory_app", "shoutory_worker", "shoutory_auth", "shoutory_readonly"];
-const DEFINERS = [
-  { name: "email_outbox_enqueue", callers: ["shoutory_auth", "shoutory_app"] },
-  { name: "sealed_key_ids", callers: ["shoutory_app", "shoutory_worker"] },
-  { name: "email_outbox_reseal_batch", callers: ["shoutory_worker"] },
-  { name: "email_outbox_reseal_write", callers: ["shoutory_worker"] },
-];
+// Security floor of migration 0006: the outbox holds a sealed link that only definer functions may touch. Each
+// purpose policy opens only the read it names. The grants and the definer hygiene are in the catalog tests.
 
 const hex = (n: number) => `\\x${n.toString(16).padStart(2, "0").repeat(4)}`;
 // Time-ordered ids, so the batch order is the insert order.
@@ -60,19 +51,6 @@ const pool = (role: Role): Pool => db.pool(role);
 const clear = () => withAdminClient(env, db.name, (admin) => admin.query("DELETE FROM app.email_outbox"));
 
 describe("email_outbox: table and grants", () => {
-  it.each(RUNTIME_ROLES)("%s holds no privilege on the table", async (role) => {
-    const found = await Promise.all(
-      PRIVILEGES.map(async (privilege) => {
-        const has = await pool("owner").query(
-          "SELECT has_table_privilege($1, 'app.email_outbox', $2) AS has",
-          [role, privilege],
-        );
-        return has.rows[0].has as boolean;
-      }),
-    );
-    expect(found).toEqual(PRIVILEGES.map(() => false));
-  });
-
   it("a direct INSERT by the auth role is refused", async () => {
     const insert = pool("auth").query(
       `INSERT INTO app.email_outbox (id, recipient, template, locale, vars) VALUES ($1, 'direct-1@example.test', 'verify_email', 'en', '{}')`,
@@ -83,30 +61,6 @@ describe("email_outbox: table and grants", () => {
 });
 
 describe("email_outbox: definers", () => {
-  const catalog = (name: string) =>
-    pool("owner").query(
-      `SELECT pg_get_userbyid(p.proowner) AS owner, p.prosecdef, p.proconfig FROM pg_proc p
-       WHERE p.pronamespace = 'app'::regnamespace AND p.proname = $1`,
-      [name],
-    );
-
-  it.each(DEFINERS)("$name is owned by the definer, with a pinned path", async ({ name }) => {
-    expect((await catalog(name)).rows).toEqual([
-      { owner: "shoutory_definer", prosecdef: true, proconfig: ["search_path=pg_catalog, app, pg_temp"] },
-    ]);
-  });
-
-  it.each(DEFINERS)("$name is executable by exactly its callers and never by PUBLIC", async (d) => {
-    const found = await pool("owner").query(
-      `SELECT coalesce(r.rolname, 'PUBLIC') AS grantee
-       FROM pg_proc p CROSS JOIN LATERAL aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
-       LEFT JOIN pg_roles r ON r.oid = a.grantee
-       WHERE p.pronamespace = 'app'::regnamespace AND p.proname = $1 AND a.privilege_type = 'EXECUTE'`,
-      [d.name],
-    );
-    expect(found.rows.map((row) => row.grantee).sort()).toEqual([...d.callers, "shoutory_definer"].sort());
-  });
-
   // The definer role sees a row only under the purpose that names its read.
   const countAs = async (purpose: string | undefined) => {
     const client = await pool("owner").connect();

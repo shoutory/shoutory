@@ -41,16 +41,10 @@ function useOwnerPool(): () => Pool {
 describe("row security catalog: PUBLIC", () => {
   const owner = useOwnerPool();
 
-  it("no function in app or auth grants EXECUTE to PUBLIC", async () => {
-    const count = await owner().query(
-      "SELECT count(*)::int AS n FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'app'",
-    );
-    // The row is vacuous with no function in the schema: the helpers and the template function must exist.
-    expect(count.rows[0].n).toBeGreaterThanOrEqual(PINNED.length);
-    for (const schema of ["app", "auth"]) {
-      const open = await owner().query(`${GRANTEES} AND r.rolname IS NULL`, [schema]);
-      expect(open.rows).toEqual([]);
-    }
+  // The functions of schema app are checked one by one below (helpers, definers, the template function).
+  it("no function in schema auth grants EXECUTE to PUBLIC", async () => {
+    const open = await owner().query(`${GRANTEES} AND r.rolname IS NULL`, ["auth"]);
+    expect(open.rows).toEqual([]);
   });
 
   it("a function the owner creates without any REVOKE has no PUBLIC EXECUTE", async () => {
@@ -108,5 +102,175 @@ describe("row security catalog: helpers", () => {
          AND s.setdatabase IN (0, (SELECT oid FROM pg_database WHERE datname = current_database()))`,
     );
     expect(found.rows).toEqual([]);
+  });
+});
+
+// The definer matrix: every function of schema app owned by the definer role, with the roles that may call it. A
+// later migration adds its definers here; a function not listed fails the first test by name.
+interface Definer {
+  name: string;
+  /** The identity arguments, so an added overload of the same name is caught. */
+  args: string;
+  callers: string[];
+  /** Not SECURITY DEFINER: an internal helper that only the definers call. */
+  helper?: true;
+}
+const AUTH_APP_WORKER = ["shoutory_auth", "shoutory_app", "shoutory_worker"];
+const SEALED_LINK =
+  "link_ciphertext bytea, link_iv bytea, link_auth_tag bytea, link_wrap_iv bytea, link_wrap_tag bytea, link_wrapped_dek bytea, link_key_id text, link_format_version integer";
+const DEFINERS: Definer[] = [
+  { name: "bucket_take", args: "key text, scope text, cost integer", callers: AUTH_APP_WORKER },
+  { name: "bucket_state", args: "key text, scope text", callers: AUTH_APP_WORKER },
+  {
+    name: "step_up_record",
+    args: "session_id uuid, user_id uuid, method text",
+    callers: ["shoutory_auth"],
+  },
+  {
+    name: "step_up_read",
+    args: "session_id uuid, user_id uuid",
+    callers: ["shoutory_auth", "shoutory_app"],
+  },
+  {
+    name: "password_recheck_set",
+    args: "user_id uuid, due timestamp with time zone",
+    callers: ["shoutory_auth"],
+  },
+  { name: "instance_admin_claim", args: "user_id uuid", callers: ["shoutory_auth"] },
+  { name: "bucket_limits", args: "scope text", callers: [], helper: true },
+  {
+    name: "email_outbox_enqueue",
+    args: `id uuid, workspace_id uuid, recipient text, template text, locale text, vars jsonb, ${SEALED_LINK}, link_digest text`,
+    callers: ["shoutory_auth", "shoutory_app"],
+  },
+  { name: "sealed_key_ids", args: "", callers: ["shoutory_app", "shoutory_worker"] },
+  {
+    name: "email_outbox_reseal_batch",
+    args: "lim integer, active_key_id text, after_id uuid",
+    callers: ["shoutory_worker"],
+  },
+  {
+    name: "email_outbox_reseal_write",
+    args: `id uuid, expected_generation integer, ${SEALED_LINK}`,
+    callers: ["shoutory_worker"],
+  },
+  { name: "instance_setting_set", args: "key text, value jsonb", callers: ["shoutory_app"] },
+  { name: "organization_owner_guard", args: "", callers: [] },
+];
+const RUNTIME_AND_OWNER_ROLES = [
+  "shoutory_owner",
+  "shoutory_definer",
+  "shoutory_app",
+  "shoutory_worker",
+  "shoutory_auth",
+  "shoutory_readonly",
+];
+// Tables outside row security on purpose: the migration ledger holds no tenant data.
+const RLS_ALLOWLIST = ["schema_migrations"];
+
+interface PolicyRow {
+  tbl: string;
+  policy: string;
+  cmd: string;
+  expr: string | null;
+}
+
+function purposeProblems(rows: PolicyRow[]): string[] {
+  const seen = new Map<string, string>();
+  const problems: string[] = [];
+  for (const row of rows) {
+    const purpose = /job_purpose\(\)[^=]*= '([a-z_]+)'/.exec(row.expr ?? "")?.[1];
+    if (!purpose) problems.push(`${row.tbl}.${row.policy}: no purpose`);
+    const commands = row.cmd === "*" ? ["r", "a", "w", "d"] : [row.cmd];
+    for (const command of commands) {
+      const key = `${row.tbl}/${purpose}/${command}`;
+      const first = seen.get(key);
+      if (first) problems.push(`${key}: ${first} and ${row.policy}`);
+      seen.set(key, row.policy);
+    }
+  }
+  return problems;
+}
+
+describe("row security catalog: definers", () => {
+  const owner = useOwnerPool();
+
+  it("the functions owned by the definer role are exactly the definer matrix, at least 11", async () => {
+    const found = await owner().query(
+      `SELECT p.proname FROM pg_proc p WHERE p.pronamespace = 'app'::regnamespace
+         AND pg_get_userbyid(p.proowner) = 'shoutory_definer' ORDER BY p.proname`,
+    );
+    const listed = found.rows.map((row) => row.proname as string);
+    expect(listed.length).toBeGreaterThanOrEqual(11);
+    expect(listed).toEqual(DEFINERS.map((d) => d.name).sort());
+  });
+
+  it("no SECURITY DEFINER function anywhere is owned by another role", async () => {
+    const found = await owner().query(
+      `SELECT n.nspname || '.' || p.proname AS name FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+       WHERE p.prosecdef AND n.nspname IN ('app', 'auth') AND pg_get_userbyid(p.proowner) <> 'shoutory_definer'`,
+    );
+    expect(found.rows).toEqual([]);
+  });
+
+  it.each(DEFINERS)(
+    "$name has one signature, pins its search_path with pg_temp last and has the stated security",
+    async (d) => {
+      const found = await owner().query(
+        `SELECT pg_get_function_identity_arguments(p.oid) AS args, p.prosecdef, p.proconfig
+         FROM pg_proc p WHERE p.pronamespace = 'app'::regnamespace AND p.proname = $1`,
+        [d.name],
+      );
+      expect(found.rows).toEqual([
+        {
+          args: d.args,
+          prosecdef: d.helper !== true,
+          proconfig: [`search_path=${d.helper ? "pg_catalog, pg_temp" : "pg_catalog, app, pg_temp"}`],
+        },
+      ]);
+    },
+  );
+
+  it.each(DEFINERS)(
+    "$name is executable by exactly its callers and the definer, never by PUBLIC",
+    async (d) => {
+      const found = await owner().query(`${GRANTEES} AND p.proname = $2`, ["app", d.name]);
+      expect(found.rows.map((row) => row.grantee).sort()).toEqual([...d.callers, "shoutory_definer"].sort());
+    },
+  );
+
+  // One definer policy per table, purpose and command: a purpose opens exactly the access its function needs.
+  it("every policy of the definer role names a purpose, once per table and command", async () => {
+    const found = await owner().query(
+      `SELECT c.relname AS tbl, p.polname AS policy, p.polcmd AS cmd,
+              coalesce(pg_get_expr(p.polqual, p.polrelid), pg_get_expr(p.polwithcheck, p.polrelid)) AS expr
+       FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid
+       WHERE c.relnamespace = 'app'::regnamespace
+         AND (SELECT oid FROM pg_roles WHERE rolname = 'shoutory_definer') = ANY (p.polroles)`,
+    );
+    expect(purposeProblems(found.rows)).toEqual([]);
+  });
+});
+
+describe("row security catalog: tables and roles", () => {
+  const owner = useOwnerPool();
+
+  it("every app table has row security enabled and forced and a policy", async () => {
+    const found = await owner().query(
+      `SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+              (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+       FROM pg_class c WHERE c.relnamespace = 'app'::regnamespace AND c.relkind IN ('r', 'p') AND NOT c.relispartition
+         AND c.relname <> ALL ($1) ORDER BY c.relname`,
+      [RLS_ALLOWLIST],
+    );
+    expect(found.rows.length).toBeGreaterThanOrEqual(11);
+    expect(
+      found.rows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity || row.policies < 1),
+    ).toEqual([]);
+  });
+
+  it.each(RUNTIME_AND_OWNER_ROLES)("%s does not bypass row security", async (role) => {
+    const found = await owner().query("SELECT rolbypassrls FROM pg_roles WHERE rolname = $1", [role]);
+    expect(found.rows).toEqual([{ rolbypassrls: false }]);
   });
 });

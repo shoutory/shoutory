@@ -36,6 +36,16 @@ const aad = (n: number, workspaceId: string | null, generation: number) =>
 let db: TestDatabase;
 beforeAll(async () => {
   db = await cloneTemplate(env, inject("shoutoryTemplate"));
+  // The outbox row of a workspace points at a real workspace.
+  await withAdminClient(env, db.name, async (admin) => {
+    const org = await admin.query(
+      "INSERT INTO app.organizations (name, slug, type) VALUES ('reseal-org', 'reseal-org', 'team') RETURNING id",
+    );
+    await admin.query(
+      "INSERT INTO app.workspaces (id, organization_id, name, slug) VALUES ($1, $2, 'reseal', 'reseal')",
+      [WORKSPACE, org.rows[0].id],
+    );
+  });
 });
 afterAll(() => db.drop());
 beforeEach(() => withAdminClient(env, db.name, (admin) => admin.query("DELETE FROM app.email_outbox")));

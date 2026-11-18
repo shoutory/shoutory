@@ -10,46 +10,9 @@ import {
 
 const env = readTestEnv();
 
-// Security floor: one row per definer of migration 0005. A definer is owned by the NOLOGIN definer role, pins its
-// search path, is executable by exactly its callers (never PUBLIC), and reads or writes only the table its purpose
-// policy names. The constant is the definer matrix of the M0 plan; later migrations add rows.
-interface Definer {
-  name: string;
-  args: string;
-  callers: string[];
-  /** An internal helper: not SECURITY DEFINER, callable by no one but the definers that share its owner. */
-  helper?: true;
-}
-const DEFINERS: Definer[] = [
-  {
-    name: "bucket_take",
-    args: "key text, scope text, cost integer",
-    callers: ["shoutory_auth", "shoutory_app", "shoutory_worker"],
-  },
-  {
-    name: "bucket_state",
-    args: "key text, scope text",
-    callers: ["shoutory_auth", "shoutory_app", "shoutory_worker"],
-  },
-  {
-    name: "step_up_record",
-    args: "session_id uuid, user_id uuid, method text",
-    callers: ["shoutory_auth"],
-  },
-  {
-    name: "step_up_read",
-    args: "session_id uuid, user_id uuid",
-    callers: ["shoutory_auth", "shoutory_app"],
-  },
-  {
-    name: "password_recheck_set",
-    args: "user_id uuid, due timestamp with time zone",
-    callers: ["shoutory_auth"],
-  },
-  { name: "instance_admin_claim", args: "user_id uuid", callers: ["shoutory_auth"] },
-  { name: "bucket_limits", args: "scope text", callers: [], helper: true },
-];
-
+// Security floor of migration 0005: each definer reads or writes only the table its purpose policy names. The
+// owner, search path and caller checks of every definer are in the catalog test.
+//
 // The table each purpose policy opens for reading, with the purpose that opens it.
 const POLICIES = [
   ["rate_buckets", "bucket_take"],
@@ -87,32 +50,9 @@ function useClone(seeded: boolean): () => TestDatabase {
   return () => db;
 }
 
-describe("definers of migration 0005: catalog", () => {
+describe("definers of migration 0005: index and caller", () => {
   const clone = useClone(false);
   const db = { pool: (role: "owner" | "readonly") => clone().pool(role) };
-
-  const catalog = (name: string) =>
-    db.pool("owner").query(
-      `SELECT pg_get_userbyid(p.proowner) AS owner, p.prosecdef, p.proconfig,
-              pg_get_function_identity_arguments(p.oid) AS args
-       FROM pg_proc p WHERE p.pronamespace = 'app'::regnamespace AND p.proname = $1`,
-      [name],
-    );
-
-  it.each(DEFINERS)(
-    "$name is owned by the definer, with a pinned path and the stated security",
-    async (d) => {
-      const found = await catalog(d.name);
-      expect(found.rows).toEqual([
-        {
-          owner: "shoutory_definer",
-          prosecdef: d.helper !== true,
-          proconfig: [`search_path=${d.helper ? "pg_catalog, pg_temp" : "pg_catalog, app, pg_temp"}`],
-          args: d.args,
-        },
-      ]);
-    },
-  );
 
   it("session_step_ups has an index led by user_id, the key of the template U predicate and the cascade", async () => {
     const found = await db.pool("owner").query(
@@ -121,17 +61,6 @@ describe("definers of migration 0005: catalog", () => {
          SELECT attnum FROM pg_attribute WHERE attrelid = i.indrelid AND attname = 'user_id')`,
     );
     expect(found.rows[0].n).toBe(1);
-  });
-
-  it.each(DEFINERS)("$name is executable by exactly its callers and never by PUBLIC", async (d) => {
-    const found = await db.pool("owner").query(
-      `SELECT coalesce(r.rolname, 'PUBLIC') AS grantee
-       FROM pg_proc p CROSS JOIN LATERAL aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
-       LEFT JOIN pg_roles r ON r.oid = a.grantee
-       WHERE p.pronamespace = 'app'::regnamespace AND p.proname = $1 AND a.privilege_type = 'EXECUTE'`,
-      [d.name],
-    );
-    expect(found.rows.map((row) => row.grantee).sort()).toEqual([...d.callers, "shoutory_definer"].sort());
   });
 
   it("a role outside the matrix is refused when it calls a definer", async () => {

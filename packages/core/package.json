@@ -5,6 +5,10 @@
   "type": "module",
   "license": "AGPL-3.0-only",
   "exports": {
+    "./authz": {
+      "source": "./src/authz/matrix.ts",
+      "default": "./dist/authz/matrix.js"
+    },
     "./config": {
       "source": "./src/config/env.ts",
       "default": "./dist/config/env.js"
