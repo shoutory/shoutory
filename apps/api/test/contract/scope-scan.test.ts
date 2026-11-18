@@ -4,7 +4,8 @@ import { dirname, join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 // This is a text tripwire, not a proof: it catches a cast or an import in the wrong place, while forging the type
-// stays impossible because the brand symbol is never exported. An AuthorizedScope exists only if the permission module minted it from the resolved rows (R211): the brand is built
+// stays impossible because the brand symbol is never exported. The one other way into the database from a route is the
+// `inUserTx` closure of a `user` route, which defineRoute binds to the session's principal (R226). An AuthorizedScope exists only if the permission module minted it from the resolved rows (R211): the brand is built
 // in packages/core/src/authz, mintScope is imported only by the db context, and a route reaches data only through the
 // scope the route table minted, never through withTenant.
 

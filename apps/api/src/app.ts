@@ -10,6 +10,7 @@ import { errorResponse, Refusal, toRefusal } from "./errors/refusal.js";
 import { registerHealth } from "./health/health.js";
 import { type Logger, logRequest } from "./logging/logger.js";
 import { type App, type AppEnv, initRoutes } from "./routes/define-route.js";
+import { registerOrganizations } from "./routes/organizations/organization.js";
 import { registerWorkspaces } from "./routes/workspaces/workspace.js";
 import { clientAddressResolver } from "./security/client-address.js";
 
@@ -87,7 +88,8 @@ export function createApp(options: AppOptions): App {
   });
   registerHealth(app, options.pool, options.keys);
   registerAuthRoutes(app, options.auth);
-  registerWorkspaces(app);
+  registerOrganizations(app, options.auth.ipHmac);
+  registerWorkspaces(app, options.auth.ipHmac);
   app.notFound((c) => errorResponse(c, new Refusal("not_found", "no such route")));
   return app;
 }

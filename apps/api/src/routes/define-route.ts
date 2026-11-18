@@ -3,7 +3,7 @@ import { PERMISSIONS, type Permission } from "@shoutory/core/authz";
 import type { AuthorizedScope } from "@shoutory/core/authz/scope";
 import type { ErrorCode } from "@shoutory/core/errors";
 import type { TenantTx } from "@shoutory/db/context";
-import { type ScopeDenial, type ScopeRequest, withScope } from "@shoutory/db/context/scope";
+import { type ScopeDenial, type ScopeRequest, withScope, withUser } from "@shoutory/db/context/scope";
 import type { AppPool } from "@shoutory/db/pool";
 import type { Context, MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -29,7 +29,7 @@ export interface RouteAuth {
 }
 
 /**
- * What data a route may reach. `none` is for a public route; `user` needs a signed-in user and holds no transaction; a workspace
+ * What data a route may reach. `none` is for a public route; `user` needs a signed-in user and holds a transaction only inside `inUserTx`; a workspace
  * access names the path parameter that holds the workspace id and the permission the caller needs there (none: any
  * member). The handler never sees a workspace id that did not come through this declaration.
  */
@@ -47,6 +47,12 @@ const MAX_BODY_BYTES = 1024 * 1024;
 type Shape = z.ZodType<Record<string, unknown>>;
 const noInput = z.strictObject({});
 
+/**
+ * What a `user` route may call: it opens a principal-only transaction when called, and nothing is held before. `run`
+ * calls only definers and makes no outbound call (AGENTS 3.7).
+ */
+export type InUserTx = <T>(run: (tx: TenantTx) => Promise<T>) => Promise<T>;
+
 interface Input<B, Q, P, A extends Access> {
   readonly body: B extends Shape ? z.infer<B> : undefined;
   readonly query: z.infer<Q & Shape>;
@@ -57,6 +63,8 @@ interface Input<B, Q, P, A extends Access> {
   readonly tx: A extends "none" | "user" ? undefined : TenantTx;
   /** The proof of the workspace the route reached; present only on a workspace access. */
   readonly scope: A extends { workspace: string } ? AuthorizedScope : undefined;
+  /** The one way a `user` route reaches a definer; absent on every other access. */
+  readonly inUserTx: A extends "user" ? InUserTx : undefined;
 }
 
 export interface RouteSpec<
@@ -77,6 +85,8 @@ export interface RouteSpec<
   readonly params?: P;
   /** The route authenticates by its cookie alone: a request carrying an `Authorization` header is refused. */
   readonly cookieOnly?: boolean;
+  /** The success status; 200 unless the route creates something. */
+  readonly status?: 200 | 201;
   /** A returned `Response` is sent as is; anything else is wrapped as `{ data }`. */
   readonly handler: (input: Input<B, Q, P, A>) => unknown;
 }
@@ -187,7 +197,41 @@ const DENIALS: Readonly<Record<ScopeDenial, ErrorCode>> = {
   limit_reached: "limit_reached",
 };
 
-type Base = Omit<Input<unknown, Shape, unknown, Access>, "tx" | "scope">;
+// The definers a user route calls: their RAISE messages (migration 0009) start with `<name> ` or `<name>:`.
+const DEFINERS = [
+  "resolve_workspace_access",
+  "my_workspaces",
+  "my_organizations",
+  "organization_create",
+  "workspace_create",
+];
+const isDefinerMessage = (message: unknown): boolean =>
+  typeof message === "string" &&
+  DEFINERS.some((name) => message.startsWith(`${name} `) || message.startsWith(`${name}:`));
+
+// The definers' own refusals, answered after the transaction has rolled back. Any other state, and the same state
+// under another message (a revoked grant or a row-security refusal is also 42501), propagates as a defect.
+const DEFINER_STATES: Readonly<Record<string, ErrorCode>> = {
+  "42501": "not_found",
+  "22023": "validation_failed",
+  "54000": "limit_reached",
+  "53400": "limit_reached",
+};
+
+const userTx =
+  (pool: AppPool, userId: string): InUserTx =>
+  async (run) => {
+    try {
+      return await withUser(pool, userId, run);
+    } catch (error) {
+      const { code: state, message } = error as { code?: unknown; message?: unknown };
+      const code = typeof state === "string" && isDefinerMessage(message) ? DEFINER_STATES[state] : undefined;
+      if (code) throw new Refusal(code, `definer refused: ${state}`, { cause: error });
+      throw error;
+    }
+  };
+
+type Base = Omit<Input<unknown, Shape, unknown, Access>, "tx" | "scope" | "inUserTx">;
 
 function scopeRequest(
   access: { readonly workspace: string; readonly permission?: Permission },
@@ -203,8 +247,8 @@ function scopeRequest(
 
 /**
  * Runs the handler as its access declares. `none` and `user` mean no transaction and no scope: a user route may call
- * outside the database, and a connection is held only by a workspace route. The workspace comes only from the
- * declared path parameter; a denial of the scope is an answer, and the handler does not run.
+ * outside the database, and holds a connection only inside `inUserTx`. The workspace comes only from the declared path
+ * parameter; a denial of the scope is an answer, and the handler does not run.
  */
 async function runScoped(
   state: RouteState,
@@ -213,11 +257,13 @@ async function runScoped(
   session: AuthSession,
 ): Promise<unknown> {
   const { access } = spec;
-  if (access === "none" || access === "user")
-    return spec.handler({ ...base, tx: undefined, scope: undefined } as never);
+  if (access === "none" || access === "user") {
+    const inUserTx = access === "user" ? userTx(state.pool, session.userId) : undefined;
+    return spec.handler({ ...base, tx: undefined, scope: undefined, inUserTx } as never);
+  }
   const request = scopeRequest(access, base.params as Record<string, unknown> | undefined, spec.method);
   const outcome = await withScope(state.pool, session.userId, request, (tx, scope) =>
-    Promise.resolve(spec.handler({ ...base, tx, scope } as never)),
+    Promise.resolve(spec.handler({ ...base, tx, scope, inUserTx: undefined } as never)),
   );
   if (!outcome.ok) throw new Refusal(DENIALS[outcome.denial], `scope denied: ${outcome.denial}`);
   return outcome.value;
@@ -255,7 +301,7 @@ export function defineRoute<
         ? { body: { required: true, content: { "application/json": { schema: spec.body as never } } } }
         : {}),
     },
-    responses: { 200: { description: "OK" } },
+    responses: { [spec.status ?? 200]: { description: "OK" } },
   });
   app.openapi(
     route as never,
@@ -269,7 +315,8 @@ export function defineRoute<
         c,
       };
       const result = await runScoped(state, spec as never, base as Base, c.get("session"));
-      const response = result instanceof Response ? result : c.json({ data: result ?? null }, 200);
+      const response =
+        result instanceof Response ? result : c.json({ data: result ?? null }, spec.status ?? 200);
       // A cookie the handler already set (a sign-out's expiry) is not overridden by the policy's refreshed one.
       const set = new Set(response.headers.getSetCookie().map((line) => line.split("=")[0]));
       for (const cookie of cookies) {

@@ -1,7 +1,8 @@
 import type { TenantTx } from "@shoutory/db/context";
 import { z } from "zod";
 import { Refusal } from "../../errors/refusal.js";
-import { type App, defineRoute } from "../define-route.js";
+import { type App, defineRoute, type InUserTx } from "../define-route.js";
+import { nameSchema, pageAnswer, pageQuery } from "../input.js";
 
 // The profile of one workspace: any member reads it (the switcher and the settings page show its name), and a role
 // with settings.manage changes it. The workspace id is the path parameter and nothing else (R205, R214).
@@ -12,20 +13,31 @@ const params = z.strictObject({ workspace_id: z.uuid().transform((id) => id.toLo
 const ZONES: ReadonlySet<string> = new Set([...Intl.supportedValuesOf("timeZone"), "UTC"]);
 
 // The bounds are those of the workspaces columns (migration 0007).
+const slug = z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/);
+const defaultTz = z.string().refine((zone) => ZONES.has(zone), "unknown time zone");
 const profile = z
-  .strictObject({
-    // PostgreSQL text cannot hold U+0000 (it would answer 22021).
-    name: z
-      .string()
-      .min(1)
-      .max(128)
-      .refine((name) => !name.includes("\0"), "no NUL character"),
-    slug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/),
-    colour: z.string().regex(/^#[0-9a-f]{6}$/),
-    default_tz: z.string().refine((zone) => ZONES.has(zone), "unknown time zone"),
-  })
+  .strictObject({ name: nameSchema, slug, colour: z.string().regex(/^#[0-9a-f]{6}$/), default_tz: defaultTz })
   .partial()
   .refine((body) => Object.keys(body).length > 0, "at least one field");
+
+// The first workspace's slug is optional: it comes from the name (R231). The organization is a body field, checked by
+// the definer, which answers a foreign and a missing one alike.
+const create = z.strictObject({
+  organization_id: z.uuid().transform((id) => id.toLowerCase()),
+  name: nameSchema,
+  slug: slug.optional(),
+  default_tz: defaultTz,
+});
+
+/** Lowercase, every run outside a-z and 0-9 as one dash, trimmed, cut to 63; `workspace` when nothing is left. */
+function slugOf(name: string): string {
+  const derived = name
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, "-")
+    .replaceAll(/^-+|-+$/g, "")
+    .slice(0, 63);
+  return derived === "" ? "workspace" : derived;
+}
 
 const COLUMNS = ["name", "slug", "colour", "default_tz"] as const;
 const ANSWER = "id, organization_id, name, slug, colour, default_tz";
@@ -58,7 +70,70 @@ async function update(
   }
 }
 
-export function registerWorkspaces(app: App): void {
+const isSlugClash = (error: unknown) =>
+  (error as { constraint?: unknown }).constraint === "workspaces_organization_slug_key";
+
+// The caller's own new row is not readable here (no workspace context yet), so the answer is built from the input and
+// the id the definer returned; the colour is null until someone sets it.
+async function createWorkspace(
+  inUserTx: InUserTx,
+  body: z.infer<typeof create>,
+  audit: { requestId: string; ipHmac: Buffer },
+) {
+  const chosen = body.slug ?? slugOf(body.name);
+  try {
+    const id = await inUserTx(async (tx) => {
+      const made = await tx.query<{ id: string }>(
+        "SELECT app.workspace_create($1, $2, $3, $4, $5, $6) AS id",
+        [body.organization_id, body.name, chosen, body.default_tz, audit.requestId, audit.ipHmac],
+      );
+      const newId = made.rows[0]?.id;
+      if (!newId) throw new Error("workspace_create returned no id");
+      return newId;
+    });
+    return {
+      id,
+      organization_id: body.organization_id,
+      name: body.name,
+      slug: chosen,
+      colour: null,
+      default_tz: body.default_tz,
+    };
+  } catch (error) {
+    if (isSlugClash(error))
+      throw new Refusal("conflict", "slug already used in the organization", { cause: error });
+    throw error;
+  }
+}
+
+export function registerWorkspaces(app: App, ipHmac: (address: string) => Buffer): void {
+  defineRoute(app, {
+    method: "get",
+    path: "/api/v1/workspaces",
+    policy: "session",
+    access: "user",
+    query: pageQuery,
+    handler: async ({ c, query, inUserTx }) => {
+      const rows = await inUserTx(async (tx) => {
+        const found = await tx.query<{ id: string }>(
+          "SELECT workspace_id AS id, organization_id, name, slug FROM app.my_workspaces($1, $2)",
+          [query.limit, query.cursor ?? null],
+        );
+        return found.rows;
+      });
+      return pageAnswer(c, rows, query.limit);
+    },
+  });
+  defineRoute(app, {
+    method: "post",
+    path: "/api/v1/workspaces",
+    policy: "session",
+    access: "user",
+    status: 201,
+    body: create,
+    handler: ({ c, body, clientAddress, inUserTx }) =>
+      createWorkspace(inUserTx, body, { requestId: c.get("requestId"), ipHmac: ipHmac(clientAddress) }),
+  });
   defineRoute(app, {
     method: "get",
     path: "/api/v1/workspaces/{workspace_id}",

@@ -84,6 +84,15 @@ function build(trustedProxies: string[] = []): Harness {
     },
   });
   defineRoute(app, {
+    method: "post",
+    path: "/test/created",
+    policy: "public",
+    access: "none",
+    status: 201,
+    body: z.strictObject({ name: z.string().max(20) }),
+    handler: ({ body }) => ({ made: body.name }),
+  });
+  defineRoute(app, {
     method: "get",
     path: "/test/who",
     policy: "public",
@@ -179,6 +188,12 @@ describe("strict input before the handler", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ data: { echoed: "ada" } });
     expect(calls()).toBe(1);
+  });
+
+  it("a route that declares status 201 answers 201 with the data envelope", async () => {
+    const response = await build().send("/test/created", json({ name: "ada" }));
+    expect(response.status).toBe(201);
+    expect(await response.json()).toEqual({ data: { made: "ada" } });
   });
 
   it.each([

@@ -56,6 +56,14 @@ async function narrow(tx: TenantTx, scope: AuthorizedScope, write: boolean): Pro
 }
 
 /**
+ * Runs `run` in a transaction whose only context is the signed-in user: for the user-level definers (lists, creates)
+ * that need no workspace. The context ends with the transaction.
+ */
+export function withUser<T>(pool: Pool, principalId: string, run: (tx: TenantTx) => Promise<T>): Promise<T> {
+  return withTenant(pool, { principalKind: "user", principalId }, run);
+}
+
+/**
  * Runs `run` for `principalId` inside the scope minted from the caller's resolved rows for the request's workspace;
  * a denial returns without running.
  */

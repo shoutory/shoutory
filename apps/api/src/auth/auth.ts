@@ -63,6 +63,8 @@ export interface AuthService extends RouteAuth {
   readonly passwords: PasswordGuard;
   /** The first verified user becomes instance owner; the call is idempotent (a no-op once any admin exists). */
   claimOwner(userId: string): Promise<void>;
+  /** The keyed digest of a client address that the audit log stores, never the address itself. */
+  ipHmac(clientAddress: string): Buffer;
 }
 
 type QueuedMail = Omit<MailInput, "workspaceId" | "locale" | "vars">;
@@ -202,5 +204,7 @@ export function createAuth(options: AuthOptions): AuthService {
     resolveSession: (headers) => readSession(library, headers),
     hasStepUp: (session) => stepUp.has(session),
     claimOwner: effects.claimOwner,
+    // Its own purpose keeps this digest apart from the `session_ip` one.
+    ipHmac: (address) => Buffer.from(pepperDigest(options.pepper, "audit_ip", address), "hex"),
   };
 }
