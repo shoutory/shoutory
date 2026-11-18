@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   customType,
+  date,
   doublePrecision,
   integer,
   interval,
@@ -217,4 +218,34 @@ export const instanceSettings = app.table("instance_settings", {
   value: jsonb("value").notNull(),
   updatedBy: uuid("updated_by"),
   updatedAt: stamp("updated_at").notNull().default(sql`clock_timestamp()`),
+});
+
+// The audit log is partitioned by month on `at` and written only through the audit definers; its leaf partitions
+// are not declared. The head table holds the last hash of each chain (a workspace and a UTC day).
+export const auditLogs = app.table(
+  "audit_logs",
+  {
+    id: uuid("id").notNull().default(sql`uuidv7()`),
+    at: stamp("at").notNull(),
+    workspaceId: uuid("workspace_id"),
+    organizationId: uuid("organization_id"),
+    actorKind: text("actor_kind").notNull(),
+    actorRef: text("actor_ref").notNull(),
+    action: text("action").notNull(),
+    resourceKind: text("resource_kind").notNull(),
+    resourceId: text("resource_id").notNull(),
+    requestId: text("request_id"),
+    ipHmac: bytea("ip_hmac"),
+    metadata: jsonb("metadata").notNull().default(sql`'{}'`),
+    prevHash: bytea("prev_hash").notNull(),
+    hash: bytea("hash").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.at, table.id] })],
+);
+
+export const auditHeads = app.table("audit_heads", {
+  id: id(),
+  workspaceId: uuid("workspace_id"),
+  day: date("day").notNull(),
+  headHash: bytea("head_hash").notNull(),
 });

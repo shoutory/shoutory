@@ -36,6 +36,8 @@ const EXACT: Record<string, Record<string, string[]>> = {
   workspaces: { shoutory_app: READ },
   workspace_members: { shoutory_app: READ },
   roles: { shoutory_app: READ },
+  audit_logs: { shoutory_app: READ },
+  audit_heads: {},
 };
 // "role table.column privilege": the column-level grants, and the only ones.
 const COLUMN_GRANTS = [

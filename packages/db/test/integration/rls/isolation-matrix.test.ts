@@ -131,6 +131,19 @@ const REGISTRY: Record<string, Entry> = {
     },
   },
 };
+// The audit log has no write policy at all: its rows come from definers, so only the read and planted-INSERT cases run.
+const auditRow = (workspace: string, organization: string, hash: string) =>
+  `INSERT INTO app.audit_logs (id, at, workspace_id, organization_id, actor_kind, actor_ref, action, resource_kind,
+     resource_id, request_id, ip_hmac, metadata, prev_hash, hash)
+   VALUES (gen_random_uuid(), now(), '${workspace}', '${organization}', 'user', '${UA}', 'post.created', 'post',
+     '${randomUUID()}', 'req-matrix', NULL, '{}', decode(repeat('00', 32), 'hex'), decode(repeat('${hash}', 32), 'hex'))`;
+REGISTRY["app.audit_logs"] = {
+  key: "workspace_id",
+  a: WA,
+  b: WB,
+  seed: [auditRow(WA, OA, "01"), auditRow(WB, OB, "02")],
+  insertForB: () => auditRow(WB, OB, "03"),
+};
 const TABLES = Object.keys(REGISTRY);
 const WRITABLE = TABLES.filter((table) => REGISTRY[table]?.write);
 
@@ -195,6 +208,7 @@ async function seed(admin: Client): Promise<void> {
     "app.workspaces",
     "app.roles",
     "app.workspace_members",
+    "app.audit_logs",
   ];
   for (const table of order) for (const sql of REGISTRY[table]?.seed ?? []) await admin.query(sql);
   const viewer = await admin.query("SELECT id FROM app.roles WHERE workspace_id IS NULL AND key = 'viewer'");

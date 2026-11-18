@@ -156,6 +156,22 @@ const DEFINERS: Definer[] = [
   },
   { name: "instance_setting_set", args: "key text, value jsonb", callers: ["shoutory_app"] },
   { name: "organization_owner_guard", args: "", callers: [] },
+  {
+    name: "audit_insert",
+    args: "action text, resource_kind text, resource_id text, request_id text, ip_hmac bytea, metadata jsonb",
+    callers: ["shoutory_app", "shoutory_worker"],
+  },
+  {
+    name: "audit_insert_instance",
+    args: "action text, actor_kind text, actor_ref text, request_id text, ip_hmac bytea, metadata jsonb",
+    callers: ["shoutory_auth"],
+  },
+  {
+    name: "audit_append",
+    args: "workspace_id uuid, organization_id uuid, actor_kind text, actor_ref text, action text, resource_kind text, resource_id text, request_id text, ip_hmac bytea, metadata jsonb",
+    callers: [],
+  },
+  { name: "audit_immutable", args: "", callers: [], helper: true },
 ];
 const RUNTIME_AND_OWNER_ROLES = [
   "shoutory_owner",
