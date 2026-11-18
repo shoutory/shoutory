@@ -53,13 +53,43 @@ export async function addWorkspaceMember(
   roleKey: string,
   status: "active" | "suspended" = "active",
 ): Promise<void> {
-  await fx.admin((client) =>
-    client.query(
+  // A workspace keeps exactly one stored Owner (a deferred guard checks it at commit): a member who is not the Owner
+  // brings a suspended placeholder Owner when there is none, and the Owner replaces that placeholder.
+  const OWNER = "r.workspace_id IS NULL AND r.key = 'owner'";
+  await fx.admin(async (client) => {
+    await client.query("BEGIN");
+    if (roleKey === "owner") {
+      await client.query(
+        `DELETE FROM app.workspace_members m USING app.roles r, auth."user" u
+         WHERE m.workspace_id = $1 AND r.id = m.role_id AND ${OWNER} AND u.id = m.user_id
+           AND u.email LIKE 'placeholder-owner-%'`,
+        [workspaceId],
+      );
+    }
+    await client.query(
       `INSERT INTO app.workspace_members (workspace_id, user_id, role_id, status)
        SELECT $1, $2, id, $4 FROM app.roles WHERE workspace_id IS NULL AND key = $3`,
       [workspaceId, userId, roleKey, status],
-    ),
-  );
+    );
+    const owned = await client.query(
+      `SELECT 1 FROM app.workspace_members m JOIN app.roles r ON r.id = m.role_id
+       WHERE m.workspace_id = $1 AND ${OWNER}`,
+      [workspaceId],
+    );
+    if (owned.rowCount === 0) {
+      const email = `placeholder-owner-${unique("ws")}@example.test`;
+      const holder = await client.query(
+        'INSERT INTO auth."user" (name, email) VALUES ($1, $1) RETURNING id',
+        [email],
+      );
+      await client.query(
+        `INSERT INTO app.workspace_members (workspace_id, user_id, role_id, status)
+         SELECT $1, $2, id, 'suspended' FROM app.roles WHERE workspace_id IS NULL AND key = 'owner'`,
+        [workspaceId, holder.rows[0].id],
+      );
+    }
+    await client.query("COMMIT");
+  });
 }
 
 export async function addOrganizationMember(

@@ -213,6 +213,26 @@ export const workspaceMembers = app.table("workspace_members", {
   status: text("status").notNull().default("active"),
 });
 
+// Written only by the invitation definers; the runtime role reads every column but the digest.
+export const invitations = app.table("invitations", {
+  id: id(),
+  workspaceId: uuid("workspace_id")
+    .notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  roleId: uuid("role_id")
+    .notNull()
+    .references(() => roles.id),
+  tokenHash: bytea("token_hash").notNull(),
+  expiresAt: stamp("expires_at").notNull(),
+  acceptedAt: stamp("accepted_at"),
+  acceptedBy: uuid("accepted_by").references(() => authUser.id),
+  revokedAt: stamp("revoked_at"),
+  invitedBy: uuid("invited_by")
+    .notNull()
+    .references(() => authUser.id),
+});
+
 export const instanceSettings = app.table("instance_settings", {
   key: text("key").primaryKey(),
   value: jsonb("value").notNull(),

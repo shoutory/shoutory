@@ -428,8 +428,9 @@ describe("create limits", () => {
              INSERT INTO app.workspaces (organization_id, name, slug)
              SELECT $1, 'bulk ' || g, 'bulk-' || g FROM generate_series(1, 501) AS g RETURNING id)
            INSERT INTO app.workspace_members (workspace_id, user_id, role_id)
-           SELECT made.id, $2, (SELECT id FROM app.roles WHERE workspace_id IS NULL AND key = 'viewer') FROM made`,
-          [bulkOrg, member.id],
+           SELECT made.id, m.u::uuid, (SELECT id FROM app.roles WHERE workspace_id IS NULL AND key = m.k)
+           FROM made CROSS JOIN (VALUES ($2, 'viewer'), ($3, 'owner')) AS m (u, k)`,
+          [bulkOrg, member.id, owner.id],
         );
         return (
           await client.query("SELECT id FROM app.workspaces WHERE organization_id = $1 LIMIT 1", [bulkOrg])

@@ -35,6 +35,7 @@ const EXACT: Record<string, Record<string, string[]>> = {
   organization_members: { shoutory_app: READ },
   workspaces: { shoutory_app: READ },
   workspace_members: { shoutory_app: READ },
+  invitations: {},
   roles: { shoutory_app: READ },
   audit_logs: { shoutory_app: READ },
   audit_heads: {},
@@ -45,6 +46,18 @@ const COLUMN_GRANTS = [
   "shoutory_app workspaces.slug UPDATE",
   "shoutory_app workspaces.colour UPDATE",
   "shoutory_app workspaces.default_tz UPDATE",
+  // The digest of an invitation is the one column the app role never reads.
+  ...[
+    "id",
+    "workspace_id",
+    "email",
+    "role_id",
+    "expires_at",
+    "accepted_at",
+    "accepted_by",
+    "revoked_at",
+    "invited_by",
+  ].map((column) => `shoutory_app invitations.${column} SELECT`),
 ];
 
 interface Held {

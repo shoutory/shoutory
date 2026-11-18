@@ -28,6 +28,10 @@ describe("foreign keys of the tenancy tables exist, are validated and state thei
     ["app.workspace_members", "user_id", 'auth."user"', "a"],
     ["app.organization_members", "user_id", 'auth."user"', "a"],
     ["app.workspace_members", "role_id", "app.roles", "a"],
+    ["app.invitations", "workspace_id", "app.workspaces", "c"],
+    ["app.invitations", "role_id", "app.roles", "a"],
+    ["app.invitations", "invited_by", 'auth."user"', "a"],
+    ["app.invitations", "accepted_by", 'auth."user"', "a"],
   ])("%s.%s references %s, is validated, with delete action %s", async (table, column, parent, action) => {
     const found = await db.pool("owner").query(FOREIGN_KEY, [table, column]);
     expect(found.rows).toEqual([{ convalidated: true, confdeltype: action, parent }]);

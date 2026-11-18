@@ -186,6 +186,41 @@ const DEFINERS: Definer[] = [
     callers: ["shoutory_app"],
   },
   { name: "member_directory", args: "workspace_id uuid, lim integer, after uuid", callers: ["shoutory_app"] },
+  { name: "role_weight", args: "key text", callers: [], helper: true },
+  { name: "tenancy_rank", args: "ws uuid, who uuid", callers: [], helper: true },
+  {
+    name: "tenancy_enter",
+    args: "fname text, ws uuid, caller uuid, need integer",
+    callers: [],
+    helper: true,
+  },
+  {
+    name: "invitation_create",
+    args: "workspace_id uuid, email text, role_key text, expires_in interval, token_digest bytea, request_id text, ip_hmac bytea",
+    callers: ["shoutory_app"],
+  },
+  {
+    name: "invitation_revoke",
+    args: "workspace_id uuid, invitation_id uuid, request_id text, ip_hmac bytea",
+    callers: ["shoutory_app"],
+  },
+  { name: "tenancy_lock", args: "ws uuid", callers: [], helper: true },
+  { name: "workspace_owner_guard", args: "", callers: [] },
+  {
+    name: "invitation_accept",
+    args: "token_digest bytea, request_id text, ip_hmac bytea",
+    callers: ["shoutory_app"],
+  },
+  {
+    name: "member_role_set",
+    args: "workspace_id uuid, user_id uuid, role_key text, request_id text, ip_hmac bytea",
+    callers: ["shoutory_app"],
+  },
+  {
+    name: "member_remove",
+    args: "workspace_id uuid, user_id uuid, request_id text, ip_hmac bytea",
+    callers: ["shoutory_app"],
+  },
 ];
 const TENANCY_TABLES = ["organizations", "organization_members", "workspaces", "workspace_members", "roles"];
 const RUNTIME_AND_OWNER_ROLES = [
@@ -286,17 +321,19 @@ describe("row security catalog: definers", () => {
 describe("row security catalog: what the definer role may do to the tenancy tables", () => {
   const owner = useOwnerPool();
 
-  // R199: the access definers read and create rows; nothing changes or removes a tenancy row through them.
-  it.each(["UPDATE", "DELETE", "TRUNCATE"])(
-    "the definer role holds no %s on a tenancy table",
-    async (privilege) => {
-      const found = await owner().query(
-        `SELECT t AS tbl FROM unnest($1::text[]) AS t WHERE has_table_privilege('shoutory_definer', 'app.' || t, $2)`,
-        [TENANCY_TABLES, privilege],
-      );
-      expect(found.rows).toEqual([]);
-    },
-  );
+  // R199, R240: the definers read and create rows. The only table-level DELETE is a member's removal; an UPDATE is a
+  // column grant (a member's role, and the id column that the rank 1a row lock needs), never table-wide.
+  it.each([
+    ["UPDATE", []],
+    ["DELETE", ["workspace_members"]],
+    ["TRUNCATE", []],
+  ])("the definer role holds %s on a tenancy table only where listed", async (privilege, listed) => {
+    const found = await owner().query(
+      `SELECT t AS tbl FROM unnest($1::text[]) AS t WHERE has_table_privilege('shoutory_definer', 'app.' || t, $2)`,
+      [TENANCY_TABLES, privilege],
+    );
+    expect(found.rows.map((row) => row.tbl)).toEqual(listed);
+  });
 });
 
 describe("row security catalog: tables and roles", () => {

@@ -131,6 +131,24 @@ const REGISTRY: Record<string, Entry> = {
     },
   },
 };
+const invitationRow = (workspace: string, email: string, user: string) =>
+  `INSERT INTO app.invitations (workspace_id, email, role_id, token_hash, expires_at, invited_by)
+   VALUES ('${workspace}', '${email}', ${BUILTIN("viewer")}, sha256(convert_to('${randomUUID()}', 'UTF8')),
+     now() + interval '1 day', '${user}')`;
+REGISTRY["app.invitations"] = {
+  key: "workspace_id",
+  a: WA,
+  b: WB,
+  seed: [invitationRow(WA, "inv-a@example.test", UA), invitationRow(WB, "inv-b@example.test", UB)],
+  insertForB: () => invitationRow(WB, "inv-new@example.test", UA),
+  write: {
+    update: "UPDATE app.invitations SET email = email",
+    insertOwn: () => invitationRow(WA, "inv-own@example.test", UA),
+    insertWs: WA,
+    changeWs: WA,
+    changeKey: WA,
+  },
+};
 // The audit log has no write policy at all: its rows come from definers, so only the read and planted-INSERT cases run.
 const auditRow = (workspace: string, organization: string, hash: string) =>
   `INSERT INTO app.audit_logs (id, at, workspace_id, organization_id, actor_kind, actor_ref, action, resource_kind,
@@ -208,6 +226,7 @@ async function seed(admin: Client): Promise<void> {
     "app.workspaces",
     "app.roles",
     "app.workspace_members",
+    "app.invitations",
     "app.audit_logs",
   ];
   for (const table of order) for (const sql of REGISTRY[table]?.seed ?? []) await admin.query(sql);

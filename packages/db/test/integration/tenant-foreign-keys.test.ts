@@ -55,7 +55,8 @@ function violations(keys: ForeignKey[]): string[] {
         key.childColumns.includes("workspace_id") && key.parentColumns.includes("workspace_id");
       const toTenantRoot =
         ["workspaces", "organizations"].includes(key.parent) && key.parentColumns.join() === "id";
-      const memberRole = key.child === "workspace_members" && key.childColumns.join() === "role_id";
+      const memberRole =
+        ["workspace_members", "invitations"].includes(key.child) && key.childColumns.join() === "role_id";
       return !(composite || toTenantRoot || memberRole);
     })
     .map((key) => `${key.child}(${key.childColumns}) -> ${key.parent}(${key.parentColumns})`);

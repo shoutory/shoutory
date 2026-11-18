@@ -119,7 +119,8 @@ const WB = randomUUID();
 
 /**
  * OA: UOA owner (no workspace row); U1 member; UM admin (and stored viewer in WA1); US member (stored, suspended editor in WA1); UN admin (stored,
- * suspended in WA1); UD admin (no stored row). WA2 has U1 as stored editor. OB holds UB alone. OE has no workspace.
+ * suspended in WA1); UD admin (no stored row). WA2 has U1 as stored editor. UOA is also the suspended stored Owner of
+ * WA1 and WA2 (the Owner guard wants one; a suspended row reaches nothing). OB holds UB alone. OE has no workspace.
  */
 async function seedAccess(admin: Client): Promise<void> {
   await admin.query(
@@ -148,7 +149,8 @@ async function seedAccess(admin: Client): Promise<void> {
        SELECT m.ws::uuid, m.u::uuid, r.id, m.st FROM (VALUES
          ('${WA1}', '${U1}', 'viewer', 'active'), ('${WA1}', '${UM}', 'viewer', 'active'),
          ('${WA1}', '${US}', 'editor', 'suspended'), ('${WA1}', '${UN}', 'editor', 'suspended'),
-         ('${WA2}', '${U1}', 'editor', 'active'), ('${WB}', '${UB}', 'owner', 'active')) AS m (ws, u, k, st)
+         ('${WA2}', '${U1}', 'editor', 'active'), ('${WB}', '${UB}', 'owner', 'active'),
+         ('${WA1}', '${UOA}', 'owner', 'suspended'), ('${WA2}', '${UOA}', 'owner', 'suspended')) AS m (ws, u, k, st)
        JOIN app.roles r ON r.key = m.k AND r.workspace_id IS NULL`,
   );
 }
@@ -359,20 +361,25 @@ describe("resolve_workspace_access never truncates (R197)", () => {
   const U500 = randomUUID();
   const O501 = randomUUID();
   const O500 = randomUUID();
-  // One statement per user: n workspaces in an organization and a stored viewer row for the user in each.
+  const UBIG = randomUUID();
+  // One statement per user: n workspaces in an organization, a stored viewer row for the user and the one stored
+  // Owner row (another user) in each.
   const SEED_WORKSPACES = `
     WITH w AS (INSERT INTO app.workspaces (organization_id, name, slug)
                 SELECT $1::uuid, 'w-' || g.n, 'w-' || g.n FROM generate_series(1, $2::int) AS g (n) RETURNING id)
     INSERT INTO app.workspace_members (workspace_id, user_id, role_id)
-      SELECT w.id, $3::uuid, r.id FROM w CROSS JOIN app.roles r WHERE r.workspace_id IS NULL AND r.key = 'viewer'`;
+      SELECT w.id, m.u::uuid, r.id FROM w CROSS JOIN (VALUES ($3, 'viewer'), ($4, 'owner')) AS m (u, k)
+        JOIN app.roles r ON r.key = m.k AND r.workspace_id IS NULL`;
   const t = useDatabase(async (admin) => {
-    await admin.query(`${addUser(U501, "big-501")}; ${addUser(U500, "big-500")}`);
+    await admin.query(
+      `${addUser(U501, "big-501")}; ${addUser(U500, "big-500")}; ${addUser(UBIG, "big-owner")}`,
+    );
     await admin.query(
       `INSERT INTO app.organizations (id, name, slug, type) VALUES
          ('${O501}', 'big-501', 'big-501', 'team'), ('${O500}', 'big-500', 'big-500', 'team')`,
     );
-    await admin.query(SEED_WORKSPACES, [O501, 501, U501]);
-    await admin.query(SEED_WORKSPACES, [O500, 500, U500]);
+    await admin.query(SEED_WORKSPACES, [O501, 501, U501, UBIG]);
+    await admin.query(SEED_WORKSPACES, [O500, 500, U500, UBIG]);
   });
 
   it("returns all 500 reachable workspaces", async () => {

@@ -7,6 +7,7 @@ import {
   type TestDatabase,
   withAdminClient,
 } from "../../src/testing/template.js";
+import { asUser, attempt, digestOf, plantInvitation, seedMembers, U, WA } from "../support/members-seed.js";
 import { openTx } from "../support/race.js";
 
 const env = readTestEnv();
@@ -160,6 +161,55 @@ describe("every 0009 definer restores the caller's job purpose", () => {
       client.release();
     }
   });
+});
+
+// The 0010 definers, each called by a user who may, with a prior purpose set and not set.
+describe("every 0010 definer restores the caller's job purpose", () => {
+  let db: TestDatabase;
+  let revokeId = "";
+  beforeAll(async () => {
+    db = await cloneTemplate(env, inject("shoutoryTemplate"));
+    revokeId = await withAdminClient(env, db.name, async (admin) => {
+      await seedMembers(admin);
+      await plantInvitation(admin, { token: "behaviour-accept" });
+      await plantInvitation(admin, { token: "behaviour-revoke", email: "behaviour-revoke@example.test" });
+      const found = await admin.query("SELECT id FROM app.invitations WHERE token_hash = $1", [
+        digestOf("behaviour-revoke"),
+      ]);
+      return String(found.rows[0].id);
+    });
+  });
+  afterAll(() => db.drop());
+
+  const NEW =
+    "SELECT app.invitation_create($1::uuid, 'behaviour-new@example.test', 'viewer', '1 day', $2, NULL, NULL)";
+  const REVOKE = "SELECT app.invitation_revoke($1::uuid, $2::uuid, NULL, NULL)";
+  const SET_ROLE = "SELECT app.member_role_set($1::uuid, $2::uuid, 'viewer', NULL, NULL)";
+  const REMOVE = "SELECT app.member_remove($1::uuid, $2::uuid, NULL, NULL)";
+  const calls: [string, string, string, () => unknown[]][] = [
+    ["invitation_create", U.admin, NEW, () => [WA, digestOf("behaviour-create")]],
+    ["invitation_revoke", U.admin, REVOKE, () => [WA, revokeId]],
+    ["member_role_set", U.admin, SET_ROLE, () => [WA, U.editor]],
+    ["member_remove", U.admin, REMOVE, () => [WA, U.editor]],
+    [
+      "invitation_accept",
+      U.invitee,
+      "SELECT app.invitation_accept($1, NULL, NULL)",
+      () => [digestOf("behaviour-accept")],
+    ],
+  ];
+
+  it.each(calls.flatMap((call) => [[...call, "x"] as const, [...call, undefined] as const]))(
+    "%s (prior %s)",
+    async (_name, caller, sql, args, prior) => {
+      const ctx = { ...asUser(caller), ...(prior ? { jobPurpose: prior } : {}) };
+      const result = await attempt(db.pool("app"), ctx, sql, args(), [
+        "SELECT current_setting('app.job_purpose', true) AS purpose",
+      ]);
+      expect(result.error).toBeUndefined();
+      expect(result.after?.[0]?.purpose || undefined).toBe(prior);
+    },
+  );
 });
 
 type Principal = { id?: string; kind?: string };

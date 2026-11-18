@@ -66,6 +66,7 @@ describe("Drizzle metadata equals the migrated catalog", () => {
       "app.email_outbox",
       "app.instance_admins",
       "app.instance_settings",
+      "app.invitations",
       "app.organization_members",
       "app.organizations",
       "app.rate_buckets",
