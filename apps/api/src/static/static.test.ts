@@ -134,6 +134,7 @@ describe("static route ordering", () => {
       method: "get",
       path: "/test/late",
       policy: "public",
+      access: "none",
       handler: () => ({ late: true }),
     });
     registerStatic(late, root);

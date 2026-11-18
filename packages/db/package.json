@@ -9,6 +9,10 @@
       "source": "./src/context/with-tenant.ts",
       "default": "./dist/context/with-tenant.js"
     },
+    "./context/scope": {
+      "source": "./src/context/with-scope.ts",
+      "default": "./dist/context/with-scope.js"
+    },
     "./migrate": {
       "source": "./src/migrate/runner.ts",
       "default": "./dist/migrate/runner.js"
@@ -31,6 +35,7 @@
     }
   },
   "dependencies": {
+    "@shoutory/core": "workspace:*",
     "drizzle-orm": "0.45.4",
     "pg": "8.23.1",
     "zod": "4.6.7"

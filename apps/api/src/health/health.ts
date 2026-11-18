@@ -77,11 +77,18 @@ function readiness(pool: AppPool, keys: KeyProvider): () => Promise<void> {
 /** `/healthz` says the process is up and touches nothing; `/readyz` says it can serve. */
 export function registerHealth(app: App, pool: AppPool, keys: KeyProvider): void {
   const ready = readiness(pool, keys);
-  defineRoute(app, { method: "get", path: "/healthz", policy: "public", handler: () => ({ status: "ok" }) });
+  defineRoute(app, {
+    method: "get",
+    path: "/healthz",
+    policy: "public",
+    access: "none",
+    handler: () => ({ status: "ok" }),
+  });
   defineRoute(app, {
     method: "get",
     path: "/readyz",
     policy: "public",
+    access: "none",
     handler: async () => {
       await ready();
       return { status: "ready" };

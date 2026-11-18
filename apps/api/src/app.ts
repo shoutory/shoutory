@@ -10,6 +10,7 @@ import { errorResponse, Refusal, toRefusal } from "./errors/refusal.js";
 import { registerHealth } from "./health/health.js";
 import { type Logger, logRequest } from "./logging/logger.js";
 import { type App, type AppEnv, initRoutes } from "./routes/define-route.js";
+import { registerWorkspaces } from "./routes/workspaces/workspace.js";
 import { clientAddressResolver } from "./security/client-address.js";
 
 export interface AppOptions {
@@ -70,7 +71,7 @@ export function createApp(options: AppOptions): App {
       }
     },
   });
-  initRoutes(app, options.publicOrigin, options.auth);
+  initRoutes(app, options.publicOrigin, options.auth, options.pool);
   app.use("*", requestContext(options.logger));
   app.use("*", secureHeaders({ contentSecurityPolicy: CSP }));
   app.use("*", clientContext(options.trustedProxies));
@@ -86,6 +87,7 @@ export function createApp(options: AppOptions): App {
   });
   registerHealth(app, options.pool, options.keys);
   registerAuthRoutes(app, options.auth);
+  registerWorkspaces(app);
   app.notFound((c) => errorResponse(c, new Refusal("not_found", "no such route")));
   return app;
 }

@@ -9,6 +9,10 @@
       "source": "./src/authz/matrix.ts",
       "default": "./dist/authz/matrix.js"
     },
+    "./authz/scope": {
+      "source": "./src/authz/scope.ts",
+      "default": "./dist/authz/scope.js"
+    },
     "./config": {
       "source": "./src/config/env.ts",
       "default": "./dist/config/env.js"

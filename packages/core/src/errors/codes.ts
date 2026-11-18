@@ -11,6 +11,8 @@ export const errorCodeSchema = z.enum([
   "invalid_credentials",
   "email_not_verified",
   "forbidden",
+  "conflict",
+  "limit_reached",
   "step_up_required",
   "password_reset_required",
   "too_many_requests",

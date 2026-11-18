@@ -83,6 +83,7 @@ export function registerStatic(app: App, root: string): void {
     method: "get",
     path: "/*",
     policy: "public",
+    access: "none",
     query: z.looseObject({}),
     looseQuery: true,
     handler: handler(root),

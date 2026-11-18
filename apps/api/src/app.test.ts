@@ -31,6 +31,7 @@ function addThrowers(app: ReturnType<typeof createApp>): void {
       method: "get",
       path,
       policy: "public",
+      access: "none",
       handler: () => {
         throw error;
       },
@@ -64,6 +65,7 @@ function build(trustedProxies: string[] = []): Harness {
     method: "post",
     path: "/test/echo",
     policy: "public",
+    access: "none",
     body: z.strictObject({ name: z.string().max(20) }),
     handler: ({ body }) => {
       calls += 1;
@@ -74,6 +76,7 @@ function build(trustedProxies: string[] = []): Harness {
     method: "get",
     path: "/test/items",
     policy: "public",
+    access: "none",
     query: z.strictObject({ limit: z.coerce.number().int().max(100).optional() }),
     handler: () => {
       calls += 1;
@@ -84,6 +87,7 @@ function build(trustedProxies: string[] = []): Harness {
     method: "get",
     path: "/test/who",
     policy: "public",
+    access: "none",
     handler: ({ clientAddress }) => ({ clientAddress }),
   });
   addThrowers(app);
@@ -268,6 +272,37 @@ describe("the request log", () => {
   });
 });
 
+describe("defineRoute access", () => {
+  const params = z.strictObject({ workspace_id: z.uuid() });
+  it.each([
+    ["none on a session route", { policy: "session", access: "none" }],
+    ["user on a public route", { policy: "public", access: "user" }],
+    ["a value outside the list", { policy: "session", access: "admin" }],
+    [
+      "a workspace parameter that is not in params",
+      { policy: "session", access: { workspace: "id" }, params },
+    ],
+    [
+      "a permission outside the matrix",
+      { policy: "session", access: { workspace: "workspace_id", permission: "x" }, params },
+    ],
+    [
+      "a change with no permission",
+      { policy: "session", access: { workspace: "workspace_id" }, params, method: "patch" },
+    ],
+  ])("refuses %s at registration", (_name, extra) => {
+    const { app } = build();
+    expect(() =>
+      defineRoute(app, {
+        method: "get",
+        path: "/test/w/{workspace_id}",
+        handler: () => 1,
+        ...extra,
+      } as never),
+    ).toThrow(/defineRoute/);
+  });
+});
+
 describe("defineRoute strictness", () => {
   const strict = z.strictObject({ a: z.string() });
   it.each([
@@ -280,7 +315,14 @@ describe("defineRoute strictness", () => {
   ])("refuses %s at registration", (_name, extra) => {
     const { app } = build();
     expect(() =>
-      defineRoute(app, { method: "post", path: "/test/new", policy: "public", handler: () => 1, ...extra }),
+      defineRoute(app, {
+        method: "post",
+        path: "/test/new",
+        policy: "public",
+        access: "none",
+        handler: () => 1,
+        ...extra,
+      }),
     ).toThrow(/strict/);
   });
 
@@ -291,6 +333,7 @@ describe("defineRoute strictness", () => {
         method: "post",
         path: "/test/ok",
         policy: "public",
+        access: "none",
         body: strict,
         handler: () => 1,
       }),
@@ -300,6 +343,7 @@ describe("defineRoute strictness", () => {
         method: "get",
         path: "/test/loose",
         policy: "public",
+        access: "none",
         query: z.looseObject({}),
         looseQuery: true,
         handler: () => 1,

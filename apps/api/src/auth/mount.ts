@@ -127,6 +127,8 @@ export function registerAuthRoutes(app: App, auth: AuthService): void {
       method: row.method === "GET" ? "get" : "post",
       path: row.path,
       policy: row.policy,
+      // The library handles these paths and reaches no workspace: a signed-in call runs as the user alone.
+      access: row.policy === "public" ? "none" : "user",
       cookieOnly: true,
       ...(row.body ? { body: row.body } : {}),
       handler: ({ body, c, clientAddress }) =>

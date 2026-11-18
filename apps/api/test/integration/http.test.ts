@@ -193,6 +193,7 @@ describe("failures and unknown routes", () => {
       method: "get",
       path: "/test/db",
       policy: "public",
+      access: "none",
       handler: async () => (await dead.query("SELECT 1")).rows,
     });
     const response = await get(app, "/test/db");

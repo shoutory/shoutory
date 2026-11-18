@@ -41,7 +41,13 @@ function build() {
     auth,
   });
   const route = (path: string, handler: () => unknown) =>
-    defineRoute(app, { method: "get", path, policy: "public", handler: handler as () => never });
+    defineRoute(app, {
+      method: "get",
+      path,
+      policy: "public",
+      access: "none",
+      handler: handler as () => never,
+    });
   route("/test/throws-error", () => {
     throw new Error(`failed for ${CANARY}`);
   });
@@ -56,6 +62,7 @@ function build() {
     method: "post",
     path: "/test/body",
     policy: "public",
+    access: "none",
     body: z.strictObject({ name: z.string().max(5) }),
     handler: () => ({ ok: true }),
   });

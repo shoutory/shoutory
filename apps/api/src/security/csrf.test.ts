@@ -24,6 +24,7 @@ function build() {
       method,
       path: `/test/${method}`,
       policy: "public",
+      access: "none",
       body: z.strictObject({}),
       handler: () => {
         calls += 1;
