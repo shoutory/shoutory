@@ -11,6 +11,7 @@ import { z } from "zod";
 import type { AuthSession, SessionResolver } from "../auth/session-check.js";
 import { Refusal } from "../errors/refusal.js";
 import { csrf } from "../security/csrf.js";
+import { definerRefusal } from "./definer-refusal.js";
 
 export interface AppEnv {
   Variables: { requestId: string; clientAddress: string; session: AuthSession };
@@ -197,37 +198,13 @@ const DENIALS: Readonly<Record<ScopeDenial, ErrorCode>> = {
   limit_reached: "limit_reached",
 };
 
-// The definers a user route calls: their RAISE messages (migration 0009) start with `<name> ` or `<name>:`.
-const DEFINERS = [
-  "resolve_workspace_access",
-  "my_workspaces",
-  "my_organizations",
-  "organization_create",
-  "workspace_create",
-];
-const isDefinerMessage = (message: unknown): boolean =>
-  typeof message === "string" &&
-  DEFINERS.some((name) => message.startsWith(`${name} `) || message.startsWith(`${name}:`));
-
-// The definers' own refusals, answered after the transaction has rolled back. Any other state, and the same state
-// under another message (a revoked grant or a row-security refusal is also 42501), propagates as a defect.
-const DEFINER_STATES: Readonly<Record<string, ErrorCode>> = {
-  "42501": "not_found",
-  "22023": "validation_failed",
-  "54000": "limit_reached",
-  "53400": "limit_reached",
-};
-
 const userTx =
   (pool: AppPool, userId: string): InUserTx =>
   async (run) => {
     try {
       return await withUser(pool, userId, run);
     } catch (error) {
-      const { code: state, message } = error as { code?: unknown; message?: unknown };
-      const code = typeof state === "string" && isDefinerMessage(message) ? DEFINER_STATES[state] : undefined;
-      if (code) throw new Refusal(code, `definer refused: ${state}`, { cause: error });
-      throw error;
+      throw definerRefusal(error) ?? error;
     }
   };
 

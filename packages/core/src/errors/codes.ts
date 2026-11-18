@@ -13,6 +13,7 @@ export const errorCodeSchema = z.enum([
   "forbidden",
   "conflict",
   "limit_reached",
+  "invitation_unusable",
   "step_up_required",
   "password_reset_required",
   "too_many_requests",

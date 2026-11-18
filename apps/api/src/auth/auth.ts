@@ -8,7 +8,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { betterAuth } from "better-auth/minimal";
 import { twoFactor } from "better-auth/plugins/two-factor";
 import type { Logger } from "../logging/logger.js";
-import { enqueueMail, type MailInput } from "../mail/enqueue.js";
+import { enqueueMail, type MailDeps, type MailInput } from "../mail/enqueue.js";
 import type { RouteAuth } from "../routes/define-route.js";
 import { SESSION_COOKIE, TWO_FACTOR_COOKIE } from "./cookie.js";
 import { createPasswordGuard, type PasswordGuard } from "./hibp.js";
@@ -59,6 +59,8 @@ export interface AuthService extends RouteAuth {
   readonly library: BetterAuthInstance;
   readonly publicOrigin: string;
   readonly throttle: Throttle;
+  /** What a route needs to enqueue a mail in its own transaction. */
+  readonly mail: MailDeps;
   readonly stepUp: StepUp;
   readonly passwords: PasswordGuard;
   /** The first verified user becomes instance owner; the call is idempotent (a no-op once any admin exists). */
@@ -199,6 +201,7 @@ export function createAuth(options: AuthOptions): AuthService {
     library,
     publicOrigin: options.publicOrigin,
     throttle,
+    mail: deps,
     stepUp,
     passwords: createPasswordGuard(options),
     resolveSession: (headers) => readSession(library, headers),

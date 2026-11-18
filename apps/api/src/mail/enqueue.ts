@@ -1,7 +1,6 @@
 import { createHmac } from "node:crypto";
 import { type Aad, FORMAT_VERSION, NIL_SCOPE, type SealedSecret, seal } from "@shoutory/core/crypto";
 import type { KeyProvider } from "@shoutory/core/keys";
-import type { AppPool } from "@shoutory/db/pool";
 import { z } from "zod";
 import { TEMPLATE_NAMES, TEMPLATES } from "./templates.js";
 
@@ -43,17 +42,21 @@ export const emailLinkAad = (id: string, workspaceId: string | null, generation:
 const digestOf = (link: string, pepper: SealedSecret): string =>
   createHmac("sha256", Buffer.from(pepper.expose())).update(`email_link:${link}`).digest("hex");
 
+/** What a mail is enqueued on: a pool, or the transaction of the change the mail follows. */
+export interface MailDb {
+  query(text: string, values?: unknown[]): Promise<{ rows: Array<Record<string, unknown>> }>;
+}
+
 /**
  * Adds one mail to the outbox with its link sealed (kind `email_link`, the row id as AAD owner, generation 0) and
- * returns the row id. The pool is the auth or the app pool; the table itself is reachable only through the
- * definer. A duplicate id is a unique violation.
+ * returns the row id. The table itself is reachable only through the definer. A duplicate id is a unique violation.
  */
-export async function enqueueMail(pool: AppPool, input: MailInput, deps: MailDeps): Promise<string> {
+export async function enqueueMail(db: MailDb, input: MailInput, deps: MailDeps): Promise<string> {
   const mail = mailSchema.parse(input);
   const vars = TEMPLATES[mail.template].vars.parse(mail.vars);
-  const id = mail.id ?? ((await pool.query("SELECT uuidv7() AS id")).rows[0].id as string);
+  const id = mail.id ?? String((await db.query("SELECT uuidv7() AS id")).rows[0]?.id);
   const sealed = seal(mail.link, emailLinkAad(id, mail.workspaceId, 0), deps.keys);
-  await pool.query(
+  await db.query(
     `SELECT app.email_outbox_enqueue($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
     [
       id,

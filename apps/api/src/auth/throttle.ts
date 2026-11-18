@@ -11,7 +11,9 @@ type Scope =
   | "link_confirm"
   | "two_factor"
   | "totp_code"
-  | "password_reset";
+  | "password_reset"
+  | "invite"
+  | "invite_accept";
 
 // A successful sign-in refunds the whole account bucket: `bucket_take` accepts a cost down to minus the capacity.
 const LOGIN_ACCOUNT_CAPACITY = 100;

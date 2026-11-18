@@ -6,6 +6,12 @@ export const TEMPLATES = {
   verify_email: { vars: z.strictObject({}) },
   reset_password: { vars: z.strictObject({}) },
   existing_account_notice: { vars: z.strictObject({}) },
+  invitation: {
+    vars: z.strictObject({
+      workspaceName: z.string().min(1).max(128),
+      role: z.string().min(1).max(32),
+    }),
+  },
 } as const;
 
 export type TemplateName = keyof typeof TEMPLATES;

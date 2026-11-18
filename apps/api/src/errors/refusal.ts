@@ -17,6 +17,7 @@ const PUBLIC: Record<ErrorCode, { status: ContentfulStatusCode; message: string 
   forbidden: { status: 403, message: "The request is not allowed." },
   conflict: { status: 409, message: "The request conflicts with the current state." },
   limit_reached: { status: 409, message: "A limit has been reached." },
+  invitation_unusable: { status: 410, message: "The invitation can no longer be used." },
   step_up_required: { status: 403, message: "Confirm your identity again to continue." },
   password_reset_required: { status: 403, message: "Reset your password to continue." },
   too_many_requests: { status: 429, message: "Too many requests. Try again later." },

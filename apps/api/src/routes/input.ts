@@ -29,8 +29,17 @@ export const pageQuery = z.strictObject({
     .default(DEFAULT_LIMIT),
 });
 
-/** The list envelope: `next_cursor` is the last id of a full page and null after a short one. */
-export function pageAnswer(c: Context<AppEnv>, rows: Array<{ id: string }>, limit: number): Response {
+/**
+ * The list envelope: `next_cursor` is the last row's cursor field (`id` unless the list pages by another key) of a
+ * full page and null after a short one.
+ */
+export function pageAnswer(
+  c: Context<AppEnv>,
+  rows: Array<Record<string, unknown>>,
+  limit: number,
+  cursorField = "id",
+): Response {
   const last = rows[rows.length - 1];
-  return c.json({ data: rows, meta: { next_cursor: rows.length === limit && last ? last.id : null } }, 200);
+  const next = rows.length === limit && last ? String(last[cursorField]) : null;
+  return c.json({ data: rows, meta: { next_cursor: next } }, 200);
 }
