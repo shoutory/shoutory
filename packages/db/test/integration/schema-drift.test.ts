@@ -61,6 +61,7 @@ describe("Drizzle metadata equals the migrated catalog", () => {
 
   it("declares every table of the migrations so far", () => {
     expect(declared.map(nameOf).sort()).toEqual([
+      "app.email_outbox",
       "app.instance_admins",
       "app.rate_buckets",
       "app.schema_migrations",

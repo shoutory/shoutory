@@ -1,5 +1,6 @@
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { OpenAPIHono } from "@hono/zod-openapi";
+import type { KeyProvider } from "@shoutory/core/keys";
 import type { AppPool } from "@shoutory/db/pool";
 import type { MiddlewareHandler } from "hono";
 import { secureHeaders } from "hono/secure-headers";
@@ -15,6 +16,8 @@ export interface AppOptions {
   /** CIDR ranges of the reverse proxies whose `X-Forwarded-For` is believed; empty trusts nobody. */
   readonly trustedProxies: readonly string[];
   readonly pool: AppPool;
+  /** The key ring: `/readyz` is not ready while a sealed row names a key it does not hold. */
+  readonly keys: KeyProvider;
   readonly logger: Logger;
 }
 
@@ -77,7 +80,7 @@ export function createApp(options: AppOptions): App {
     }
     return errorResponse(c, refusal);
   });
-  registerHealth(app, options.pool);
+  registerHealth(app, options.pool, options.keys);
   app.notFound((c) => errorResponse(c, new Refusal("not_found", "no such route")));
   return app;
 }

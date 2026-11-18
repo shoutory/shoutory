@@ -8,7 +8,8 @@ export type CredentialKind = (typeof CREDENTIAL_KINDS)[number];
 /** The all-zero UUID: the scope of an instance-wide secret. */
 export const NIL_SCOPE = "00000000-0000-0000-0000-000000000000";
 
-const FORMAT_VERSION = 1;
+/** The one layout the envelope seals and opens; callers that build an AAD use it. */
+export const FORMAT_VERSION = 1;
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
 const DEK_BYTES = 32;

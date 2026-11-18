@@ -28,7 +28,7 @@ function io() {
 }
 
 describe("shoutory command entry", () => {
-  it.each([[[]], [["nonsense"]]])(
+  it.each([[[]], [["nonsense"]], [["secrets"]], [["secrets", "rotate"]], [["migrate", "now"]]])(
     "an unknown or missing command (%j) writes one usage line and returns 2",
     async (argv) => {
       const sink = io();
@@ -36,6 +36,15 @@ describe("shoutory command entry", () => {
       expect(sink.err).toHaveLength(1);
       expect(sink.err[0]).toContain("migrate");
       expect(sink.out).toEqual([]);
+    },
+  );
+
+  it.each([["secrets check"], ["secrets reseal"]])(
+    "%s reaches its command: with no worker URL it reports that variable and fails",
+    async (command) => {
+      const sink = io();
+      expect(await run(command.split(" "), {}, sink.io)).toBe(1);
+      expect(sink.err.join("\n")).toContain("SHOUTORY_DATABASE_URL_WORKER");
     },
   );
 

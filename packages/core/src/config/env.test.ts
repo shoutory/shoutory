@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { inspect } from "node:util";
 import { describe, expect, it } from "vitest";
 import { assertKeyIdsLoaded, EnvKeyProvider, KeyError } from "../crypto/keys.js";
-import { assertUtc, ConfigError, type Env, parseEnv } from "./env.js";
+import { assertUtc, ConfigError, type Env, parseEnv, parseKeyRing } from "./env.js";
 
 const b64 = (fill: number) => Buffer.alloc(32, fill).toString("base64");
 const ROLES = ["OWNER", "APP", "WORKER", "AUTH", "READONLY"] as const;
@@ -217,5 +217,18 @@ describe("start-up: HTTP settings", () => {
     expect(
       refusedVariable({ ...without("SHOUTORY_PUBLIC_ORIGIN"), SHOUTORY_ROLE: "worker" }),
     ).toBeUndefined();
+  });
+});
+
+describe("parseKeyRing", () => {
+  const example = "c2hvdXRvcnktZXhhbXBsZS1rZWstMDEyMzQ1Njc4OSE=";
+
+  it("loads the key variables alone and refuses an example KEK and a missing active key", () => {
+    const ring = parseKeyRing({ SHOUTORY_ACTIVE_KEY_ID: "k1", SHOUTORY_KEK_K1: b64(7) });
+    expect(ring.activeKeyId()).toBe("k1");
+    expect(() => parseKeyRing({ SHOUTORY_ACTIVE_KEY_ID: "k1", SHOUTORY_KEK_K1: example })).toThrow(
+      /known example value/,
+    );
+    expect(() => parseKeyRing({ SHOUTORY_KEK_K1: b64(7) })).toThrow(ConfigError);
   });
 });

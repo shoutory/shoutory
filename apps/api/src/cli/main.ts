@@ -1,13 +1,15 @@
 import { SECRET_VARIABLES } from "@shoutory/core/config";
 import { createScrubber } from "../logging/scrub.js";
 import { migrateCommand } from "./migrate.js";
+import { checkCommand } from "./secrets/check.js";
+import { resealCommand } from "./secrets/reseal.js";
 
 export interface CliIo {
   readonly stdout: (line: string) => void;
   readonly stderr: (line: string) => void;
 }
 
-const USAGE = "usage: shoutory <command>; commands: migrate";
+const USAGE = "usage: shoutory <command>; commands: migrate, secrets check, secrets reseal";
 const KEK_PREFIX = "SHOUTORY_KEK_";
 const MIN_SECRET_LENGTH = 8;
 
@@ -32,15 +34,30 @@ export function collectSecrets(env: NodeJS.ProcessEnv): string[] {
   return [...new Set(usable)];
 }
 
+type Command = (env: NodeJS.ProcessEnv, io: CliIo) => Promise<number>;
+
+// A command is the whole argument list, so an extra or a missing word is a usage error.
+const COMMANDS: ReadonlyMap<string, Command> = new Map([
+  [
+    "migrate",
+    async (env, io) => {
+      await migrateCommand(env, io.stdout);
+      return 0;
+    },
+  ],
+  ["secrets check", checkCommand],
+  ["secrets reseal", resealCommand],
+]);
+
 /** Runs one command and returns its exit code; starting a process around it is the server slice's job. */
 export async function run(argv: readonly string[], env: NodeJS.ProcessEnv, io: CliIo): Promise<number> {
-  if (argv[0] !== "migrate") {
+  const command = COMMANDS.get(argv.join(" "));
+  if (!command) {
     io.stderr(USAGE);
     return 2;
   }
   try {
-    await migrateCommand(env, io.stdout);
-    return 0;
+    return await command(env, io);
   } catch (error) {
     const message = error instanceof Error ? error.message : "the command failed";
     io.stderr(String(createScrubber(collectSecrets(env))(message)));

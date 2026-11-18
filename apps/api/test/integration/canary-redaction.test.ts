@@ -1,3 +1,4 @@
+import { EnvKeyProvider } from "@shoutory/core/keys";
 import { createAppPool } from "@shoutory/db/pool";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
@@ -25,7 +26,11 @@ function build() {
     `postgres://shoutory_app:${encodeURIComponent(CANARY)}@127.0.0.1:1/none`,
     () => undefined,
   );
-  const app = createApp({ publicOrigin: "https://app.example.test", trustedProxies: [], pool, logger });
+  const keys = new EnvKeyProvider({
+    SHOUTORY_ACTIVE_KEY_ID: "k1",
+    SHOUTORY_KEK_K1: Buffer.alloc(32, 1).toString("base64"),
+  });
+  const app = createApp({ publicOrigin: "https://app.example.test", trustedProxies: [], pool, keys, logger });
   const route = (path: string, handler: () => unknown) =>
     defineRoute(app, { method: "get", path, policy: "public", handler: handler as () => never });
   route("/test/throws-error", () => {

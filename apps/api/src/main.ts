@@ -2,8 +2,9 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { assertUtc, type Config, parseEnv } from "@shoutory/core/config";
+import { assertKeyIdsLoaded } from "@shoutory/core/keys";
 import { createAppPool } from "@shoutory/db/pool";
-import { assertMigrationsApplied } from "@shoutory/db/startup";
+import { assertMigrationsApplied, sealedKeyIds } from "@shoutory/db/startup";
 import { createApp } from "./app.js";
 import { type CliIo, collectSecrets, run } from "./cli/main.js";
 import { createLogger, type Logger } from "./logging/logger.js";
@@ -44,6 +45,7 @@ async function startServer(config: Config, logger: Logger): Promise<RunningServe
   );
   try {
     await assertMigrationsApplied(pool);
+    assertKeyIdsLoaded(await sealedKeyIds(pool), config.keys);
     const publicOrigin = config.publicOrigin;
     if (publicOrigin === undefined) throw new Error("SHOUTORY_PUBLIC_ORIGIN is required");
     // The SPA static route is registered here, after every other route, once its folder is configured.
@@ -51,6 +53,7 @@ async function startServer(config: Config, logger: Logger): Promise<RunningServe
       publicOrigin,
       trustedProxies: config.trustedProxies,
       pool,
+      keys: config.keys,
       logger,
     });
     const server = await listen(app.fetch, config.port, config.host);

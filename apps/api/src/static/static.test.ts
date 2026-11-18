@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { EnvKeyProvider } from "@shoutory/core/keys";
 import { createAppPool } from "@shoutory/db/pool";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../app.js";
@@ -18,6 +19,10 @@ const newApp = () =>
     publicOrigin: "https://app.example.test",
     trustedProxies: [],
     pool: createAppPool("postgres://shoutory_app:app-test-secret-1@127.0.0.1:1/none", () => undefined),
+    keys: new EnvKeyProvider({
+      SHOUTORY_ACTIVE_KEY_ID: "k1",
+      SHOUTORY_KEK_K1: Buffer.alloc(32, 1).toString("base64"),
+    }),
     logger: createLogger({ secrets: [], stream: { write: () => undefined } }),
   });
 

@@ -1,18 +1,48 @@
+import { assertKeyIdsLoaded, KeyError, type KeyProvider } from "@shoutory/core/keys";
 import { loadMigrations } from "@shoutory/db/migrate";
 import type { AppPool } from "@shoutory/db/pool";
+import { sealedKeyIds } from "@shoutory/db/startup";
 import { isUnavailable, Refusal } from "../errors/refusal.js";
 import { type App, defineRoute } from "../routes/define-route.js";
 
 const UNDEFINED_TABLE = "42P01";
 
-/** The unauthenticated probe must stay cheap: the shipped names are read once and each probe is one query. */
-function readiness(pool: AppPool): () => Promise<void> {
+/** Every key id a sealed row holds must have a loaded key, or those rows could never be opened again. */
+async function assertKeysHeld(pool: AppPool, keys: KeyProvider): Promise<void> {
+  try {
+    assertKeyIdsLoaded(await sealedKeyIds(pool), keys);
+  } catch (error) {
+    if (error instanceof KeyError) {
+      throw new Refusal("service_unavailable", "a key id in use has no loaded key", {
+        cause: error,
+        details: { cause: "key_missing" },
+      });
+    }
+    if (isUnavailable(error)) {
+      throw new Refusal("service_unavailable", "database unreachable", {
+        cause: error,
+        details: { cause: "database_unreachable" },
+      });
+    }
+    throw error;
+  }
+}
+
+/**
+ * The unauthenticated probe must stay cheap: the shipped names are read once and a probe is two queries, the second
+ * only when no migration is missing. Concurrent requests share one probe.
+ */
+function readiness(pool: AppPool, keys: KeyProvider): () => Promise<void> {
   let shipped: Promise<string[]> | undefined;
   let inFlight: Promise<void> | undefined;
 
   async function probe(): Promise<void> {
     shipped ??= loadMigrations().then((all) => all.map(({ name }) => name));
-    const names = await shipped;
+    // A failed read is not remembered: the next probe reads the folder again.
+    const names = await shipped.catch((error: unknown) => {
+      shipped = undefined;
+      throw error;
+    });
     let applied = new Set<string>();
     try {
       const rows = (await pool.query("SELECT name FROM app.schema_migrations")).rows as { name: string }[];
@@ -32,6 +62,7 @@ function readiness(pool: AppPool): () => Promise<void> {
         details: { cause: "migrations_missing" },
       });
     }
+    await assertKeysHeld(pool, keys);
   }
 
   // Concurrent probes share one in-flight promise, so a burst costs one round trip.
@@ -44,8 +75,8 @@ function readiness(pool: AppPool): () => Promise<void> {
 }
 
 /** `/healthz` says the process is up and touches nothing; `/readyz` says it can serve. */
-export function registerHealth(app: App, pool: AppPool): void {
-  const ready = readiness(pool);
+export function registerHealth(app: App, pool: AppPool, keys: KeyProvider): void {
+  const ready = readiness(pool, keys);
   defineRoute(app, { method: "get", path: "/healthz", policy: "public", handler: () => ({ status: "ok" }) });
   defineRoute(app, {
     method: "get",

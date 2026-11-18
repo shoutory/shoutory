@@ -1,6 +1,7 @@
 import { connect, createServer, type Server, type Socket } from "node:net";
+import { EnvKeyProvider } from "@shoutory/core/keys";
 import { createAppPool } from "@shoutory/db/pool";
-import { cloneTemplate, readTestEnv, type TestDatabase } from "@shoutory/db/testing";
+import { cloneTemplate, readTestEnv, type TestDatabase, withAdminClient } from "@shoutory/db/testing";
 import { afterAll, beforeAll, describe, expect, inject, it, vi } from "vitest";
 import { createApp } from "../../src/app.js";
 import { createLogger } from "../../src/logging/logger.js";
@@ -10,6 +11,10 @@ import { registerStatic } from "../../src/static/static.js";
 const env = readTestEnv();
 const REMOTE = { incoming: { socket: { remoteAddress: "192.0.2.1" } } };
 const logger = createLogger({ secrets: [], stream: { write: () => undefined } });
+const testKeys = new EnvKeyProvider({
+  SHOUTORY_ACTIVE_KEY_ID: "k1",
+  SHOUTORY_KEK_K1: Buffer.alloc(32, 1).toString("base64"),
+});
 
 /** A TCP forwarder to PostgreSQL that the test can cut and bring back on the same port. */
 class Forwarder {
@@ -58,19 +63,26 @@ const appFor = (url: string) =>
     publicOrigin: "https://app.example.test",
     trustedProxies: [],
     pool: createAppPool(url, () => undefined),
+    keys: testKeys,
     logger,
   });
 const get = (app: ReturnType<typeof createApp>, path: string) =>
   Promise.resolve(app.request(path, {}, REMOTE));
 
 describe("readiness and health", () => {
-  it("N parallel /readyz probes cause one database round trip", async () => {
+  it("N parallel /readyz probes share one probe of two database queries", async () => {
     const pool = createAppPool(db.url("app"), () => undefined);
     const query = vi.spyOn(pool, "query");
-    const app = createApp({ publicOrigin: "https://app.example.test", trustedProxies: [], pool, logger });
+    const app = createApp({
+      publicOrigin: "https://app.example.test",
+      trustedProxies: [],
+      pool,
+      keys: testKeys,
+      logger,
+    });
     const responses = await Promise.all(Array.from({ length: 20 }, () => get(app, "/readyz")));
     expect(responses.map((response) => response.status)).toEqual(Array(20).fill(200));
-    expect(query).toHaveBeenCalledTimes(1);
+    expect(query).toHaveBeenCalledTimes(2);
     await pool.end();
   });
 
@@ -113,6 +125,49 @@ describe("readiness and health", () => {
   });
 });
 
+describe("readiness and held key ids", () => {
+  const KEK = (n: number) => Buffer.alloc(32, n).toString("base64");
+  const ring = (...ids: string[]) =>
+    new EnvKeyProvider({
+      SHOUTORY_ACTIVE_KEY_ID: "k1",
+      SHOUTORY_KEK_K1: KEK(1),
+      ...Object.fromEntries(ids.map((keyId, i) => [`SHOUTORY_KEK_${keyId.toUpperCase()}`, KEK(i + 2)])),
+    });
+  let clone: TestDatabase;
+  beforeAll(async () => {
+    clone = await cloneTemplate(env, inject("shoutoryTemplate"));
+    await withAdminClient(env, clone.name, (admin) =>
+      admin.query(
+        `INSERT INTO app.email_outbox (id, recipient, template, locale, vars, link_ciphertext, link_iv, link_auth_tag,
+             link_wrap_iv, link_wrap_tag, link_wrapped_dek, link_key_id, link_format_version, link_generation, link_digest)
+           VALUES (uuidv7(), 'held-1@example.test', 'verify_email', 'en', '{}', '\\x01', '\\x01', '\\x01', '\\x01', '\\x01',
+             '\\x01', 'held', 1, 0, $1)`,
+        ["d".repeat(64)],
+      ),
+    );
+  });
+  afterAll(() => clone.drop());
+
+  it("/readyz answers 503 with Retry-After 5 and cause key_missing when a sealed row names a key with no loaded key, and 200 again once loaded", async () => {
+    const pools: ReturnType<typeof createAppPool>[] = [];
+    const appWith = (keys: EnvKeyProvider) => {
+      const pool = createAppPool(clone.url("app"), () => undefined);
+      pools.push(pool);
+      return createApp({ publicOrigin: "https://app.example.test", trustedProxies: [], pool, logger, keys });
+    };
+    try {
+      const refused = await get(appWith(ring()), "/readyz");
+      expect(refused.status).toBe(503);
+      expect(refused.headers.get("retry-after")).toBe("5");
+      const body = (await refused.json()) as { error: { details: { cause: string } } };
+      expect(body.error.details.cause).toBe("key_missing");
+      expect((await get(appWith(ring("held")), "/readyz")).status).toBe(200);
+    } finally {
+      await Promise.all(pools.map((pool) => pool.end()));
+    }
+  });
+});
+
 describe("failures and unknown routes", () => {
   it("a pool connection failure inside a route answers 503 with Retry-After and no connection detail", async () => {
     const dead = createAppPool(
@@ -123,6 +178,7 @@ describe("failures and unknown routes", () => {
       publicOrigin: "https://app.example.test",
       trustedProxies: [],
       pool: dead,
+      keys: testKeys,
       logger,
     });
     defineRoute(app, {

@@ -1,8 +1,10 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  customType,
   doublePrecision,
   integer,
+  jsonb,
   pgSchema,
   primaryKey,
   text,
@@ -112,6 +114,33 @@ export const userProfiles = app.table("user_profiles", {
     .references(() => authUser.id, { onDelete: "cascade" }),
   lastWorkspaceId: uuid("last_workspace_id"),
   passwordRecheckAt: stamp("password_recheck_at"),
+});
+
+// The sealed fields of a stored secret are raw bytes; Drizzle has no bytea builder at the pin.
+const bytea = customType<{ data: Buffer }>({ dataType: () => "bytea" });
+
+// The mail outbox: written and read only through definer functions. The sealed link columns are NULL after send.
+export const emailOutbox = app.table("email_outbox", {
+  id: uuid("id").primaryKey(),
+  workspaceId: uuid("workspace_id"),
+  recipient: text("recipient").notNull(),
+  template: text("template").notNull(),
+  locale: text("locale").notNull(),
+  vars: jsonb("vars").notNull(),
+  state: text("state").notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: stamp("next_attempt_at").notNull().default(sql`clock_timestamp()`),
+  createdAt: stamp("created_at").notNull().default(sql`clock_timestamp()`),
+  linkCiphertext: bytea("link_ciphertext"),
+  linkIv: bytea("link_iv"),
+  linkAuthTag: bytea("link_auth_tag"),
+  linkWrapIv: bytea("link_wrap_iv"),
+  linkWrapTag: bytea("link_wrap_tag"),
+  linkWrappedDek: bytea("link_wrapped_dek"),
+  linkKeyId: text("link_key_id"),
+  linkFormatVersion: integer("link_format_version"),
+  linkGeneration: integer("link_generation"),
+  linkDigest: text("link_digest"),
 });
 
 export const instanceAdmins = app.table("instance_admins", {

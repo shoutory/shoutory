@@ -142,7 +142,8 @@ export interface Config {
   databaseUrls: Readonly<Record<Role, SealedSecret>>;
 }
 
-function parseKeys(env: Env): KeyProvider {
+/** The key ring alone, from the key variables: the operator commands need no other setting. */
+export function parseKeyRing(env: Env): KeyProvider {
   try {
     const keys = new EnvKeyProvider(env);
     for (const [variable, value] of Object.entries(env)) {
@@ -181,7 +182,7 @@ export function parseEnv(env: Env): Config {
     port: http.data.SHOUTORY_PORT,
     host: http.data.SHOUTORY_HOST,
     trustedProxies: http.data.SHOUTORY_TRUSTED_PROXIES,
-    keys: parseKeys(env),
+    keys: parseKeyRing(env),
     hmacPepper: secret("SHOUTORY_HMAC_PEPPER"),
     sessionSecret: secret("SHOUTORY_SESSION_SECRET"),
     smtpUrl: secret("SHOUTORY_SMTP_URL"),

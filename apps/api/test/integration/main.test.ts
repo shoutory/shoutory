@@ -6,6 +6,7 @@ import {
   emptyDatabase,
   readTestEnv,
   type TestDatabase,
+  withAdminClient,
 } from "@shoutory/db/testing";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { main, type Started } from "../../src/main.js";
@@ -111,6 +112,31 @@ describe("process entry refusals", () => {
     expect(refusal(started)).toBeGreaterThan(0);
     expect(sink.err.join("\n")).toMatch(/migrations? .*not applied|run the migrate command/);
     await expect(fetch(`http://127.0.0.1:${port}/healthz`)).rejects.toThrow();
+  });
+});
+
+describe("process entry and held key ids", () => {
+  it("main refuses a sealed row whose key id has no loaded key before listening, and names the key id", async () => {
+    const held = await cloneTemplate(testEnv, inject("shoutoryTemplate"));
+    try {
+      await withAdminClient(testEnv, held.name, (admin) =>
+        admin.query(
+          `INSERT INTO app.email_outbox (id, recipient, template, locale, vars, link_ciphertext, link_iv, link_auth_tag,
+               link_wrap_iv, link_wrap_tag, link_wrapped_dek, link_key_id, link_format_version, link_generation, link_digest)
+             VALUES (uuidv7(), 'held-1@example.test', 'verify_email', 'en', '{}', '\\x01', '\\x01', '\\x01', '\\x01', '\\x01',
+               '\\x01', 'held', 1, 0, $1)`,
+          ["d".repeat(64)],
+        ),
+      );
+      const sink = io();
+      const port = await freePort();
+      const started = await main([], envFor(held, { SHOUTORY_PORT: String(port) }), sink.io);
+      expect(refusal(started)).toBeGreaterThan(0);
+      expect(sink.err.join("\n")).toContain("held");
+      await expect(fetch(`http://127.0.0.1:${port}/healthz`)).rejects.toThrow();
+    } finally {
+      await held.drop();
+    }
   });
 });
 

@@ -10,6 +10,12 @@ export class MissingMigrationError extends Error {
   }
 }
 
+/** The key ids that sealed rows still hold, read through the definer; the caller checks them against its key ring. */
+export async function sealedKeyIds(pool: Pool): Promise<string[]> {
+  const rows = (await pool.query("SELECT key_id FROM app.sealed_key_ids()")).rows as { key_id: string }[];
+  return rows.map((row) => row.key_id);
+}
+
 /** Stops start-up when a shipped migration is not recorded as applied, so the app never runs on an old schema. */
 export async function assertMigrationsApplied(pool: Pool, dir: string = migrationsDir): Promise<void> {
   const shipped = (await loadMigrations(dir)).map(({ name }) => name);

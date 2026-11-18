@@ -137,7 +137,9 @@ export function emptyDatabase(env: TestEnv): Promise<TestDatabase> {
 
 async function open(env: TestEnv, template?: string): Promise<TestDatabase> {
   const name = await createDatabase(env, template);
-  const pools: Pool[] = [];
+  // One pool per role for the life of the clone: a pool per call would each hold connections until the drop and
+  // exhaust the server's connection slots when many test files run at once.
+  const pools = new Map<DbRole, Pool>();
   // pool.end() resolves before each socket has closed; dropping the database with FORCE in that gap kills a
   // connection that is still shutting down and the client reports it as an uncaught error.
   const closed: Promise<void>[] = [];
@@ -160,17 +162,19 @@ async function open(env: TestEnv, template?: string): Promise<TestDatabase> {
     name,
     url,
     pool(role) {
+      const existing = pools.get(role);
+      if (existing) return existing;
       const pool = new Pool({
         connectionString: url(role),
         connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
         max: 4,
       });
       trackClose(pool);
-      pools.push(pool);
+      pools.set(role, pool);
       return pool;
     },
     async drop() {
-      await Promise.all(pools.map((pool) => pool.end()));
+      await Promise.all([...pools.values()].map((pool) => pool.end()));
       await Promise.all(closed);
       await dropDatabase(env, name);
     },

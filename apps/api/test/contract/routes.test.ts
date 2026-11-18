@@ -1,3 +1,4 @@
+import { EnvKeyProvider } from "@shoutory/core/keys";
 import { createAppPool } from "@shoutory/db/pool";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.js";
@@ -15,6 +16,10 @@ describe("route registration", () => {
       publicOrigin: "https://app.example.test",
       trustedProxies: [],
       pool,
+      keys: new EnvKeyProvider({
+        SHOUTORY_ACTIVE_KEY_ID: "k1",
+        SHOUTORY_KEK_K1: Buffer.alloc(32, 1).toString("base64"),
+      }),
       logger,
     });
     registerStatic(app, ".");
