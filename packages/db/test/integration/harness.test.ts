@@ -12,10 +12,12 @@ const env = readTestEnv();
 describe("test database harness", () => {
   let first: TestDatabase;
   let second: TestDatabase;
+  let extra: TestDatabase;
 
   beforeAll(async () => {
     first = await cloneTemplate(env, inject("shoutoryTemplate"));
     second = await cloneTemplate(env, inject("shoutoryTemplate"));
+    extra = await cloneTemplate(env, inject("shoutoryTemplate"));
   });
 
   afterAll(async () => {
@@ -30,13 +32,17 @@ describe("test database harness", () => {
     expect(first.name).not.toEqual(inject("shoutoryTemplate"));
   });
 
-  it("drops a clone so a later run starts clean", async () => {
-    const extra = await cloneTemplate(env, inject("shoutoryTemplate"));
+  // The clone is made in the hook (30 s), not in the test (5 s): CREATE DATABASE ... TEMPLATE copies the template
+  // files and waits for checkpoints, which is slow while many test files clone at once.
+  it("drops a clone so a later run starts clean, and then hands out no pool for it", async () => {
     await extra.drop();
     const found = await first
       .pool("owner")
       .query("SELECT 1 FROM pg_database WHERE datname = $1", [extra.name]);
     expect(found.rowCount).toBe(0);
+    // A pool opened after the drop began would connect to a database that is about to disappear and die with an
+    // unhandled 57P01 when the drop terminates it.
+    expect(() => extra.pool("app")).toThrow("dropped");
   });
 
   it("fails the run when the database is unreachable instead of skipping", async () => {

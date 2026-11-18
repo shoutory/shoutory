@@ -140,6 +140,7 @@ async function open(env: TestEnv, template?: string): Promise<TestDatabase> {
   // One pool per role for the life of the clone: a pool per call would each hold connections until the drop and
   // exhaust the server's connection slots when many test files run at once.
   const pools = new Map<DbRole, Pool>();
+  let dropped = false;
   // pool.end() resolves before each socket has closed; dropping the database with FORCE in that gap kills a
   // connection that is still shutting down and the client reports it as an uncaught error.
   const closed: Promise<void>[] = [];
@@ -162,6 +163,7 @@ async function open(env: TestEnv, template?: string): Promise<TestDatabase> {
     name,
     url,
     pool(role) {
+      if (dropped) throw new Error(`the test database ${name} was dropped`);
       const existing = pools.get(role);
       if (existing) return existing;
       const pool = new Pool({
@@ -174,6 +176,9 @@ async function open(env: TestEnv, template?: string): Promise<TestDatabase> {
       return pool;
     },
     async drop() {
+      // From here no new pool may open: it would connect to a database that the drop below terminates, and the pool
+      // would report the killed connection as an uncaught error.
+      dropped = true;
       await Promise.all([...pools.values()].map((pool) => pool.end()));
       await Promise.all(closed);
       await dropDatabase(env, name);

@@ -21,6 +21,14 @@
       "source": "./src/crypto/envelope.ts",
       "default": "./dist/crypto/envelope.js"
     },
+    "./entitlements": {
+      "source": "./src/entitlements/entitlements.ts",
+      "default": "./dist/entitlements/entitlements.js"
+    },
+    "./flags": {
+      "source": "./src/flags/flags.ts",
+      "default": "./dist/flags/flags.js"
+    },
     "./errors": {
       "source": "./src/errors/codes.ts",
       "default": "./dist/errors/codes.js"

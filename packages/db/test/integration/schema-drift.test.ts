@@ -64,6 +64,8 @@ describe("Drizzle metadata equals the migrated catalog", () => {
       "app.audit_heads",
       "app.audit_logs",
       "app.email_outbox",
+      "app.feature_flag_overrides",
+      "app.feature_flags",
       "app.instance_admins",
       "app.instance_settings",
       "app.invitations",

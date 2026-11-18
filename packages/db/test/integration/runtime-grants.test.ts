@@ -30,6 +30,8 @@ const EXACT: Record<string, Record<string, string[]>> = {
   rate_buckets: {},
   instance_admins: {},
   instance_settings: {},
+  feature_flags: {},
+  feature_flag_overrides: {},
   email_outbox: {},
   organizations: { shoutory_app: READ },
   organization_members: { shoutory_app: READ },

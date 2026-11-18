@@ -154,7 +154,18 @@ const DEFINERS: Definer[] = [
     args: `id uuid, expected_generation integer, ${SEALED_LINK}`,
     callers: ["shoutory_worker"],
   },
-  { name: "instance_setting_set", args: "key text, value jsonb", callers: ["shoutory_app"] },
+  {
+    name: "instance_setting_set",
+    args: "key text, value jsonb, request_id text, ip_hmac bytea",
+    callers: ["shoutory_app"],
+  },
+  { name: "flags_read", args: "", callers: ["shoutory_app", "shoutory_worker"] },
+  { name: "instance_admin_check", args: "", callers: ["shoutory_app"] },
+  {
+    name: "feature_flag_override_set",
+    args: "flag_key text, enabled boolean, request_id text, ip_hmac bytea",
+    callers: ["shoutory_app"],
+  },
   { name: "organization_owner_guard", args: "", callers: [] },
   {
     name: "audit_insert",

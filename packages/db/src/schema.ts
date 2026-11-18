@@ -240,6 +240,25 @@ export const instanceSettings = app.table("instance_settings", {
   updatedAt: stamp("updated_at").notNull().default(sql`clock_timestamp()`),
 });
 
+// Read and written only through the flag definers; no runtime role holds a privilege on either table.
+export const featureFlags = app.table("feature_flags", {
+  key: text("key").primaryKey(),
+  description: text("description").notNull(),
+  owner: text("owner").notNull(),
+  removeBy: date("remove_by").notNull(),
+  defaultOn: boolean("default_on").notNull().default(false),
+});
+
+export const featureFlagOverrides = app.table("feature_flag_overrides", {
+  id: id(),
+  flagKey: text("flag_key")
+    .notNull()
+    .references(() => featureFlags.key, { onDelete: "cascade" }),
+  scope: text("scope").notNull(),
+  scopeId: uuid("scope_id"),
+  on: boolean("on").notNull(),
+});
+
 // The audit log is partitioned by month on `at` and written only through the audit definers; its leaf partitions
 // are not declared. The head table holds the last hash of each chain (a workspace and a UTC day).
 export const auditLogs = app.table(

@@ -229,7 +229,10 @@ async function setInstanceSetting(
     for (const [name, setting] of Object.entries(settings)) {
       await client.query("SELECT set_config($1, $2, true)", [name, setting]);
     }
-    await client.query("SELECT app.instance_setting_set($1, $2::jsonb)", [key, JSON.stringify(value)]);
+    await client.query("SELECT app.instance_setting_set($1, $2::jsonb, 'req-setting-1', NULL)", [
+      key,
+      JSON.stringify(value),
+    ]);
     const after = await client.query("SELECT current_setting('app.job_purpose', true) AS purpose");
     await client.query("COMMIT");
     return after.rows[0].purpose as string;
