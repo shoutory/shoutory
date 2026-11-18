@@ -5,6 +5,7 @@ import { liveSessionCookie } from "./cookie.js";
 import { CREDENTIAL_HANDLERS } from "./credential-handlers.js";
 import { refusalFromLinkError } from "./error-map.js";
 import {
+  audit,
   type Ctx,
   forward,
   type Handler,
@@ -66,7 +67,11 @@ const signIn: Handler = async (ctx) => {
   // The second step of the challenge records the step-up and claims the owner place.
   if (data.twoFactorRedirect) return respond(ctx.c, data, cookies);
   const created = await sessionAfter(ctx, cookies);
-  if (created) await ctx.auth.stepUp.record(created, "password");
+  if (created) {
+    // The row comes first: no cookie leaves and no step-up is recorded for a sign-in that has no audit row.
+    await audit(ctx, "auth.sign_in", created.userId, "password");
+    await ctx.auth.stepUp.record(created, "password");
+  }
   // The first verified user becomes owner; this repeats the claim of the verification hook, which a failure can skip.
   if (userId) await ctx.auth.claimOwner(userId);
   return respond(ctx.c, data, cookies);

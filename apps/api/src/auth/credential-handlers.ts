@@ -1,5 +1,5 @@
 import { liveSessionCookie } from "./cookie.js";
-import { type Ctx, forward, type Handler, pass, respond, sessionAfter, text } from "./forward.js";
+import { audit, type Ctx, forward, type Handler, pass, respond, sessionAfter, text } from "./forward.js";
 import { AUTH_BASE } from "./paths.js";
 import { revokeOtherSessions } from "./sessions.js";
 
@@ -16,7 +16,9 @@ const guarded =
 
 const verifyPassword = guarded(async (ctx) => {
   const answer = await pass(ctx);
-  await ctx.auth.stepUp.record(ctx.c.get("session"), "password");
+  const session = ctx.c.get("session");
+  await audit(ctx, "auth.step_up", session.userId, "password");
+  await ctx.auth.stepUp.record(session, "password");
   return answer;
 });
 
@@ -28,13 +30,32 @@ const secondFactorChange = guarded(async (ctx) => {
   return respond(ctx.c, data, cookies);
 });
 
+/**
+ * A code is a sign-in when the request holds no live session, and then it completes the challenge; with a live session
+ * the library lets that session win over a leftover challenge cookie, so a TOTP code only proves identity again.
+ */
+async function auditSecondFactor(
+  ctx: Ctx,
+  userId: string,
+  method: "totp" | "backup_code",
+  hadSession: boolean,
+): Promise<void> {
+  if (!hadSession) {
+    await audit(ctx, "auth.sign_in", userId, method);
+  } else if (method === "totp") {
+    await audit(ctx, "auth.step_up", userId, "totp");
+  }
+}
+
 /** A code of the second factor: completing a sign-in claims the owner place; a TOTP code proves identity again. */
 const secondFactorCode =
-  (recordsStepUp: boolean): Handler =>
+  (method: "totp" | "backup_code"): Handler =>
   async (ctx: Ctx) => {
+    const hadSession = (await ctx.auth.resolveSession(ctx.c.req.raw.headers)) !== null;
     const { data, cookies } = await forward(ctx);
     const session = await sessionAfter(ctx, cookies);
-    if (session && recordsStepUp) await ctx.auth.stepUp.record(session, "totp");
+    if (session) await auditSecondFactor(ctx, session.userId, method, hadSession);
+    if (session && method === "totp") await ctx.auth.stepUp.record(session, "totp");
     if (session && liveSessionCookie(cookies)) await ctx.auth.claimOwner(session.userId);
     return respond(ctx.c, data, cookies);
   };
@@ -73,6 +94,6 @@ export const CREDENTIAL_HANDLERS: Readonly<Record<string, Handler>> = {
   [`POST ${AUTH_BASE}/two-factor/disable`]: secondFactorChange,
   [`POST ${AUTH_BASE}/two-factor/get-totp-uri`]: guarded(pass),
   [`POST ${AUTH_BASE}/two-factor/generate-backup-codes`]: guarded(pass),
-  [`POST ${AUTH_BASE}/two-factor/verify-totp`]: secondFactorCode(true),
-  [`POST ${AUTH_BASE}/two-factor/verify-backup-code`]: secondFactorCode(false),
+  [`POST ${AUTH_BASE}/two-factor/verify-totp`]: secondFactorCode("totp"),
+  [`POST ${AUTH_BASE}/two-factor/verify-backup-code`]: secondFactorCode("backup_code"),
 };

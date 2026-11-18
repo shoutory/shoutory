@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 import type { AppEnv } from "../routes/define-route.js";
-import { type AuthService, CLIENT_IP_HEADER } from "./auth.js";
+import { type AuditEntry, type AuthService, CLIENT_IP_HEADER } from "./auth.js";
 import { authCookies, liveSessionCookie, withoutForgedSession } from "./cookie.js";
 import { answerCode, refusalFromAnswer } from "./error-map.js";
 import type { AuthPath } from "./paths.js";
@@ -72,6 +72,15 @@ export async function userIdByEmail(ctx: Ctx, email: string): Promise<string | u
   const context = await ctx.auth.library.$context;
   return (await context.internalAdapter.findUserByEmail(email))?.user.id;
 }
+
+/** The audit row of a sign-in or step-up of the user, with this request's id and client address. */
+export const audit = (
+  ctx: Ctx,
+  action: AuditEntry["action"],
+  userId: string,
+  method: AuditEntry["method"],
+): Promise<void> =>
+  ctx.auth.audit({ action, userId, method, requestId: ctx.c.get("requestId"), clientAddress: ctx.ip });
 
 export const pass = async (ctx: Ctx): Promise<Response> => {
   const { data, cookies } = await forward(ctx);

@@ -9,6 +9,7 @@ import { registerAuthRoutes } from "./auth/mount.js";
 import { errorResponse, Refusal, toRefusal } from "./errors/refusal.js";
 import { registerHealth } from "./health/health.js";
 import { type Logger, logRequest } from "./logging/logger.js";
+import { registerAudit } from "./routes/audit/audit.js";
 import { type App, type AppEnv, initRoutes } from "./routes/define-route.js";
 import { registerInvitations } from "./routes/invitations/invitations.js";
 import { registerMembers } from "./routes/members/members.js";
@@ -94,6 +95,7 @@ export function createApp(options: AppOptions): App {
   registerWorkspaces(app, options.auth.ipHmac);
   registerInvitations(app, options.auth);
   registerMembers(app, options.auth.ipHmac);
+  registerAudit(app);
   app.notFound((c) => errorResponse(c, new Refusal("not_found", "no such route")));
   return app;
 }

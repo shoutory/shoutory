@@ -75,7 +75,7 @@ const get = (app: ReturnType<typeof createApp>, path: string) =>
   Promise.resolve(app.request(path, {}, REMOTE));
 
 describe("readiness and health", () => {
-  it("N parallel /readyz probes share one probe of two database queries", async () => {
+  it("N parallel /readyz probes share one probe of three database queries", async () => {
     const pool = createAppPool(db.url("app"), () => undefined);
     const query = vi.spyOn(pool, "query");
     const app = createApp({
@@ -88,7 +88,8 @@ describe("readiness and health", () => {
     });
     const responses = await Promise.all(Array.from({ length: 20 }, () => get(app, "/readyz")));
     expect(responses.map((response) => response.status)).toEqual(Array(20).fill(200));
-    expect(query).toHaveBeenCalledTimes(2);
+    // Migrations applied, key ids held, partition runway.
+    expect(query).toHaveBeenCalledTimes(3);
     await pool.end();
   });
 

@@ -7,6 +7,7 @@ import type { BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { betterAuth } from "better-auth/minimal";
 import { twoFactor } from "better-auth/plugins/two-factor";
+import { Refusal } from "../errors/refusal.js";
 import type { Logger } from "../logging/logger.js";
 import { enqueueMail, type MailDeps, type MailInput } from "../mail/enqueue.js";
 import type { RouteAuth } from "../routes/define-route.js";
@@ -67,6 +68,19 @@ export interface AuthService extends RouteAuth {
   claimOwner(userId: string): Promise<void>;
   /** The keyed digest of a client address that the audit log stores, never the address itself. */
   ipHmac(clientAddress: string): Buffer;
+  /**
+   * Writes one instance-chain row for a person's sign-in or step-up. A failed write answers 503: an identity proof is
+   * never granted without its record.
+   */
+  audit(entry: AuditEntry): Promise<void>;
+}
+
+export interface AuditEntry {
+  readonly action: "auth.sign_in" | "auth.step_up";
+  readonly userId: string;
+  readonly method: "password" | "totp" | "backup_code";
+  readonly requestId: string;
+  readonly clientAddress: string;
 }
 
 type QueuedMail = Omit<MailInput, "workspaceId" | "locale" | "vars">;
@@ -197,6 +211,8 @@ export function createAuth(options: AuthOptions): AuthService {
   const throttle = createThrottle(options.pool, options.pepper);
   const library = createLibrary(options, effects, throttle);
   const stepUp = createStepUp(options.pool);
+  // Its own purpose keeps this digest apart from the `session_ip` one.
+  const ipHmac = (address: string) => Buffer.from(pepperDigest(options.pepper, "audit_ip", address), "hex");
   return {
     library,
     publicOrigin: options.publicOrigin,
@@ -207,7 +223,23 @@ export function createAuth(options: AuthOptions): AuthService {
     resolveSession: (headers) => readSession(library, headers),
     hasStepUp: (session) => stepUp.has(session),
     claimOwner: effects.claimOwner,
-    // Its own purpose keeps this digest apart from the `session_ip` one.
-    ipHmac: (address) => Buffer.from(pepperDigest(options.pepper, "audit_ip", address), "hex"),
+    ipHmac,
+    audit: async ({ action, userId, method, requestId, clientAddress }) => {
+      try {
+        await options.pool.query("SELECT app.audit_insert_instance($1, 'user', $2, $3, $4, $5)", [
+          action,
+          userId,
+          requestId,
+          ipHmac(clientAddress),
+          JSON.stringify({ method }),
+        ]);
+      } catch (error) {
+        // The app's error handler logs a 503 with the request id.
+        throw new Refusal("service_unavailable", "the audit write failed", {
+          cause: error,
+          details: { cause: "audit_unavailable" },
+        });
+      }
+    },
   };
 }
