@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { EnvKeyProvider } from "@shoutory/core/keys";
 import { createAppPool } from "@shoutory/db/pool";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { testAuth } from "../../test/support/auth.js";
 import { createApp } from "../app.js";
 import { createLogger } from "../logging/logger.js";
 import { defineRoute } from "../routes/define-route.js";
@@ -14,17 +15,23 @@ const SECRET = "outside-the-static-root-marker";
 let root: string;
 let app: ReturnType<typeof createApp>;
 
-const newApp = () =>
-  createApp({
-    publicOrigin: "https://app.example.test",
-    trustedProxies: [],
-    pool: createAppPool("postgres://shoutory_app:app-test-secret-1@127.0.0.1:1/none", () => undefined),
-    keys: new EnvKeyProvider({
-      SHOUTORY_ACTIVE_KEY_ID: "k1",
-      SHOUTORY_KEK_K1: Buffer.alloc(32, 1).toString("base64"),
-    }),
-    logger: createLogger({ secrets: [], stream: { write: () => undefined } }),
+const newApp = () => {
+  const publicOrigin = "https://app.example.test";
+  const pool = createAppPool("postgres://shoutory_app:app-test-secret-1@127.0.0.1:1/none", () => undefined);
+  const keys = new EnvKeyProvider({
+    SHOUTORY_ACTIVE_KEY_ID: "k1",
+    SHOUTORY_KEK_K1: Buffer.alloc(32, 1).toString("base64"),
   });
+  const logger = createLogger({ secrets: [], stream: { write: () => undefined } });
+  return createApp({
+    publicOrigin,
+    trustedProxies: [],
+    pool,
+    keys,
+    logger,
+    auth: testAuth(pool, keys, logger, publicOrigin),
+  });
+};
 
 beforeAll(() => {
   const base = mkdtempSync(join(tmpdir(), "shoutory-static-"));
@@ -65,6 +72,16 @@ describe("static handler", () => {
       }
       expect(response.headers.get("x-content-type-options")).toBe("nosniff");
       expect(response.headers.get("cache-control")).toMatch(/no-cache|no-store/);
+    },
+  );
+
+  it.each(["/auth/verify", "/auth/reset", "/"])(
+    "the shell for the page %s is never stored and sends no referrer",
+    async (path) => {
+      const response = await get(path);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.get("referrer-policy")).toBe("no-referrer");
     },
   );
 

@@ -7,6 +7,7 @@ import { createApp } from "../../src/app.js";
 import { createLogger } from "../../src/logging/logger.js";
 import { defineRoute, registeredRoutes } from "../../src/routes/define-route.js";
 import { registerStatic } from "../../src/static/static.js";
+import { testAuth } from "../support/auth.js";
 
 const env = readTestEnv();
 const REMOTE = { incoming: { socket: { remoteAddress: "192.0.2.1" } } };
@@ -58,14 +59,18 @@ afterAll(async () => {
   await db.drop();
 });
 
-const appFor = (url: string) =>
-  createApp({
-    publicOrigin: "https://app.example.test",
+const ORIGIN = "https://app.example.test";
+const appFor = (url: string) => {
+  const pool = createAppPool(url, () => undefined);
+  return createApp({
+    publicOrigin: ORIGIN,
     trustedProxies: [],
-    pool: createAppPool(url, () => undefined),
+    pool,
     keys: testKeys,
     logger,
+    auth: testAuth(pool, testKeys, logger, ORIGIN),
   });
+};
 const get = (app: ReturnType<typeof createApp>, path: string) =>
   Promise.resolve(app.request(path, {}, REMOTE));
 
@@ -74,11 +79,12 @@ describe("readiness and health", () => {
     const pool = createAppPool(db.url("app"), () => undefined);
     const query = vi.spyOn(pool, "query");
     const app = createApp({
-      publicOrigin: "https://app.example.test",
+      publicOrigin: ORIGIN,
       trustedProxies: [],
       pool,
       keys: testKeys,
       logger,
+      auth: testAuth(pool, testKeys, logger, ORIGIN),
     });
     const responses = await Promise.all(Array.from({ length: 20 }, () => get(app, "/readyz")));
     expect(responses.map((response) => response.status)).toEqual(Array(20).fill(200));
@@ -153,7 +159,8 @@ describe("readiness and held key ids", () => {
     const appWith = (keys: EnvKeyProvider) => {
       const pool = createAppPool(clone.url("app"), () => undefined);
       pools.push(pool);
-      return createApp({ publicOrigin: "https://app.example.test", trustedProxies: [], pool, logger, keys });
+      const auth = testAuth(pool, keys, logger, ORIGIN);
+      return createApp({ publicOrigin: ORIGIN, trustedProxies: [], pool, logger, keys, auth });
     };
     try {
       const refused = await get(appWith(ring()), "/readyz");
@@ -175,11 +182,12 @@ describe("failures and unknown routes", () => {
       () => undefined,
     );
     const app = createApp({
-      publicOrigin: "https://app.example.test",
+      publicOrigin: ORIGIN,
       trustedProxies: [],
       pool: dead,
       keys: testKeys,
       logger,
+      auth: testAuth(dead, testKeys, logger, ORIGIN),
     });
     defineRoute(app, {
       method: "get",

@@ -2,6 +2,7 @@ import { EnvKeyProvider } from "@shoutory/core/keys";
 import { createAppPool } from "@shoutory/db/pool";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import { testAuth } from "../../test/support/auth.js";
 import { createApp } from "../app.js";
 import { createLogger } from "../logging/logger.js";
 import { defineRoute } from "../routes/define-route.js";
@@ -15,7 +16,8 @@ const testKeys = new EnvKeyProvider({
 function build() {
   const logger = createLogger({ secrets: [], stream: { write: () => undefined } });
   const pool = createAppPool("postgres://shoutory_app:app-test-secret-1@127.0.0.1:1/none", () => undefined);
-  const app = createApp({ publicOrigin: ORIGIN, trustedProxies: [], pool, keys: testKeys, logger });
+  const auth = testAuth(pool, testKeys, logger, ORIGIN);
+  const app = createApp({ publicOrigin: ORIGIN, trustedProxies: [], pool, keys: testKeys, logger, auth });
   let calls = 0;
   for (const method of ["post", "put", "patch", "delete"] as const) {
     defineRoute(app, {

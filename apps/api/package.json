@@ -5,6 +5,7 @@
   "type": "module",
   "license": "AGPL-3.0-only",
   "dependencies": {
+    "@better-auth/core": "1.7.16",
     "@hono/node-server": "2.1.6",
     "@hono/zod-openapi": "1.6.3",
     "@opentelemetry/api": "1.10.0",
@@ -16,6 +17,7 @@
     "@opentelemetry/sdk-trace": "3.0.0",
     "@shoutory/core": "workspace:*",
     "@shoutory/db": "workspace:*",
+    "better-auth": "1.7.16",
     "hono": "4.13.16",
     "pino": "10.4.0",
     "zod": "4.6.7"

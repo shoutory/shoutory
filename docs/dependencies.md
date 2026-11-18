@@ -130,3 +130,26 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
 ## zod (apps/api)
 
 - `apps/api` now declares `zod` 4.6.7 too: its route schemas are `z.strictObject`. The card above holds the evaluation.
+
+## better-auth 1.7.16
+
+- Used for: email and password sign-up and sign-in, database sessions, email verification and (in a later slice) the
+  second factor, behind our own route mount in `apps/api/src/auth/`. No plugin is enabled; only its Drizzle adapter is used.
+  Our adapter wrapper stores session tokens as digests, and its built-in rate limit and telemetry are off.
+- Licence: MIT. Published 2026-11-03, more than 14 days before adoption. Its runtime dependencies (package.json of the
+  pin) are `@better-auth/utils`, `@better-fetch/fetch`, `@noble/ciphers`, `@noble/hashes`, `better-call`, `defu`, `jose`,
+  `kysely`, `nanostores` and `zod`, and the `@better-auth/*` packages of the same pin (`core`, `telemetry` and the
+  `drizzle`, `kysely`, `memory`, `mongo` and `prisma` adapters). We import `better-auth/minimal`, which does not load Kysely.
+
+## @better-auth/core 1.7.16
+
+- Used for: one import, `queueAfterTransactionHook` from `@better-auth/core/context`, which runs the sign-up mail
+  enqueue after the transaction commits. It is already installed as a dependency of `better-auth` at the same release;
+  `apps/api` declares it exactly (1.7.16, the register pin) so that import is direct.
+- Licence: MIT. Published 2026-11-03 with `better-auth`, more than 14 days before adoption. Advisories: as `better-auth`.
+- Rejected: reaching it through `better-auth` re-exports (the entry used is not re-exported) and a hand-written
+  after-commit queue (infrastructure we do not reinvent).
+- Advisories: 1.7.16 is the register pin that carries the GHSA-9hm7-xhfp-cx58 fix; no later 1.7.x release is an
+  advisory fix (checked 2026-11-18). Re-read at each upgrade.
+- Rejected: Auth.js (maintenance mode), Lucia (deprecated), a self-written session layer (authentication and sessions are
+  infrastructure we do not reinvent).

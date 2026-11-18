@@ -1,6 +1,11 @@
+import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
 export type AppPool = Pool;
+
+/** The query builder the authentication library runs on, over the pool of the `shoutory_auth` role. */
+export const createAuthDb = (pool: AppPool) => drizzle(pool);
+export type AuthDb = ReturnType<typeof createAuthDb>;
 
 const MAX_CONNECTIONS = 10;
 const CONNECT_TIMEOUT_MS = 5_000;

@@ -166,10 +166,24 @@ function refusal(error: z.ZodError): ConfigError {
 }
 
 /**
+ * The authentication library reads `BETTER_AUTH_*` and `AUTH_*` itself (its secret, base URL, trusted origins, and a
+ * telemetry switch that overrides the option). Configuration is only ours, so such a variable refuses the start.
+ */
+function assertNoLibrarySwitches(env: Env): void {
+  const found = Object.keys(env).find((name) => /^(BETTER_AUTH|AUTH)_/.test(name) && env[name] !== undefined);
+  if (found)
+    throw new ConfigError(
+      found,
+      `${found} is not accepted: authentication is configured through SHOUTORY_ variables only`,
+    );
+}
+
+/**
  * Parses the process environment, or refuses to start. Secrets have no default: a missing, empty, weak,
  * all-zero or example value raises a `ConfigError` that names the variable and never prints the value.
  */
 export function parseEnv(env: Env): Config {
+  assertNoLibrarySwitches(env);
   const parsed = schema.safeParse(env);
   if (!parsed.success) throw refusal(parsed.error);
   const http = httpSchema.safeParse(env);

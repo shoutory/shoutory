@@ -6,6 +6,7 @@ import { createApp } from "../../src/app.js";
 import { Refusal } from "../../src/errors/refusal.js";
 import { createLogger } from "../../src/logging/logger.js";
 import { defineRoute } from "../../src/routes/define-route.js";
+import { testAuth } from "../support/auth.js";
 
 const CANARY = 'http-canary"v\\1/a b+c=d';
 const spellings = [
@@ -30,7 +31,15 @@ function build() {
     SHOUTORY_ACTIVE_KEY_ID: "k1",
     SHOUTORY_KEK_K1: Buffer.alloc(32, 1).toString("base64"),
   });
-  const app = createApp({ publicOrigin: "https://app.example.test", trustedProxies: [], pool, keys, logger });
+  const auth = testAuth(pool, keys, logger, "https://app.example.test");
+  const app = createApp({
+    publicOrigin: "https://app.example.test",
+    trustedProxies: [],
+    pool,
+    keys,
+    logger,
+    auth,
+  });
   const route = (path: string, handler: () => unknown) =>
     defineRoute(app, { method: "get", path, policy: "public", handler: handler as () => never });
   route("/test/throws-error", () => {

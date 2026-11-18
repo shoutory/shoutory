@@ -39,7 +39,16 @@ function maskString(text: string, forms: readonly string[]): string {
   return forms.reduce((out, form) => out.replaceAll(form, CENSOR), text);
 }
 
+// A query builder's error (Drizzle's) puts the SQL and every parameter in its message and stack header; only its
+// type and the driver error in `cause` are kept.
+const echoesQuery = (error: Error): boolean =>
+  Object.hasOwn(error, "query") && Object.hasOwn(error, "params");
+
 function plainError(error: Error): Record<string, unknown> {
+  if (echoesQuery(error)) {
+    const type = error.name === "Error" ? error.constructor.name : error.name;
+    return { type, cause: error.cause };
+  }
   return { type: error.name, message: error.message, stack: error.stack, cause: error.cause };
 }
 

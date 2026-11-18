@@ -4,6 +4,8 @@ import type { KeyProvider } from "@shoutory/core/keys";
 import type { AppPool } from "@shoutory/db/pool";
 import type { MiddlewareHandler } from "hono";
 import { secureHeaders } from "hono/secure-headers";
+import type { AuthService } from "./auth/auth.js";
+import { registerAuthRoutes } from "./auth/mount.js";
 import { errorResponse, Refusal, toRefusal } from "./errors/refusal.js";
 import { registerHealth } from "./health/health.js";
 import { type Logger, logRequest } from "./logging/logger.js";
@@ -19,6 +21,8 @@ export interface AppOptions {
   /** The key ring: `/readyz` is not ready while a sealed row names a key it does not hold. */
   readonly keys: KeyProvider;
   readonly logger: Logger;
+  /** Sign-up, sign-in, sessions and the route policies that read them. */
+  readonly auth: AuthService;
 }
 
 const SELF = ["'self'"];
@@ -66,7 +70,7 @@ export function createApp(options: AppOptions): App {
       }
     },
   });
-  initRoutes(app, options.publicOrigin);
+  initRoutes(app, options.publicOrigin, options.auth);
   app.use("*", requestContext(options.logger));
   app.use("*", secureHeaders({ contentSecurityPolicy: CSP }));
   app.use("*", clientContext(options.trustedProxies));
@@ -81,6 +85,7 @@ export function createApp(options: AppOptions): App {
     return errorResponse(c, refusal);
   });
   registerHealth(app, options.pool, options.keys);
+  registerAuthRoutes(app, options.auth);
   app.notFound((c) => errorResponse(c, new Refusal("not_found", "no such route")));
   return app;
 }

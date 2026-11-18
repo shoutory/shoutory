@@ -3,9 +3,10 @@ import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { assertUtc, type Config, parseEnv } from "@shoutory/core/config";
 import { assertKeyIdsLoaded } from "@shoutory/core/keys";
-import { createAppPool } from "@shoutory/db/pool";
+import { createAppPool, createAuthDb } from "@shoutory/db/pool";
 import { assertMigrationsApplied, sealedKeyIds } from "@shoutory/db/startup";
 import { createApp } from "./app.js";
+import { createAuth } from "./auth/auth.js";
 import { type CliIo, collectSecrets, run } from "./cli/main.js";
 import { createLogger, type Logger } from "./logging/logger.js";
 import { createScrubber } from "./logging/scrub.js";
@@ -43,31 +44,46 @@ async function startServer(config: Config, logger: Logger): Promise<RunningServe
   const pool = createAppPool(config.databaseUrls.app.expose(), (error) =>
     logger.error({ err: error }, "database pool error"),
   );
+  const authPool = createAppPool(config.databaseUrls.auth.expose(), (error) =>
+    logger.error({ err: error }, "auth database pool error"),
+  );
   try {
     await assertMigrationsApplied(pool);
     assertKeyIdsLoaded(await sealedKeyIds(pool), config.keys);
     const publicOrigin = config.publicOrigin;
     if (publicOrigin === undefined) throw new Error("SHOUTORY_PUBLIC_ORIGIN is required");
     // The SPA static route is registered here, after every other route, once its folder is configured.
+    const auth = createAuth({
+      publicOrigin,
+      secret: config.sessionSecret.expose(),
+      pepper: config.hmacPepper,
+      keys: config.keys,
+      db: createAuthDb(authPool),
+      pool: authPool,
+      logger,
+    });
+    // The library starts asynchronously; a bad configuration refuses the start here, not on the first request.
+    await auth.library.$context;
     const app = createApp({
       publicOrigin,
       trustedProxies: config.trustedProxies,
       pool,
       keys: config.keys,
       logger,
+      auth,
     });
     const server = await listen(app.fetch, config.port, config.host);
     logger.info({ port: server.port, role: config.role }, "listening");
     const close = async (): Promise<void> => {
       await server.close();
-      await pool.end();
+      await Promise.all([pool.end(), authPool.end()]);
     };
     return { port: server.port, close };
   } catch (error) {
     // A failing close must not hide why the start failed.
-    await pool
-      .end()
-      .catch((endError: unknown) => logger.error({ err: endError }, "database pool did not close"));
+    await Promise.all([pool.end(), authPool.end()]).catch((endError: unknown) =>
+      logger.error({ err: endError }, "database pool did not close"),
+    );
     throw error;
   }
 }

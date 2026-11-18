@@ -220,6 +220,26 @@ describe("start-up: HTTP settings", () => {
   });
 });
 
+describe("start-up refusal of the library's own environment switches", () => {
+  // The authentication library reads these itself (secret, URL, trusted origins, telemetry) and would override us.
+  it.each([
+    "BETTER_AUTH_SECRET",
+    "BETTER_AUTH_SECRETS",
+    "BETTER_AUTH_URL",
+    "BETTER_AUTH_TRUSTED_ORIGINS",
+    "BETTER_AUTH_TELEMETRY",
+    "AUTH_SECRET",
+  ])("refuses %s, names it and never prints its value", (variable) => {
+    const found = refusal(withValue(variable, "library-switch-value-1"));
+    expect(found?.variable).toBe(variable);
+    expect(found?.shown).not.toContain("library-switch-value-1");
+  });
+
+  it("accepts an unrelated variable that only looks similar", () => {
+    expect(refusedVariable(withValue("OAUTH_CLIENT", "x"))).toBeUndefined();
+  });
+});
+
 describe("parseKeyRing", () => {
   const example = "c2hvdXRvcnktZXhhbXBsZS1rZWstMDEyMzQ1Njc4OSE=";
 

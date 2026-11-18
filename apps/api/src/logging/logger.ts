@@ -14,6 +14,7 @@ export interface LoggerOptions {
 
 export interface Logger {
   info(fields: object, message?: string): void;
+  warn(fields: object, message?: string): void;
   error(fields: object, message?: string): void;
   child(bindings: object): Logger;
 }
@@ -37,6 +38,7 @@ type BindingsFormatter = (value: object) => Record<string, unknown>;
 function wrap(logger: pino.Logger, bindings: BindingsFormatter): Logger {
   return {
     info: (fields, message) => logger.info(fields, message),
+    warn: (fields, message) => logger.warn(fields, message),
     error: (fields, message) => logger.error(fields, message),
     child: (more) => wrap(logger.child(more, { formatters: { bindings } }), bindings),
   };

@@ -1,5 +1,5 @@
 import { readFile, stat } from "node:fs/promises";
-import { extname, join, resolve, sep } from "node:path";
+import { basename, extname, join, resolve, sep } from "node:path";
 import type { Context } from "hono";
 import { z } from "zod";
 import { Refusal } from "../errors/refusal.js";
@@ -18,6 +18,9 @@ const TYPES: Readonly<Record<string, string>> = {
   ".map": "application/json",
 };
 const IMMUTABLE = "public, max-age=31536000, immutable";
+// The shell is the page the emailed links open (their token sits in the fragment): it is never stored.
+const SHELL_CACHE = "no-store";
+const cacheOf = (file: string): string => (basename(file) === "index.html" ? SHELL_CACHE : "no-cache");
 // Hashed build assets are the only immutable files; the shell must be revalidated so a release is seen.
 const ASSET_DIR = "assets";
 
@@ -65,12 +68,12 @@ function handler(root: string) {
     if (file !== base && !file.startsWith(base + sep))
       throw new Refusal("validation_failed", "outside the root");
     if (segments.length > 0 && (await isFile(file))) {
-      return serve(file, segments[0] === ASSET_DIR ? IMMUTABLE : "no-cache");
+      return serve(file, segments[0] === ASSET_DIR ? IMMUTABLE : cacheOf(file));
     }
     const isAsset = segments[0] === ASSET_DIR;
     const isApi = segments[0] === "api";
     if (isAsset || isApi || extname(file) !== "") throw new Refusal("not_found", "no such file");
-    return serve(join(base, "index.html"), "no-cache");
+    return serve(join(base, "index.html"), SHELL_CACHE);
   };
 }
 

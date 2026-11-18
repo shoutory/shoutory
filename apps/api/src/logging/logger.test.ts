@@ -249,6 +249,28 @@ describe("an unparsable request target is logged as a fixed value and never thro
   });
 });
 
+describe("a query error that echoes its parameters", () => {
+  it("is logged without message, stack, query and params, and keeps its type and its cause", () => {
+    const { log, lines } = capture([]);
+    const driver = Object.assign(new Error("connection refused"), { code: "ECONNREFUSED" });
+    // The shape of Drizzle's query error: SQL and parameters in the message, the driver error only in `cause`.
+    const failed = Object.assign(
+      new Error(
+        "Failed query: insert into account\nparams: hash-value-not-registered-1,mail-not-registered-1",
+        {
+          cause: driver,
+        },
+      ),
+      { name: "DrizzleQueryError", query: "insert into account", params: ["hash-value-not-registered-1"] },
+    );
+    log.error({ err: failed }, "request failed");
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).not.toContain("not-registered-1");
+    expect(lines[0]).toContain("DrizzleQueryError");
+    expect(lines[0]).toContain("connection refused");
+  });
+});
+
 describe("a provider answer is logged as class and code only", () => {
   it("logs the class and the code and never the body", () => {
     const { log, lines } = capture([]);

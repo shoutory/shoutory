@@ -2,17 +2,23 @@ import { createRoute, type OpenAPIHono } from "@hono/zod-openapi";
 import type { Context, MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
+import type { AuthSession, SessionResolver } from "../auth/session-check.js";
 import { Refusal } from "../errors/refusal.js";
 import { csrf } from "../security/csrf.js";
 
 export interface AppEnv {
-  Variables: { requestId: string; clientAddress: string };
+  Variables: { requestId: string; clientAddress: string; session: AuthSession };
 }
 export type App = OpenAPIHono<AppEnv>;
 
-/** The closed list of route policies. The authentication slice adds `session` and `step_up`, the API-key slice its own. */
-const POLICIES = ["public"] as const;
+/** The closed list of route policies. The API-key slice adds its own. */
+const POLICIES = ["public", "session"] as const;
 type Policy = (typeof POLICIES)[number];
+
+/** What a `session` route needs from the authentication service. */
+export interface RouteAuth {
+  readonly resolveSession: SessionResolver;
+}
 
 export interface RegisteredRoute {
   readonly method: string;
@@ -43,19 +49,41 @@ export interface RouteSpec<B extends Shape | undefined, Q extends Shape, P exten
   /** The one opt-out of a strict query, for the SPA shell route; every other route refuses it at registration. */
   readonly looseQuery?: boolean;
   readonly params?: P;
+  /** The route authenticates by its cookie alone: a request carrying an `Authorization` header is refused. */
+  readonly cookieOnly?: boolean;
   /** A returned `Response` is sent as is; anything else is wrapped as `{ data }`. */
   readonly handler: (input: Input<B, Q, P>) => unknown;
 }
 
 interface RouteState {
   readonly publicOrigin: string;
+  readonly auth: RouteAuth;
   readonly routes: RegisteredRoute[];
 }
 const states = new WeakMap<App, RouteState>();
 
-/** Called once by `createApp`: the public origin the CSRF check of every route compares with. */
-export function initRoutes(app: App, publicOrigin: string): void {
-  states.set(app, { publicOrigin, routes: [] });
+/** Called once by `createApp`: the public origin the CSRF check compares with, and the session reader of the policies. */
+export function initRoutes(app: App, publicOrigin: string, auth: RouteAuth): void {
+  states.set(app, { publicOrigin, auth, routes: [] });
+}
+
+/** A cookie-only route never reads `Authorization`, so any value in it is a refused credential, not an exemption. */
+const refuseAuthorization: MiddlewareHandler = async (c, next) => {
+  if (c.req.header("authorization") !== undefined) {
+    throw new Refusal("unauthenticated", "this route authenticates by cookie only");
+  }
+  await next();
+};
+
+/**
+ * The `session` policy. It runs after the input is validated (a malformed request is a 400 whoever sends it) and
+ * before the handler; the cookies a sliding refresh produced are returned to ride the answer.
+ */
+async function authenticate(auth: RouteAuth, c: Context<AppEnv>): Promise<readonly string[]> {
+  const found = await auth.resolveSession(c.req.raw.headers);
+  if (!found) throw new Refusal("unauthenticated", "no valid session");
+  c.set("session", found.session);
+  return found.cookies;
 }
 
 /** Every route registered through `defineRoute`, for the contract test and the strict-input test. */
@@ -105,7 +133,10 @@ export function defineRoute<
   assertStrict("body", spec.body);
   if (!spec.looseQuery) assertStrict("query", spec.query);
   assertStrict("params", spec.params);
-  const middleware: MiddlewareHandler[] = [csrf(state.publicOrigin)];
+  const middleware: MiddlewareHandler[] = [
+    ...(spec.cookieOnly ? [refuseAuthorization] : []),
+    csrf(state.publicOrigin),
+  ];
   if (spec.body) middleware.push(bodyLimit({ maxSize: MAX_BODY_BYTES, onError: tooLarge }), requireJson);
   const route = createRoute({
     method: spec.method,
@@ -123,6 +154,7 @@ export function defineRoute<
   app.openapi(
     route as never,
     (async (c: Context<AppEnv>) => {
+      const cookies = spec.policy === "public" ? [] : await authenticate(state.auth, c);
       const result = await spec.handler({
         body: (spec.body ? validated(c, "json") : undefined) as Input<B, Q, P>["body"],
         query: validated(c, "query") as Input<B, Q, P>["query"],
@@ -130,7 +162,13 @@ export function defineRoute<
         clientAddress: c.get("clientAddress"),
         c,
       });
-      return result instanceof Response ? result : c.json({ data: result ?? null }, 200);
+      const response = result instanceof Response ? result : c.json({ data: result ?? null }, 200);
+      // A cookie the handler already set (a sign-out's expiry) is not overridden by the policy's refreshed one.
+      const set = new Set(response.headers.getSetCookie().map((line) => line.split("=")[0]));
+      for (const cookie of cookies) {
+        if (!set.has(cookie.split("=")[0])) response.headers.append("set-cookie", cookie);
+      }
+      return response;
     }) as never,
   );
   state.routes.push({

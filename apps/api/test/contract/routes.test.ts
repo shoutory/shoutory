@@ -5,22 +5,26 @@ import { createApp } from "../../src/app.js";
 import { createLogger } from "../../src/logging/logger.js";
 import { registeredRoutes } from "../../src/routes/define-route.js";
 import { registerStatic } from "../../src/static/static.js";
+import { testAuth } from "../support/auth.js";
 
-const POLICIES = ["public"];
+const POLICIES = ["public", "session"];
 
 describe("route registration", () => {
   it("every route of the app is registered through defineRoute with a policy", () => {
     const logger = createLogger({ secrets: [], stream: { write: () => undefined } });
     const pool = createAppPool("postgres://shoutory_app:app-test-secret-1@127.0.0.1:1/none", () => undefined);
+    const ring = new EnvKeyProvider({
+      SHOUTORY_ACTIVE_KEY_ID: "k1",
+      SHOUTORY_KEK_K1: Buffer.alloc(32, 1).toString("base64"),
+    });
+    const publicOrigin = "https://app.example.test";
     const app = createApp({
-      publicOrigin: "https://app.example.test",
+      publicOrigin,
       trustedProxies: [],
       pool,
-      keys: new EnvKeyProvider({
-        SHOUTORY_ACTIVE_KEY_ID: "k1",
-        SHOUTORY_KEK_K1: Buffer.alloc(32, 1).toString("base64"),
-      }),
+      keys: ring,
       logger,
+      auth: testAuth(pool, ring, logger, publicOrigin),
     });
     registerStatic(app, ".");
     const registered = registeredRoutes(app);

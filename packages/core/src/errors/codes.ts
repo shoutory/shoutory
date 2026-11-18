@@ -7,6 +7,11 @@ export const errorCodeSchema = z.enum([
   "unsupported_media_type",
   "not_found",
   "csrf_rejected",
+  "unauthenticated",
+  "invalid_credentials",
+  "email_not_verified",
+  "forbidden",
+  "too_many_requests",
   "service_unavailable",
   "internal_error",
 ]);
