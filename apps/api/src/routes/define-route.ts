@@ -12,12 +12,14 @@ export interface AppEnv {
 export type App = OpenAPIHono<AppEnv>;
 
 /** The closed list of route policies. The API-key slice adds its own. */
-const POLICIES = ["public", "session"] as const;
+const POLICIES = ["public", "session", "step_up"] as const;
 type Policy = (typeof POLICIES)[number];
 
-/** What a `session` route needs from the authentication service. */
+/** What a `session` or `step_up` route needs from the authentication service. */
 export interface RouteAuth {
   readonly resolveSession: SessionResolver;
+  /** Whether the session proved its identity again in the last ten minutes. */
+  readonly hasStepUp: (session: AuthSession) => Promise<boolean>;
 }
 
 export interface RegisteredRoute {
@@ -79,10 +81,13 @@ const refuseAuthorization: MiddlewareHandler = async (c, next) => {
  * The `session` policy. It runs after the input is validated (a malformed request is a 400 whoever sends it) and
  * before the handler; the cookies a sliding refresh produced are returned to ride the answer.
  */
-async function authenticate(auth: RouteAuth, c: Context<AppEnv>): Promise<readonly string[]> {
+async function authenticate(auth: RouteAuth, c: Context<AppEnv>, policy: Policy): Promise<readonly string[]> {
   const found = await auth.resolveSession(c.req.raw.headers);
   if (!found) throw new Refusal("unauthenticated", "no valid session");
   c.set("session", found.session);
+  if (policy === "step_up" && !(await auth.hasStepUp(found.session))) {
+    throw new Refusal("step_up_required", "no authentication in the last ten minutes");
+  }
   return found.cookies;
 }
 
@@ -154,7 +159,7 @@ export function defineRoute<
   app.openapi(
     route as never,
     (async (c: Context<AppEnv>) => {
-      const cookies = spec.policy === "public" ? [] : await authenticate(state.auth, c);
+      const cookies = spec.policy === "public" ? [] : await authenticate(state.auth, c, spec.policy);
       const result = await spec.handler({
         body: (spec.body ? validated(c, "json") : undefined) as Input<B, Q, P>["body"],
         query: validated(c, "query") as Input<B, Q, P>["query"],

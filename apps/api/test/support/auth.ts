@@ -13,5 +13,7 @@ export const testAuth = (pool: AppPool, keys: KeyProvider, logger: Logger, publi
     keys,
     db: createAuthDb(pool),
     pool,
+    appPool: pool,
+    fetch: () => Promise.reject(new TypeError("these tests never reach the network")),
     logger,
   });

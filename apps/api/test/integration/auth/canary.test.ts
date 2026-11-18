@@ -36,7 +36,8 @@ describe("a planted canary never leaves the process through a failing database h
     } finally {
       await fx.close();
     }
-  });
+    // A fixture and four memory-hard hashes, run beside the 100-sign-in lockout row: the default limit is too short.
+  }, 30_000);
 });
 
 // The canary is the email local part, so it is a parameter of the library's first statement. Revoking the library
@@ -66,6 +67,7 @@ describe("a planted canary never leaves the process through the sign-in routes",
       "/api/auth/sign-up/email",
       { name: "Canary", email: `${MAIL_CANARY}@example.test`, password: PASSWORD },
     ],
+    ["password reset request", "/api/auth/request-password-reset", { email: `${MAIL_CANARY}@example.test` }],
   ])(
     "%s: a failing query carrying the canary as a parameter is absent from every surface in every form",
     async (_name, path, body) => {
@@ -83,4 +85,28 @@ describe("a planted canary never leaves the process through the sign-in routes",
       }
     },
   );
+});
+
+const PASSWORD_CANARY = "password-canary-7d2e91b4-long";
+
+describe("a password never leaves through the breached-password check", () => {
+  it("the range request names only the hash prefix, and an outage logs no password in any form", async () => {
+    const fx = await startFixture({ secrets: [PASSWORD_CANARY] });
+    try {
+      const body = { name: "Canary", email: "hibp-canary-1@example.test", password: PASSWORD_CANARY };
+      const first = await fx.request("/api/auth/sign-up/email", { body });
+      fx.hibp.down = true;
+      const second = await fx.request("/api/auth/sign-up/email", {
+        body: { ...body, email: "hibp-canary-2@example.test" },
+      });
+      expect([first.status, second.status]).toEqual([200, 200]);
+      expect(fx.logged.join("")).toContain("the breached-password check is unavailable");
+      for (const surface of [fx.logged.join(""), fx.hibp.urls.join("\n")]) {
+        for (const form of spellings(PASSWORD_CANARY)) expect(surface).not.toContain(form);
+      }
+      for (const url of fx.hibp.urls) expect(url).toMatch(/\/range\/[0-9A-F]{5}$/);
+    } finally {
+      await fx.close();
+    }
+  });
 });

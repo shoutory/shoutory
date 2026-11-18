@@ -17,6 +17,10 @@
       "source": "./src/errors/codes.ts",
       "default": "./dist/errors/codes.js"
     },
+    "./password": {
+      "source": "./src/password/policy.ts",
+      "default": "./dist/password/policy.js"
+    },
     "./keys": {
       "source": "./src/crypto/keys.ts",
       "default": "./dist/crypto/keys.js"

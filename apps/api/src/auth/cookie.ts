@@ -30,6 +30,19 @@ export function withoutForgedSession(headers: Headers): Headers {
   return clean;
 }
 
-/** Only the session cookie leaves a library answer: it also expires cookies of features we do not use. */
+/** The cookie that holds a second-factor challenge between the password and the code; ten minutes (the plugin's). */
+export const TWO_FACTOR_COOKIE = "__Host-shoutory_two_factor";
+
+/** Only our two cookies leave a library answer: it also expires cookies of features we do not use. */
+export const authCookies = (headers: Headers): string[] =>
+  headers
+    .getSetCookie()
+    .filter((line) => line.startsWith(`${SESSION_COOKIE}=`) || line.startsWith(`${TWO_FACTOR_COOKIE}=`));
+
+/** Only the session cookie: what a session check forwards. */
 export const sessionCookies = (headers: Headers): string[] =>
   headers.getSetCookie().filter((line) => line.startsWith(`${SESSION_COOKIE}=`));
+
+/** The session cookie line that sets a session (a non-empty value), if the answer carries one. */
+export const liveSessionCookie = (lines: readonly string[]): string | undefined =>
+  lines.find((line) => new RegExp(`^${SESSION_COOKIE}=[^;]`).test(line));

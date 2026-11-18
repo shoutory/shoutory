@@ -3,8 +3,15 @@ import type { SealedSecret } from "@shoutory/core/crypto";
 import type { AppPool } from "@shoutory/db/pool";
 import { Refusal } from "../errors/refusal.js";
 
-/** The scopes M0-04c spends (the full closed list and the capacities live in the `bucket_take` definer). */
-type Scope = "login_account" | "login_ip" | "verification_resend" | "link_confirm";
+/** The scopes the sign-in, second-factor and reset routes spend (the capacities live in the `bucket_take` definer). */
+type Scope =
+  | "login_account"
+  | "login_ip"
+  | "verification_resend"
+  | "link_confirm"
+  | "two_factor"
+  | "totp_code"
+  | "password_reset";
 
 // A successful sign-in refunds the whole account bucket: `bucket_take` accepts a cost down to minus the capacity.
 const LOGIN_ACCOUNT_CAPACITY = 100;

@@ -138,7 +138,19 @@ describe("the scrubber's caps, masking and failure mode", () => {
 });
 
 describe("every redacted key (authorization, cookie, token and the rest) is redacted", () => {
-  const keys = ["authorization", "cookie", "set-cookie", "token", "secret", "password", "apiKey"];
+  const keys = [
+    "authorization",
+    "cookie",
+    "set-cookie",
+    "token",
+    "secret",
+    "password",
+    "apiKey",
+    "newPassword",
+    "currentPassword",
+    "totpURI",
+    "backupCodes",
+  ];
   const variants = (key: string) => [
     key,
     key.toUpperCase(),

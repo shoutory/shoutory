@@ -15,6 +15,8 @@ const PUBLIC: Record<ErrorCode, { status: ContentfulStatusCode; message: string 
   invalid_credentials: { status: 401, message: "The email or password is not correct." },
   email_not_verified: { status: 403, message: "The email address is not verified." },
   forbidden: { status: 403, message: "The request is not allowed." },
+  step_up_required: { status: 403, message: "Confirm your identity again to continue." },
+  password_reset_required: { status: 403, message: "Reset your password to continue." },
   too_many_requests: { status: 429, message: "Too many requests. Try again later." },
   service_unavailable: { status: 503, message: "The service is not available right now." },
   internal_error: { status: 500, message: "Something went wrong." },

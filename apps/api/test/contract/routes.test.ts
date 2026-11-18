@@ -7,7 +7,7 @@ import { registeredRoutes } from "../../src/routes/define-route.js";
 import { registerStatic } from "../../src/static/static.js";
 import { testAuth } from "../support/auth.js";
 
-const POLICIES = ["public", "session"];
+const POLICIES = ["public", "session", "step_up"];
 
 describe("route registration", () => {
   it("every route of the app is registered through defineRoute with a policy", () => {

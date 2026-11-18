@@ -60,6 +60,8 @@ async function startServer(config: Config, logger: Logger): Promise<RunningServe
       keys: config.keys,
       db: createAuthDb(authPool),
       pool: authPool,
+      appPool: pool,
+      fetch,
       logger,
     });
     // The library starts asynchronously; a bad configuration refuses the start here, not on the first request.

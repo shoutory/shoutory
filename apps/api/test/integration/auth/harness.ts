@@ -1,3 +1,4 @@
+import { createHash, createHmac } from "node:crypto";
 import { open, SealedSecret, type StoredSecret } from "@shoutory/core/crypto";
 import { EnvKeyProvider } from "@shoutory/core/keys";
 import { createAppPool, createAuthDb } from "@shoutory/db/pool";
@@ -56,7 +57,109 @@ export interface Fixture {
   admin<T>(run: (client: AdminClient) => Promise<T>): Promise<T>;
   /** Signs up, verifies through the mailed token and signs in; returns the session cookie. */
   signedIn(email: string, peer?: string): Promise<string>;
+  /** The breached-password service every auth call of this fixture reaches. */
+  readonly hibp: HibpFake;
+  /** Signs in, enables the second factor and verifies its first code; the jar holds the new session. */
+  enrolled(email: string): Promise<Enrolled>;
+  /** Signs in a user with a second factor and returns the jar that holds only the challenge cookie. */
+  challenged(email: string): Promise<{ jar: Jar; answer: Response }>;
+  /** The number of live session rows of the user. */
+  sessionCount(email: string): Promise<number>;
   close(): Promise<void>;
+}
+
+export interface Enrolled {
+  readonly email: string;
+  readonly jar: Jar;
+  readonly secret: string;
+  readonly backupCodes: string[];
+  readonly enableAnswer: Response;
+}
+
+/** The k-anonymity range API of the breached-password service: a password in `breached` is a hit; `down` fails. */
+export interface HibpFake {
+  readonly breached: Set<string>;
+  /** Every URL asked for. */
+  readonly urls: string[];
+  down: boolean;
+  /** When set, the whole answer body, whatever the range asked for. */
+  body: string | undefined;
+  readonly fetch: typeof fetch;
+}
+
+export function createHibpFake(): HibpFake {
+  const fake: HibpFake = {
+    breached: new Set(),
+    urls: [],
+    down: false,
+    body: undefined,
+    fetch: async (input) => {
+      fake.urls.push(String(input));
+      if (fake.down) throw new TypeError("fetch failed");
+      if (fake.body !== undefined) return new Response(fake.body);
+      const prefix = new URL(String(input)).pathname.split("/").pop() ?? "";
+      const lines = [...fake.breached]
+        .map((password) => createHash("sha1").update(password.normalize("NFKC")).digest("hex").toUpperCase())
+        .filter((hash) => hash.startsWith(prefix.toUpperCase()))
+        .map((hash) => `${hash.slice(5)}:3`);
+      return new Response([...lines, "0000000000000000000000000000000000A:0"].join("\r\n"));
+    },
+  };
+  return fake;
+}
+
+const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+function base32Decode(text: string): Buffer {
+  let bits = 0;
+  let value = 0;
+  const out: number[] = [];
+  for (const char of text.replace(/=+$/, "").toUpperCase()) {
+    value = (value << 5) | BASE32.indexOf(char);
+    bits += 5;
+    if (bits >= 8) {
+      out.push((value >>> (bits - 8)) & 255);
+      bits -= 8;
+    }
+  }
+  return Buffer.from(out);
+}
+
+/** The RFC 6238 code (SHA-1, 6 digits, 30 s) of the base32 secret, `steps` periods from now. */
+export function totpAt(secret: string, steps = 0): string {
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30_000) + steps));
+  const hash = createHmac("sha1", base32Decode(secret)).update(counter).digest();
+  const offset = (hash[19] ?? 0) & 15;
+  const number =
+    (((hash[offset] ?? 0) & 127) << 24) |
+    ((hash[offset + 1] ?? 0) << 16) |
+    ((hash[offset + 2] ?? 0) << 8) |
+    (hash[offset + 3] ?? 0);
+  return String(number % 1_000_000).padStart(6, "0");
+}
+
+/** The cookies a browser would hold: a Set-Cookie with an empty value or a zero Max-Age removes the cookie. */
+export class Jar {
+  private readonly cookies = new Map<string, string>();
+  constructor(header = "") {
+    for (const pair of header.split(";")) {
+      const [name = "", ...value] = pair.trim().split("=");
+      if (name && value.join("=")) this.cookies.set(name, value.join("="));
+    }
+  }
+  add(response: Response): this {
+    for (const line of response.headers.getSetCookie()) {
+      const [pair = "", ...attributes] = line.split(";");
+      const [name = "", ...value] = pair.split("=");
+      const gone = value.join("=") === "" || attributes.some((a) => /^\s*max-age=0\s*$/i.test(a));
+      if (gone) this.cookies.delete(name);
+      else this.cookies.set(name, value.join("="));
+    }
+    return this;
+  }
+  get header(): Record<string, string> {
+    return { cookie: [...this.cookies].map(([name, value]) => `${name}=${value}`).join("; ") };
+  }
 }
 
 export const cookieOf = (response: Response): string =>
@@ -136,6 +239,59 @@ export interface FixtureOptions {
   readonly secrets?: readonly string[];
 }
 
+const mailsOf =
+  (admin: Fixture["admin"]): Fixture["mails"] =>
+  (recipient) =>
+    admin(async (client) => {
+      const found = await client.query(
+        "SELECT * FROM app.email_outbox WHERE recipient = $1 ORDER BY created_at DESC",
+        [recipient],
+      );
+      return found.rows.map((row) => openedMail(recipient, row));
+    });
+
+function accountHelpers({
+  request,
+  admin,
+  signedIn,
+}: Pick<Fixture, "request" | "admin" | "signedIn">): Pick<
+  Fixture,
+  "enrolled" | "challenged" | "sessionCount"
+> {
+  return {
+    sessionCount: (email) =>
+      admin(async (client) =>
+        Number(
+          (
+            await client.query(
+              'SELECT count(*) FROM auth.session s JOIN auth."user" u ON u.id = s.user_id WHERE u.email = $1',
+              [email],
+            )
+          ).rows[0].count,
+        ),
+      ),
+    enrolled: async (email) => {
+      const jar = new Jar(await signedIn(email));
+      const enableAnswer = await request("/api/auth/two-factor/enable", {
+        body: { password: PASSWORD },
+        headers: jar.header,
+      });
+      const body = (await enableAnswer.clone().json()) as { totpURI: string; backupCodes: string[] };
+      const secret = new URL(body.totpURI).searchParams.get("secret") ?? "";
+      const verified = await request("/api/auth/two-factor/verify-totp", {
+        body: { code: totpAt(secret) },
+        headers: jar.header,
+      });
+      jar.add(verified);
+      return { email, jar, secret, backupCodes: body.backupCodes, enableAnswer };
+    },
+    challenged: async (email) => {
+      const answer = await request("/api/auth/sign-in/email", { body: { email, password: PASSWORD } });
+      return { jar: new Jar().add(answer), answer };
+    },
+  };
+}
+
 export async function startFixture(options: FixtureOptions = {}): Promise<Fixture> {
   const db = await cloneTemplate(env, inject("shoutoryTemplate"));
   const logged: string[] = [];
@@ -145,6 +301,7 @@ export async function startFixture(options: FixtureOptions = {}): Promise<Fixtur
   });
   const authPool = db.pool("auth");
   const appPool = db.pool("app");
+  const hibp = createHibpFake();
   // The clone's own pools are closed by `db.drop()`; only the pools made here for an outage are ended here.
   const extraPools: (typeof authPool)[] = [];
   // A library URL replaces only the library's database: the throttle, the mail queue and the owner claim keep the
@@ -159,6 +316,8 @@ export async function startFixture(options: FixtureOptions = {}): Promise<Fixtur
       keys,
       db: createAuthDb(libraryPool),
       pool: authPool,
+      appPool,
+      fetch: hibp.fetch,
       logger,
     });
     return createApp({ publicOrigin: ORIGIN, trustedProxies: [], pool: appPool, keys, logger, auth });
@@ -166,14 +325,7 @@ export async function startFixture(options: FixtureOptions = {}): Promise<Fixtur
   const app = buildApp(undefined);
   const request: Fixture["request"] = (path, init, on = app) => send(on, path, init);
   const admin: Fixture["admin"] = (run) => withAdminClient(env, db.name, run);
-  const mails: Fixture["mails"] = (recipient) =>
-    admin(async (client) => {
-      const found = await client.query(
-        "SELECT * FROM app.email_outbox WHERE recipient = $1 ORDER BY created_at DESC",
-        [recipient],
-      );
-      return found.rows.map((row) => openedMail(recipient, row));
-    });
+  const mails = mailsOf(admin);
   const signedIn: Fixture["signedIn"] = (email, peer = freshPeer()) =>
     verifiedSession({ request, mails }, email, peer);
   return {
@@ -185,6 +337,8 @@ export async function startFixture(options: FixtureOptions = {}): Promise<Fixtur
     mails,
     admin,
     signedIn,
+    hibp,
+    ...accountHelpers({ request, admin, signedIn }),
     close: async () => {
       await Promise.all(extraPools.map((pool) => pool.end()));
       await db.drop();

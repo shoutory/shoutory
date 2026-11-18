@@ -26,6 +26,16 @@ const SAMPLE: Record<string, unknown> = {
   "/api/auth/verify-email": { token: "token-sample-1" },
   "/api/auth/sessions/revoke": { id: "00000000-0000-7000-8000-000000000001" },
   "/api/auth/sessions/revoke-others": {},
+  "/api/auth/verify-password": { password: PASSWORD },
+  "/api/auth/change-password": { currentPassword: PASSWORD, newPassword: "another-password-5678" },
+  "/api/auth/request-password-reset": { email: "table-1@example.test" },
+  "/api/auth/reset-password": { token: "token-sample-1", newPassword: "another-password-5678" },
+  "/api/auth/two-factor/enable": { password: PASSWORD },
+  "/api/auth/two-factor/disable": { password: PASSWORD },
+  "/api/auth/two-factor/get-totp-uri": { password: PASSWORD },
+  "/api/auth/two-factor/generate-backup-codes": { password: PASSWORD },
+  "/api/auth/two-factor/verify-totp": { code: "123456" },
+  "/api/auth/two-factor/verify-backup-code": { code: "backup-sample-1" },
 };
 const nonGet = AUTH_PATHS.filter((row) => row.method !== "GET");
 
@@ -207,8 +217,8 @@ describe("the error map", () => {
     ],
     [
       "a path Better-Auth has but we disabled",
-      "/api/auth/change-password",
-      { newPassword: "x", currentPassword: "y" },
+      "/api/auth/change-email",
+      { newEmail: "x@example.test" },
       404,
       "not_found",
     ],

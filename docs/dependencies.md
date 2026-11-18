@@ -133,13 +133,29 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
 
 ## better-auth 1.7.16
 
-- Used for: email and password sign-up and sign-in, database sessions, email verification and (in a later slice) the
-  second factor, behind our own route mount in `apps/api/src/auth/`. No plugin is enabled; only its Drizzle adapter is used.
-  Our adapter wrapper stores session tokens as digests, and its built-in rate limit and telemetry are off.
+- Used for: email and password sign-up and sign-in, database sessions, email verification, password reset and change,
+  and the second factor (the `better-auth/plugins/two-factor` entry: TOTP, backup codes in the `encrypted` mode),
+  behind our own route mount in `apps/api/src/auth/`. The email OTP endpoints of that plugin are disabled. Our adapter
+  wrapper stores session tokens as digests, and its built-in rate limit and telemetry are off. The breached-password
+  plugin is not used: it fails closed, so `apps/api/src/auth/hibp.ts` is ours.
 - Licence: MIT. Published 2026-11-03, more than 14 days before adoption. Its runtime dependencies (package.json of the
   pin) are `@better-auth/utils`, `@better-fetch/fetch`, `@noble/ciphers`, `@noble/hashes`, `better-call`, `defu`, `jose`,
   `kysely`, `nanostores` and `zod`, and the `@better-auth/*` packages of the same pin (`core`, `telemetry` and the
   `drizzle`, `kysely`, `memory`, `mongo` and `prisma` adapters). We import `better-auth/minimal`, which does not load Kysely.
+
+## Common-password list (data, packages/core)
+
+- Used for: the "bundled common-password list" of the password policy (`packages/core/src/password/`). It is data, not
+  a package: the 10,000 entries of SecLists `Passwords/Common-Credentials/10k-most-common.txt`, read from the
+  repository's default branch on 2026-11-18 (73,026 bytes, 10,001 lines, no upper-case or non-ASCII entry), embedded as
+  one string in `common-passwords.ts` by a one-off conversion that adds nothing. It drops one entry, a provider
+  name, because no core file may carry one (AGENTS 5.1).
+- Licence: MIT, "Copyright (c) 2018 Daniel Miessler", verified by reading
+  https://raw.githubusercontent.com/danielmiessler/SecLists/master/LICENSE on 2026-11-18. The full notice is in the
+  header of `common-passwords.ts`, as the licence requires of every copy. The list is not a runtime dependency and
+  downloads nothing.
+- Rejected: the NCSC 100k list (the licence of its origin could not be verified) and a run-time download (AGENTS 4.9).
+  The breached-password range check covers the breadth the 10,000 entries do not.
 
 ## @better-auth/core 1.7.16
 

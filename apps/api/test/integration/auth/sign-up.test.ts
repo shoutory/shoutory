@@ -141,3 +141,14 @@ describe("the instance owner's claim", () => {
     }
   });
 });
+
+// After the owner rows: this user verifies, so it must not be the first verified user of the shared fixture.
+describe("a long password", () => {
+  it("the policy's longest password, 128 astral characters of 256 UTF-16 units, can sign in", async () => {
+    const email = "astral-1@example.test";
+    const astral = "😀".repeat(128);
+    expect((await signUp(email, astral)).status).toBe(200);
+    await fx.request("/api/auth/verify-email", { body: { token: tokenOf((await fx.mails(email))[0]) } });
+    expect((await signIn(email, astral)).status).toBe(200);
+  });
+});

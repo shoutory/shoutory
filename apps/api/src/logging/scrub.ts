@@ -7,6 +7,11 @@ const CENSORED_KEYS: ReadonlySet<string> = new Set([
   "secret",
   "password",
   "apikey",
+  "newpassword",
+  "currentpassword",
+  // The user's own TOTP URI and backup codes appear once, in the enrolment answers, and never in a log.
+  "totpuri",
+  "backupcodes",
 ]);
 const CENSOR = "[Redacted]";
 const TRUNCATED = "[truncated]";
