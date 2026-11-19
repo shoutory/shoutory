@@ -20,20 +20,22 @@ const fails = async () => {
 const hangs = () => new Promise<never>(() => undefined);
 const other = async () => new Blob(["not the probe bytes"]).stream();
 
-// One component of a real driver misbehaves per row; the rest still works.
-const ROWS: [string, Partial<StorageDriver>, boolean, boolean, string][] = [
-  ["the write fails", { put: fails }, false, false, "write_failed"],
-  ["the read fails", { get: fails }, true, false, "read_failed"],
-  ["the read returns other bytes", { get: other }, true, false, "read_failed"],
-  ["the object is missing when read back", { get: async () => null }, true, false, "read_failed"],
-  ["the delete fails", { delete: fails }, true, true, "delete_failed"],
-  ["the read never answers", { get: hangs }, true, false, "timeout"],
+// One component of a real driver misbehaves per row; the rest still works. Only the row that waits for the limit
+// shortens it: a short limit on the other rows raced the real filesystem under load and answered `timeout`.
+type Row = [string, Partial<StorageDriver>, boolean, boolean, string, { timeoutMs?: number }];
+const ROWS: Row[] = [
+  ["the write fails", { put: fails }, false, false, "write_failed", {}],
+  ["the read fails", { get: fails }, true, false, "read_failed", {}],
+  ["the read returns other bytes", { get: other }, true, false, "read_failed", {}],
+  ["the object is missing when read back", { get: async () => null }, true, false, "read_failed", {}],
+  ["the delete fails", { delete: fails }, true, true, "delete_failed", {}],
+  ["the read never answers", { get: hangs }, true, false, "timeout", { timeoutMs: 100 }],
 ];
 
 describe("storage check: a failing probe is a class, never error text", () => {
-  it.each(ROWS)("%s", async (_name, broken, writable, readable, failure) => {
+  it.each(ROWS)("%s", async (_name, broken, writable, readable, failure, options) => {
     const driver = { ...real, ...broken };
-    const answer = await checkStorage(driver, { timeoutMs: 100 });
+    const answer = await checkStorage(driver, options);
     expect(answer).toMatchObject({ driver: "fs", writable, readable, failure });
     expect(JSON.stringify(answer)).not.toContain("secret");
   });

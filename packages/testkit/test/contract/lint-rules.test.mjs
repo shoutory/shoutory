@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
@@ -14,6 +14,11 @@ function lint(path, code) {
   const dir = mkdtempSync(join(tmpdir(), "lint-fixture-"));
   try {
     copyFileSync(join(root, "biome.json"), join(dir, "biome.json"));
+    // biome.json lists its plugin files, so each one is copied beside it.
+    mkdirSync(join(dir, "biome-plugins"));
+    for (const plugin of readdirSync(join(root, "biome-plugins"))) {
+      copyFileSync(join(root, "biome-plugins", plugin), join(dir, "biome-plugins", plugin));
+    }
     mkdirSync(dirname(join(dir, path)), { recursive: true });
     writeFileSync(join(dir, path), code);
     const run = spawnSync(process.execPath, [biome, "lint", "--vcs-enabled=false", path], {
@@ -27,7 +32,10 @@ function lint(path, code) {
 }
 
 const src = "apps/api/src/fixture.ts";
+const web = "apps/web/src/fixture.tsx";
+const PLUGIN_MESSAGE = "Raw HTML write is banned";
 const imp = (from) => `import * as m from "${from}";\nexport { m };\n`;
+const html = (element) => `export const View = ({ x }) => (\n  ${element}\n);\n`;
 const longBody = Array.from({ length: 52 }, (_, i) => `  const v${i} = ${i};`).join("\n");
 const nested = Array.from({ length: 12 }, (_, i) => `if (a > ${i}) { if (b > ${i}) { c += 1; } }`).join("\n");
 
@@ -51,6 +59,44 @@ const REFUSED = [
   ["hono aws-lambda", src, imp("hono/aws-lambda"), "noRestrictedImports"],
   ["react-router dev", src, imp("@react-router/dev/vite"), "noRestrictedImports"],
   ["a plugin outside the allowlist", src, imp("better-auth/plugins/organization"), "noRestrictedImports"],
+  // The web app renders text through React and talks to the server through one typed fetch wrapper (NFR-SEC-17).
+  [
+    "dangerouslySetInnerHTML",
+    web,
+    html("<div dangerouslySetInnerHTML={{ __html: x }} />"),
+    "noDangerouslySetInnerHtml",
+  ],
+  [
+    "dangerouslySetInnerHTML with children",
+    web,
+    html("<div dangerouslySetInnerHTML={{ __html: x }}>y</div>"),
+    "noDangerouslySetInnerHtmlWithChildren",
+  ],
+  // The plugin of biome-plugins matches writes of raw HTML and says so in its own message, so a row cannot pass on
+  // another rule's output.
+  ...[
+    ["an innerHTML write", "el.innerHTML = x;"],
+    ["an outerHTML write", "el.outerHTML = x;"],
+    ["an innerHTML write in bracket form", 'el["innerHTML"] = x;'],
+    ["an innerHTML append", "el.innerHTML += x;"],
+    ["document.write", "document.write(x);"],
+    ["document.writeln", "document.writeln(x);"],
+  ].map(([label, body]) => [label, web, `export const f = (el, x) => { ${body} };\n`, PLUGIN_MESSAGE]),
+  ...[
+    ["insertAdjacentHTML", 'el.insertAdjacentHTML("beforeend", x);'],
+    ["setHTMLUnsafe", "el.setHTMLUnsafe(x);"],
+    ["parseHTMLUnsafe", "Document.parseHTMLUnsafe(x);"],
+    ["createContextualFragment", "range.createContextualFragment(x);"],
+  ].map(([label, body]) => [
+    label,
+    web,
+    `export const f = (el, range, x) => { ${body} };\n`,
+    "noJsRestrictedProperties",
+  ]),
+  ["the better-auth browser client", web, imp("better-auth/client"), "noRestrictedImports"],
+  ["the better-auth react client", web, imp("better-auth/react"), "noRestrictedImports"],
+  ["a better-auth client subpath", web, imp("better-auth/client/plugins"), "noRestrictedImports"],
+  ["the better-auth vue client", web, imp("better-auth/vue"), "noRestrictedImports"],
 ];
 
 for (const [label, path, code, rule] of REFUSED) {
@@ -65,6 +111,7 @@ const ALLOWED = [
   ["console in scripts", "scripts/fixture.mjs", 'console.log("x");\n'],
   ["Math.random outside src", "packages/testkit/test/fixture.mjs", "export const n = Math.random();\n"],
   ["the allowed better-auth two-factor plugin", src, imp("better-auth/plugins/two-factor")],
+  ["a text write in the web app", web, "export const f = (el, x) => { el.textContent = x; };\n"],
   ["a catch that handles the error", src, "try { f(); } catch (e) { handle(e); }\n"],
 ];
 

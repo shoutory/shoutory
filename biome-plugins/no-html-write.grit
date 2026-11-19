@@ -1,0 +1,18 @@
+language js
+
+// Raw HTML is injected by writing innerHTML or outerHTML, or by document.write. The restricted-properties rule reports
+// reads only, so this plugin matches the writes: assignment and append, in dot and bracket form.
+or {
+  `$el.innerHTML = $value`,
+  `$el.outerHTML = $value`,
+  `$el["innerHTML"] = $value`,
+  `$el["outerHTML"] = $value`,
+  `$el['innerHTML'] = $value`,
+  `$el['outerHTML'] = $value`,
+  `$el.innerHTML += $value`,
+  `$el.outerHTML += $value`,
+  `document.write($args)`,
+  `document.writeln($args)`
+} as $write where {
+  register_diagnostic(span=$write, message="Raw HTML write is banned; render text through React.")
+}

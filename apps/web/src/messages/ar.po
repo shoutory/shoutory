@@ -1,0 +1,16 @@
+msgid ""
+msgstr ""
+"POT-Creation-Date: 2026-11-19 00:00+0000\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: @lingui/cli\n"
+"Language: ar\n"
+
+#. js-lingui-explicit-id
+msgid "system.not_found.title"
+msgstr "الصفحة غير موجودة"
+
+#. js-lingui-explicit-id
+msgid "system.not_found.body"
+msgstr "لم نعثر على الصفحة التي طلبتها."

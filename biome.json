@@ -10,6 +10,8 @@
     "lineEnding": "lf"
   },
   "javascript": { "formatter": { "quoteStyle": "double" } },
+  "css": { "parser": { "tailwindDirectives": true } },
+  "plugins": ["./biome-plugins/no-html-write.grit"],
   "linter": {
     "enabled": true,
     "rules": {
@@ -33,6 +35,17 @@
               "better-auth/plugins": "Import an allowed plugin from its own subpath."
             },
             "patterns": [
+              {
+                "group": [
+                  "better-auth/client",
+                  "better-auth/client/*",
+                  "better-auth/react",
+                  "better-auth/vue",
+                  "better-auth/svelte",
+                  "better-auth/solid"
+                ],
+                "message": "No code uses the browser client; the web talks to the server through one typed fetch wrapper."
+              },
               {
                 "group": ["@react-router/dev", "@react-router/dev/*"],
                 "message": "React Router runs in library mode."
@@ -66,9 +79,38 @@
             "noJsRestrictedProperties": {
               "level": "error",
               "options": {
-                "entries": [{ "object": "Math", "property": "random", "message": "Use an injected source." }]
+                "entries": [
+                  { "object": "Math", "property": "random", "message": "Use an injected source." },
+                  {
+                    "property": "insertAdjacentHTML",
+                    "message": "Raw HTML is banned; render text through React."
+                  },
+                  {
+                    "property": "setHTMLUnsafe",
+                    "message": "Raw HTML is banned; render text through React."
+                  },
+                  {
+                    "property": "parseHTMLUnsafe",
+                    "message": "Raw HTML is banned; render text through React."
+                  },
+                  {
+                    "property": "createContextualFragment",
+                    "message": "Raw HTML is banned; render text through React."
+                  }
+                ]
               }
             }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/web/src/**"],
+      "linter": {
+        "rules": {
+          "security": {
+            "noDangerouslySetInnerHtml": "error",
+            "noDangerouslySetInnerHtmlWithChildren": "error"
           }
         }
       }

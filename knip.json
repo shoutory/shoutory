@@ -9,6 +9,11 @@
       "entry": ["test/*/*.test.mjs", "scripts/*.mjs"],
       "project": ["test/**"]
     },
+    "apps/web": {
+      "entry": ["src/theme/bootstrap.js"],
+      "project": ["src/**"],
+      "ignoreDependencies": ["happy-dom", "@lingui/cli"]
+    },
     "apps/api": {
       "entry": ["src/main.ts"],
       "project": ["src/**", "test/**"]

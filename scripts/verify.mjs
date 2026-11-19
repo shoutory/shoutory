@@ -29,20 +29,24 @@ const sources = [
   "packages/providers/*/{src,test}/**/*.{ts,tsx}",
 ];
 const workflowFiles = [".github/workflows/*.{yml,yaml}", ".github/actions/**/action.{yml,yaml}"];
-const unitTests = ["{apps,packages}/*/src/**/*.test.ts", "packages/providers/*/src/**/*.test.ts"];
-// A vitest step writes a JSON report so a skipped or todo test fails the step.
-const vitestReport = (project) => `.artifacts/vitest-${project}.json`;
-const vitest = (project) => ({
+const unitTests = [
+  "{apps,packages}/*/src/**/*.test.ts",
+  "packages/providers/*/src/**/*.test.ts",
+  "apps/web/src/**/*.test.tsx",
+];
+// A vitest step writes a JSON report so a skipped or todo test fails the step. A step may run several
+// projects (the web app's DOM project runs beside each node unit project).
+const vitestReport = (step) => `.artifacts/vitest-${step}.json`;
+const vitest = (step, ...projects) => ({
   command: node(
     binOf("vitest", "vitest"),
     "run",
-    "--project",
-    project,
+    ...projects.flatMap((project) => ["--project", project]),
     "--reporter=default",
     "--reporter=json",
-    `--outputFile.json=${vitestReport(project)}`,
+    `--outputFile.json=${vitestReport(step)}`,
   ),
-  skips: { json: vitestReport(project) },
+  skips: { json: vitestReport(step) },
 });
 const nodeTests = { command: [process.execPath, "--test", "--test-reporter=tap"], skips: "node-test" };
 
@@ -100,7 +104,7 @@ export const STEPS = [
   },
   {
     name: "lint",
-    globs: ["**/*.{mjs,ts,tsx,json}"],
+    globs: ["**/*.{mjs,js,ts,tsx,css,json,grit}"],
     command: node(binOf("@biomejs/biome", "biome"), "check"),
     appendFiles: true,
   },
@@ -109,8 +113,8 @@ export const STEPS = [
     globs: ["knip.json", "package.json", "{apps,packages}/*/package.json"],
     command: node(binOf("knip", "knip")),
   },
-  { name: "unit", globs: unitTests, ...vitest("unit") },
-  { name: "unit-chatham", globs: unitTests, ...vitest("unit-chatham") },
+  { name: "unit", globs: unitTests, ...vitest("unit", "unit", "web") },
+  { name: "unit-chatham", globs: unitTests, ...vitest("unit-chatham", "unit-chatham", "web-chatham") },
   {
     name: "integration",
     globs: [
@@ -123,7 +127,7 @@ export const STEPS = [
       "SHOUTORY_TEST_S3_URL",
       ...["OWNER", "APP", "WORKER", "AUTH", "READONLY"].map((role) => `SHOUTORY_DATABASE_URL_${role}`),
     ],
-    ...vitest("integration"),
+    ...vitest("integration", "integration"),
   },
   {
     name: "contract",
@@ -131,7 +135,7 @@ export const STEPS = [
       "{apps,packages}/*/test/contract/**/*.test.ts",
       "packages/providers/*/test/contract/**/*.test.ts",
     ],
-    ...vitest("contract"),
+    ...vitest("contract", "contract"),
   },
   {
     name: "testkit-contract",

@@ -132,6 +132,9 @@ job queue upgrade. A `worker` or `all` process then runs the scheduled upkeep, a
 as the worker role. `/readyz` is not ready while the outbox or the job queue is behind (60 s and 120 s), while no worker
 has beaten within 90 s, or before the job queue is installed; these limits are defaults to confirm.
 
+`pnpm build` also builds the web application (`apps/web`) into `apps/web/dist/client`; `pnpm --filter @shoutory/web exec vite`
+serves it for development.
+
 ### Mail
 
 A `worker` or `all` process sends the queued mail over `SHOUTORY_SMTP_URL` from `SHOUTORY_MAIL_FROM`. Marketing mail is a

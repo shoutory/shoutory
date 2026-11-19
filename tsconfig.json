@@ -6,6 +6,8 @@
     { "path": "packages/db" },
     { "path": "packages/db/tsconfig.test.json" },
     { "path": "apps/api" },
-    { "path": "apps/api/tsconfig.test.json" }
+    { "path": "apps/api/tsconfig.test.json" },
+    { "path": "apps/web" },
+    { "path": "apps/web/tsconfig.test.json" }
   ]
 }

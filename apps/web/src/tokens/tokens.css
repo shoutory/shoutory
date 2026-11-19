@@ -1,0 +1,110 @@
+/* Design tokens. Components use only these roles, never raw values. Light is the base; the dark theme redefines the
+   colours under [data-theme="dark"], which the theme bootstrap always sets. A status tint is the status colour at 12%
+   over the surface; the contrast test computes the same sRGB mix. */
+@theme static {
+  --color-bg: #f4f1ea;
+  --color-surface: #fbf9f4;
+  --color-surface-2: #ece7dc;
+  --color-border: #d8d2c4;
+  --color-border-control: #8f887a;
+  --color-text: #1b1a17;
+  --color-text-muted: #5e5a52;
+  --color-primary: #ffc800;
+  --color-on-primary: #1b1a17;
+  --color-highlight: #ffe58a;
+  --color-link: #7a5a00;
+  --color-focus: #1b1a17;
+  --color-success: #2f7a4c;
+  --color-attention: #a14a0c;
+  --color-danger: #b42318;
+  --color-on-danger: #ffffff;
+  --color-info: #2b579a;
+  --color-neutral: #5e5a52;
+  --color-success-bg: color-mix(in srgb, var(--color-success) 12%, var(--color-surface));
+  --color-attention-bg: color-mix(in srgb, var(--color-attention) 12%, var(--color-surface));
+  --color-danger-bg: color-mix(in srgb, var(--color-danger) 12%, var(--color-surface));
+  --color-info-bg: color-mix(in srgb, var(--color-info) 12%, var(--color-surface));
+  --color-neutral-bg: color-mix(in srgb, var(--color-neutral) 12%, var(--color-surface));
+
+  --font-body: "IBM Plex Sans", "IBM Plex Sans Arabic", system-ui, sans-serif;
+  --font-heading: "Bricolage Grotesque Variable", "IBM Plex Sans Arabic", system-ui, sans-serif;
+
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.25rem;
+  --text-md: 1rem;
+  --text-md--line-height: 1.5rem;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 2rem;
+  --text-3xl: 1.875rem;
+  --text-3xl--line-height: 2.375rem;
+
+  --space-0: 0;
+  --space-1: 0.125rem;
+  --space-2: 0.25rem;
+  --space-3: 0.5rem;
+  --space-4: 0.75rem;
+  --space-5: 1rem;
+  --space-6: 1.25rem;
+  --space-7: 1.5rem;
+  --space-8: 2rem;
+  --space-9: 2.5rem;
+  --space-10: 3rem;
+  --space-11: 4rem;
+}
+
+:root {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-bg: #141311;
+  --color-surface: #1f1d1a;
+  --color-surface-2: #292622;
+  --color-border: #2e2b26;
+  --color-border-control: #78726a;
+  --color-text: #ede8dd;
+  --color-text-muted: #a39e92;
+  --color-on-primary: #141311;
+  --color-highlight: #4a3c00;
+  --color-link: #ffc800;
+  --color-focus: #ede8dd;
+  --color-success: #5fbf86;
+  --color-attention: #f0a25c;
+  --color-danger: #f2877c;
+  --color-on-danger: #141311;
+  --color-info: #7fa8e8;
+  --color-neutral: #a39e92;
+}
+
+/* Arabic reads larger: its own size column (ux-spec 4.2), never italic, never letter-spaced. */
+:root:lang(ar) {
+  --text-xs: 0.875rem;
+  --text-xs--line-height: 1.375rem;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.625rem;
+  --text-md: 1.0625rem;
+  --text-md--line-height: 1.875rem;
+  --text-lg: 1.1875rem;
+  --text-lg--line-height: 2rem;
+  --text-xl: 1.375rem;
+  --text-xl--line-height: 2.25rem;
+  --text-2xl: 1.625rem;
+  --text-2xl--line-height: 2.625rem;
+  --text-3xl: 2rem;
+  --text-3xl--line-height: 3.125rem;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: var(--text-md);
+  line-height: var(--text-md--line-height);
+}

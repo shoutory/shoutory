@@ -204,3 +204,139 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
 - Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
 - Rejected: `@aws-sdk/lib-storage` (multipart is not needed for the objects this driver writes); a hand-written SigV4 client
   (signing is infrastructure we do not reinvent); the MinIO client (its server is archived).
+
+## react 19.3.1
+
+- Used for: the user interface of `apps/web`.
+- Licence: MIT. Published 2026-10-14, more than 14 days before adoption. Its install scripts: none.
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
+- Rejected: Preact and Solid (the accessible component library and the editor and calendar libraries chosen for the web app
+  are built for React).
+
+## react-dom 19.3.1
+
+- Used for: rendering the React tree into the page (`apps/web/src/main.tsx`). It is pinned to the same version as `react`.
+- Licence: MIT. Published 2026-10-14, more than 14 days before adoption. Its install scripts: none.
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
+- Rejected: server rendering (the web app is a same-origin static build, no SSR).
+
+## react-router 8.5.1
+
+- Used for: client routing in data mode (`createBrowserRouter`) in `apps/web/src/app.tsx`. Only the library packages are
+  used; the framework tooling (`@react-router/dev`) is banned by lint.
+- Licence: MIT. Published 2026-10-27, more than 14 days before adoption. Its install scripts: none.
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
+- Rejected: TanStack Router (a second routing model beside the pinned data-router loaders and actions); a hand-written
+  router (infrastructure we do not reinvent).
+
+## @tailwindcss/vite 4.3.3
+
+- Used for: compiling Tailwind CSS in the Vite build of `apps/web` (a development dependency; the compiled CSS ships).
+- Licence: MIT. Published 2026-07-16, more than 14 days before adoption. Its install scripts: none.
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
+- Rejected: `@tailwindcss/postcss` (one more config file for no gain); CSS-in-JS runtimes (the logical-utility lint is built
+  on Tailwind class names).
+
+## @vitejs/plugin-react 6.1.2
+
+- Used for: the JSX transform and Fast Refresh in the Vite build of `apps/web` (a development dependency).
+- Licence: MIT. Published 2026-10-05, more than 14 days before adoption. Its install scripts: none.
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
+- Rejected: `@vitejs/plugin-react-swc` (a native compiler binary for no need of ours).
+
+## @types/react 19.3.0
+
+- Used for: the type declarations of `react` under strict TypeScript in `apps/web` (a development dependency). Types only, no
+  runtime code.
+- Licence: MIT. Published 2026-09-09, more than 14 days before adoption. Its install scripts: none.
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it.
+- Rejected: hand-written declarations (they drift from the library).
+
+## @types/react-dom 19.3.0
+
+- Used for: the type declarations of `react-dom` (`createRoot`) in `apps/web` (a development dependency). Types only, no
+  runtime code.
+- Licence: MIT. Published 2026-09-09, more than 14 days before adoption. Its install scripts: none.
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it.
+- Rejected: hand-written declarations (they drift from the library).
+
+## tailwindcss 4.3.3
+
+- Used for: the utility classes and the `@theme` token mechanism of `apps/web` (`src/index.css`); only logical utilities are
+  allowed (a contract test refuses the physical ones). A development dependency; the compiled CSS ships.
+- Licence: MIT. Published 2026-07-16, more than 14 days before adoption. Its install scripts: none.
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
+- Rejected: hand-written utility CSS (the token and logical-utility rules are built on Tailwind's names).
+
+## @fontsource-variable/bricolage-grotesque 5.3.0
+
+- Used for: the Latin display and heading face of `apps/web`, self-hosted as WOFF2 files that Vite bundles and the server
+  serves from the same origin (no font CDN). The variable weight axis covers 200 to 800 in one file per script subset.
+- Licence: OFL-1.1 (the SIL Open Font License; the package carries the licence text). Published 2026-07-19, more than 14 days
+  before adoption. Its install scripts: none.
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
+- Rejected: a font CDN (the web app makes no runtime call to a third-party host for fonts); vendoring the files by hand (the package keeps the licence and
+  the subsets in step with each release).
+
+## @fontsource/ibm-plex-sans 5.3.0
+
+- Used for: the Latin body and interface face of `apps/web` (weights 400, 500 and 600, Latin subset only).
+- Licence: OFL-1.1 (the SIL Open Font License; the package carries the licence text). Published 2026-07-19, more than 14 days
+  before adoption. Its install scripts: none.
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
+- Rejected: a font CDN; Inter (the owner's identity names IBM Plex Sans).
+
+## @fontsource/ibm-plex-sans-arabic 5.3.0
+
+- Used for: the Arabic face of `apps/web` for body, interface and headings (weights 400, 500, 600 and 700, Arabic subset only).
+- Licence: OFL-1.1 (the SIL Open Font License; the package carries the licence text). Published 2026-07-19, more than 14 days
+  before adoption. Its install scripts: none.
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
+- Rejected: Cairo (retired by the owner's identity decision); a font CDN.
+
+## happy-dom 21.0.4
+
+- Used for: the DOM of the web unit tests (`vitest` environment `happy-dom`); a development dependency, never shipped.
+- Licence: MIT. Published 2026-10-20, more than 14 days before adoption. Its install scripts: none.
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
+- Rejected: jsdom (heavier, and its extra dependencies add install weight for the same tests).
+
+## @lingui/core 6.11.0
+
+- Used for: the message catalogs and the `i18n` instance of `apps/web` (`src/i18n/i18n.ts`); ICU messages with Arabic's six
+  plural forms. Every message carries an explicit dotted id.
+- Licence: MIT. Published 2026-10-29, more than 14 days before adoption. Its install scripts: none.
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
+- Rejected: react-i18next and FormatJS (Lingui compiles catalogs at build time and has the macro transform the plan names).
+
+## @lingui/react 6.11.0
+
+- Used for: `I18nProvider` and the `Trans` component (through its macro) in `apps/web`. Pinned to the same version as
+  `@lingui/core`.
+- Licence: MIT. Published 2026-10-29, more than 14 days before adoption. Its install scripts: none.
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
+- Rejected: a hand-written provider (infrastructure we do not reinvent).
+
+## @lingui/cli 6.11.0
+
+- Used for: reading `lingui.config.mjs` and compiling the PO catalogs for the Vite plugin (a development dependency, a peer
+  of `@lingui/vite-plugin`). Catalog extraction is not run: the PO files are written by hand with explicit ids.
+- Licence: MIT. Published 2026-10-29, more than 14 days before adoption. Its install scripts: none.
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
+- Rejected: compiled catalogs committed to the repository (nothing generated is committed).
+
+## @lingui/format-po 6.11.0
+
+- Used for: the PO catalog format named in `lingui.config.mjs` (a development dependency). PO is the format translators' tools
+  read.
+- Licence: MIT. Published 2026-10-29, more than 14 days before adoption. Its install scripts: none.
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
+- Rejected: JSON catalogs (fewer translator tools read them).
+
+## @lingui/vite-plugin 6.11.0
+
+- Used for: compiling the PO catalogs when they are imported and transforming the Lingui macros with its native transform, so
+  no Babel step is needed (a development dependency).
+- Licence: MIT. Published 2026-10-29, more than 14 days before adoption. Its install scripts: none.
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
+- Rejected: the Babel and SWC macro routes (extra plugin pins for the same transform).

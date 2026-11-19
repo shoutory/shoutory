@@ -3,6 +3,9 @@ import { defineConfig } from "vitest/config";
 // One runner per extension: .ts files run here, .mjs contract tests run only through `node --test`.
 const exclude = ["**/node_modules/**", "**/dist/**", "**/*.test.mjs"];
 const unit = ["{apps,packages}/*/src/**/*.test.ts", "packages/providers/*/src/**/*.test.ts"];
+// The web app's tests need a DOM, so they run in their own projects; the node projects leave them out.
+const web = ["apps/web/src/**/*.test.{ts,tsx}"];
+const nodeExclude = [...exclude, "apps/web/**"];
 
 // Tests read workspace packages from `src` through the `source` export condition; Node reads `dist`.
 const ssr = { resolve: { conditions: ["source"], externalConditions: ["source"] } };
@@ -10,10 +13,27 @@ const ssr = { resolve: { conditions: ["source"], externalConditions: ["source"] 
 export default defineConfig({
   test: {
     projects: [
-      { ssr, test: { name: "unit", include: unit, exclude } },
+      { ssr, test: { name: "unit", include: unit, exclude: nodeExclude } },
       {
         ssr,
-        test: { name: "unit-chatham", include: unit, exclude, pool: "forks", env: { TZ: "Pacific/Chatham" } },
+        test: {
+          name: "unit-chatham",
+          include: unit,
+          exclude: nodeExclude,
+          pool: "forks",
+          env: { TZ: "Pacific/Chatham" },
+        },
+      },
+      { test: { name: "web", environment: "happy-dom", include: web, exclude } },
+      {
+        test: {
+          name: "web-chatham",
+          environment: "happy-dom",
+          include: web,
+          exclude,
+          pool: "forks",
+          env: { TZ: "Pacific/Chatham" },
+        },
       },
       {
         ssr,
@@ -41,6 +61,9 @@ export default defineConfig({
         ssr,
         test: {
           name: "contract",
+          // The web bundle contract runs two full Vite builds in one hook, which the default 10 s cannot always hold.
+          hookTimeout: 60_000,
+          testTimeout: 30_000,
           include: [
             "{apps,packages}/*/test/contract/**/*.test.ts",
             "packages/providers/*/test/contract/**/*.test.ts",
