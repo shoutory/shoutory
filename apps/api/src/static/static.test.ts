@@ -80,7 +80,7 @@ describe("static handler", () => {
     },
   );
 
-  it.each(["/auth/verify", "/auth/reset", "/"])(
+  it.each(["/auth/verify", "/auth/reset", `/invite/${"t".repeat(43)}`, "/"])(
     "the shell for the page %s is never stored and sends no referrer",
     async (path) => {
       const response = await get(path);

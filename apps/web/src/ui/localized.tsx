@@ -1,11 +1,12 @@
 import { useLingui } from "@lingui/react";
+import { useDigits } from "../account/prefs";
 import { type FormatPrefs, formatDate, formatNumber, type Locale } from "../i18n/i18n";
 import { DirText } from "./dir-text";
 
-// Latin digits whatever the language until the profile setting exists (R381, 11e adds it).
+// Latin digits by default whatever the language; the profile setting switches to Arabic-Indic.
 function useFormatPrefs(): FormatPrefs {
   const { i18n } = useLingui();
-  return { locale: i18n.locale as Locale, digits: "latn" };
+  return { locale: i18n.locale as Locale, digits: useDigits() };
 }
 
 export function LocalizedNumber({ value }: { value: number }) {

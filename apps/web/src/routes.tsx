@@ -3,7 +3,9 @@ import { msg } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
 import { type ReactElement, useEffect, useState } from "react";
 import { Outlet, type RouteObject, replace, useMatches, useRouteError } from "react-router";
+import { ProfilePage } from "./account/profile";
 import { ForgotPage } from "./auth/forgot";
+import { InvitePage, inviteLoader } from "./auth/invite";
 import { MfaPage } from "./auth/mfa";
 import { ResetPage } from "./auth/reset";
 import { SignInPage } from "./auth/sign-in";
@@ -30,6 +32,8 @@ const TITLES = {
   signIn: msg({ id: "system.sign_in.title", message: "Sign in" }),
   mfa: msg({ id: "auth.mfa.title", message: "Two-step verification" }),
   twoFactorSetup: msg({ id: "auth.setup.title", message: "Set up two-step verification" }),
+  profile: msg({ id: "account.profile.title", message: "Profile" }),
+  invite: msg({ id: "auth.invite.title", message: "Accept your invitation" }),
   signUp: msg({ id: "auth.sign_up.title", message: "Create your account" }),
   forgot: msg({ id: "auth.forgot.title", message: "Reset your password" }),
   verify: msg({ id: "auth.verify.title", message: "Confirm your email" }),
@@ -136,6 +140,14 @@ export const routes: RouteObject[] = [
       { path: "auth/reset", handle: handle(TITLES.reset), element: <ResetPage /> },
       // The mailed link points at /auth/sign-in.
       { path: "auth/sign-in", loader: () => replace("/sign-in") },
+      // The invitation page reads the session itself: a signed-out visitor must see it, not be sent away.
+      {
+        path: "invite/:token",
+        handle: handle(TITLES.invite),
+        loader: inviteLoader,
+        hydrateFallbackElement: <Pending />,
+        element: <InvitePage />,
+      },
       { path: "session-expired", handle: handle(TITLES.sessionExpired), element: <SessionExpiredPage /> },
       {
         id: SESSION_ROUTE_ID,
@@ -149,6 +161,7 @@ export const routes: RouteObject[] = [
             element: <Shell />,
             children: [
               { index: true, element: <StartPage /> },
+              { path: "account/profile", handle: handle(TITLES.profile), element: <ProfilePage /> },
               {
                 path: "account/security/two-factor",
                 handle: handle(TITLES.twoFactorSetup),

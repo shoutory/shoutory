@@ -24,6 +24,8 @@ const QUERY_KEYS: ReadonlySet<string> = new Set([
   "id_token",
   "client_secret",
   "api_key",
+  // The page to return to after sign-in; an invitation link rides in it.
+  "return-to",
   "x-amz-signature",
   "x-amz-credential",
   "x-amz-security-token",

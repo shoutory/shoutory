@@ -69,6 +69,20 @@ describe("the api client", () => {
   });
 });
 
+describe("the details of a refusal", () => {
+  it.each([
+    ["the reason the server gives", { reason: "expired", expires_at: "2026-11-20T10:00:00.000Z" }],
+    ["nothing when the answer has none", undefined],
+    ["nothing when it is not a map of text", ["expired"]],
+  ])("an error carries %s as details", async (_name, sent) => {
+    const error = { code: "invitation_unusable", message: "m", ...(sent ? { details: sent } : {}) };
+    stubFetch(json({ error }, 410));
+    const failure = await request(answer, "/api/v1/x").catch((caught: unknown) => caught);
+    const expected = sent && !Array.isArray(sent) ? sent : undefined;
+    expect((failure as { details?: unknown }).details).toEqual(expected);
+  });
+});
+
 describe("the api client while it reads the body", () => {
   // R387: the 15 s limit also covers reading the body; a timeout or a dropped stream there is a network failure too.
   it.each([

@@ -1,7 +1,7 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useState } from "react";
 import { Dialog, DialogTrigger, Popover } from "react-aria-components";
-import { useNavigate, useRouteLoaderData } from "react-router";
+import { Link, useNavigate, useRouteLoaderData } from "react-router";
 import { z } from "zod";
 import { ApiError, request } from "../http/client";
 import { SESSION_ROUTE_ID, type Session } from "../session/session";
@@ -11,12 +11,13 @@ import { ErrorPanel } from "../ui/error-panel";
 import { forgetWorkspace } from "./last-workspace";
 import { useOnline } from "./offline-banner";
 
-// The account menu holds sign out only (R396); language, theme and zone arrive with the profile (A-06).
+// The account menu holds the address, the profile link and sign out.
 export function AccountMenu() {
   const { t } = useLingui();
   const session = useRouteLoaderData<Session>(SESSION_ROUTE_ID);
   const online = useOnline();
   const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [failure, setFailure] = useState<ApiError | null>(null);
 
@@ -51,7 +52,7 @@ export function AccountMenu() {
     ? t({ id: "shell.signing_out", message: "Signing out" })
     : t({ id: "shell.sign_out_offline", message: "You are offline. Signing out needs the server." });
   return (
-    <DialogTrigger>
+    <DialogTrigger isOpen={open} onOpenChange={setOpen}>
       <Button>
         <Trans id="shell.account">Account</Trans>
       </Button>
@@ -61,6 +62,9 @@ export function AccountMenu() {
           className="flex flex-col gap-3 outline-none"
         >
           {session ? <DirText dir="ltr">{session.user.email}</DirText> : null}
+          <Link to="/account/profile" onClick={() => setOpen(false)} className="text-link underline">
+            <Trans id="shell.profile">Profile</Trans>
+          </Link>
           <Button
             aria-disabled={unavailable}
             busy={signingOut}

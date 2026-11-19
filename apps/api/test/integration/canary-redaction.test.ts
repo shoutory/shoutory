@@ -144,3 +144,16 @@ describe("a planted canary never leaves the process", () => {
     expect(response.status).toBe(STATUS[name]);
   });
 });
+
+describe("an invitation link carried through sign-in", () => {
+  // The link rides in `return-to`; this value is not a registered secret, so only the URL redaction itself can keep
+  // it out of the request log.
+  it("an invitation link in a return-to query is logged without its token", async () => {
+    const { app, logged } = build();
+    const token = "invitetoken-return-to-sample-0001-aaaaa";
+    const response = await send(app, `/sign-in?return-to=${encodeURIComponent(`/invite/${token}`)}`);
+    expect(response.status).toBe(404);
+    expect(logged.length).toBeGreaterThan(0);
+    expect(logged.join("")).not.toContain(token);
+  });
+});

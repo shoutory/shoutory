@@ -57,9 +57,30 @@ export interface Api {
   requestReset?: Answer;
   resetPassword?: Answer;
   enable?: Answer;
+  acceptInvitation?: Answer;
+  profile?: Answer;
 }
 
-export const USER = { id: "u1", email: "person@example.test", emailVerified: true };
+export const USER = { id: "u1", name: "Person Sample", email: "person@example.test", emailVerified: true };
+
+// The answers of the sign-up, link, setup, invitation and profile calls (the rest are in `stubApi`).
+function moreAnswers(api: Api): Record<string, Answer> {
+  return {
+    "/api/auth/two-factor/enable":
+      api.enable ?? (() => json({ method: "totp", totpURI: "", backupCodes: [] })),
+    "/api/v1/invitations/accept":
+      api.acceptInvitation ??
+      (() => json({ data: { workspace_id: "0190a000-0000-7000-8000-000000000001" } })),
+    "/api/auth/profile": api.profile ?? (() => json({ data: { name: "Person Sample" } })),
+    "/api/v1/instance/signup": api.signUpMode ?? (() => json({ data: { open: true } })),
+    "/api/auth/sign-up/email":
+      api.signUp ?? (() => json({ user: { name: "T", email: "new@example.test", emailVerified: false } })),
+    // The verify route answers in our envelope; the reset routes are library answers, bare.
+    "/api/auth/verify-email": api.verifyEmail ?? (() => json({ data: { verified: true } })),
+    "/api/auth/request-password-reset": api.requestReset ?? (() => json({ status: true })),
+    "/api/auth/reset-password": api.resetPassword ?? (() => json({ status: true })),
+  };
+}
 
 /** The fetch stub: each api path has its answer, signed in with `ORGS` and `WORKSPACES` unless a test says otherwise. */
 export function stubApi(api: Api = {}) {
@@ -74,15 +95,7 @@ export function stubApi(api: Api = {}) {
     "/api/auth/two-factor/verify-backup-code": api.verifyBackupCode ?? (() => json({ user: USER })),
     "/api/auth/verify-password": api.verifyPassword ?? (() => json({ status: true })),
     "/api/auth/send-verification-email": api.resend ?? (() => json({ status: true })),
-    "/api/auth/two-factor/enable":
-      api.enable ?? (() => json({ method: "totp", totpURI: "", backupCodes: [] })),
-    "/api/v1/instance/signup": api.signUpMode ?? (() => json({ data: { open: true } })),
-    "/api/auth/sign-up/email":
-      api.signUp ?? (() => json({ user: { name: "T", email: "new@example.test", emailVerified: false } })),
-    // The verify route answers in our envelope; the reset routes are library answers, bare.
-    "/api/auth/verify-email": api.verifyEmail ?? (() => json({ data: { verified: true } })),
-    "/api/auth/request-password-reset": api.requestReset ?? (() => json({ status: true })),
-    "/api/auth/reset-password": api.resetPassword ?? (() => json({ status: true })),
+    ...moreAnswers(api),
   };
   const stub = vi.fn((path: string, _init?: RequestInit) => {
     const answer = answers[new URL(path, "http://same-origin.invalid").pathname];
@@ -95,7 +108,7 @@ export function stubApi(api: Api = {}) {
 export const SESSION = {
   data: {
     session: { id: "s1", expiresAt: "2026-12-01T00:00:00Z" },
-    user: { id: "u1", email: "person@example.test", emailVerified: true },
+    user: { id: "u1", name: "Person Sample", email: "person@example.test", emailVerified: true },
   },
 };
 

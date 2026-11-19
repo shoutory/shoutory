@@ -10,13 +10,21 @@ export class ApiError extends Error {
   readonly code: ErrorCode | "network" | "invalid_response";
   readonly status: number;
   readonly requestId: string | undefined;
+  /** The reason the server gives with a refusal (`reason`, and `expires_at` on an expired invitation), if any. */
+  readonly details: Readonly<Record<string, string>> | undefined;
 
-  constructor(code: ApiError["code"], status: number, requestId?: string, options?: { cause?: unknown }) {
-    super(`api call failed: ${code}`, options);
+  constructor(
+    code: ApiError["code"],
+    status: number,
+    requestId?: string,
+    options?: { cause?: unknown; details?: Readonly<Record<string, string>> },
+  ) {
+    super(`api call failed: ${code}`, options?.cause === undefined ? undefined : { cause: options.cause });
     this.name = "ApiError";
     this.code = code;
     this.status = status;
     this.requestId = requestId;
+    this.details = options?.details;
     this.state = stateOf(code, status);
   }
 }
@@ -33,7 +41,12 @@ function stateOf(code: ApiError["code"], status: number): FailureState {
 
 // The envelope of an error answer (`apps/api` errors/refusal.ts); an unknown code is not trusted.
 const errorEnvelope = z.object({
-  error: z.object({ code: errorCodeSchema, requestId: z.string().optional() }),
+  error: z.object({
+    code: errorCodeSchema,
+    requestId: z.string().optional(),
+    // Anything but a map of text is no details: the refusal itself still counts.
+    details: z.record(z.string(), z.string()).optional().catch(undefined),
+  }),
 });
 
 const TIMEOUT_MS = 15_000;
@@ -87,7 +100,8 @@ export async function request<T>(schema: ZodType<T>, path: string, init: Request
   if (!response.ok) {
     const failure = errorEnvelope.safeParse(body);
     if (failure.success) {
-      throw new ApiError(failure.data.error.code, response.status, failure.data.error.requestId);
+      const { code, requestId, details } = failure.data.error;
+      throw new ApiError(code, response.status, requestId, details ? { details } : {});
     }
     throw new ApiError("invalid_response", response.status);
   }

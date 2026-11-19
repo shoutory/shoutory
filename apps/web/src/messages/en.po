@@ -536,3 +536,143 @@ msgstr "Go to the start page"
 #. js-lingui-explicit-id
 msgid "auth.setup.copy_failed"
 msgstr "Could not copy; select the text instead."
+
+#. js-lingui-explicit-id
+msgid "auth.invite.title"
+msgstr "Accept your invitation"
+
+#. js-lingui-explicit-id
+msgid "auth.invite.accept"
+msgstr "Accept invitation"
+
+#. js-lingui-explicit-id
+msgid "auth.invite.signed_out"
+msgstr "Sign in, or create an account, to accept this invitation."
+
+#. js-lingui-explicit-id
+msgid "auth.invite.after_sign_up"
+msgstr "After you confirm your email, open the invitation link again."
+
+#. js-lingui-explicit-id
+msgid "auth.invite.ask"
+msgstr "Ask the person who invited you for a new invitation."
+
+#. js-lingui-explicit-id
+msgid "auth.invite.expired.what"
+msgstr "This invitation has expired"
+
+#. js-lingui-explicit-id
+msgid "auth.invite.expired.meaning"
+msgstr "An invitation stops working after a while."
+
+#. js-lingui-explicit-id
+msgid "auth.invite.used.what"
+msgstr "This invitation was already used"
+
+#. js-lingui-explicit-id
+msgid "auth.invite.used.meaning"
+msgstr "Each invitation works once."
+
+#. js-lingui-explicit-id
+msgid "auth.invite.revoked.what"
+msgstr "This invitation was withdrawn"
+
+#. js-lingui-explicit-id
+msgid "auth.invite.revoked.meaning"
+msgstr "The person who sent it cancelled it."
+
+#. js-lingui-explicit-id
+msgid "auth.invite.unknown.what"
+msgstr "We cannot find this invitation"
+
+#. js-lingui-explicit-id
+msgid "auth.invite.unknown.meaning"
+msgstr "The link may be incomplete. Check that you copied all of it."
+
+#. js-lingui-explicit-id
+msgid "auth.invite.member.what"
+msgstr "You are already a member"
+
+#. js-lingui-explicit-id
+msgid "auth.invite.member.meaning"
+msgstr "You can already open this workspace."
+
+#. js-lingui-explicit-id
+msgid "auth.invite.unverified.what"
+msgstr "Confirm your email first"
+
+#. js-lingui-explicit-id
+msgid "auth.invite.unverified.meaning"
+msgstr "Confirm your email, then open this invitation link again."
+
+#. js-lingui-explicit-id
+msgid "auth.invite.mismatch.what"
+msgstr "This invitation is for a different email"
+
+#. js-lingui-explicit-id
+msgid "shell.profile"
+msgstr "Profile"
+
+#. js-lingui-explicit-id
+msgid "account.profile.title"
+msgstr "Profile"
+
+#. js-lingui-explicit-id
+msgid "account.profile.name"
+msgstr "Name"
+
+#. js-lingui-explicit-id
+msgid "account.profile.name_length"
+msgstr "Use 1 to 100 characters."
+
+#. js-lingui-explicit-id
+msgid "account.profile.save"
+msgstr "Save"
+
+#. js-lingui-explicit-id
+msgid "account.profile.saved"
+msgstr "Saved"
+
+#. js-lingui-explicit-id
+msgid "account.profile.language"
+msgstr "Language"
+
+#. js-lingui-explicit-id
+msgid "account.profile.theme"
+msgstr "Theme"
+
+#. js-lingui-explicit-id
+msgid "account.profile.theme_system"
+msgstr "System"
+
+#. js-lingui-explicit-id
+msgid "account.profile.theme_light"
+msgstr "Light"
+
+#. js-lingui-explicit-id
+msgid "account.profile.theme_dark"
+msgstr "Dark"
+
+#. js-lingui-explicit-id
+msgid "account.profile.digits"
+msgstr "Digits"
+
+#. js-lingui-explicit-id
+msgid "account.profile.digits_latin"
+msgstr "Latin"
+
+#. js-lingui-explicit-id
+msgid "account.profile.digits_arabic"
+msgstr "Arabic-Indic"
+
+#. js-lingui-explicit-id
+msgid "account.profile.language_failed"
+msgstr "Could not load that language. Your language was not changed."
+
+#. js-lingui-explicit-id
+msgid "account.profile.sample"
+msgstr "Example:"
+
+#. js-lingui-explicit-id
+msgid "auth.invite.mismatch.meaning"
+msgstr "You are signed in with another address. Sign out, then sign in with the address the invitation was sent to."

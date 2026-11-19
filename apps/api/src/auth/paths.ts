@@ -8,6 +8,15 @@ const email = z.email().max(320);
 const password = z.string().min(1).max(128);
 const userOut = z.object({ name: z.string(), email: z.string(), emailVerified: z.boolean() });
 const status = z.object({ status: z.boolean() });
+// A person's name, as sign-up and the profile take it: trimmed, 1 to 100 characters (the length of the JS string, which
+// is what the form counts too), with no control, format (bidi marks included) or line and paragraph separator.
+const FORBIDDEN_IN_NAME = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+const personName = z
+  .string()
+  .trim()
+  .min(1)
+  .max(100)
+  .refine((value) => !FORBIDDEN_IN_NAME.test(value));
 const code = z.string().regex(/^\d{6}$/);
 
 type AuthPolicy = "public" | "session" | "step_up";
@@ -98,7 +107,7 @@ export const AUTH_PATHS: readonly AuthPath[] = [
     path: `${AUTH_BASE}/sign-up/email`,
     policy: "public",
     ours: false,
-    body: z.strictObject({ name: z.string().min(1).max(100), email, password: passwordPolicy }),
+    body: z.strictObject({ name: personName, email, password: passwordPolicy }),
     answer: z.object({ user: userOut }),
   },
   {
@@ -135,6 +144,13 @@ export const AUTH_PATHS: readonly AuthPath[] = [
   ...SECOND_FACTOR_PATHS,
   ...PASSWORD_PATHS,
   { method: "GET", path: `${AUTH_BASE}/get-session`, policy: "session", ours: true },
+  {
+    method: "POST",
+    path: `${AUTH_BASE}/profile`,
+    policy: "session",
+    ours: true,
+    body: z.strictObject({ name: personName }),
+  },
   { method: "GET", path: `${AUTH_BASE}/sessions`, policy: "session", ours: true },
   {
     method: "POST",

@@ -26,6 +26,7 @@ const SAMPLE: Record<string, unknown> = {
   "/api/auth/verify-email": { token: "token-sample-1" },
   "/api/auth/sessions/revoke": { id: "00000000-0000-7000-8000-000000000001" },
   "/api/auth/sessions/revoke-others": {},
+  "/api/auth/profile": { name: "Test" },
   "/api/auth/verify-password": { password: PASSWORD },
   "/api/auth/change-password": { currentPassword: PASSWORD, newPassword: "another-password-5678" },
   "/api/auth/request-password-reset": { email: "table-1@example.test" },

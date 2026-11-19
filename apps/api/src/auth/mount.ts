@@ -103,12 +103,20 @@ const verifyEmail: Handler = async (ctx) => {
 };
 
 const getSession: Handler = async (ctx) => {
-  const { id, userId, email, emailVerified, expiresAt } = ctx.c.get("session");
+  const { id, userId, name, email, emailVerified, expiresAt } = ctx.c.get("session");
   return respond(
     ctx.c,
-    { data: { session: { id, expiresAt }, user: { id: userId, email, emailVerified } } },
+    { data: { session: { id, expiresAt }, user: { id: userId, name, email, emailVerified } } },
     [],
   );
+};
+
+// The caller's own name and nothing else: the id comes from the session, never from the body.
+const profile: Handler = async (ctx) => {
+  const name = text(ctx, "name");
+  const context = await ctx.auth.library.$context;
+  await context.internalAdapter.updateUser(ctx.c.get("session").userId, { name });
+  return respond(ctx.c, { data: { name } }, []);
 };
 
 const sessions: Handler = async (ctx) =>
@@ -132,6 +140,7 @@ const HANDLERS: Readonly<Record<string, Handler>> = {
   [`POST ${AUTH_BASE}/send-verification-email`]: resend,
   [`POST ${AUTH_BASE}/verify-email`]: verifyEmail,
   [`GET ${AUTH_BASE}/get-session`]: getSession,
+  [`POST ${AUTH_BASE}/profile`]: profile,
   [`GET ${AUTH_BASE}/sessions`]: sessions,
   [`POST ${AUTH_BASE}/sessions/revoke`]: revoke,
   [`POST ${AUTH_BASE}/sessions/revoke-others`]: revokeOthers,

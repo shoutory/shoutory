@@ -534,3 +534,143 @@ msgstr "الانتقال إلى الصفحة الرئيسية"
 #. js-lingui-explicit-id
 msgid "auth.setup.copy_failed"
 msgstr "تعذّر النسخ؛ حدّد النص بدلًا من ذلك."
+
+#. js-lingui-explicit-id
+msgid "auth.invite.title"
+msgstr "قبول الدعوة"
+
+#. js-lingui-explicit-id
+msgid "auth.invite.accept"
+msgstr "قبول الدعوة"
+
+#. js-lingui-explicit-id
+msgid "auth.invite.signed_out"
+msgstr "سجّل الدخول أو أنشئ حسابًا لقبول هذه الدعوة."
+
+#. js-lingui-explicit-id
+msgid "auth.invite.after_sign_up"
+msgstr "بعد تأكيد بريدك الإلكتروني، افتح رابط الدعوة مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "auth.invite.ask"
+msgstr "اطلب من الشخص الذي دعاك دعوة جديدة."
+
+#. js-lingui-explicit-id
+msgid "auth.invite.expired.what"
+msgstr "انتهت صلاحية هذه الدعوة"
+
+#. js-lingui-explicit-id
+msgid "auth.invite.expired.meaning"
+msgstr "تتوقف الدعوة عن العمل بعد مدة."
+
+#. js-lingui-explicit-id
+msgid "auth.invite.used.what"
+msgstr "استُخدمت هذه الدعوة من قبل"
+
+#. js-lingui-explicit-id
+msgid "auth.invite.used.meaning"
+msgstr "تعمل كل دعوة مرة واحدة فقط."
+
+#. js-lingui-explicit-id
+msgid "auth.invite.revoked.what"
+msgstr "تم سحب هذه الدعوة"
+
+#. js-lingui-explicit-id
+msgid "auth.invite.revoked.meaning"
+msgstr "ألغاها الشخص الذي أرسلها."
+
+#. js-lingui-explicit-id
+msgid "auth.invite.unknown.what"
+msgstr "لا يمكننا العثور على هذه الدعوة"
+
+#. js-lingui-explicit-id
+msgid "auth.invite.unknown.meaning"
+msgstr "قد يكون الرابط ناقصًا. تأكد من نسخه كاملًا."
+
+#. js-lingui-explicit-id
+msgid "auth.invite.member.what"
+msgstr "أنت عضو بالفعل"
+
+#. js-lingui-explicit-id
+msgid "auth.invite.member.meaning"
+msgstr "يمكنك فتح مساحة العمل هذه الآن."
+
+#. js-lingui-explicit-id
+msgid "auth.invite.unverified.what"
+msgstr "أكّد بريدك الإلكتروني أولًا"
+
+#. js-lingui-explicit-id
+msgid "auth.invite.unverified.meaning"
+msgstr "أكّد بريدك الإلكتروني ثم افتح رابط الدعوة مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "auth.invite.mismatch.what"
+msgstr "هذه الدعوة لبريد إلكتروني مختلف"
+
+#. js-lingui-explicit-id
+msgid "shell.profile"
+msgstr "الملف الشخصي"
+
+#. js-lingui-explicit-id
+msgid "account.profile.title"
+msgstr "الملف الشخصي"
+
+#. js-lingui-explicit-id
+msgid "account.profile.name"
+msgstr "الاسم"
+
+#. js-lingui-explicit-id
+msgid "account.profile.name_length"
+msgstr "استخدم من 1 إلى 100 حرف."
+
+#. js-lingui-explicit-id
+msgid "account.profile.save"
+msgstr "حفظ"
+
+#. js-lingui-explicit-id
+msgid "account.profile.saved"
+msgstr "تم الحفظ"
+
+#. js-lingui-explicit-id
+msgid "account.profile.language"
+msgstr "اللغة"
+
+#. js-lingui-explicit-id
+msgid "account.profile.theme"
+msgstr "المظهر"
+
+#. js-lingui-explicit-id
+msgid "account.profile.theme_system"
+msgstr "النظام"
+
+#. js-lingui-explicit-id
+msgid "account.profile.theme_light"
+msgstr "فاتح"
+
+#. js-lingui-explicit-id
+msgid "account.profile.theme_dark"
+msgstr "داكن"
+
+#. js-lingui-explicit-id
+msgid "account.profile.digits"
+msgstr "الأرقام"
+
+#. js-lingui-explicit-id
+msgid "account.profile.digits_latin"
+msgstr "لاتينية"
+
+#. js-lingui-explicit-id
+msgid "account.profile.digits_arabic"
+msgstr "هندية عربية"
+
+#. js-lingui-explicit-id
+msgid "account.profile.language_failed"
+msgstr "تعذّر تحميل هذه اللغة. لم تتغير لغتك."
+
+#. js-lingui-explicit-id
+msgid "account.profile.sample"
+msgstr "مثال:"
+
+#. js-lingui-explicit-id
+msgid "auth.invite.mismatch.meaning"
+msgstr "أنت مسجّل الدخول بعنوان آخر. سجّل الخروج ثم سجّل الدخول بالعنوان الذي أُرسلت إليه الدعوة."

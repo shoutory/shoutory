@@ -6,10 +6,13 @@ import { forgetWorkspace } from "../shell/last-workspace";
 // `GET /api/auth/get-session` (apps/api auth/mount.ts): the session and the user it belongs to.
 const sessionSchema = z.object({
   session: z.object({ id: z.string(), expiresAt: z.string() }),
-  user: z.object({ id: z.string(), email: z.string(), emailVerified: z.boolean() }),
+  user: z.object({ id: z.string(), name: z.string(), email: z.string(), emailVerified: z.boolean() }),
 });
 
 export type Session = z.infer<typeof sessionSchema>;
+
+/** The session of the browser's cookie; an `ApiError` (`session_expired` when there is none) otherwise. */
+export const readSession = () => request(sessionSchema, "/api/auth/get-session");
 
 /** The id of the guarded route: its loader data is the session, read by the screens with `useRouteLoaderData`. */
 export const SESSION_ROUTE_ID = "session";
@@ -20,7 +23,7 @@ export const SESSION_ROUTE_ID = "session";
  */
 export async function sessionGuard({ request: navigation }: LoaderFunctionArgs) {
   try {
-    return await request(sessionSchema, "/api/auth/get-session");
+    return await readSession();
   } catch (error) {
     if (error instanceof ApiError && error.state === "session_expired") {
       // The session is over: the next person on this browser must not inherit the last workspace. A redirect of the

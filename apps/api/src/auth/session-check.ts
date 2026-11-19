@@ -5,6 +5,7 @@ import { refusalFromThrown } from "./error-map.js";
 export interface AuthSession {
   readonly id: string;
   readonly userId: string;
+  readonly name: string;
   readonly email: string;
   readonly emailVerified: boolean;
   readonly expiresAt: Date;
@@ -35,6 +36,7 @@ export async function readSession(
       session: {
         id: session.id,
         userId: user.id,
+        name: user.name,
         email: user.email,
         emailVerified: user.emailVerified,
         expiresAt: session.expiresAt,

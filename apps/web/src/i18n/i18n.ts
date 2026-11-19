@@ -2,7 +2,7 @@ import { i18n, type Messages } from "@lingui/core";
 
 const LOCALES = ["en", "ar"] as const;
 export type Locale = (typeof LOCALES)[number];
-type Digits = "latn" | "arab";
+export type Digits = "latn" | "arab";
 export type FormatPrefs = { locale: Locale; digits: Digits };
 
 const LOCALE_KEY = "shoutory.locale";
@@ -33,6 +33,16 @@ export function storedLocale(): string | null {
     return localStorage.getItem(LOCALE_KEY);
   } catch {
     return null;
+  }
+}
+
+/** Remembers the language for the next start (the page reads it again before its first paint). */
+export function storeLocale(locale: Locale) {
+  try {
+    localStorage.setItem(LOCALE_KEY, locale);
+  } catch (error) {
+    // Blocked or full storage is a normal answer: the choice holds for this page only.
+    if (!(error instanceof DOMException)) throw error;
   }
 }
 
