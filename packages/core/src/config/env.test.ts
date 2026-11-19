@@ -277,6 +277,21 @@ describe("start-up: storage settings (R331, R340)", () => {
   });
 });
 
+describe("start-up: web root setting (V-76)", () => {
+  it("is optional: unset serves no web, a set absolute folder is read", () => {
+    expect(parseEnv(valid).webRoot).toBeUndefined();
+    expect(parseEnv(withValue("SHOUTORY_WEB_ROOT", "/srv/shoutory/web")).webRoot).toBe("/srv/shoutory/web");
+    expect(parseEnv(withValue("SHOUTORY_WEB_ROOT", "C:\\shoutory\\web")).webRoot).toBe("C:\\shoutory\\web");
+  });
+
+  it.each([
+    ["a relative folder", "web/dist"],
+    ["an empty value", ""],
+  ])("refuses %s and names the variable", (_name, value) => {
+    expect(refusedVariable(withValue("SHOUTORY_WEB_ROOT", value))).toBe("SHOUTORY_WEB_ROOT");
+  });
+});
+
 const S3: Record<string, string> = {
   SHOUTORY_STORAGE_DRIVER: "s3",
   SHOUTORY_S3_ENDPOINT: "https://s3.example.test",

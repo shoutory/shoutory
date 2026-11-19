@@ -131,6 +131,11 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
 
 - `apps/api` now declares `zod` 4.6.7 too: its route schemas are `z.strictObject`. The card above holds the evaluation.
 
+## zod (apps/web)
+
+- `apps/web` declares `zod` 4.6.7 too: the api client parses every answer with a schema. It also imports the error codes
+  of `@shoutory/core` (a workspace package, web to core is the allowed direction). The card above holds the evaluation.
+
 ## better-auth 1.7.16
 
 - Used for: email and password sign-up and sign-in, database sessions, email verification, password reset and change,
@@ -243,6 +248,19 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
 - Licence: MIT. Published 2026-10-05, more than 14 days before adoption. Its install scripts: none.
 - Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
 - Rejected: `@vitejs/plugin-react-swc` (a native compiler binary for no need of ours).
+
+## react-aria-components 1.22.1
+
+- Used for: the accessible behaviour of the UI kit in `apps/web/src/ui` (button, text field, toast region). Components are
+  styled with Tailwind; the library brings keyboard, focus and ARIA handling.
+- Licence: Apache-2.0. Published 2026-10-09 (the pin register), more than 14 days before adoption. Its install scripts:
+  none.
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
+- Toast: the library exports its toast only with an `UNSTABLE_` prefix (`UNSTABLE_ToastRegion`, `UNSTABLE_ToastQueue`,
+  `UNSTABLE_Toast`, `UNSTABLE_ToastList`, `UNSTABLE_ToastContent`). Any upgrade of this package re-checks those exports
+  and the toast tests before it merges.
+- Rejected: shadcn and Radix (React Aria is the chosen accessible component library); hand-written widgets (accessibility behaviour is infrastructure we
+  do not reinvent).
 
 ## @types/react 19.3.0
 

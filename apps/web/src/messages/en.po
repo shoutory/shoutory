@@ -14,3 +14,73 @@ msgstr "Page not found"
 #. js-lingui-explicit-id
 msgid "system.not_found.body"
 msgstr "We could not find the page you asked for."
+
+#. js-lingui-explicit-id
+msgid "system.action.home"
+msgstr "Go to the start page"
+
+#. js-lingui-explicit-id
+msgid "system.forbidden.title"
+msgstr "You do not have access to this page"
+
+#. js-lingui-explicit-id
+msgid "system.forbidden.body"
+msgstr "Nothing was changed. Ask an owner or admin of the workspace to give you access."
+
+#. js-lingui-explicit-id
+msgid "system.session_expired.title"
+msgstr "Your session has ended"
+
+#. js-lingui-explicit-id
+msgid "system.session_expired.body"
+msgstr "Changes you had not saved are not kept. Sign in again to continue where you were."
+
+#. js-lingui-explicit-id
+msgid "system.session_expired.action"
+msgstr "Sign in again"
+
+#. js-lingui-explicit-id
+msgid "system.maintenance.title"
+msgstr "Shoutory is not reachable right now"
+
+#. js-lingui-explicit-id
+msgid "system.maintenance.body"
+msgstr "Content you already saved is not affected. Wait a moment, then reload the page."
+
+#. js-lingui-explicit-id
+msgid "system.maintenance.action"
+msgstr "Reload the page"
+
+#. js-lingui-explicit-id
+msgid "system.startup_failure.title"
+msgstr "Shoutory did not start correctly"
+
+#. js-lingui-explicit-id
+msgid "system.startup_failure.body"
+msgstr ""
+"The server answered with an error, so nothing was loaded and nothing was changed. If you run this server, check "
+"its logs; otherwise ask the person who does."
+
+#. js-lingui-explicit-id
+msgid "system.startup_failure.details"
+msgstr "Details"
+
+#. js-lingui-explicit-id
+msgid "system.startup_failure.reference"
+msgstr "Reference"
+
+#. js-lingui-explicit-id
+msgid "system.sign_in.title"
+msgstr "Sign in"
+
+#. js-lingui-explicit-id
+msgid "system.sign_in.body"
+msgstr "The sign-in form is not available in this version yet."
+
+#. js-lingui-explicit-id
+msgid "system.sign_in.action"
+msgstr "Try again"
+
+#. js-lingui-explicit-id
+msgid "system.loading"
+msgstr "Loading"

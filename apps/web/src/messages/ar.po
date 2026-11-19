@@ -14,3 +14,71 @@ msgstr "الصفحة غير موجودة"
 #. js-lingui-explicit-id
 msgid "system.not_found.body"
 msgstr "لم نعثر على الصفحة التي طلبتها."
+
+#. js-lingui-explicit-id
+msgid "system.action.home"
+msgstr "العودة إلى الصفحة الرئيسية"
+
+#. js-lingui-explicit-id
+msgid "system.forbidden.title"
+msgstr "ليس لديك صلاحية الوصول إلى هذه الصفحة"
+
+#. js-lingui-explicit-id
+msgid "system.forbidden.body"
+msgstr "لم يتغيّر شيء. اطلب من مالك مساحة العمل أو مديرها منحك صلاحية الوصول."
+
+#. js-lingui-explicit-id
+msgid "system.session_expired.title"
+msgstr "انتهت جلستك"
+
+#. js-lingui-explicit-id
+msgid "system.session_expired.body"
+msgstr "التغييرات التي لم تحفظها لم يتم الاحتفاظ بها. سجّل الدخول من جديد لتتابع من حيث توقفت."
+
+#. js-lingui-explicit-id
+msgid "system.session_expired.action"
+msgstr "تسجيل الدخول من جديد"
+
+#. js-lingui-explicit-id
+msgid "system.maintenance.title"
+msgstr "تعذّر الوصول إلى Shoutory حاليًا"
+
+#. js-lingui-explicit-id
+msgid "system.maintenance.body"
+msgstr "المحتوى الذي حفظته سابقًا لم يتأثر. انتظر لحظة ثم أعد تحميل الصفحة."
+
+#. js-lingui-explicit-id
+msgid "system.maintenance.action"
+msgstr "إعادة تحميل الصفحة"
+
+#. js-lingui-explicit-id
+msgid "system.startup_failure.title"
+msgstr "لم يبدأ Shoutory عمله بشكل صحيح"
+
+#. js-lingui-explicit-id
+msgid "system.startup_failure.body"
+msgstr "ردّ الخادم بخطأ، لذلك لم يُحمَّل شيء ولم يتغيّر شيء. إن كنت تدير هذا الخادم فراجع سجلاته، وإلا فاسأل من يديره."
+
+#. js-lingui-explicit-id
+msgid "system.startup_failure.details"
+msgstr "التفاصيل"
+
+#. js-lingui-explicit-id
+msgid "system.startup_failure.reference"
+msgstr "المرجع"
+
+#. js-lingui-explicit-id
+msgid "system.sign_in.title"
+msgstr "تسجيل الدخول"
+
+#. js-lingui-explicit-id
+msgid "system.sign_in.body"
+msgstr "نموذج تسجيل الدخول غير متاح في هذا الإصدار بعد."
+
+#. js-lingui-explicit-id
+msgid "system.sign_in.action"
+msgstr "حاول مرة أخرى"
+
+#. js-lingui-explicit-id
+msgid "system.loading"
+msgstr "جارٍ التحميل"

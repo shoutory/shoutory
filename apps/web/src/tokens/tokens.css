@@ -56,6 +56,16 @@
   --space-9: 2.5rem;
   --space-10: 3rem;
   --space-11: 4rem;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  --motion-fast: 100ms ease-out;
+  --motion-base: 160ms cubic-bezier(0.2, 0, 0, 1);
+  --motion-slow: 260ms cubic-bezier(0.2, 0, 0, 1);
+  --dir: 1;
 }
 
 :root {
@@ -99,6 +109,23 @@
   --text-2xl--line-height: 2.625rem;
   --text-3xl: 2rem;
   --text-3xl--line-height: 3.125rem;
+}
+
+/* Motion slides from the logical edge: --dir is 1 in LTR and -1 in RTL (ux-spec 4.4). */
+:root:dir(rtl) {
+  --dir: -1;
+}
+
+/* Reduced motion (the system value only until the profile setting exists): no animation, no slide, opacity at most. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 body {

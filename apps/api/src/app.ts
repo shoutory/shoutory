@@ -21,6 +21,7 @@ import { registerOrganizations } from "./routes/organizations/organization.js";
 import { registerUnsubscribe } from "./routes/unsubscribe.js";
 import { registerWorkspaces } from "./routes/workspaces/workspace.js";
 import { clientAddressResolver } from "./security/client-address.js";
+import { inlineScriptSource, readShell, registerStatic } from "./static/static.js";
 
 export interface AppOptions {
   /** The exact origin the web app is served from; CSRF compares `Origin` with it. */
@@ -37,12 +38,14 @@ export interface AppOptions {
   readonly now?: () => number;
   /** Where objects are stored; the storage routes exist only when it is given. */
   readonly storage?: StorageDriver;
+  /** The folder of the built web app; when set, the app serves it after every other route. */
+  readonly webRoot?: string | undefined;
 }
 
 const SELF = ["'self'"];
-const CSP = {
+const cspFor = (scriptSources: string[]) => ({
   defaultSrc: SELF,
-  scriptSrc: SELF,
+  scriptSrc: scriptSources,
   styleSrc: SELF,
   imgSrc: ["'self'", "data:", "blob:"],
   connectSrc: SELF,
@@ -50,7 +53,7 @@ const CSP = {
   baseUri: ["'none'"],
   formAction: SELF,
   frameAncestors: ["'none'"],
-};
+});
 
 /** Request id on every response, one request-log line per request. */
 function requestContext(logger: Logger): MiddlewareHandler<AppEnv> {
@@ -74,6 +77,9 @@ function clientContext(trusted: readonly string[]): MiddlewareHandler<AppEnv> {
 }
 
 export function createApp(options: AppOptions): App {
+  // Read once, first: a shell that cannot be hashed refuses the start, and the copy hashed here is the one served.
+  const shell = options.webRoot ? readShell(options.webRoot) : undefined;
+  const scriptSources = shell === undefined ? SELF : [...SELF, inlineScriptSource(shell)];
   const app = new OpenAPIHono<AppEnv>({
     defaultHook: (result) => {
       if (!result.success) {
@@ -86,7 +92,7 @@ export function createApp(options: AppOptions): App {
   });
   initRoutes(app, options.publicOrigin, options.auth, options.pool);
   app.use("*", requestContext(options.logger));
-  app.use("*", secureHeaders({ contentSecurityPolicy: CSP }));
+  app.use("*", secureHeaders({ contentSecurityPolicy: cspFor(scriptSources) }));
   app.use("*", clientContext(options.trustedProxies));
   app.onError((error, c) => {
     const refusal = toRefusal(error);
@@ -110,5 +116,7 @@ export function createApp(options: AppOptions): App {
   registerAdmin(app, options.auth);
   if (options.storage) registerStorageCheck(app, options.auth, options.storage);
   app.notFound((c) => errorResponse(c, new Refusal("not_found", "no such route")));
+  // Last, so a route added before it is never shadowed by the shell (R360).
+  if (options.webRoot) registerStatic(app, options.webRoot, shell);
   return app;
 }

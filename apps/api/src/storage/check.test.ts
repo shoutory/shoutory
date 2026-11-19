@@ -18,6 +18,7 @@ const fails = async () => {
   throw new Error("planted failure naming /some/secret/path");
 };
 const hangs = () => new Promise<never>(() => undefined);
+const answers = async () => undefined;
 const other = async () => new Blob(["not the probe bytes"]).stream();
 
 // One component of a real driver misbehaves per row; the rest still works. Only the row that waits for the limit
@@ -29,7 +30,16 @@ const ROWS: Row[] = [
   ["the read returns other bytes", { get: other }, true, false, "read_failed", {}],
   ["the object is missing when read back", { get: async () => null }, true, false, "read_failed", {}],
   ["the delete fails", { delete: fails }, true, true, "delete_failed", {}],
-  ["the read never answers", { get: hangs }, true, false, "timeout", { timeoutMs: 100 }],
+  // Only the read can reach the short limit: write and delete answer at once without the disk, so a slow disk
+  // cannot make this row time out anywhere else (the limit is not lengthened and nothing is retried).
+  [
+    "the read never answers",
+    { put: answers, get: hangs, delete: answers },
+    true,
+    false,
+    "timeout",
+    { timeoutMs: 100 },
+  ],
 ];
 
 describe("storage check: a failing probe is a class, never error text", () => {

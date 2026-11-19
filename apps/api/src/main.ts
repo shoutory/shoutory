@@ -56,7 +56,6 @@ async function startServer(config: Config, logger: Logger): Promise<RunningServe
     assertKeyIdsLoaded(await sealedKeyIds(pool), config.keys);
     const publicOrigin = config.publicOrigin;
     if (publicOrigin === undefined) throw new Error("SHOUTORY_PUBLIC_ORIGIN is required");
-    // The SPA static route is registered here, after every other route, once its folder is configured.
     const auth = createAuth({
       publicOrigin,
       secret: config.sessionSecret.expose(),
@@ -78,6 +77,7 @@ async function startServer(config: Config, logger: Logger): Promise<RunningServe
       logger,
       auth,
       storage: createStorageDriver(config.storage),
+      webRoot: config.webRoot,
     });
     const server = await listen(app.fetch, config.port, config.host);
     logger.info({ port: server.port, role: config.role }, "listening");

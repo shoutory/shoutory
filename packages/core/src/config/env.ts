@@ -121,6 +121,11 @@ const httpSchema = z
         z.number().min(1, "must be a port from 1 to 65535").max(MAX_PORT, "must be a port from 1 to 65535"),
       ),
     SHOUTORY_TRUSTED_PROXIES: cidrList,
+    // The built web app; unset means this process serves no web (a worker never does).
+    SHOUTORY_WEB_ROOT: z
+      .string()
+      .refine((value) => isAbsolutePath(value), "must be an absolute path")
+      .optional(),
     SHOUTORY_HOST: z
       .string()
       .refine((value) => isIP(value) > 0, "must be an IPv4 or IPv6 address")
@@ -265,6 +270,8 @@ export interface Config {
   /** The address to listen on; unset means the Node default (all interfaces). */
   host: string | undefined;
   trustedProxies: readonly string[];
+  /** The folder of the built web app; unset means no web is served. */
+  webRoot: string | undefined;
   keys: KeyProvider;
   hmacPepper: SealedSecret;
   sessionSecret: SealedSecret;
@@ -331,6 +338,7 @@ export function parseEnv(env: Env): Config {
     port: http.data.SHOUTORY_PORT,
     host: http.data.SHOUTORY_HOST,
     trustedProxies: http.data.SHOUTORY_TRUSTED_PROXIES,
+    webRoot: http.data.SHOUTORY_WEB_ROOT,
     keys: parseKeyRing(env),
     hmacPepper: secret("SHOUTORY_HMAC_PEPPER"),
     sessionSecret: secret("SHOUTORY_SESSION_SECRET"),

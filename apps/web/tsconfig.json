@@ -6,6 +6,10 @@
     "moduleResolution": "Bundler",
     "types": ["vite/client"],
     "jsx": "react-jsx",
+    // Without the base's `source` condition, React Aria's dependencies resolve to their declaration files; their raw
+    // TypeScript sources would otherwise be checked under this project's strict options. @shoutory/core resolves to its
+    // built declarations through the project reference.
+    "customConditions": [],
     "rootDir": "src",
     "outDir": "dist/tsc",
     "tsBuildInfoFile": "dist/tsc/tsconfig.tsbuildinfo"

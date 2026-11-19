@@ -1,4 +1,15 @@
-import { defineConfig } from "vitest/config";
+import { createRequire } from "node:module";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { defineConfig, type Plugin } from "vitest/config";
+
+// The web components use Lingui's macros, which only the Lingui plugin compiles; it is a dependency of apps/web, so it
+// is resolved from there. The web tests render components, so they need the same compilation as the build.
+const webDir = join(import.meta.dirname, "apps/web");
+const { lingui } = (await import(
+  pathToFileURL(createRequire(join(webDir, "package.json")).resolve("@lingui/vite-plugin")).href
+)) as { lingui: (options: { macroTransform: boolean; cwd: string }) => Plugin };
+const linguiForWeb = () => lingui({ macroTransform: true, cwd: webDir });
 
 // One runner per extension: .ts files run here, .mjs contract tests run only through `node --test`.
 const exclude = ["**/node_modules/**", "**/dist/**", "**/*.test.mjs"];
@@ -24,8 +35,9 @@ export default defineConfig({
           env: { TZ: "Pacific/Chatham" },
         },
       },
-      { test: { name: "web", environment: "happy-dom", include: web, exclude } },
+      { plugins: [linguiForWeb()], test: { name: "web", environment: "happy-dom", include: web, exclude } },
       {
+        plugins: [linguiForWeb()],
         test: {
           name: "web-chatham",
           environment: "happy-dom",

@@ -1,27 +1,14 @@
-import { Trans } from "@lingui/react/macro";
-import { createBrowserRouter, Outlet, RouterProvider } from "react-router";
+import { createBrowserRouter, RouterProvider } from "react-router";
+import { routes } from "./routes";
+import { ToastRegion } from "./ui/toast";
 
-function NotFound() {
-  return (
-    <main id="main">
-      <h1>
-        <Trans id="system.not_found.title">Page not found</Trans>
-      </h1>
-      <p>
-        <Trans id="system.not_found.body">We could not find the page you asked for.</Trans>
-      </p>
-    </main>
-  );
-}
-
-const router = createBrowserRouter([
-  {
-    path: "/",
-    element: <Outlet />,
-    children: [{ path: "*", element: <NotFound /> }],
-  },
-]);
+const router = createBrowserRouter(routes);
 
 export function App() {
-  return <RouterProvider router={router} />;
+  return (
+    <>
+      <RouterProvider router={router} />
+      <ToastRegion />
+    </>
+  );
 }
