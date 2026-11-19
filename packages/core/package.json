@@ -37,6 +37,10 @@
       "source": "./src/password/policy.ts",
       "default": "./dist/password/policy.js"
     },
+    "./storage": {
+      "source": "./src/storage/storage.ts",
+      "default": "./dist/storage/storage.js"
+    },
     "./keys": {
       "source": "./src/crypto/keys.ts",
       "default": "./dist/crypto/keys.js"

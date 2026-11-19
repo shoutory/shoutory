@@ -1,4 +1,5 @@
 import { isIP } from "node:net";
+import { posix, win32 } from "node:path";
 import { z } from "zod";
 import { SealedSecret } from "../crypto/envelope.js";
 import { EnvKeyProvider, KeyError, type KeyProvider } from "../crypto/keys.js";
@@ -144,6 +145,26 @@ const httpSchema = z
 
 export type ServerRole = z.infer<typeof httpSchema>["SHOUTORY_ROLE"];
 
+// Where objects are stored (R331). Only the filesystem driver exists yet; the data directory is never created by the
+// driver, so a relative path (which would follow the working directory) is refused at start-up.
+const isAbsolutePath = (value: string) => posix.isAbsolute(value) || win32.isAbsolute(value);
+const storageSchema = z.object({
+  SHOUTORY_STORAGE_DRIVER: z.enum(["fs"]).default("fs"),
+  SHOUTORY_DATA_DIR: z.string().refine(isAbsolutePath, "must be an absolute path").default("/data"),
+});
+
+export interface StorageConfig {
+  driver: "fs";
+  dataDir: string;
+}
+
+/** The storage settings alone: `shoutory storage check` needs no other setting. */
+export function parseStorageEnv(env: Env): StorageConfig {
+  const parsed = storageSchema.safeParse(env);
+  if (!parsed.success) throw refusal(parsed.error);
+  return { driver: parsed.data.SHOUTORY_STORAGE_DRIVER, dataDir: parsed.data.SHOUTORY_DATA_DIR };
+}
+
 export interface Config {
   role: ServerRole;
   /** Set for every role that serves HTTP; only a worker may lack it. */
@@ -160,6 +181,7 @@ export interface Config {
   mailFrom: string | undefined;
   mailMarketingFrom: string | undefined;
   mailDkimSelector: string | undefined;
+  storage: StorageConfig;
   databaseUrls: Readonly<Record<Role, SealedSecret>>;
 }
 
@@ -224,6 +246,7 @@ export function parseEnv(env: Env): Config {
     mailFrom: http.data.SHOUTORY_MAIL_FROM,
     mailMarketingFrom: http.data.SHOUTORY_MAIL_MARKETING_FROM,
     mailDkimSelector: http.data.SHOUTORY_MAIL_DKIM_SELECTOR,
+    storage: parseStorageEnv(env),
     databaseUrls: Object.fromEntries(
       ROLES.map((r) => [r, secret(`SHOUTORY_DATABASE_URL_${r.toUpperCase()}`)]),
     ) as Record<Role, SealedSecret>,

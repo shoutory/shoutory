@@ -1,6 +1,7 @@
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { OpenAPIHono } from "@hono/zod-openapi";
 import type { KeyProvider } from "@shoutory/core/keys";
+import type { StorageDriver } from "@shoutory/core/storage";
 import type { AppPool } from "@shoutory/db/pool";
 import type { MiddlewareHandler } from "hono";
 import { secureHeaders } from "hono/secure-headers";
@@ -10,6 +11,7 @@ import { errorResponse, Refusal, toRefusal } from "./errors/refusal.js";
 import { registerHealth } from "./health/health.js";
 import { type Logger, logRequest } from "./logging/logger.js";
 import { registerAdmin } from "./routes/admin/admin.js";
+import { registerStorageCheck } from "./routes/admin/storage-check.js";
 import { registerAudit } from "./routes/audit/audit.js";
 import { type App, type AppEnv, initRoutes } from "./routes/define-route.js";
 import { registerInstance } from "./routes/instance.js";
@@ -33,6 +35,8 @@ export interface AppOptions {
   readonly auth: AuthService;
   /** The clock of the in-process caches, in milliseconds; the system clock when absent. */
   readonly now?: () => number;
+  /** Where objects are stored; the storage routes exist only when it is given. */
+  readonly storage?: StorageDriver;
 }
 
 const SELF = ["'self'"];
@@ -104,6 +108,7 @@ export function createApp(options: AppOptions): App {
   registerUnsubscribe(app, options.auth, options.pool);
   registerInstance(app, options.pool, options.now ?? Date.now);
   registerAdmin(app, options.auth);
+  if (options.storage) registerStorageCheck(app, options.auth, options.storage);
   app.notFound((c) => errorResponse(c, new Refusal("not_found", "no such route")));
   return app;
 }

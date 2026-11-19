@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { inspect } from "node:util";
 import { describe, expect, it } from "vitest";
 import { assertKeyIdsLoaded, EnvKeyProvider, KeyError } from "../crypto/keys.js";
-import { assertUtc, ConfigError, type Env, parseEnv, parseKeyRing } from "./env.js";
+import { assertUtc, ConfigError, type Env, parseEnv, parseKeyRing, parseStorageEnv } from "./env.js";
 
 const b64 = (fill: number) => Buffer.alloc(32, fill).toString("base64");
 const ROLES = ["OWNER", "APP", "WORKER", "AUTH", "READONLY"] as const;
@@ -253,6 +253,25 @@ describe("start-up: mail senders (R322)", () => {
 
   it("leaves the marketing sender and the DKIM selector optional", () => {
     expect(refusedVariable(mail)).toBeUndefined();
+  });
+});
+
+describe("start-up: storage settings (R331, R340)", () => {
+  it("defaults to the filesystem driver on /data and reads a set directory", () => {
+    expect(parseEnv(valid).storage).toEqual({ driver: "fs", dataDir: "/data" });
+    expect(parseStorageEnv({ SHOUTORY_DATA_DIR: "/srv/shoutory" })).toEqual({
+      driver: "fs",
+      dataDir: "/srv/shoutory",
+    });
+    expect(parseStorageEnv({ SHOUTORY_DATA_DIR: "C:\\shoutory\\data" }).dataDir).toBe("C:\\shoutory\\data");
+  });
+
+  it.each([
+    ["a relative data directory", "SHOUTORY_DATA_DIR", "data/files"],
+    ["an empty data directory", "SHOUTORY_DATA_DIR", ""],
+    ["a driver that does not exist yet", "SHOUTORY_STORAGE_DRIVER", "s3"],
+  ])("refuses %s and names the variable", (_name, key, value) => {
+    expect(refusedVariable(withValue(key, value))).toBe(key);
   });
 });
 

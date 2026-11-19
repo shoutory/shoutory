@@ -5,6 +5,7 @@ import { mailCheckCommand } from "./mail-check.js";
 import { migrateCommand } from "./migrate.js";
 import { checkCommand } from "./secrets/check.js";
 import { resealCommand } from "./secrets/reseal.js";
+import { storageCheckCommand } from "./storage-check.js";
 
 export interface CliIo {
   readonly stdout: (line: string) => void;
@@ -12,7 +13,7 @@ export interface CliIo {
 }
 
 const USAGE =
-  "usage: shoutory <command>; commands: migrate, mail check, secrets check, secrets reseal, audit verify [YYYY-MM-DD]";
+  "usage: shoutory <command>; commands: migrate, mail check, storage check, secrets check, secrets reseal, audit verify [YYYY-MM-DD]";
 const KEK_PREFIX = "SHOUTORY_KEK_";
 const MIN_SECRET_LENGTH = 8;
 
@@ -49,6 +50,7 @@ const COMMANDS: ReadonlyMap<string, Command> = new Map([
     },
   ],
   ["mail check", (env, io) => mailCheckCommand(env, io)],
+  ["storage check", storageCheckCommand],
   ["secrets check", checkCommand],
   ["secrets reseal", resealCommand],
 ]);

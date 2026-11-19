@@ -66,7 +66,7 @@ function registerReads(app: App): void {
  * A write: the admin check comes first and the step-up second, so a non-admin never learns that the route exists from
  * a step-up refusal. (The `step_up` route policy would run before the handler and answer 403 to a non-admin.)
  */
-async function asAdminWrite<T>(
+export async function asAdminWrite<T>(
   auth: RouteAuth,
   c: Context<AppEnv>,
   inUserTx: InUserTx,

@@ -11,6 +11,7 @@ import { type CliIo, collectSecrets, run } from "./cli/main.js";
 import { startWorker } from "./jobs/worker.js";
 import { createLogger, type Logger } from "./logging/logger.js";
 import { createScrubber } from "./logging/scrub.js";
+import { createFsDriver } from "./storage/fs-driver.js";
 import { startTelemetry } from "./telemetry/telemetry.js";
 
 export interface RunningServer {
@@ -76,6 +77,7 @@ async function startServer(config: Config, logger: Logger): Promise<RunningServe
       keys: config.keys,
       logger,
       auth,
+      storage: createFsDriver(config.storage.dataDir),
     });
     const server = await listen(app.fetch, config.port, config.host);
     logger.info({ port: server.port, role: config.role }, "listening");

@@ -89,6 +89,8 @@ requires `TZ=UTC`.
 | `SHOUTORY_TRUSTED_PROXIES`                                                  | Comma-separated CIDR ranges of the reverse proxies whose `X-Forwarded-For` is believed; empty (the default) trusts none           |
 | `SHOUTORY_HOST`                                                             | The IPv4 or IPv6 address to listen on; unset (the default) listens on all interfaces                                              |
 | `SHOUTORY_ROLE`                                                             | `api` (HTTP only), `worker` (background jobs, no HTTP) or `all` (both, default)                                                   |
+| `SHOUTORY_STORAGE_DRIVER`                                                   | `fs` (the filesystem, default); the only driver so far                                                                            |
+| `SHOUTORY_DATA_DIR`                                                         | The absolute folder the `fs` driver stores objects in; default `/data`; it must exist and be writable (`shoutory storage check`)  |
 
 Generate real values with `openssl rand -base64 32`. The values below are examples only and are refused at start-up. To
 rotate, add a new `SHOUTORY_KEK_<ID>`, point `SHOUTORY_ACTIVE_KEY_ID` at it and keep the old key until no row uses it.
@@ -116,6 +118,14 @@ A `worker` or `all` process sends the queued mail over `SHOUTORY_SMTP_URL` from 
 separate class on its own sender and carries one-click unsubscribe headers; no marketing mail exists yet. `shoutory mail
 check` reads the sending domain of `SHOUTORY_MAIL_FROM` and prints whether its SPF, DMARC and DKIM records are present; a
 missing record is advice and the command still exits 0.
+
+### Storage
+
+Uploaded media and exports go to the folder `SHOUTORY_DATA_DIR`, which the operator creates and mounts; the server never
+creates it, so a missing mount fails instead of filling the container's own disk. `shoutory storage check` writes a small
+object, reads it back, deletes it and prints one JSON line: `driver`, `writable`, `readable`, `free_bytes` (null when
+unknown) and `failure` (null, or `write_failed`, `read_failed`, `delete_failed` or `timeout`). It exits 0 only when
+`failure` is null. The answer never names a path.
 
 ### Logs and telemetry
 

@@ -1,4 +1,8 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createFsDriver } from "../../src/storage/fs-driver.js";
 import { signedUser } from "../support/tenancy.js";
 import { cookieOf, type Fixture, PASSWORD, startFixture } from "./auth/harness.js";
 
@@ -16,8 +20,21 @@ const OLD = "admin-flag-old";
 let fx: Fixture;
 let adminEmail: string;
 let outsider: { id: string; cookie: string };
+let storageDir: string;
+// The real driver, counting the objects the storage check probe writes.
+let probes = 0;
 beforeAll(async () => {
-  fx = await startFixture();
+  storageDir = await mkdtemp(join(tmpdir(), "shoutory-admin-storage-"));
+  const real = createFsDriver(storageDir);
+  fx = await startFixture({
+    storage: {
+      ...real,
+      put: (...args) => {
+        probes++;
+        return real.put(...args);
+      },
+    },
+  });
   const first = await signedUser(fx, "admin-first");
   adminEmail = (
     await fx.admin((client) => client.query('SELECT email FROM auth."user" WHERE id = $1', [first.id]))
@@ -37,7 +54,10 @@ beforeAll(async () => {
     );
   });
 });
-afterAll(() => fx.close());
+afterAll(async () => {
+  await fx.close();
+  await rm(storageDir, { recursive: true, force: true });
+});
 
 /** A fresh sign-in of the instance admin: its step-up is recent. */
 const login = async (): Promise<string> =>
@@ -177,5 +197,49 @@ describe("admin routes: what an instance admin does", () => {
       owner: "admin-owner",
       remove_by: "2000-01-01",
     });
+  });
+});
+
+describe("admin storage check route", () => {
+  const CHECK = "/api/v1/admin/storage/check";
+  const post = (cookie: string) => fx.request(CHECK, { method: "POST", headers: { cookie } });
+  const staleStepUp = (where: string, param: string) =>
+    fx.admin((client) =>
+      client.query(`UPDATE app.session_step_ups SET at = at - interval '11 minutes' WHERE ${where}`, [param]),
+    );
+  const auditCount = async () =>
+    Number((await fx.admin((client) => client.query("SELECT count(*) AS n FROM app.audit_logs"))).rows[0].n);
+
+  it("answers 401 with no session and 404 to a user who is not an instance admin, writing no probe", async () => {
+    const before = probes;
+    expect((await post("")).status).toBe(401);
+    const answer = await post(outsider.cookie);
+    expect([answer.status, await errorCode(answer)]).toEqual([404, "not_found"]);
+    await staleStepUp("user_id = $1", outsider.id);
+    const stale = await post(outsider.cookie);
+    expect([stale.status, await errorCode(stale)]).toEqual([404, "not_found"]);
+    expect(probes).toBe(before);
+  });
+
+  it("answers 403 step_up_required to an admin without a recent step-up, writing no probe", async () => {
+    const cookie = await login();
+    await staleStepUp(`user_id = (SELECT id FROM auth."user" WHERE email = $1)`, adminEmail);
+    const before = probes;
+    const answer = await post(cookie);
+    expect([answer.status, await errorCode(answer)]).toEqual([403, "step_up_required"]);
+    expect(probes).toBe(before);
+  });
+
+  it("runs the probe for an admin with a fresh step-up and records no audit row", async () => {
+    const cookie = await login();
+    const rows = await auditCount();
+    const before = probes;
+    const answer = await post(cookie);
+    expect(answer.status).toBe(200);
+    const { data } = (await answer.json()) as { data: Record<string, unknown> };
+    expect(data).toMatchObject({ driver: "fs", writable: true, readable: true, failure: null });
+    expect(data.free_bytes).toBeGreaterThan(0);
+    expect(probes).toBe(before + 1);
+    expect(await auditCount()).toBe(rows);
   });
 });
