@@ -56,6 +56,7 @@ export interface Api {
   verifyEmail?: Answer;
   requestReset?: Answer;
   resetPassword?: Answer;
+  enable?: Answer;
 }
 
 export const USER = { id: "u1", email: "person@example.test", emailVerified: true };
@@ -73,6 +74,8 @@ export function stubApi(api: Api = {}) {
     "/api/auth/two-factor/verify-backup-code": api.verifyBackupCode ?? (() => json({ user: USER })),
     "/api/auth/verify-password": api.verifyPassword ?? (() => json({ status: true })),
     "/api/auth/send-verification-email": api.resend ?? (() => json({ status: true })),
+    "/api/auth/two-factor/enable":
+      api.enable ?? (() => json({ method: "totp", totpURI: "", backupCodes: [] })),
     "/api/v1/instance/signup": api.signUpMode ?? (() => json({ data: { open: true } })),
     "/api/auth/sign-up/email":
       api.signUp ?? (() => json({ user: { name: "T", email: "new@example.test", emailVerified: false } })),

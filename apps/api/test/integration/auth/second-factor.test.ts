@@ -1,7 +1,7 @@
 import { SealedSecret } from "@shoutory/core/crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { pepperDigest } from "../../../src/auth/throttle.js";
-import { type Enrolled, type Fixture, type Jar, PASSWORD, PEPPER, startFixture, totpAt } from "./harness.js";
+import { type Enrolled, type Fixture, Jar, PASSWORD, PEPPER, startFixture, totpAt } from "./harness.js";
 
 let fx: Fixture;
 beforeAll(async () => {
@@ -205,4 +205,50 @@ describe("the enrolment answers carry the secret once and nothing else does", ()
     expect(row.secret).not.toContain(enrolled.secret);
     for (const code of enrolled.backupCodes) expect(row.backup_codes).not.toContain(code);
   });
+});
+
+// What the setup page may tell the user: which sessions survive the two calls of an enrolment.
+describe("an enrolment and its first code", () => {
+  it("enabling signs out the other devices, and the first code keeps this device signed in", async () => {
+    const email = "setup-sessions-1@example.test";
+    const jar = new Jar(await fx.signedIn(email));
+    const signIn = async () =>
+      new Jar().add(await fx.request("/api/auth/sign-in/email", { body: { email, password: PASSWORD } }));
+    const alive = async (holder: Jar) =>
+      (await fx.request("/api/auth/get-session", { headers: holder.header })).status === 200;
+    const before = await signIn();
+    const enable = await fx.request("/api/auth/two-factor/enable", {
+      body: { password: PASSWORD },
+      headers: jar.header,
+    });
+    const { totpURI } = (await enable.json()) as { totpURI: string };
+    const afterEnable = {
+      sessions: await fx.sessionCount(email),
+      here: await alive(jar),
+      other: await alive(before),
+    };
+    const opened = await signIn();
+    const secret = new URL(totpURI).searchParams.get("secret");
+    if (!secret) throw new Error("the enable answer holds no secret");
+    const verified = await verifyTotp(jar, totpAt(secret));
+    const swapped = new Jar(jar.header.cookie).add(verified);
+    const observed = {
+      afterEnable,
+      verifyStatus: verified.status,
+      newCookie: verified.headers.getSetCookie().some((line) => line.startsWith("__Host-shoutory_session=")),
+      sessions: await fx.sessionCount(email),
+      oldCookieAlive: await alive(jar),
+      thisDeviceAlive: await alive(swapped),
+      openedBetweenAlive: await alive(opened),
+    };
+    expect(observed).toEqual({
+      afterEnable: { sessions: 1, here: true, other: false },
+      verifyStatus: 200,
+      newCookie: true,
+      sessions: 2,
+      oldCookieAlive: false,
+      thisDeviceAlive: true,
+      openedBetweenAlive: true,
+    });
+  }, 30_000);
 });

@@ -462,3 +462,75 @@ msgstr "تم تغيير كلمة المرور. تم تسجيل خروج الأج
 #. js-lingui-explicit-id
 msgid "auth.reset.new_link"
 msgstr "أرسل رابطًا جديدًا"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.title"
+msgstr "إعداد التحقق بخطوتين"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.password_heading"
+msgstr "أكّد كلمة المرور"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.continue"
+msgstr "متابعة"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.qr_heading"
+msgstr "امسح الرمز"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.qr_alt"
+msgstr "رمز QR لتطبيق المصادقة"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.qr_body"
+msgstr "امسح هذا الرمز بتطبيق المصادقة، أو اكتب المفتاح السري يدويًا. تم تسجيل خروج الأجهزة الأخرى عند بدء الإعداد."
+
+#. js-lingui-explicit-id
+msgid "auth.setup.secret_label"
+msgstr "المفتاح السري للكتابة اليدوية"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.copy_secret"
+msgstr "انسخ المفتاح السري"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.copied"
+msgstr "تم النسخ"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.turn_on"
+msgstr "تفعيل"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.codes_heading"
+msgstr "احفظ رموز الاسترداد"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.codes_body"
+msgstr "كل رمز يعمل مرة واحدة إذا فقدت تطبيق المصادقة. تظهر الآن فقط. يبقى هذا الجهاز مسجّل الدخول."
+
+#. js-lingui-explicit-id
+msgid "auth.setup.copy_codes"
+msgstr "انسخ الرموز"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.download"
+msgstr "تنزيل"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.saved"
+msgstr "حفظت الرموز"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.done"
+msgstr "تم تفعيل التحقق بخطوتين"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.start"
+msgstr "الانتقال إلى الصفحة الرئيسية"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.copy_failed"
+msgstr "تعذّر النسخ؛ حدّد النص بدلًا من ذلك."

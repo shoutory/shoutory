@@ -358,3 +358,13 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
 - Licence: MIT. Published 2026-10-29, more than 14 days before adoption. Its install scripts: none.
 - Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
 - Rejected: the Babel and SWC macro routes (extra plugin pins for the same transform).
+
+## uqr 0.1.3
+
+- Used for: turning the two-factor setup address into the QR matrix in `apps/web`, which the page draws as an inline SVG
+  path. The address holds the secret, so it is encoded in the browser and never sent to a QR service.
+- Licence: MIT. Published 2026-04-03, more than 14 days before adoption. No dependencies. Its install scripts: none (its
+  `scripts` block holds build, lint and test commands only).
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
+- Rejected: `react-qr-code` (pulls `prop-types` and `qrcode-generator`), `qrcode` (three dependencies, last release
+  2024-08), `qrcode-generator` (556 KB).

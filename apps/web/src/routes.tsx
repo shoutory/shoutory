@@ -9,6 +9,7 @@ import { ResetPage } from "./auth/reset";
 import { SignInPage } from "./auth/sign-in";
 import { SignUpPage } from "./auth/sign-up";
 import { StepUpProvider } from "./auth/step-up";
+import { TwoFactorSetupPage } from "./auth/two-factor-setup";
 import { VerifyPage } from "./auth/verify";
 import { ApiError } from "./http/client";
 import { type PageHandle, usePageTitleAndFocus } from "./page-title";
@@ -28,6 +29,7 @@ import { Button } from "./ui/button";
 const TITLES = {
   signIn: msg({ id: "system.sign_in.title", message: "Sign in" }),
   mfa: msg({ id: "auth.mfa.title", message: "Two-step verification" }),
+  twoFactorSetup: msg({ id: "auth.setup.title", message: "Set up two-step verification" }),
   signUp: msg({ id: "auth.sign_up.title", message: "Create your account" }),
   forgot: msg({ id: "auth.forgot.title", message: "Reset your password" }),
   verify: msg({ id: "auth.verify.title", message: "Confirm your email" }),
@@ -147,6 +149,11 @@ export const routes: RouteObject[] = [
             element: <Shell />,
             children: [
               { index: true, element: <StartPage /> },
+              {
+                path: "account/security/two-factor",
+                handle: handle(TITLES.twoFactorSetup),
+                element: <TwoFactorSetupPage />,
+              },
               {
                 path: "w/:ws",
                 // An id that is none of mine shows the not-found page, so the page is titled as one.

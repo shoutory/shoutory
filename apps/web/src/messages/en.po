@@ -464,3 +464,75 @@ msgstr "Your password was changed. Other devices were signed out."
 #. js-lingui-explicit-id
 msgid "auth.reset.new_link"
 msgstr "Send a new link"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.title"
+msgstr "Set up two-step verification"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.password_heading"
+msgstr "Confirm your password"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.continue"
+msgstr "Continue"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.qr_heading"
+msgstr "Scan the code"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.qr_alt"
+msgstr "QR code for your authenticator app"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.qr_body"
+msgstr "Scan this code with your authenticator app, or type the secret in by hand. Other devices were signed out when setup started."
+
+#. js-lingui-explicit-id
+msgid "auth.setup.secret_label"
+msgstr "Secret for typing in by hand"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.copy_secret"
+msgstr "Copy secret"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.copied"
+msgstr "Copied"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.turn_on"
+msgstr "Turn on"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.codes_heading"
+msgstr "Save your recovery codes"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.codes_body"
+msgstr "Each code works once if you lose your authenticator app. They are shown only now. This device stays signed in."
+
+#. js-lingui-explicit-id
+msgid "auth.setup.copy_codes"
+msgstr "Copy codes"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.download"
+msgstr "Download"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.saved"
+msgstr "I saved my codes"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.done"
+msgstr "Two-step verification is on"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.start"
+msgstr "Go to the start page"
+
+#. js-lingui-explicit-id
+msgid "auth.setup.copy_failed"
+msgstr "Could not copy; select the text instead."
