@@ -1,5 +1,6 @@
+import { globSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { defineConfig, type Plugin } from "vitest/config";
 
@@ -20,6 +21,29 @@ const nodeExclude = [...exclude, "apps/web/**"];
 
 // Tests read workspace packages from `src` through the `source` export condition; Node reads `dist`.
 const ssr = { resolve: { conditions: ["source"], externalConditions: ["source"] } };
+// The web projects read workspace packages from `src` too (no built `dist` needed). A global `source` condition would
+// also pick the dangling `source` export of third-party packages (react-aria-components ships none), so only the
+// workspace packages' own `source` targets are aliased.
+const root = import.meta.dirname;
+const workspaceSources = globSync("{apps,packages,packages/providers}/*/package.json", { cwd: root }).flatMap(
+  (file) => {
+    const pkg = JSON.parse(readFileSync(join(root, file), "utf8")) as {
+      name?: string;
+      exports?: Record<string, { source?: string } | string>;
+    };
+    return Object.entries(pkg.exports ?? {}).flatMap(([subpath, target]) =>
+      pkg.name && typeof target === "object" && target.source
+        ? [
+            {
+              find: new RegExp(`^${pkg.name}${subpath.slice(1)}$`),
+              replacement: join(root, dirname(file), target.source),
+            },
+          ]
+        : [],
+    );
+  },
+);
+const webResolve = { alias: workspaceSources };
 
 export default defineConfig({
   test: {
@@ -35,9 +59,14 @@ export default defineConfig({
           env: { TZ: "Pacific/Chatham" },
         },
       },
-      { plugins: [linguiForWeb()], test: { name: "web", environment: "happy-dom", include: web, exclude } },
       {
         plugins: [linguiForWeb()],
+        resolve: webResolve,
+        test: { name: "web", environment: "happy-dom", include: web, exclude },
+      },
+      {
+        plugins: [linguiForWeb()],
+        resolve: webResolve,
         test: {
           name: "web-chatham",
           environment: "happy-dom",
