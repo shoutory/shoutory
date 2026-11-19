@@ -4,10 +4,6 @@
     "reason": "no end-to-end tests exist yet"
   },
   {
-    "name": "image-smoke",
-    "reason": "no container image exists yet"
-  },
-  {
     "name": "upgrade",
     "reason": "there is no earlier release to upgrade from"
   }

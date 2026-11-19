@@ -3,34 +3,64 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { parse } from "yaml";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const compose = readFileSync(join(root, "docker/compose.yml"), "utf8");
-const lines = compose.split("\n");
+const { services } = parse(compose);
+const IMAGE = "${SHOUTORY_IMAGE:-ghcr.io/shoutory/shoutory:stable}";
+// Everything a service sets that is a credential, a key or a connection string comes from the environment.
+const SENSITIVE = /PASSWORD|SECRET|PEPPER|KEK|_URL/;
 
-test("compose runs PostgreSQL only, by digest", () => {
-  const services = lines.filter((line) => /^ {2}[a-z][\w-]*:\s*$/.test(line));
-  assert.deepEqual(services, ["  postgres:"]);
-  assert.match(compose, /^\s+image: postgres:18[\w.-]*@sha256:[0-9a-f]{64}$/m);
+test("compose runs PostgreSQL by digest, the one-shot migrate and the app only: no Redis, no MinIO", () => {
+  assert.deepEqual(Object.keys(services).sort(), ["migrate", "postgres", "shoutory"]);
+  assert.match(services.postgres.image, /^postgres:18[\w.-]*@sha256:[0-9a-f]{64}$/);
+  assert.doesNotMatch(compose, /redis|minio/i);
 });
 
-test("compose binds PostgreSQL to 127.0.0.1", () => {
-  // Every item of a `ports:` list is a loopback binding; host networking and a wildcard address never appear.
-  const start = lines.findIndex((line) => /^\s+ports:\s*$/.test(line));
-  assert.ok(start >= 0, "no ports list was found");
-  const ports = [];
-  for (const line of lines.slice(start + 1)) {
-    if (!/^\s+- /.test(line)) break;
-    ports.push(line.trim());
+test("the database healthcheck connects over TCP, because the init-time server listens on its socket only", () => {
+  assert.match(services.postgres.healthcheck.test.join(" "), /pg_isready .*-h 127\.0\.0\.1/);
+});
+
+test("the app starts only after migrate completed, and migrate runs once with the owner role alone", () => {
+  assert.equal(services.shoutory.depends_on.migrate.condition, "service_completed_successfully");
+  assert.equal(services.migrate.restart, "no");
+  assert.deepEqual(services.migrate.command, ["migrate"]);
+  const urls = Object.keys(services.migrate.environment).filter((key) =>
+    key.startsWith("SHOUTORY_DATABASE_URL_"),
+  );
+  assert.deepEqual(urls, ["SHOUTORY_DATABASE_URL_OWNER"]);
+});
+
+test("migrate and the app are one image, which compose can also build", () => {
+  for (const name of ["migrate", "shoutory"]) {
+    assert.equal(services[name].image, IMAGE, name);
+    assert.deepEqual(services[name].build, { context: "..", dockerfile: "docker/Dockerfile" }, name);
   }
+});
+
+test("the app has a read-only root, a tmpfs /tmp, a /data volume and the all role by default", () => {
+  const app = services.shoutory;
+  assert.equal(app.read_only, true);
+  assert.ok(app.tmpfs.includes("/tmp"), "no tmpfs on /tmp");
+  assert.ok(
+    app.volumes.some((volume) => volume.split(":")[1] === "/data"),
+    "no /data volume",
+  );
+  assert.equal(app.environment.SHOUTORY_ROLE, "${SHOUTORY_ROLE:-all}");
+});
+
+test("compose binds every published port to 127.0.0.1 and never uses host networking", () => {
+  const ports = Object.values(services).flatMap((service) => service.ports ?? []);
   assert.ok(ports.length >= 1, "no published port was found");
-  for (const port of ports) assert.match(port, /^- "127\.0\.0\.1:\d+:\d+"$/);
+  for (const port of ports) assert.match(port, /^127\.0\.0\.1:\d+:\d+$/);
   assert.doesNotMatch(compose, /network_mode/);
   assert.doesNotMatch(compose, /0\.0\.0\.0/);
 });
 
 test("compose takes every credential from the environment and refuses an unset one", () => {
-  const credentials = lines.filter((line) => /^\s+[A-Z_]*PASSWORD[A-Z_]*:/.test(line));
-  assert.ok(credentials.length >= 6, "the superuser and five role passwords must be listed");
-  for (const line of credentials) assert.match(line.trim(), /^[A-Z_]+: \$\{[A-Z_]+:\?[^}]+\}$/);
+  const entries = Object.values(services).flatMap((service) => Object.entries(service.environment ?? {}));
+  const sensitive = entries.filter(([key]) => SENSITIVE.test(key));
+  assert.ok(sensitive.length >= 6, "the superuser and the role passwords must be listed");
+  for (const [key, value] of sensitive) assert.match(String(value), /^\$\{[A-Z0-9_]+:\?[^}]+\}$/, key);
 });

@@ -16,6 +16,7 @@
     "test:integration": "vitest run --passWithNoTests --project integration",
     "test:contract": "vitest run --passWithNoTests --project contract && node --test \"packages/testkit/test/contract/*.test.mjs\"",
     "test:focus": "vitest run --passWithNoTests",
+    "image-smoke": "node scripts/image-smoke.mjs",
     "e2e": "playwright test --config e2e/playwright.config.ts --pass-with-no-tests",
     "build": "tsc -b && pnpm --filter @shoutory/web run build",
     "knip": "knip",

@@ -1,4 +1,5 @@
 import { realpathSync } from "node:fs";
+import type { Server } from "node:http";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { assertUtc, type Config, parseEnv } from "@shoutory/core/config";
@@ -11,6 +12,7 @@ import { type CliIo, collectSecrets, run } from "./cli/main.js";
 import { startWorker } from "./jobs/worker.js";
 import { createLogger, type Logger } from "./logging/logger.js";
 import { createScrubber } from "./logging/scrub.js";
+import { closeServer, closeTogether, drain, firstOnly } from "./shutdown.js";
 import { createStorageDriver } from "./storage/driver.js";
 import { startTelemetry } from "./telemetry/telemetry.js";
 
@@ -37,7 +39,7 @@ function listen(
       server.off("error", fail);
       done({
         port: info.port,
-        close: () => new Promise<void>((ok, bad) => server.close((error) => (error ? bad(error) : ok()))),
+        close: () => closeServer(server as Server),
       });
     });
     server.once("error", fail);
@@ -143,14 +145,9 @@ async function startRole(config: Config, logger: Logger): Promise<Started> {
     return {
       server: {
         port: server.port,
-        // The server closes even when the worker's close throws.
-        close: async () => {
-          try {
-            await worker.close();
-          } finally {
-            await server.close();
-          }
-        },
+        // Both stop at once: the worker stops fetching while the server finishes its requests, and one failing
+        // never leaves the other running.
+        close: () => closeTogether([() => server.close(), () => worker.close()]),
       },
     };
   } catch (error) {
@@ -180,9 +177,13 @@ async function start(env: NodeJS.ProcessEnv, io: CliIo): Promise<Started> {
     throw error;
   }
   const running = "server" in started ? started.server : "worker" in started ? started.worker : undefined;
+  // Telemetry stops after the role, inside the same bounded close, and also when the role's close failed.
   const close = async (): Promise<void> => {
-    await running?.close();
-    await telemetry?.shutdown();
+    try {
+      await running?.close();
+    } finally {
+      await telemetry?.shutdown();
+    }
   };
   return "server" in started ? { server: { port: started.server.port, close } } : { worker: { close } };
 }
@@ -213,14 +214,15 @@ async function runProcess(): Promise<void> {
     return;
   }
   const running = "server" in started ? started.server : started.worker;
-  for (const signal of ["SIGINT", "SIGTERM"] as const) {
-    process.once(signal, () => {
-      running.close().catch((error: unknown) => {
-        io.stderr(error instanceof Error ? error.message : "shutdown failed");
-        process.exitCode = EXIT_FAILED;
-      });
+  // One guard for both signals: whichever arrives first drains, later ones are ignored.
+  const onSignal = firstOnly(() => {
+    void drain(() => running.close()).then((outcome) => {
+      if (outcome.code !== 0) io.stderr(`shutdown ended without finishing: ${outcome.reason}`);
+      // A request that never ends keeps the event loop alive: the exit is explicit.
+      process.exit(outcome.code);
     });
-  }
+  });
+  for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, onSignal);
 }
 
 /** True when this file is the one node was started on; real paths, so a symlinked start still matches. */

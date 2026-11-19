@@ -1,5 +1,10 @@
-# PostgreSQL for local development, bound to this machine only. Every credential comes from the environment and
-# compose refuses to start when one is unset or empty.
+# Shoutory on one machine: PostgreSQL, a one-shot migration, and the app. Run it from this folder:
+#
+#   docker compose build      builds the image from this checkout (or pull SHOUTORY_IMAGE once a release exists)
+#   docker compose up -d      starts the database, applies the migrations, then starts the app
+#
+# Every credential comes from the environment and compose refuses to start when one is unset or empty. Published ports
+# are bound to this machine only; put a reverse proxy with TLS in front of the app.
 services:
   postgres:
     image: postgres:18.6-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
@@ -15,3 +20,76 @@ services:
       SHOUTORY_DATABASE_PASSWORD_READONLY: ${SHOUTORY_DATABASE_PASSWORD_READONLY:?set SHOUTORY_DATABASE_PASSWORD_READONLY}
     volumes:
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d shoutory"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # Runs once as the owner role and exits; the app starts only after it completed.
+  migrate:
+    image: ${SHOUTORY_IMAGE:-ghcr.io/shoutory/shoutory:stable}
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    command: ["migrate"]
+    restart: "no"
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      SHOUTORY_DATABASE_URL_OWNER: ${SHOUTORY_DATABASE_URL_OWNER:?set SHOUTORY_DATABASE_URL_OWNER}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  shoutory:
+    image: ${SHOUTORY_IMAGE:-ghcr.io/shoutory/shoutory:stable}
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - shoutory-data:/data
+    ports:
+      - "127.0.0.1:3000:3000"
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      SHOUTORY_ROLE: ${SHOUTORY_ROLE:-all}
+      SHOUTORY_PUBLIC_ORIGIN: ${SHOUTORY_PUBLIC_ORIGIN:?set SHOUTORY_PUBLIC_ORIGIN}
+      SHOUTORY_MAIL_FROM: ${SHOUTORY_MAIL_FROM:?set SHOUTORY_MAIL_FROM}
+      SHOUTORY_SMTP_URL: ${SHOUTORY_SMTP_URL:?set SHOUTORY_SMTP_URL}
+      SHOUTORY_HMAC_PEPPER: ${SHOUTORY_HMAC_PEPPER:?set SHOUTORY_HMAC_PEPPER}
+      SHOUTORY_SESSION_SECRET: ${SHOUTORY_SESSION_SECRET:?set SHOUTORY_SESSION_SECRET}
+      SHOUTORY_ACTIVE_KEY_ID: ${SHOUTORY_ACTIVE_KEY_ID:?set SHOUTORY_ACTIVE_KEY_ID}
+      SHOUTORY_KEK_K1: ${SHOUTORY_KEK_K1:?set SHOUTORY_KEK_K1}
+      SHOUTORY_DATABASE_PASSWORD_OWNER: ${SHOUTORY_DATABASE_PASSWORD_OWNER:?set SHOUTORY_DATABASE_PASSWORD_OWNER}
+      SHOUTORY_DATABASE_PASSWORD_APP: ${SHOUTORY_DATABASE_PASSWORD_APP:?set SHOUTORY_DATABASE_PASSWORD_APP}
+      SHOUTORY_DATABASE_PASSWORD_WORKER: ${SHOUTORY_DATABASE_PASSWORD_WORKER:?set SHOUTORY_DATABASE_PASSWORD_WORKER}
+      SHOUTORY_DATABASE_PASSWORD_AUTH: ${SHOUTORY_DATABASE_PASSWORD_AUTH:?set SHOUTORY_DATABASE_PASSWORD_AUTH}
+      SHOUTORY_DATABASE_PASSWORD_READONLY: ${SHOUTORY_DATABASE_PASSWORD_READONLY:?set SHOUTORY_DATABASE_PASSWORD_READONLY}
+      SHOUTORY_DATABASE_URL_OWNER: ${SHOUTORY_DATABASE_URL_OWNER:?set SHOUTORY_DATABASE_URL_OWNER}
+      SHOUTORY_DATABASE_URL_APP: ${SHOUTORY_DATABASE_URL_APP:?set SHOUTORY_DATABASE_URL_APP}
+      SHOUTORY_DATABASE_URL_WORKER: ${SHOUTORY_DATABASE_URL_WORKER:?set SHOUTORY_DATABASE_URL_WORKER}
+      SHOUTORY_DATABASE_URL_AUTH: ${SHOUTORY_DATABASE_URL_AUTH:?set SHOUTORY_DATABASE_URL_AUTH}
+      SHOUTORY_DATABASE_URL_READONLY: ${SHOUTORY_DATABASE_URL_READONLY:?set SHOUTORY_DATABASE_URL_READONLY}
+    healthcheck:
+      test:
+        - CMD
+        - /nodejs/bin/node
+        - -e
+        - fetch('http://127.0.0.1:3000/readyz').then((answer) => process.exit(answer.ok ? 0 : 1), () => process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+volumes:
+  postgres-data:
+  shoutory-data:

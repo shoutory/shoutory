@@ -82,6 +82,16 @@ superuser password first, then run `docker compose -f docker/compose.yml up -d`:
 export SHOUTORY_POSTGRES_PASSWORD=postgres-dev-password
 ```
 
+## Self-hosting
+
+The same file also runs Shoutory: `docker compose -f docker/compose.yml up -d` starts PostgreSQL, applies the migrations
+once (`migrate`), then starts the app on `127.0.0.1:3000`. It reads the image from `SHOUTORY_IMAGE` (default
+`ghcr.io/shoutory/shoutory:stable`) and refuses to start until every variable in [Configuration](#configuration) it names
+is set. To build the image yourself instead of pulling it, run
+`docker build -f docker/Dockerfile --build-arg SHOUTORY_RELEASE_CHANNEL=stable -t shoutory .` and set `SHOUTORY_IMAGE=shoutory`.
+The container runs as a non-root user with a read-only filesystem, keeps uploads in the `/data` volume, and `pnpm verify
+--only image-smoke` (needs Docker) checks the built image end to end.
+
 ## Configuration
 
 The process refuses to start when a secret is missing, empty, shorter than its floor, all zero, or equal to an example
