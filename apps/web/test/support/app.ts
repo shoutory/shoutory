@@ -95,6 +95,58 @@ export interface Api {
   leave?: Answer;
   invite?: Answer;
   revokeInvitation?: Answer;
+  /** The operator screens: whether the caller is an instance admin, the flags, the settings and their two writes. */
+  admin?: Answer;
+  adminFlags?: Answer;
+  overrideFlag?: Answer;
+  adminSettings?: Answer;
+  setSignup?: Answer;
+}
+
+/** The flags of the instance as the admin list answers them: one off, one forced off, one past its removal date. */
+export const FLAGS = [
+  {
+    key: "new-composer",
+    description: "The new composer",
+    owner: "core-team",
+    remove_by: "2099-01-01",
+    default_on: false,
+    instance_override: null,
+    effective: false,
+  },
+  {
+    key: "dark-launch",
+    description: "Dark launch",
+    owner: "core-team",
+    remove_by: "2099-01-01",
+    default_on: true,
+    instance_override: false,
+    effective: false,
+  },
+  {
+    key: "old-thing",
+    description: "Past its date",
+    owner: "core-team",
+    remove_by: "2000-01-01",
+    default_on: false,
+    instance_override: null,
+    effective: false,
+  },
+];
+
+// The operator screens' calls; a flag key in the override path is any key.
+function adminAnswers(api: Api, pathname: string, method: string): Answer | undefined {
+  const route = pathname.replace(/\/flags\/[^/]+\/override$/, "/flags/*/override");
+  const answers: Record<string, Answer> = {
+    "/api/v1/instance/admin:GET": api.admin ?? (() => json({ data: { admin: false } })),
+    "/api/v1/admin/flags:GET": api.adminFlags ?? (() => json({ data: FLAGS })),
+    "/api/v1/admin/flags/*/override:PUT":
+      api.overrideFlag ?? (() => json({ data: { key: "new-composer", on: true } })),
+    "/api/v1/admin/settings:GET": api.adminSettings ?? (() => json({ data: [] })),
+    "/api/v1/admin/settings/signup_enabled:PUT":
+      api.setSignup ?? (() => json({ data: { key: "signup_enabled", value: true } })),
+  };
+  return answers[`${route}:${method}`];
 }
 
 /** The members of w1 as the caller sees them: the others, plus the caller (u1) in `role`; below an Owner caller sits an Owner. */
@@ -269,7 +321,10 @@ export function stubApi(api: Api = {}) {
     // A create call to a path that also lists (organizations, workspaces) has its own `<path>:POST` answer.
     const method = init?.method ?? "GET";
     const answer =
-      answers[`${pathname}:${method}`] ?? answers[pathname] ?? membersAnswers(api, pathname, method);
+      answers[`${pathname}:${method}`] ??
+      answers[pathname] ??
+      membersAnswers(api, pathname, method) ??
+      adminAnswers(api, pathname, method);
     return Promise.resolve(answer ? answer() : refusal("not_found", 404));
   });
   vi.stubGlobal("fetch", stub);
@@ -416,6 +471,34 @@ export async function openMembers(role: string, api: Api = {}) {
   const stub = stubApi({ workspaces: roleOf(role), members: pageOf(membersFor(role)), ...api });
   const opened = await openApp("/w/w1/settings/members");
   return { stub, ...opened };
+}
+
+/** Opens an operator screen as an instance admin (the shell's admin read answers true); `api` overrides any answer. */
+export async function openAdmin(path: string, api: Api = {}) {
+  const stub = stubApi({ admin: () => json({ data: { admin: true } }), ...api });
+  const opened = await openApp(path);
+  return { stub, ...opened };
+}
+
+/** A sensitive call that is refused with step_up_required until the password was verified, then answers `ok`. */
+export function needsPassword(key: keyof Api, ok: () => Response): Api {
+  let verified = false;
+  return {
+    [key]: () => (verified ? ok() : refusal("step_up_required", 403)),
+    verifyPassword: () => {
+      verified = true;
+      return json({ status: true });
+    },
+  };
+}
+
+/** Types the password into the open password dialog and confirms. */
+export async function confirmPassword() {
+  const field = document.querySelector<HTMLInputElement>('[role="dialog"] input[name="password"]');
+  if (!field) throw new Error("no password dialog is open");
+  type(field, "correct horse battery 7");
+  click(byText(document.body, '[role="dialog"] button', "Confirm"));
+  await settle();
 }
 
 /** The calls to a path (a part of it) with a method. */

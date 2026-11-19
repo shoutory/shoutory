@@ -39,7 +39,10 @@ export function Select({
   return (
     <AriaSelect
       selectedKey={value}
-      onSelectionChange={(key) => key !== null && onChange(String(key))}
+      // A closed list still selects on ArrowLeft and ArrowRight, so an unavailable one ignores every change.
+      onSelectionChange={(key) => {
+        if (!unavailable && key !== null) onChange(String(key));
+      }}
       className="flex flex-col gap-2"
       {...(unavailable ? { isOpen: false, onOpenChange: () => undefined } : {})}
     >
@@ -53,7 +56,9 @@ export function Select({
           <path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" />
         </svg>
       </Button>
-      {unavailable && reason ? <span className="text-sm text-text-muted">{reason}</span> : null}
+      <span role="status" className="text-sm text-text-muted">
+        {unavailable ? reason : null}
+      </span>
       <Popover className="w-(--trigger-width) rounded-md border border-border bg-surface shadow-lg">
         <ListBox className="max-h-72 overflow-auto p-2 outline-none">
           {options.map((option) => (

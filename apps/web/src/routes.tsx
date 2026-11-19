@@ -5,6 +5,10 @@ import { type ReactElement, useEffect, useState } from "react";
 import { Outlet, type Params, type RouteObject, replace, useMatches, useRouteError } from "react-router";
 import { ProfilePage } from "./account/profile";
 import { SecurityPage } from "./account/security";
+import { AdminShell } from "./admin/admin-shell";
+import { FlagsPage } from "./admin/flags";
+import { ProvidersPage } from "./admin/providers";
+import { SignupSwitchPage } from "./admin/signup-switch";
 import { ForgotPage } from "./auth/forgot";
 import { InvitePage, inviteLoader } from "./auth/invite";
 import { MfaPage } from "./auth/mfa";
@@ -57,6 +61,10 @@ const TITLES = {
   general: msg({ id: "settings.general.title", message: "General" }),
   billing: msg({ id: "billing.title", message: "Billing" }),
   members: msg({ id: "members.title", message: "Members" }),
+  admin: msg({ id: "admin.title", message: "Admin" }),
+  adminFlags: msg({ id: "admin.flags.title", message: "Feature flags" }),
+  adminProviders: msg({ id: "admin.providers.title", message: "Provider apps" }),
+  adminSignup: msg({ id: "admin.signup.title", message: "Sign-up" }),
   forbidden: msg({ id: "system.forbidden.title", message: "You do not have access to this page" }),
   maintenance: msg({ id: "system.maintenance.title", message: "Shoutory is not reachable right now" }),
   startupFailure: msg({ id: "system.startup_failure.title", message: "Shoutory did not start correctly" }),
@@ -199,6 +207,17 @@ export const routes: RouteObject[] = [
                 path: "w/:ws",
                 handle: titled(TITLES.workspace, (shell, params) => isUnknownWorkspace(shell, params.ws)),
                 element: <WorkspaceHome />,
+              },
+              {
+                path: "admin",
+                handle: titled(TITLES.admin, (shell) => !("error" in shell) && shell.admin === false),
+                element: <AdminShell />,
+                children: [
+                  { index: true, loader: () => replace("/admin/flags") },
+                  { path: "flags", handle: handle(TITLES.adminFlags), element: <FlagsPage /> },
+                  { path: "providers", handle: handle(TITLES.adminProviders), element: <ProvidersPage /> },
+                  { path: "signup", handle: handle(TITLES.adminSignup), element: <SignupSwitchPage /> },
+                ],
               },
               {
                 path: "w/:ws/settings/general",

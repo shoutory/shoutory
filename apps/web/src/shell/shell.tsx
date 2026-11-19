@@ -98,6 +98,11 @@ function Rail() {
           <Trans id="shell.nav.members">Members</Trans>
         </NavLink>
       ) : null}
+      {lists?.admin === true ? (
+        <NavLink to="/admin" className={NAV_LINK}>
+          <Trans id="shell.nav.admin">Admin</Trans>
+        </NavLink>
+      ) : null}
       {ws ? (
         <NavLink to={`/w/${ws}/settings/general`} className={NAV_LINK}>
           <Trans id="shell.nav.settings">Settings</Trans>

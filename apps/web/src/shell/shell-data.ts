@@ -22,8 +22,13 @@ const workspace = z.object({
 export type Organization = z.infer<typeof organization>;
 export type Workspace = z.infer<typeof workspace>;
 
-/** The shell's lists, or the failure that stopped them: a list that fails shows inline and the frame stays. */
-export type ShellData = { organizations: Organization[]; workspaces: Workspace[] } | { error: ApiError };
+/**
+ * The shell's lists, or the failure that stopped them: a list that fails shows inline and the frame stays. `admin` is
+ * whether the caller is an instance admin; the failure of that read is no answer, which is never taken as "no".
+ */
+export type ShellData =
+  | { organizations: Organization[]; workspaces: Workspace[]; admin: boolean | ApiError }
+  | { error: ApiError };
 
 /** An id that is none of my workspaces: only judged when the lists loaded and there is at least one workspace. */
 export const isUnknownWorkspace = (data: ShellData, id: string | undefined): boolean =>
@@ -39,13 +44,28 @@ export const SHELL_ROUTE_ID = "shell";
 // The first page only (AGENTS 6.6, R393): a `next_cursor` beyond it is not followed in M0.
 const LIMIT = "?limit=100";
 
+const adminAnswer = z.object({ admin: z.boolean() });
+
+// The admin read never fails the shell: without an answer there is no Admin entry, and the failure is kept for the
+// admin screens to show. An ended session is still the guard's page.
+async function readAdmin(): Promise<boolean | ApiError> {
+  try {
+    return (await request(adminAnswer, "/api/v1/instance/admin")).admin;
+  } catch (error) {
+    if (error instanceof ApiError && error.state === "session_expired") throw error;
+    if (error instanceof ApiError) return error;
+    throw error;
+  }
+}
+
 export async function shellLoader(): Promise<ShellData> {
   try {
-    const [organizations, workspaces] = await Promise.all([
+    const [organizations, workspaces, admin] = await Promise.all([
       request(z.array(organization), `/api/v1/organizations${LIMIT}`),
       request(z.array(workspace), `/api/v1/workspaces${LIMIT}`),
+      readAdmin(),
     ]);
-    return { organizations, workspaces };
+    return { organizations, workspaces, admin };
   } catch (error) {
     // An ended session is the guard's page, not an inline panel.
     if (error instanceof ApiError && error.state !== "session_expired") return { error };

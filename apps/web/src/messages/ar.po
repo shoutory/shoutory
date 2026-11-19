@@ -1298,3 +1298,119 @@ msgstr "لم تعد هذه الدعوة معلّقة"
 #. js-lingui-explicit-id
 msgid "invitations.ended.meaning"
 msgstr "تم قبولها أو إلغاؤها بالفعل. لم يتغيّر شيء."
+
+#. js-lingui-explicit-id
+msgid "shell.nav.admin"
+msgstr "الإدارة"
+
+#. js-lingui-explicit-id
+msgid "admin.title"
+msgstr "الإدارة"
+
+#. js-lingui-explicit-id
+msgid "admin.nav_label"
+msgstr "أقسام الإدارة"
+
+#. js-lingui-explicit-id
+msgid "admin.nav.signup"
+msgstr "التسجيل"
+
+#. js-lingui-explicit-id
+msgid "admin.nav.flags"
+msgstr "مفاتيح الميزات"
+
+#. js-lingui-explicit-id
+msgid "admin.nav.providers"
+msgstr "تطبيقات المزوّدين"
+
+#. js-lingui-explicit-id
+msgid "admin.providers.title"
+msgstr "تطبيقات المزوّدين"
+
+#. js-lingui-explicit-id
+msgid "admin.providers.empty_title"
+msgstr "لا توجد تطبيقات مزوّدين في هذا الإصدار"
+
+#. js-lingui-explicit-id
+msgid "admin.providers.empty_body"
+msgstr "يظهر هنا كل مزوّد قناة يحتاج إلى تطبيق خاص بك عند توفره."
+
+#. js-lingui-explicit-id
+msgid "admin.flags.title"
+msgstr "مفاتيح الميزات"
+
+#. js-lingui-explicit-id
+msgid "admin.flags.col_flag"
+msgstr "المفتاح"
+
+#. js-lingui-explicit-id
+msgid "admin.flags.col_owner"
+msgstr "المسؤول"
+
+#. js-lingui-explicit-id
+msgid "admin.flags.col_remove_by"
+msgstr "تاريخ الإزالة"
+
+#. js-lingui-explicit-id
+msgid "admin.flags.col_state"
+msgstr "الحالة"
+
+#. js-lingui-explicit-id
+msgid "admin.flags.col_override"
+msgstr "التجاوز"
+
+#. js-lingui-explicit-id
+msgid "admin.flags.expired"
+msgstr "منتهٍ"
+
+#. js-lingui-explicit-id
+msgid "admin.flags.on"
+msgstr "مفعّل"
+
+#. js-lingui-explicit-id
+msgid "admin.flags.off"
+msgstr "معطّل"
+
+#. js-lingui-explicit-id
+msgid "admin.flags.default_on"
+msgstr "الافتراضي (مفعّل)"
+
+#. js-lingui-explicit-id
+msgid "admin.flags.default_off"
+msgstr "الافتراضي (معطّل)"
+
+#. js-lingui-explicit-id
+msgid "admin.flags.override_of"
+msgstr "تجاوز {key}"
+
+#. js-lingui-explicit-id
+msgid "admin.flags.gone"
+msgstr "تجاوز تاريخ إزالته؛ لا يمكن تغييره."
+
+#. js-lingui-explicit-id
+msgid "admin.flags.saving"
+msgstr "جارٍ حفظ التجاوز…"
+
+#. js-lingui-explicit-id
+msgid "admin.signup.title"
+msgstr "التسجيل"
+
+#. js-lingui-explicit-id
+msgid "admin.signup.label"
+msgstr "السماح لأي شخص بالتسجيل"
+
+#. js-lingui-explicit-id
+msgid "admin.signup.saving"
+msgstr "جارٍ الحفظ…"
+
+#. js-lingui-explicit-id
+msgid "admin.signup.effect_on"
+msgstr "يمكن لأي شخص إنشاء حساب على هذا التثبيت."
+
+#. js-lingui-explicit-id
+msgid "admin.signup.effect_off"
+msgstr "التسجيل متوقف: يمكن للعناوين المدعوة فقط إنشاء حساب."
+
+#. js-lingui-explicit-id
+msgid "admin.signup.exceptions"
+msgstr "أول تسجيل على تثبيت فارغ يكون مفتوحًا دائمًا، ويمكن للعنوان المدعو أن يسجّل حتى لو كان التسجيل متوقفًا."

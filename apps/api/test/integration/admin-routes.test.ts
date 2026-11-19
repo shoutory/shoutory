@@ -243,3 +243,24 @@ describe("admin storage check route", () => {
     expect(await auditCount()).toBe(rows);
   });
 });
+
+// The shell asks once whether to show the Admin entry: true for the instance admin, false (never an error) for any
+// other signed-in user, 401 without a session.
+describe("GET /api/v1/instance/admin", () => {
+  const rows: Array<[string, number, boolean | undefined, () => Promise<string>]> = [
+    ["the instance admin", 200, true, () => login()],
+    ["another signed-in user", 200, false, async () => outsider.cookie],
+    ["no session", 401, undefined, async () => ""],
+  ];
+  it.each(rows)("answers %s with status %s and admin %s", async (_who, status, admin, cookie) => {
+    const answer = await send("GET", "/api/v1/instance/admin", await cookie(), undefined);
+    expect(answer.status).toBe(status);
+    if (admin !== undefined) expect(await answer.json()).toEqual({ data: { admin } });
+  });
+
+  // A per-user answer must never be replayed from a shared cache, whatever the user is.
+  it("carries Cache-Control: no-store", async () => {
+    const answer = await send("GET", "/api/v1/instance/admin", outsider.cookie, undefined);
+    expect(answer.headers.get("cache-control")).toBe("no-store");
+  });
+});

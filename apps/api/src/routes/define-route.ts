@@ -259,6 +259,22 @@ async function runScoped(
 }
 
 /**
+ * The headers the policy adds to an answer. An answer for a signed-in caller is that caller's, so a shared cache must
+ * never replay it to another: it is `no-store` unless the handler chose a value. The cookies a sliding refresh produced
+ * ride along, but a cookie the handler already set (a sign-out's expiry) is not overridden by them.
+ */
+function withPolicyHeaders(response: Response, policy: Policy, cookies: readonly string[]): Response {
+  if (policy !== "public" && !response.headers.has("cache-control")) {
+    response.headers.set("cache-control", "no-store");
+  }
+  const set = new Set(response.headers.getSetCookie().map((line) => line.split("=")[0]));
+  for (const cookie of cookies) {
+    if (!set.has(cookie.split("=")[0])) response.headers.append("set-cookie", cookie);
+  }
+  return response;
+}
+
+/**
  * The only way to add a route. The policy and the access are declared, CSRF and the body limit run first, every input
  * schema is a strict object and a failed validation answers with the error envelope.
  */
@@ -306,12 +322,7 @@ export function defineRoute<
       const result = await runScoped(state, spec as never, base as Base, c.get("session"));
       const response =
         result instanceof Response ? result : c.json({ data: result ?? null }, spec.status ?? 200);
-      // A cookie the handler already set (a sign-out's expiry) is not overridden by the policy's refreshed one.
-      const set = new Set(response.headers.getSetCookie().map((line) => line.split("=")[0]));
-      for (const cookie of cookies) {
-        if (!set.has(cookie.split("=")[0])) response.headers.append("set-cookie", cookie);
-      }
-      return response;
+      return withPolicyHeaders(response, spec.policy, cookies);
     }) as never,
   );
   state.routes.push({

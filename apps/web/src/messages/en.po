@@ -1300,3 +1300,119 @@ msgstr "That invitation is no longer pending"
 #. js-lingui-explicit-id
 msgid "invitations.ended.meaning"
 msgstr "It was accepted or revoked already. Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "shell.nav.admin"
+msgstr "Admin"
+
+#. js-lingui-explicit-id
+msgid "admin.title"
+msgstr "Admin"
+
+#. js-lingui-explicit-id
+msgid "admin.nav_label"
+msgstr "Admin sections"
+
+#. js-lingui-explicit-id
+msgid "admin.nav.signup"
+msgstr "Sign-up"
+
+#. js-lingui-explicit-id
+msgid "admin.nav.flags"
+msgstr "Feature flags"
+
+#. js-lingui-explicit-id
+msgid "admin.nav.providers"
+msgstr "Provider apps"
+
+#. js-lingui-explicit-id
+msgid "admin.providers.title"
+msgstr "Provider apps"
+
+#. js-lingui-explicit-id
+msgid "admin.providers.empty_title"
+msgstr "There are no provider apps in this build"
+
+#. js-lingui-explicit-id
+msgid "admin.providers.empty_body"
+msgstr "Each channel provider that needs an app of your own appears here once it ships."
+
+#. js-lingui-explicit-id
+msgid "admin.flags.title"
+msgstr "Feature flags"
+
+#. js-lingui-explicit-id
+msgid "admin.flags.col_flag"
+msgstr "Flag"
+
+#. js-lingui-explicit-id
+msgid "admin.flags.col_owner"
+msgstr "Owner"
+
+#. js-lingui-explicit-id
+msgid "admin.flags.col_remove_by"
+msgstr "Removal date"
+
+#. js-lingui-explicit-id
+msgid "admin.flags.col_state"
+msgstr "State"
+
+#. js-lingui-explicit-id
+msgid "admin.flags.col_override"
+msgstr "Override"
+
+#. js-lingui-explicit-id
+msgid "admin.flags.expired"
+msgstr "Expired"
+
+#. js-lingui-explicit-id
+msgid "admin.flags.on"
+msgstr "On"
+
+#. js-lingui-explicit-id
+msgid "admin.flags.off"
+msgstr "Off"
+
+#. js-lingui-explicit-id
+msgid "admin.flags.default_on"
+msgstr "Default (on)"
+
+#. js-lingui-explicit-id
+msgid "admin.flags.default_off"
+msgstr "Default (off)"
+
+#. js-lingui-explicit-id
+msgid "admin.flags.override_of"
+msgstr "Override of {key}"
+
+#. js-lingui-explicit-id
+msgid "admin.flags.gone"
+msgstr "Past its removal date; it cannot be changed."
+
+#. js-lingui-explicit-id
+msgid "admin.flags.saving"
+msgstr "Saving the override…"
+
+#. js-lingui-explicit-id
+msgid "admin.signup.title"
+msgstr "Sign-up"
+
+#. js-lingui-explicit-id
+msgid "admin.signup.label"
+msgstr "Allow anyone to sign up"
+
+#. js-lingui-explicit-id
+msgid "admin.signup.saving"
+msgstr "Saving…"
+
+#. js-lingui-explicit-id
+msgid "admin.signup.effect_on"
+msgstr "Anyone can sign up for an account on this installation."
+
+#. js-lingui-explicit-id
+msgid "admin.signup.effect_off"
+msgstr "Sign-up is off: only invited addresses can sign up."
+
+#. js-lingui-explicit-id
+msgid "admin.signup.exceptions"
+msgstr "The first sign-up on an empty instance is always open, and an invited address may still sign up while this is off."

@@ -12,6 +12,7 @@ import { errorResponse, Refusal, toRefusal } from "./errors/refusal.js";
 import { registerHealth } from "./health/health.js";
 import { type Logger, logRequest } from "./logging/logger.js";
 import { registerAdmin } from "./routes/admin/admin.js";
+import { registerAdminMe } from "./routes/admin/me.js";
 import { registerStorageCheck } from "./routes/admin/storage-check.js";
 import { registerAudit } from "./routes/audit/audit.js";
 import { type App, type AppEnv, initRoutes } from "./routes/define-route.js";
@@ -119,6 +120,7 @@ export function createApp(options: AppOptions): App {
   registerUnsubscribe(app, options.auth, options.pool);
   registerInstance(app, options.pool, options.now ?? Date.now);
   registerAdmin(app, options.auth);
+  registerAdminMe(app);
   if (options.storage) registerStorageCheck(app, options.auth, options.storage);
   app.notFound((c) => errorResponse(c, new Refusal("not_found", "no such route")));
   // Last, so a route added before it is never shadowed by the shell (R360).
