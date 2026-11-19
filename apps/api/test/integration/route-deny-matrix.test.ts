@@ -197,6 +197,13 @@ describe("route table", () => {
     expect(find("PATCH")?.access).toEqual({ workspace: "workspace_id", permission: "settings.manage" });
   });
 
+  it("only the unsubscribe route opts out of the web-client CSRF check, and it is a public POST (R321)", () => {
+    const optedOut = registeredRoutes(fx.app).filter((route) => route.csrf === "token");
+    expect(optedOut.map((r) => `${r.method} ${r.path} ${r.policy}`)).toEqual([
+      "POST /api/v1/unsubscribe/:token public",
+    ]);
+  });
+
   it("an unregistered route and an unregistered method are refused before any handler or database connection", async () => {
     const user = await signedUser(fx, "unregistered");
     const owned = await seedWorkspace(fx, orgId);

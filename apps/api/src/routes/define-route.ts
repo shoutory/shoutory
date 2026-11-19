@@ -42,6 +42,8 @@ export interface RegisteredRoute {
   readonly policy: Policy;
   readonly access: Access;
   readonly looseQuery: boolean;
+  /** `web`: the web-client CSRF check runs; `token`: the path token is the credential (the one-click unsubscribe). */
+  readonly csrf: "web" | "token";
 }
 
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -86,6 +88,11 @@ export interface RouteSpec<
   readonly params?: P;
   /** The route authenticates by its cookie alone: a request carrying an `Authorization` header is refused. */
   readonly cookieOnly?: boolean;
+  /**
+   * The one opt-out of the web-client CSRF check (R321), only for a `public` route whose path token is the credential:
+   * a mail client's one-click POST carries neither the origin nor the client header, and no ambient credential.
+   */
+  readonly csrf?: "token";
   /** The success status; 200 unless the route creates something. */
   readonly status?: 200 | 201;
   /** A returned `Response` is sent as is; anything else is wrapped as `{ data }`. */
@@ -166,6 +173,11 @@ function assertStrict(where: string, schema: Shape | undefined): void {
 /** Refuses at registration an access that could reach data without a principal, a workspace or a known permission. */
 function assertAccess(spec: RouteSpec<Shape | undefined, Shape, Shape | undefined, Access>): void {
   const { access, policy, method, params } = spec;
+  if (spec.csrf === "token" && (policy !== "public" || method !== "post" || !params)) {
+    throw new Error(
+      `defineRoute: ${method} ${spec.path}: the token CSRF opt-out is for a public POST with a token`,
+    );
+  }
   const problem = accessProblem(access, policy, method, params);
   if (problem) throw new Error(`defineRoute: ${method} ${spec.path}: ${problem}`);
 }
@@ -264,7 +276,7 @@ export function defineRoute<
   assertAccess(spec as never);
   const middleware: MiddlewareHandler[] = [
     ...(spec.cookieOnly ? [refuseAuthorization] : []),
-    csrf(state.publicOrigin),
+    ...(spec.csrf === "token" ? [] : [csrf(state.publicOrigin)]),
   ];
   if (spec.body) middleware.push(bodyLimit({ maxSize: MAX_BODY_BYTES, onError: tooLarge }), requireJson);
   const route = createRoute({
@@ -308,5 +320,6 @@ export function defineRoute<
     policy: spec.policy,
     access: spec.access,
     looseQuery: spec.looseQuery === true,
+    csrf: spec.csrf ?? "web",
   });
 }

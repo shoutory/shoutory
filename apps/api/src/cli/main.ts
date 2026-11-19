@@ -1,6 +1,7 @@
 import { SECRET_VARIABLES } from "@shoutory/core/config";
 import { createScrubber } from "../logging/scrub.js";
 import { auditVerifyCommand } from "./audit-verify.js";
+import { mailCheckCommand } from "./mail-check.js";
 import { migrateCommand } from "./migrate.js";
 import { checkCommand } from "./secrets/check.js";
 import { resealCommand } from "./secrets/reseal.js";
@@ -11,7 +12,7 @@ export interface CliIo {
 }
 
 const USAGE =
-  "usage: shoutory <command>; commands: migrate, secrets check, secrets reseal, audit verify [YYYY-MM-DD]";
+  "usage: shoutory <command>; commands: migrate, mail check, secrets check, secrets reseal, audit verify [YYYY-MM-DD]";
 const KEK_PREFIX = "SHOUTORY_KEK_";
 const MIN_SECRET_LENGTH = 8;
 
@@ -47,6 +48,7 @@ const COMMANDS: ReadonlyMap<string, Command> = new Map([
       return 0;
     },
   ],
+  ["mail check", (env, io) => mailCheckCommand(env, io)],
   ["secrets check", checkCommand],
   ["secrets reseal", resealCommand],
 ]);

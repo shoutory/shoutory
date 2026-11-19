@@ -39,6 +39,7 @@ function envFor(db: TestDatabase, extra: Record<string, string>): NodeJS.Process
     SHOUTORY_SESSION_SECRET: "session-for-main-tests-0123456789a",
     SHOUTORY_SMTP_URL: "smtp://mailer-test:smtp-test-secret-1@mail.invalid:587",
     SHOUTORY_PUBLIC_ORIGIN: "https://app.example.test",
+    SHOUTORY_MAIL_FROM: "noreply@mail.example.test",
     // Tests listen on loopback only, never on all interfaces; the role is HTTP only unless a test asks for more.
     SHOUTORY_HOST: "127.0.0.1",
     SHOUTORY_ROLE: "api",

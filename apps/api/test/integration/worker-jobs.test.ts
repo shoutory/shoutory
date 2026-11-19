@@ -1,9 +1,13 @@
+import { SealedSecret } from "@shoutory/core/crypto";
+import { EnvKeyProvider } from "@shoutory/core/keys";
 import { withAdvisoryLock } from "@shoutory/db/locks";
 import { cloneTemplate, readTestEnv, type TestDatabase, withAdminClient } from "@shoutory/db/testing";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { PARTITION_CLASSES } from "../../src/jobs/registry.js";
 import { ensurePartitions, purgeExpired, startWorker } from "../../src/jobs/worker.js";
 import { createLogger } from "../../src/logging/logger.js";
+import { enqueueMail } from "../../src/mail/enqueue.js";
+import { startSmtpSink } from "../support/smtp-sink.js";
 
 const env = readTestEnv();
 const lines: string[] = [];
@@ -19,11 +23,18 @@ const adminOf =
   <T>(run: Parameters<typeof withAdminClient<T>>[2]) =>
     withAdminClient(env, database().name, run);
 const admin = adminOf(() => db);
-const options = (database: TestDatabase) => ({
+const keys = new EnvKeyProvider({
+  SHOUTORY_ACTIVE_KEY_ID: "k1",
+  SHOUTORY_KEK_K1: Buffer.alloc(32, 1).toString("base64"),
+});
+const pepper = new SealedSecret("worker-jobs-pepper-for-tests-0123456789");
+// Port 9 refuses connections: a test that does not read mail never reaches a server.
+const options = (database: TestDatabase, smtpUrl = "smtp://127.0.0.1:9") => ({
   connectionString: database.url("worker"),
   pool: database.pool("worker"),
   logger,
   role: "worker" as const,
+  mail: { keys, pepper, smtpUrl: new SealedSecret(smtpUrl), from: "noreply@mail.example.test" },
 });
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 // True once no connection of the queue client is left in `database`; false after a second.
@@ -159,6 +170,35 @@ describe("the worker's start and close", () => {
     await sleep(150);
     expect(await look()).toEqual(atClose);
     expect(await queueClientGone(db)).toBe(true);
+  });
+
+  it("sends queued mail through the mail sender, and close() stops it", async () => {
+    const sink = await startSmtpSink();
+    const worker = await startWorker({ ...options(db, sink.url), mailIntervalMs: 10 });
+    const queue = (n: number) =>
+      enqueueMail(
+        db.pool("app"),
+        {
+          workspaceId: null,
+          recipient: `wired-${n}@example.test`,
+          template: "verify_email",
+          locale: "en",
+          vars: {},
+          link: `https://app.example.test/verify#token=wired-${n}`,
+        },
+        { keys, pepper },
+      );
+    try {
+      await queue(1);
+      for (let tries = 0; tries < 100 && sink.messages.length === 0; tries++) await sleep(25);
+      expect(sink.messages).toHaveLength(1);
+      await worker.close();
+      await queue(2);
+      await sleep(150);
+      expect(sink.messages).toHaveLength(1);
+    } finally {
+      await sink.close();
+    }
   });
 
   it("a failed start leaves no open queue connection", async () => {

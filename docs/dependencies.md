@@ -180,3 +180,15 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
   that `apps/api` already declares.
 - Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
 - Rejected: a hand-written queue engine (infrastructure we do not reinvent).
+
+## nodemailer 10.3.1
+
+- Used for: the SMTP transport of the mail sender in `apps/api/src/jobs/mail-sender.ts`. SMTP is the only built-in
+  transport; the operator brings any SMTP server through `SHOUTORY_SMTP_URL`.
+- Licence: MIT-0 (`package.json` of the tarball says `MIT-0`; its `LICENSE` file is the MIT grant without the attribution
+  clause). Published 2026-10-29, more than 14 days before adoption. It has no runtime dependencies and ships its own type
+  declarations, so no `@types` package is added.
+- Egress: the SMTP connection is an operator-configured outbound call that does not go through `egressFetch`; it is an
+  operator egress exception that the egress policy lists.
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
+- Rejected: a hand-written SMTP client and MIME composer (infrastructure we do not reinvent).

@@ -13,7 +13,8 @@ type Scope =
   | "totp_code"
   | "password_reset"
   | "invite"
-  | "invite_accept";
+  | "invite_accept"
+  | "unsubscribe";
 
 // A successful sign-in refunds the whole account bucket: `bucket_take` accepts a cost down to minus the capacity.
 const LOGIN_ACCOUNT_CAPACITY = 100;
@@ -22,6 +23,10 @@ const LOGIN_ACCOUNT_CAPACITY = 100;
 export function pepperDigest(pepper: SealedSecret, purpose: string, value: string): string {
   return createHmac("sha256", Buffer.from(pepper.expose())).update(`${purpose}:${value}`).digest("hex");
 }
+
+/** The keyed digest of a mail address as the suppression list stores it: the address is lower-cased first (R323). */
+export const emailDigest = (pepper: SealedSecret, address: string): string =>
+  pepperDigest(pepper, "email_suppression", address.toLowerCase());
 
 const IPV6_GROUPS = 8;
 const IPV6_PREFIX_GROUPS = 4;

@@ -103,7 +103,17 @@ async function startWorkerRole(
   const pool = createAppPool(url, (error) => logger.error({ err: error }, "worker database pool error"));
   try {
     await assertMigrationsApplied(pool);
-    const worker = await startWorker({ connectionString: url, pool, logger, role });
+    // The worker and all roles need the sender; the configuration refuses a start without it.
+    if (config.mailFrom === undefined) throw new Error("SHOUTORY_MAIL_FROM is required");
+    const mail = {
+      keys: config.keys,
+      pepper: config.hmacPepper,
+      smtpUrl: config.smtpUrl,
+      from: config.mailFrom,
+      marketingFrom: config.mailMarketingFrom,
+      publicOrigin: config.publicOrigin,
+    };
+    const worker = await startWorker({ connectionString: url, pool, logger, role, mail });
     logger.info({ role }, "worker started");
     return {
       close: async () => {

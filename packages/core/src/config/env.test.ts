@@ -14,6 +14,7 @@ const valid: Record<string, string> = {
   SHOUTORY_SESSION_SECRET: "session-for-config-tests-0123456789",
   SHOUTORY_SMTP_URL: "smtp://mailer-test:smtp-test-secret-1@mail.invalid:587",
   SHOUTORY_PUBLIC_ORIGIN: "https://app.example.test",
+  SHOUTORY_MAIL_FROM: "noreply@mail.example.test",
   ...Object.fromEntries(
     ROLES.map((r) => [`SHOUTORY_DATABASE_PASSWORD_${r}`, `${r.toLowerCase()}-test-secret-1`]),
   ),
@@ -127,7 +128,7 @@ describe("start-up: shipped examples and printing", () => {
     const config = parseEnv(valid);
     const shown = [JSON.stringify(config), String(config), inspect(config, { depth: 6 })].join("\n");
     for (const key of Object.keys(valid).filter(
-      (k) => k !== "SHOUTORY_ACTIVE_KEY_ID" && k !== "SHOUTORY_PUBLIC_ORIGIN",
+      (k) => !["SHOUTORY_ACTIVE_KEY_ID", "SHOUTORY_PUBLIC_ORIGIN", "SHOUTORY_MAIL_FROM"].includes(k),
     )) {
       expect(shown).not.toContain(valid[key] as string);
     }
@@ -217,6 +218,41 @@ describe("start-up: HTTP settings", () => {
     expect(
       refusedVariable({ ...without("SHOUTORY_PUBLIC_ORIGIN"), SHOUTORY_ROLE: "worker" }),
     ).toBeUndefined();
+  });
+});
+
+describe("start-up: mail senders (R322)", () => {
+  const mail = valid;
+  const noFrom = (role: string): Env => ({ ...without("SHOUTORY_MAIL_FROM"), SHOUTORY_ROLE: role });
+
+  it.each(["worker", "all"])("requires SHOUTORY_MAIL_FROM for the %s role, which sends mail", (role) => {
+    expect(refusedVariable(noFrom(role))).toBe("SHOUTORY_MAIL_FROM");
+  });
+
+  it("does not require SHOUTORY_MAIL_FROM for the api role", () => {
+    expect(refusedVariable(noFrom("api"))).toBeUndefined();
+  });
+
+  it.each([
+    ["a bare address", "noreply@mail.example.test"],
+    ["a display name and an address", "Shoutory <noreply@mail.example.test>"],
+  ])("accepts %s as the sender and the marketing sender", (_name, address) => {
+    expect(
+      refusedVariable({ ...mail, SHOUTORY_MAIL_FROM: address, SHOUTORY_MAIL_MARKETING_FROM: address }),
+    ).toBeUndefined();
+  });
+
+  it.each([
+    ["SHOUTORY_MAIL_FROM", "not an address"],
+    ["SHOUTORY_MAIL_FROM", "Shoutory <noreply>"],
+    ["SHOUTORY_MAIL_MARKETING_FROM", "news@"],
+    ["SHOUTORY_MAIL_DKIM_SELECTOR", "has space"],
+  ])("refuses %s = %j and names the variable", (key, value) => {
+    expect(refusedVariable({ ...mail, [key]: value })).toBe(key);
+  });
+
+  it("leaves the marketing sender and the DKIM selector optional", () => {
+    expect(refusedVariable(mail)).toBeUndefined();
   });
 });
 

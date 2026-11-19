@@ -79,6 +79,51 @@ async function waitUpTo(promise: Promise<unknown>, ms: number): Promise<void> {
   clearTimeout(timer);
 }
 
+export interface IntervalLoop {
+  /** Ticks until stopped. Once only: a second start, or a start after stop, throws. */
+  start(): void;
+  /** Stops the loop and waits a bounded time for a tick in flight. */
+  stop(): Promise<void>;
+}
+
+/**
+ * An interval loop (R317): one tick in flight at a time, the next scheduled when it ends, a failed tick logged and
+ * never fatal. The outbox relay and the mail sender both run on it; `name` words their log line and their start error.
+ */
+export function intervalLoop(
+  name: string,
+  tick: () => Promise<unknown>,
+  logger: Logger,
+  intervalMs: number,
+  stopMs: number,
+): IntervalLoop {
+  let state: "idle" | "running" | "stopped" = "idle";
+  let timer: NodeJS.Timeout | undefined;
+  let running: Promise<void> = Promise.resolve();
+  function schedule(): void {
+    timer = setTimeout(() => {
+      running = tick()
+        .then(() => undefined)
+        .catch((error: unknown) => logger.error({ err: error }, `${name} tick failed`))
+        .finally(() => {
+          if (state === "running") schedule();
+        });
+    }, intervalMs);
+  }
+  return {
+    start() {
+      if (state !== "idle") throw new Error(`the ${name} starts once`);
+      state = "running";
+      schedule();
+    },
+    async stop() {
+      state = "stopped";
+      clearTimeout(timer);
+      await waitUpTo(running, stopMs);
+    },
+  };
+}
+
 /**
  * Runs the handler of one claimed row, then marks it with the claim's attempt; true when the mark took. A failure is
  * logged by type and error class only: an error message may carry the payload.
@@ -142,31 +187,5 @@ export function createOutboxRelay(options: OutboxRelayOptions): OutboxRelay {
     return marked;
   }
 
-  let state: "idle" | "running" | "stopped" = "idle";
-  let timer: NodeJS.Timeout | undefined;
-  let running: Promise<void> = Promise.resolve();
-  function schedule(): void {
-    timer = setTimeout(() => {
-      running = tick()
-        .then(() => undefined)
-        .catch((error: unknown) => logger.error({ err: error }, "outbox relay tick failed"))
-        .finally(() => {
-          if (state === "running") schedule();
-        });
-    }, intervalMs);
-  }
-
-  return {
-    tick,
-    start() {
-      if (state !== "idle") throw new Error("the outbox relay starts once");
-      state = "running";
-      schedule();
-    },
-    async stop() {
-      state = "stopped";
-      clearTimeout(timer);
-      await waitUpTo(running, stopTimeoutMs);
-    },
-  };
+  return { tick, ...intervalLoop("outbox relay", tick, logger, intervalMs, stopTimeoutMs) };
 }

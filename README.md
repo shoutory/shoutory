@@ -79,6 +79,9 @@ requires `TZ=UTC`.
 | `SHOUTORY_HMAC_PEPPER`                                                      | The pepper for API-key and token digests: at least 32 bytes                                                                       |
 | `SHOUTORY_SESSION_SECRET`                                                   | The session and two-factor secret: at least 32 bytes                                                                              |
 | `SHOUTORY_SMTP_URL`                                                         | The mail server, `smtp://` or `smtps://` with its credentials                                                                     |
+| `SHOUTORY_MAIL_FROM`                                                        | The sender of transactional mail (`user@domain` or `Name <user@domain>`); required for the `worker` and `all` roles                |
+| `SHOUTORY_MAIL_MARKETING_FROM`                                              | The sender of marketing mail; optional, and it must differ from `SHOUTORY_MAIL_FROM`: marketing mail is refused without it        |
+| `SHOUTORY_MAIL_DKIM_SELECTOR`                                               | The DKIM selector `shoutory mail check` looks up; optional                                                                        |
 | `SHOUTORY_DATABASE_URL_OWNER`, `_APP`, `_WORKER`, `_AUTH`, `_READONLY`      | One connection URL per database role                                                                                              |
 | `SHOUTORY_DATABASE_PASSWORD_OWNER`, `_APP`, `_WORKER`, `_AUTH`, `_READONLY` | The password each database role is created with                                                                                   |
 | `SHOUTORY_PUBLIC_ORIGIN`                                                    | The exact origin the web app is served from (`https://host[:port]`, no path, query or userinfo); no default; a worker may omit it |
@@ -106,6 +109,13 @@ time zone, the configuration and the applied migrations before it listens, and a
 job queue upgrade. A `worker` or `all` process then runs the scheduled upkeep, a 30-second heartbeat and the outbox relay
 as the worker role. `/readyz` is not ready while the outbox or the job queue is behind (60 s and 120 s), while no worker
 has beaten within 90 s, or before the job queue is installed; these limits are defaults to confirm.
+
+### Mail
+
+A `worker` or `all` process sends the queued mail over `SHOUTORY_SMTP_URL` from `SHOUTORY_MAIL_FROM`. Marketing mail is a
+separate class on its own sender and carries one-click unsubscribe headers; no marketing mail exists yet. `shoutory mail
+check` reads the sending domain of `SHOUTORY_MAIL_FROM` and prints whether its SPF, DMARC and DKIM records are present; a
+missing record is advice and the command still exits 0.
 
 ### Logs and telemetry
 

@@ -14,6 +14,7 @@ import { type App, type AppEnv, initRoutes } from "./routes/define-route.js";
 import { registerInvitations } from "./routes/invitations/invitations.js";
 import { registerMembers } from "./routes/members/members.js";
 import { registerOrganizations } from "./routes/organizations/organization.js";
+import { registerUnsubscribe } from "./routes/unsubscribe.js";
 import { registerWorkspaces } from "./routes/workspaces/workspace.js";
 import { clientAddressResolver } from "./security/client-address.js";
 
@@ -96,6 +97,7 @@ export function createApp(options: AppOptions): App {
   registerInvitations(app, options.auth);
   registerMembers(app, options.auth.ipHmac);
   registerAudit(app);
+  registerUnsubscribe(app, options.auth, options.pool);
   app.notFound((c) => errorResponse(c, new Refusal("not_found", "no such route")));
   return app;
 }

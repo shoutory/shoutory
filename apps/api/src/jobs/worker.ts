@@ -5,6 +5,7 @@ import type { AppPool } from "@shoutory/db/pool";
 import type { PgBoss } from "pg-boss";
 import type { Logger } from "../logging/logger.js";
 import { createBoss } from "./boss.js";
+import { createMailSender, type MailSenderOptions } from "./mail-sender.js";
 import { createOutboxRelay } from "./outbox-relay.js";
 import { JOB_QUEUES, PARTITION_CLASSES, parseJobPayload, RETENTION_CLASSES } from "./registry.js";
 
@@ -13,9 +14,15 @@ export interface WorkerOptions {
   readonly pool: AppPool;
   readonly logger: Logger;
   readonly role: "worker" | "all";
-  /** Beat and relay intervals; the defaults are the production values (30 s, 1 s). */
+  /** What the mail sender needs besides the pool and the logger. */
+  readonly mail: Pick<
+    MailSenderOptions,
+    "keys" | "pepper" | "smtpUrl" | "from" | "marketingFrom" | "publicOrigin"
+  >;
+  /** Beat, relay and mail intervals; the defaults are the production values (30 s, 1 s, 1 s). */
   readonly heartbeatMs?: number;
   readonly relayIntervalMs?: number;
+  readonly mailIntervalMs?: number;
 }
 export interface StartedWorker {
   close(): Promise<void>;
@@ -118,22 +125,25 @@ async function register(boss: PgBoss, pool: AppPool, logger: Logger): Promise<vo
 }
 
 /**
- * Starts the queue client with its schedules, the 30 s heartbeat and the outbox relay. The first beat is made before
- * this returns, so a worker that cannot reach the database fails its start instead of looking alive.
+ * Starts the queue client with its schedules, the 30 s heartbeat, the outbox relay and the mail sender. The first
+ * beat is made before this returns, so a worker that cannot reach the database fails its start instead of looking alive.
  */
 export async function startWorker({
   connectionString,
   pool,
   logger,
   role,
+  mail,
   heartbeatMs = HEARTBEAT_MS,
   relayIntervalMs = RELAY_INTERVAL_MS,
+  mailIntervalMs = RELAY_INTERVAL_MS,
 }: WorkerOptions): Promise<StartedWorker> {
   const boss = createBoss(connectionString, (error) => logger.error({ err: error }, "job queue error"));
   const workerId = randomUUID();
   const beat = () =>
     withSystem(pool, "heartbeat", (tx) => tx.query("SELECT app.worker_heartbeat($1, $2)", [workerId, role]));
   const relay = createOutboxRelay({ pool, handlers: {}, logger, intervalMs: relayIntervalMs });
+  const sender = createMailSender({ ...mail, pool, logger, intervalMs: mailIntervalMs });
   // A failed start stops the client, so its pool never stays open: `start` opens the pool before it checks the schema.
   try {
     await boss.start();
@@ -146,13 +156,14 @@ export async function startWorker({
     throw error;
   }
   relay.start();
+  sender.start();
   const timer = setInterval(() => {
     beat().catch((error: unknown) => logger.error({ err: error }, "worker heartbeat failed"));
   }, heartbeatMs);
   return {
     async close() {
       clearInterval(timer);
-      await relay.stop();
+      await Promise.all([relay.stop(), sender.stop()]);
       await boss.stop({ graceful: true, timeout: STOP_TIMEOUT_MS });
     },
   };

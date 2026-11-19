@@ -86,6 +86,12 @@ const isCidr = (value: string) => {
   const limit = family === 4 ? 32 : 128;
   return rest.length === 0 && family > 0 && /^[0-9]{1,3}$/.test(prefix ?? "") && Number(prefix) <= limit;
 };
+/** `user@domain` or `Display Name <user@domain>`; the display name may not carry a quote, angle bracket or line break. */
+const isSender = (value: string) => {
+  const found = /^(?:[^<>"\r\n]*<([^<>\s]+)>|([^<>\s"]+))$/.exec(value.trim());
+  return z.email().safeParse(found?.[1] ?? found?.[2]).success;
+};
+const sender = z.string().refine(isSender, "must be an address or Name <address>");
 const cidrList = z
   .string()
   .default("")
@@ -118,10 +124,21 @@ const httpSchema = z
       .string()
       .refine((value) => isIP(value) > 0, "must be an IPv4 or IPv6 address")
       .optional(),
+    // Transactional and marketing mail travel on separate senders (rule 100); there is no default sender address.
+    SHOUTORY_MAIL_FROM: sender.optional(),
+    SHOUTORY_MAIL_MARKETING_FROM: sender.optional(),
+    SHOUTORY_MAIL_DKIM_SELECTOR: z
+      .string()
+      .regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/, "must be a DNS label")
+      .optional(),
   })
   .superRefine((value, ctx) => {
     if (value.SHOUTORY_ROLE !== "worker" && value.SHOUTORY_PUBLIC_ORIGIN === undefined) {
       ctx.addIssue({ code: "custom", path: ["SHOUTORY_PUBLIC_ORIGIN"], message: "is required" });
+    }
+    // A role that sends mail needs the sender; the api role only queues it.
+    if (value.SHOUTORY_ROLE !== "api" && value.SHOUTORY_MAIL_FROM === undefined) {
+      ctx.addIssue({ code: "custom", path: ["SHOUTORY_MAIL_FROM"], message: "is required" });
     }
   });
 
@@ -139,6 +156,10 @@ export interface Config {
   hmacPepper: SealedSecret;
   sessionSecret: SealedSecret;
   smtpUrl: SealedSecret;
+  /** The transactional sender; set for every role that sends mail (`worker`, `all`). */
+  mailFrom: string | undefined;
+  mailMarketingFrom: string | undefined;
+  mailDkimSelector: string | undefined;
   databaseUrls: Readonly<Record<Role, SealedSecret>>;
 }
 
@@ -200,6 +221,9 @@ export function parseEnv(env: Env): Config {
     hmacPepper: secret("SHOUTORY_HMAC_PEPPER"),
     sessionSecret: secret("SHOUTORY_SESSION_SECRET"),
     smtpUrl: secret("SHOUTORY_SMTP_URL"),
+    mailFrom: http.data.SHOUTORY_MAIL_FROM,
+    mailMarketingFrom: http.data.SHOUTORY_MAIL_MARKETING_FROM,
+    mailDkimSelector: http.data.SHOUTORY_MAIL_DKIM_SELECTOR,
     databaseUrls: Object.fromEntries(
       ROLES.map((r) => [r, secret(`SHOUTORY_DATABASE_URL_${r.toUpperCase()}`)]),
     ) as Record<Role, SealedSecret>,
