@@ -2,7 +2,7 @@ import type { MessageDescriptor } from "@lingui/core";
 import { msg } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
 import { type ReactElement, useEffect, useState } from "react";
-import { Outlet, type RouteObject, replace, useMatches, useRouteError } from "react-router";
+import { Outlet, type Params, type RouteObject, replace, useMatches, useRouteError } from "react-router";
 import { ProfilePage } from "./account/profile";
 import { SecurityPage } from "./account/security";
 import { ForgotPage } from "./auth/forgot";
@@ -14,7 +14,9 @@ import { SignUpPage } from "./auth/sign-up";
 import { StepUpProvider } from "./auth/step-up";
 import { TwoFactorSetupPage } from "./auth/two-factor-setup";
 import { VerifyPage } from "./auth/verify";
+import { BillingPage } from "./billing/billing";
 import { ApiError } from "./http/client";
+import { ClientsPage } from "./org/clients";
 import { type PageHandle, usePageTitleAndFocus } from "./page-title";
 import {
   ForbiddenPage,
@@ -24,8 +26,15 @@ import {
   StartupFailurePage,
 } from "./pages/system-pages";
 import { SESSION_ROUTE_ID, sessionGuard } from "./session/session";
+import { GeneralPage } from "./settings/general";
 import { Shell, StartPage, WorkspaceHome } from "./shell/shell";
-import { isUnknownWorkspace, SHELL_ROUTE_ID, type ShellData, shellLoader } from "./shell/shell-data";
+import {
+  isUnknownOrganization,
+  isUnknownWorkspace,
+  SHELL_ROUTE_ID,
+  type ShellData,
+  shellLoader,
+} from "./shell/shell-data";
 import { Button } from "./ui/button";
 
 // The page names, in the words of each page's heading (system-pages.tsx).
@@ -43,11 +52,25 @@ const TITLES = {
   sessionExpired: msg({ id: "system.session_expired.title", message: "Your session has ended" }),
   notFound: msg({ id: "system.not_found.title", message: "Page not found" }),
   workspace: msg({ id: "shell.workspace.title", message: "Workspace" }),
+  clients: msg({ id: "org.clients.title", message: "Clients" }),
+  general: msg({ id: "settings.general.title", message: "General" }),
+  billing: msg({ id: "billing.title", message: "Billing" }),
   forbidden: msg({ id: "system.forbidden.title", message: "You do not have access to this page" }),
   maintenance: msg({ id: "system.maintenance.title", message: "Shoutory is not reachable right now" }),
   startupFailure: msg({ id: "system.startup_failure.title", message: "Shoutory did not start correctly" }),
 };
 const handle = (title: MessageDescriptor): PageHandle => ({ title });
+
+// An id that is none of mine shows the not-found page, so the page is titled as one.
+const titled = (
+  title: MessageDescriptor,
+  unknown: (shell: ShellData, params: Params) => boolean,
+): PageHandle => ({
+  title: (matches) => {
+    const shell = matches.find((match) => match.id === SHELL_ROUTE_ID)?.loaderData as ShellData | undefined;
+    return shell && unknown(shell, matches.at(-1)?.params ?? {}) ? TITLES.notFound : title;
+  },
+});
 
 // The system page for a failed call, chosen from its typed state (only a 503 or a network failure is
 // maintenance). Anything else that fails while the page loads is the start-up failure page.
@@ -172,18 +195,23 @@ export const routes: RouteObject[] = [
               },
               {
                 path: "w/:ws",
-                // An id that is none of mine shows the not-found page, so the page is titled as one.
-                handle: {
-                  title: (matches) => {
-                    const shell = matches.find((match) => match.id === SHELL_ROUTE_ID)?.loaderData as
-                      | ShellData
-                      | undefined;
-                    return shell && isUnknownWorkspace(shell, matches.at(-1)?.params.ws)
-                      ? TITLES.notFound
-                      : TITLES.workspace;
-                  },
-                } satisfies PageHandle,
+                handle: titled(TITLES.workspace, (shell, params) => isUnknownWorkspace(shell, params.ws)),
                 element: <WorkspaceHome />,
+              },
+              {
+                path: "w/:ws/settings/general",
+                handle: titled(TITLES.general, (shell, params) => isUnknownWorkspace(shell, params.ws)),
+                element: <GeneralPage />,
+              },
+              {
+                path: "o/:org/billing",
+                handle: titled(TITLES.billing, (shell, params) => isUnknownOrganization(shell, params.org)),
+                element: <BillingPage />,
+              },
+              {
+                path: "o/:org/clients",
+                handle: titled(TITLES.clients, (shell, params) => isUnknownOrganization(shell, params.org)),
+                element: <ClientsPage />,
               },
             ],
           },

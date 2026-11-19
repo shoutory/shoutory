@@ -54,10 +54,13 @@ export function ZonePicker({
   label,
   value,
   onChange,
+  isReadOnly = false,
 }: {
   label: string;
   value: string;
   onChange: (zone: string) => void;
+  /** The zone is shown and cannot be changed (a role that may only read the settings). */
+  isReadOnly?: boolean;
 }) {
   const { i18n, t } = useLingui();
   const locale: Locale = i18n.locale === "ar" ? "ar" : "en";
@@ -73,6 +76,7 @@ export function ZonePicker({
     <ComboBox
       defaultItems={items}
       selectedKey={value}
+      isReadOnly={isReadOnly}
       onSelectionChange={(key) => key !== null && onChange(String(key))}
       className="flex flex-col gap-2"
     >

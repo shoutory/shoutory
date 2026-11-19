@@ -29,6 +29,10 @@ export type ShellData = { organizations: Organization[]; workspaces: Workspace[]
 export const isUnknownWorkspace = (data: ShellData, id: string | undefined): boolean =>
   !("error" in data) && data.workspaces.length > 0 && !data.workspaces.some((w) => w.id === id);
 
+/** An id that is none of my organizations, or is a personal one (which has no clients or billing page). */
+export const isUnknownOrganization = (data: ShellData, id: string | undefined): boolean =>
+  !("error" in data) && !data.organizations.some((org) => org.id === id && org.type !== "personal");
+
 /** The id of the shell route; the pages under it read its loader data. */
 export const SHELL_ROUTE_ID = "shell";
 

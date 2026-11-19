@@ -1,5 +1,6 @@
 import { passwordPolicy } from "@shoutory/core/password";
 import { z } from "zod";
+import { nameOf } from "../names.js";
 
 export const AUTH_BASE = "/api/auth";
 
@@ -8,15 +9,8 @@ const email = z.email().max(320);
 const password = z.string().min(1).max(128);
 const userOut = z.object({ name: z.string(), email: z.string(), emailVerified: z.boolean() });
 const status = z.object({ status: z.boolean() });
-// A person's name, as sign-up and the profile take it: trimmed, 1 to 100 characters (the length of the JS string, which
-// is what the form counts too), with no control, format (bidi marks included) or line and paragraph separator.
-const FORBIDDEN_IN_NAME = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
-const personName = z
-  .string()
-  .trim()
-  .min(1)
-  .max(100)
-  .refine((value) => !FORBIDDEN_IN_NAME.test(value));
+// A person's name, as sign-up and the profile take it: the shared name rule, up to 100 characters.
+const personName = nameOf(100);
 const code = z.string().regex(/^\d{6}$/);
 
 type AuthPolicy = "public" | "session" | "step_up";

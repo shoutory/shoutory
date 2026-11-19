@@ -1,15 +1,12 @@
 import type { Context } from "hono";
 import { z } from "zod";
+import { nameOf } from "../names.js";
 import type { AppEnv } from "./define-route.js";
 
 // The input shapes and the list answer that the organization and workspace routes share.
 
-/** PostgreSQL text cannot hold U+0000 (it would answer 22021); the bounds are those of the name columns. */
-export const nameSchema = z
-  .string()
-  .min(1)
-  .max(128)
-  .refine((name) => !name.includes("\0"), "no NUL character");
+/** The name of an organization or a workspace: the shared name rule, with the bound of the name columns. */
+export const nameSchema = nameOf(128);
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;

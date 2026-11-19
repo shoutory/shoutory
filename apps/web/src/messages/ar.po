@@ -858,3 +858,207 @@ msgstr "مثال:"
 #. js-lingui-explicit-id
 msgid "auth.invite.mismatch.meaning"
 msgstr "أنت مسجّل الدخول بعنوان آخر. سجّل الخروج ثم سجّل الدخول بالعنوان الذي أُرسلت إليه الدعوة."
+
+#. js-lingui-explicit-id
+msgid "shell.nav.clients"
+msgstr "العملاء"
+
+#. js-lingui-explicit-id
+msgid "org.clients.title"
+msgstr "العملاء"
+
+#. js-lingui-explicit-id
+msgid "org.clients.add"
+msgstr "إضافة عميل"
+
+#. js-lingui-explicit-id
+msgid "org.clients.add_first"
+msgstr "أضف عميلك الأول"
+
+#. js-lingui-explicit-id
+msgid "org.clients.no_add"
+msgstr "فقط مديرو المؤسسة يمكنهم إضافة عملاء."
+
+#. js-lingui-explicit-id
+msgid "org.clients.empty_title"
+msgstr "لا يوجد عملاء بعد"
+
+#. js-lingui-explicit-id
+msgid "org.clients.empty_body"
+msgstr "العميل مساحة عمل لها قنواتها وتقويمها وموافقاتها."
+
+#. js-lingui-explicit-id
+msgid "org.clients.name"
+msgstr "اسم العميل"
+
+#. js-lingui-explicit-id
+msgid "org.clients.col_name"
+msgstr "الاسم"
+
+#. js-lingui-explicit-id
+msgid "org.clients.col_slug"
+msgstr "الاسم في العنوان"
+
+#. js-lingui-explicit-id
+msgid "org.clients.col_role"
+msgstr "دورك"
+
+#. js-lingui-explicit-id
+msgid "org.clients.col_action"
+msgstr "إجراء"
+
+#. js-lingui-explicit-id
+msgid "org.clients.settings"
+msgstr "الإعدادات"
+
+#. js-lingui-explicit-id
+msgid "org.clients.limit.what"
+msgstr "تعذّرت إضافة العميل"
+
+#. js-lingui-explicit-id
+msgid "org.clients.limit.meaning"
+msgstr "لدى هذه المؤسسة 100 عميل، وهو أقصى ما تستوعبه. لم يتغيّر شيء."
+
+#. js-lingui-explicit-id
+msgid "role.owner"
+msgstr "مالك"
+
+#. js-lingui-explicit-id
+msgid "role.admin"
+msgstr "مدير"
+
+#. js-lingui-explicit-id
+msgid "role.editor"
+msgstr "محرّر"
+
+#. js-lingui-explicit-id
+msgid "role.approver"
+msgstr "معتمِد"
+
+#. js-lingui-explicit-id
+msgid "role.viewer"
+msgstr "مشاهد"
+
+#. js-lingui-explicit-id
+msgid "role.member"
+msgstr "عضو"
+
+#. js-lingui-explicit-id
+msgid "org.clients.added"
+msgstr "تمت إضافة العميل."
+
+#. js-lingui-explicit-id
+msgid "shell.nav.settings"
+msgstr "الإعدادات"
+
+#. js-lingui-explicit-id
+msgid "settings.general.title"
+msgstr "عام"
+
+#. js-lingui-explicit-id
+msgid "settings.general.name"
+msgstr "الاسم"
+
+#. js-lingui-explicit-id
+msgid "settings.general.slug"
+msgstr "الاسم في العنوان"
+
+#. js-lingui-explicit-id
+msgid "settings.general.colour"
+msgstr "اللون"
+
+#. js-lingui-explicit-id
+msgid "settings.general.unsaved"
+msgstr "تغييرات غير محفوظة"
+
+#. js-lingui-explicit-id
+msgid "settings.slug_bad"
+msgstr "استخدم أحرفًا إنجليزية صغيرة وأرقامًا وشرطات."
+
+#. js-lingui-explicit-id
+msgid "settings.need_admin"
+msgstr "تحتاج دور المدير لحفظ التغييرات."
+
+#. js-lingui-explicit-id
+msgid "settings.general.slug_taken.what"
+msgstr "الاسم في العنوان مستخدم بالفعل"
+
+#. js-lingui-explicit-id
+msgid "settings.general.slug_taken.meaning"
+msgstr "يستخدمه عميل آخر في هذه المؤسسة. اختر اسمًا آخر. لم يتغيّر شيء."
+
+#. js-lingui-explicit-id
+msgid "settings.general.forbidden.what"
+msgstr "لم يعد بإمكانك تغيير هذه الإعدادات"
+
+#. js-lingui-explicit-id
+msgid "settings.general.forbidden.meaning"
+msgstr "تغيّر دورك. لم يُحفظ شيء."
+
+#. js-lingui-explicit-id
+msgid "settings.colour.red"
+msgstr "أحمر"
+
+#. js-lingui-explicit-id
+msgid "settings.colour.orange"
+msgstr "برتقالي"
+
+#. js-lingui-explicit-id
+msgid "settings.colour.amber"
+msgstr "كهرماني"
+
+#. js-lingui-explicit-id
+msgid "settings.colour.green"
+msgstr "أخضر"
+
+#. js-lingui-explicit-id
+msgid "settings.colour.teal"
+msgstr "فيروزي"
+
+#. js-lingui-explicit-id
+msgid "settings.colour.blue"
+msgstr "أزرق"
+
+#. js-lingui-explicit-id
+msgid "settings.colour.purple"
+msgstr "بنفسجي"
+
+#. js-lingui-explicit-id
+msgid "settings.colour.pink"
+msgstr "وردي"
+
+#. js-lingui-explicit-id
+msgid "shell.nav.billing"
+msgstr "الفوترة"
+
+#. js-lingui-explicit-id
+msgid "billing.title"
+msgstr "الفوترة"
+
+#. js-lingui-explicit-id
+msgid "billing.workspaces"
+msgstr "مساحات العمل"
+
+#. js-lingui-explicit-id
+msgid "billing.members"
+msgstr "الأعضاء"
+
+#. js-lingui-explicit-id
+msgid "billing.unlimited"
+msgstr "غير محدود"
+
+#. js-lingui-explicit-id
+msgid "billing.up_to"
+msgstr "حتى {limit}"
+
+#. js-lingui-explicit-id
+msgid "billing.used_of"
+msgstr "{used} من {limit}"
+
+#. js-lingui-explicit-id
+msgid "billing.empty_title"
+msgstr "لا شيء لعرضه بعد"
+
+#. js-lingui-explicit-id
+msgid "billing.empty_body"
+msgstr "يظهر الاستخدام عندما يكون في المؤسسة عميل يمكنك الوصول إليه."

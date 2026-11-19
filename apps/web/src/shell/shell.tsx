@@ -1,7 +1,7 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect } from "react";
 import { Link as AriaLink } from "react-aria-components";
-import { Link, Navigate, Outlet, useParams, useRevalidator, useSearchParams } from "react-router";
+import { Link, Navigate, NavLink, Outlet, useParams, useRevalidator, useSearchParams } from "react-router";
 import { Onboarding } from "../onboarding/onboarding";
 import { NotFoundPage } from "../pages/system-pages";
 import { DirText } from "../ui/dir-text";
@@ -60,18 +60,43 @@ function TopBar() {
   );
 }
 
+const NAV_LINK = "min-h-6 pointer-coarse:min-h-11 text-link underline";
+
+// The links of the place the person is in: the workspace's own, and its organization's unless that is a personal one
+// (a person on their own has no clients or billing).
 function Rail() {
-  const { ws } = useParams();
+  const { ws, org } = useParams();
   const { t } = useLingui();
+  const data = useShellData();
+  const lists = "error" in data ? undefined : data;
+  const orgId = org ?? lists?.workspaces.find((workspace) => workspace.id === ws)?.organization_id;
+  const shared = lists?.organizations.some(
+    (candidate) => candidate.id === orgId && candidate.type !== "personal",
+  );
   return (
     <nav
       aria-label={t({ id: "shell.nav_label", message: "Main navigation" })}
       className="fixed inset-x-0 bottom-0 z-30 flex gap-3 border-t border-border bg-surface px-5 py-3 md:static md:flex-col md:border-t-0 md:border-e"
     >
       {ws ? (
-        <Link to={`/w/${ws}`} className="min-h-6 pointer-coarse:min-h-11 text-link underline">
+        <NavLink to={`/w/${ws}`} end className={NAV_LINK}>
           <Trans id="shell.nav.home">Home</Trans>
-        </Link>
+        </NavLink>
+      ) : null}
+      {shared ? (
+        <NavLink to={`/o/${orgId}/clients`} className={NAV_LINK}>
+          <Trans id="shell.nav.clients">Clients</Trans>
+        </NavLink>
+      ) : null}
+      {shared ? (
+        <NavLink to={`/o/${orgId}/billing`} className={NAV_LINK}>
+          <Trans id="shell.nav.billing">Billing</Trans>
+        </NavLink>
+      ) : null}
+      {ws ? (
+        <NavLink to={`/w/${ws}/settings/general`} className={NAV_LINK}>
+          <Trans id="shell.nav.settings">Settings</Trans>
+        </NavLink>
       ) : null}
     </nav>
   );

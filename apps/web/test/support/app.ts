@@ -42,6 +42,11 @@ export const refusal = (code: string, status: number) =>
   json({ error: { code, message: "words the user must never see", requestId: "req-42" } }, status);
 const page = (rows: unknown[]) => json({ data: rows, meta: { next_cursor: null } });
 
+/** An answer that lists `rows` as one page. */
+export const pageOf = (rows: unknown[]) => () => page(rows);
+/** Lets pending calls and renders finish. */
+export const settle = () => act(async () => undefined);
+
 type Answer = () => Response | Promise<Response>;
 export interface Api {
   session?: Answer;
@@ -63,6 +68,9 @@ export interface Api {
   profile?: Answer;
   createOrganization?: Answer;
   createWorkspace?: Answer;
+  workspaceProfile?: Answer;
+  patchWorkspace?: Answer;
+  entitlements?: Answer;
   sessions?: Answer;
   revokeSession?: Answer;
   revokeOthers?: Answer;
@@ -98,6 +106,27 @@ export const DEVICES = [
 export const NEW_ORG = "0190a000-0000-7000-8000-0000000000a1";
 export const NEW_WORKSPACE = "0190a000-0000-7000-8000-0000000000b1";
 
+/** The profile of workspace w1 as GET and PATCH answer it. */
+export const PROFILE = {
+  id: "w1",
+  organization_id: "o1",
+  name: "Acme One",
+  slug: "acme-one",
+  colour: null,
+  default_tz: "Africa/Cairo",
+};
+
+// The settings calls of workspace w1: its profile (read and changed) and its plan limits.
+function settingsAnswers(api: Api): Record<string, Answer> {
+  return {
+    "/api/v1/workspaces/w1": api.workspaceProfile ?? (() => json({ data: PROFILE })),
+    "/api/v1/workspaces/w1:PATCH": api.patchWorkspace ?? (() => json({ data: PROFILE })),
+    "/api/v1/workspaces/w1/entitlements":
+      api.entitlements ??
+      (() => json({ data: { workspaces: { kind: "unlimited" }, members: { kind: "unlimited" } } })),
+  };
+}
+
 // The create calls of the onboarding: an organization, then its first workspace (both answer 201 with the row).
 function onboardingAnswers(api: Api): Record<string, Answer> {
   return {
@@ -127,6 +156,7 @@ function onboardingAnswers(api: Api): Record<string, Answer> {
 function securityAnswers(api: Api): Record<string, Answer> {
   return {
     ...onboardingAnswers(api),
+    ...settingsAnswers(api),
     "/api/auth/sessions": api.sessions ?? (() => json({ data: DEVICES })),
     "/api/auth/sessions/revoke": api.revokeSession ?? (() => json({ data: { revoked: true } })),
     "/api/auth/sessions/revoke-others": api.revokeOthers ?? (() => json({ data: { revoked: true } })),

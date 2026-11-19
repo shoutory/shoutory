@@ -1,5 +1,6 @@
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { OpenAPIHono } from "@hono/zod-openapi";
+import { type Entitlements, entitlements as selfHost } from "@shoutory/core/entitlements";
 import type { KeyProvider } from "@shoutory/core/keys";
 import type { StorageDriver } from "@shoutory/core/storage";
 import type { AppPool } from "@shoutory/db/pool";
@@ -19,6 +20,7 @@ import { registerInvitations } from "./routes/invitations/invitations.js";
 import { registerMembers } from "./routes/members/members.js";
 import { registerOrganizations } from "./routes/organizations/organization.js";
 import { registerUnsubscribe } from "./routes/unsubscribe.js";
+import { registerEntitlements } from "./routes/workspaces/entitlements.js";
 import { registerWorkspaces } from "./routes/workspaces/workspace.js";
 import { clientAddressResolver } from "./security/client-address.js";
 import { inlineScriptSource, readShell, registerStatic } from "./static/static.js";
@@ -40,6 +42,8 @@ export interface AppOptions {
   readonly storage?: StorageDriver;
   /** The folder of the built web app; when set, the app serves it after every other route. */
   readonly webRoot?: string | undefined;
+  /** The plan limits of a workspace; the self-host answer (nothing is limited) when absent. */
+  readonly entitlements?: Entitlements;
 }
 
 const SELF = ["'self'"];
@@ -108,6 +112,7 @@ export function createApp(options: AppOptions): App {
   registerAuthRoutes(app, options.auth);
   registerOrganizations(app, options.auth.ipHmac);
   registerWorkspaces(app, options.auth.ipHmac);
+  registerEntitlements(app, options.entitlements ?? selfHost);
   registerInvitations(app, options.auth);
   registerMembers(app, options.auth.ipHmac);
   registerAudit(app);

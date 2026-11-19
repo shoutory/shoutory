@@ -860,3 +860,207 @@ msgstr "Example:"
 #. js-lingui-explicit-id
 msgid "auth.invite.mismatch.meaning"
 msgstr "You are signed in with another address. Sign out, then sign in with the address the invitation was sent to."
+
+#. js-lingui-explicit-id
+msgid "shell.nav.clients"
+msgstr "Clients"
+
+#. js-lingui-explicit-id
+msgid "org.clients.title"
+msgstr "Clients"
+
+#. js-lingui-explicit-id
+msgid "org.clients.add"
+msgstr "Add client"
+
+#. js-lingui-explicit-id
+msgid "org.clients.add_first"
+msgstr "Add your first client"
+
+#. js-lingui-explicit-id
+msgid "org.clients.no_add"
+msgstr "Only organization admins can add clients."
+
+#. js-lingui-explicit-id
+msgid "org.clients.empty_title"
+msgstr "No clients yet"
+
+#. js-lingui-explicit-id
+msgid "org.clients.empty_body"
+msgstr "A client is a workspace with its own channels, calendar and approvals."
+
+#. js-lingui-explicit-id
+msgid "org.clients.name"
+msgstr "Name of the client"
+
+#. js-lingui-explicit-id
+msgid "org.clients.col_name"
+msgstr "Name"
+
+#. js-lingui-explicit-id
+msgid "org.clients.col_slug"
+msgstr "Address name"
+
+#. js-lingui-explicit-id
+msgid "org.clients.col_role"
+msgstr "Your role"
+
+#. js-lingui-explicit-id
+msgid "org.clients.col_action"
+msgstr "Action"
+
+#. js-lingui-explicit-id
+msgid "org.clients.settings"
+msgstr "Settings"
+
+#. js-lingui-explicit-id
+msgid "org.clients.limit.what"
+msgstr "We could not add the client"
+
+#. js-lingui-explicit-id
+msgid "org.clients.limit.meaning"
+msgstr "This organization already has 100 clients, the most it can hold. Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "role.owner"
+msgstr "Owner"
+
+#. js-lingui-explicit-id
+msgid "role.admin"
+msgstr "Admin"
+
+#. js-lingui-explicit-id
+msgid "role.editor"
+msgstr "Editor"
+
+#. js-lingui-explicit-id
+msgid "role.approver"
+msgstr "Approver"
+
+#. js-lingui-explicit-id
+msgid "role.viewer"
+msgstr "Viewer"
+
+#. js-lingui-explicit-id
+msgid "role.member"
+msgstr "Member"
+
+#. js-lingui-explicit-id
+msgid "org.clients.added"
+msgstr "Client added."
+
+#. js-lingui-explicit-id
+msgid "shell.nav.settings"
+msgstr "Settings"
+
+#. js-lingui-explicit-id
+msgid "settings.general.title"
+msgstr "General"
+
+#. js-lingui-explicit-id
+msgid "settings.general.name"
+msgstr "Name"
+
+#. js-lingui-explicit-id
+msgid "settings.general.slug"
+msgstr "Address name"
+
+#. js-lingui-explicit-id
+msgid "settings.general.colour"
+msgstr "Colour"
+
+#. js-lingui-explicit-id
+msgid "settings.general.unsaved"
+msgstr "Unsaved changes"
+
+#. js-lingui-explicit-id
+msgid "settings.slug_bad"
+msgstr "Use lowercase letters, digits and dashes."
+
+#. js-lingui-explicit-id
+msgid "settings.need_admin"
+msgstr "You need the admin role to save changes."
+
+#. js-lingui-explicit-id
+msgid "settings.general.slug_taken.what"
+msgstr "That address name is already used"
+
+#. js-lingui-explicit-id
+msgid "settings.general.slug_taken.meaning"
+msgstr "Another client of this organization has it. Choose another. Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "settings.general.forbidden.what"
+msgstr "You can no longer change these settings"
+
+#. js-lingui-explicit-id
+msgid "settings.general.forbidden.meaning"
+msgstr "Your role changed. Nothing was saved."
+
+#. js-lingui-explicit-id
+msgid "settings.colour.red"
+msgstr "Red"
+
+#. js-lingui-explicit-id
+msgid "settings.colour.orange"
+msgstr "Orange"
+
+#. js-lingui-explicit-id
+msgid "settings.colour.amber"
+msgstr "Amber"
+
+#. js-lingui-explicit-id
+msgid "settings.colour.green"
+msgstr "Green"
+
+#. js-lingui-explicit-id
+msgid "settings.colour.teal"
+msgstr "Teal"
+
+#. js-lingui-explicit-id
+msgid "settings.colour.blue"
+msgstr "Blue"
+
+#. js-lingui-explicit-id
+msgid "settings.colour.purple"
+msgstr "Purple"
+
+#. js-lingui-explicit-id
+msgid "settings.colour.pink"
+msgstr "Pink"
+
+#. js-lingui-explicit-id
+msgid "shell.nav.billing"
+msgstr "Billing"
+
+#. js-lingui-explicit-id
+msgid "billing.title"
+msgstr "Billing"
+
+#. js-lingui-explicit-id
+msgid "billing.workspaces"
+msgstr "Workspaces"
+
+#. js-lingui-explicit-id
+msgid "billing.members"
+msgstr "Members"
+
+#. js-lingui-explicit-id
+msgid "billing.unlimited"
+msgstr "Unlimited"
+
+#. js-lingui-explicit-id
+msgid "billing.up_to"
+msgstr "Up to {limit}"
+
+#. js-lingui-explicit-id
+msgid "billing.used_of"
+msgstr "{used} of {limit}"
+
+#. js-lingui-explicit-id
+msgid "billing.empty_title"
+msgstr "Nothing to show yet"
+
+#. js-lingui-explicit-id
+msgid "billing.empty_body"
+msgstr "Usage appears once the organization has a client you can reach."

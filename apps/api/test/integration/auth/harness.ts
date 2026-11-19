@@ -1,5 +1,6 @@
 import { createHash, createHmac } from "node:crypto";
 import { open, SealedSecret, type StoredSecret } from "@shoutory/core/crypto";
+import type { Entitlements } from "@shoutory/core/entitlements";
 import { EnvKeyProvider } from "@shoutory/core/keys";
 import type { StorageDriver } from "@shoutory/core/storage";
 import { createAppPool, createAuthDb } from "@shoutory/db/pool";
@@ -246,6 +247,8 @@ export interface FixtureOptions {
   readonly now?: () => number;
   /** The storage driver of the app; absent, the app has no storage routes. */
   readonly storage?: StorageDriver;
+  /** The plan limits of the app; absent, the app answers the core self-host value. */
+  readonly entitlements?: Entitlements;
 }
 
 const mailsOf =
@@ -330,6 +333,7 @@ function buildOn({ logger, hibp, authPool, appPool, options }: Parts, libraryPoo
   });
   const clock = options.now ? { now: options.now } : {};
   const storage = options.storage ? { storage: options.storage } : {};
+  const limits = options.entitlements ? { entitlements: options.entitlements } : {};
   const app = createApp({
     publicOrigin: ORIGIN,
     trustedProxies: [],
@@ -339,6 +343,7 @@ function buildOn({ logger, hibp, authPool, appPool, options }: Parts, libraryPoo
     auth,
     ...clock,
     ...storage,
+    ...limits,
   });
   return { app, auth };
 }

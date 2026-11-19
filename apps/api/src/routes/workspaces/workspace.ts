@@ -73,37 +73,60 @@ async function update(
 const isSlugClash = (error: unknown) =>
   (error as { constraint?: unknown }).constraint === "workspaces_organization_slug_key";
 
+// The organization holds at most 100 workspaces, so no derived slug needs more than 100 tries.
+const MAX_ATTEMPTS = 100;
+
+/** The nth try of a derived slug: the base, then `base-2`, `base-3`, the base cut so the whole stays within 63. */
+function attemptOf(base: string, attempt: number): string {
+  if (attempt === 1) return base;
+  const suffix = `-${attempt}`;
+  return base.slice(0, 63 - suffix.length).replace(/-+$/, "") + suffix;
+}
+
+type Audit = { requestId: string; ipHmac: Buffer };
+
+// One attempt is its own transaction: a clash aborts it, and the next try starts clean.
+const insertWorkspace = (inUserTx: InUserTx, body: z.infer<typeof create>, slugValue: string, audit: Audit) =>
+  inUserTx(async (tx) => {
+    const made = await tx.query<{ id: string }>("SELECT app.workspace_create($1, $2, $3, $4, $5, $6) AS id", [
+      body.organization_id,
+      body.name,
+      slugValue,
+      body.default_tz,
+      audit.requestId,
+      audit.ipHmac,
+    ]);
+    const newId = made.rows[0]?.id;
+    if (!newId) throw new Error("workspace_create returned no id");
+    return newId;
+  });
+
 // The caller's own new row is not readable here (no workspace context yet), so the answer is built from the input and
-// the id the definer returned; the colour is null until someone sets it.
-async function createWorkspace(
-  inUserTx: InUserTx,
-  body: z.infer<typeof create>,
-  audit: { requestId: string; ipHmac: Buffer },
-) {
-  const chosen = body.slug ?? slugOf(body.name);
-  try {
-    const id = await inUserTx(async (tx) => {
-      const made = await tx.query<{ id: string }>(
-        "SELECT app.workspace_create($1, $2, $3, $4, $5, $6) AS id",
-        [body.organization_id, body.name, chosen, body.default_tz, audit.requestId, audit.ipHmac],
-      );
-      const newId = made.rows[0]?.id;
-      if (!newId) throw new Error("workspace_create returned no id");
-      return newId;
-    });
-    return {
-      id,
-      organization_id: body.organization_id,
-      name: body.name,
-      slug: chosen,
-      colour: null,
-      default_tz: body.default_tz,
-    };
-  } catch (error) {
-    if (isSlugClash(error))
-      throw new Refusal("conflict", "slug already used in the organization", { cause: error });
-    throw error;
+// the id the definer returned; the colour is null until someone sets it. A slug the caller chose that is taken is a
+// conflict; a slug derived from the name is tried again with a number until one is free.
+async function createWorkspace(inUserTx: InUserTx, body: z.infer<typeof create>, audit: Audit) {
+  const base = slugOf(body.name);
+  const tries = body.slug
+    ? [body.slug]
+    : Array.from({ length: MAX_ATTEMPTS }, (_, at) => attemptOf(base, at + 1));
+  let clash: unknown;
+  for (const chosen of tries) {
+    try {
+      const id = await insertWorkspace(inUserTx, body, chosen, audit);
+      return {
+        id,
+        organization_id: body.organization_id,
+        name: body.name,
+        slug: chosen,
+        colour: null,
+        default_tz: body.default_tz,
+      };
+    } catch (error) {
+      if (!isSlugClash(error)) throw error;
+      clash = error;
+    }
   }
+  throw new Refusal("conflict", "slug already used in the organization", { cause: clash });
 }
 
 export function registerWorkspaces(app: App, ipHmac: (address: string) => Buffer): void {
