@@ -101,7 +101,41 @@ export interface Api {
   overrideFlag?: Answer;
   adminSettings?: Answer;
   setSignup?: Answer;
+  adminQueue?: Answer;
+  storageCheck?: Answer;
+  mailCheck?: Answer;
+  mailTest?: Answer;
+  adminSystem?: Answer;
 }
+
+/** The queue health of the instance: a running worker, a silent one, and the lag of the outbox and the job queue. */
+export const QUEUE = {
+  workers: [
+    {
+      worker_id: "worker-fresh",
+      role: "worker",
+      started_at: "2026-11-19T08:00:00Z",
+      seen_at: "2026-11-19T10:00:00Z",
+      stale: false,
+    },
+    {
+      worker_id: "worker-silent",
+      role: "all",
+      started_at: "2026-11-18T08:00:00Z",
+      seen_at: "2026-11-18T09:00:00Z",
+      stale: true,
+    },
+  ],
+  outbox_lag_seconds: 12,
+  jobs: { installed: true, lag_seconds: 3 },
+};
+
+/** The release information: version, channel and the migrations applied against those shipped. */
+export const SYSTEM = {
+  version: "1.2.3",
+  channel: "stable",
+  migrations: { applied: 12, shipped: 12, pending: [] as string[] },
+};
 
 /** The flags of the instance as the admin list answers them: one off, one forced off, one past its removal date. */
 export const FLAGS = [
@@ -143,6 +177,17 @@ function adminAnswers(api: Api, pathname: string, method: string): Answer | unde
     "/api/v1/admin/flags/*/override:PUT":
       api.overrideFlag ?? (() => json({ data: { key: "new-composer", on: true } })),
     "/api/v1/admin/settings:GET": api.adminSettings ?? (() => json({ data: [] })),
+    "/api/v1/admin/queue:GET": api.adminQueue ?? (() => json({ data: QUEUE })),
+    "/api/v1/admin/system:GET": api.adminSystem ?? (() => json({ data: SYSTEM })),
+    "/api/v1/admin/storage/check:POST":
+      api.storageCheck ??
+      (() =>
+        json({
+          data: { driver: "fs", writable: true, readable: true, free_bytes: 1_000_000, failure: null },
+        })),
+    "/api/v1/admin/mail/check:POST":
+      api.mailCheck ?? (() => json({ data: { domain: "mail.example.test", records: [] } })),
+    "/api/v1/admin/mail/test:POST": api.mailTest ?? (() => json({ data: { queued: true } })),
     "/api/v1/admin/settings/signup_enabled:PUT":
       api.setSignup ?? (() => json({ data: { key: "signup_enabled", value: true } })),
   };

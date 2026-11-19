@@ -8,7 +8,10 @@ import { SecurityPage } from "./account/security";
 import { AdminShell } from "./admin/admin-shell";
 import { FlagsPage } from "./admin/flags";
 import { ProvidersPage } from "./admin/providers";
+import { QueuePage } from "./admin/queue";
+import { ReleasesPage } from "./admin/releases";
 import { SignupSwitchPage } from "./admin/signup-switch";
+import { SystemPage } from "./admin/system";
 import { ForgotPage } from "./auth/forgot";
 import { InvitePage, inviteLoader } from "./auth/invite";
 import { MfaPage } from "./auth/mfa";
@@ -63,6 +66,9 @@ const TITLES = {
   members: msg({ id: "members.title", message: "Members" }),
   admin: msg({ id: "admin.title", message: "Admin" }),
   adminFlags: msg({ id: "admin.flags.title", message: "Feature flags" }),
+  adminQueue: msg({ id: "admin.queue.title", message: "Queue health" }),
+  adminSystem: msg({ id: "admin.system.title", message: "Mail and storage" }),
+  adminReleases: msg({ id: "admin.releases.title", message: "Releases" }),
   adminProviders: msg({ id: "admin.providers.title", message: "Provider apps" }),
   adminSignup: msg({ id: "admin.signup.title", message: "Sign-up" }),
   forbidden: msg({ id: "system.forbidden.title", message: "You do not have access to this page" }),
@@ -215,6 +221,9 @@ export const routes: RouteObject[] = [
                 children: [
                   { index: true, loader: () => replace("/admin/flags") },
                   { path: "flags", handle: handle(TITLES.adminFlags), element: <FlagsPage /> },
+                  { path: "queue", handle: handle(TITLES.adminQueue), element: <QueuePage /> },
+                  { path: "system", handle: handle(TITLES.adminSystem), element: <SystemPage /> },
+                  { path: "releases", handle: handle(TITLES.adminReleases), element: <ReleasesPage /> },
                   { path: "providers", handle: handle(TITLES.adminProviders), element: <ProvidersPage /> },
                   { path: "signup", handle: handle(TITLES.adminSignup), element: <SignupSwitchPage /> },
                 ],

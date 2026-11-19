@@ -1,13 +1,11 @@
 import { assertKeyIdsLoaded, KeyError, type KeyProvider } from "@shoutory/core/keys";
-import { loadMigrations } from "@shoutory/db/migrate";
 import type { AppPool } from "@shoutory/db/pool";
 import { sealedKeyIds } from "@shoutory/db/startup";
 import { isUnavailable, Refusal } from "../errors/refusal.js";
 import { type App, defineRoute } from "../routes/define-route.js";
 import { assertJobsHealthy } from "./jobs.js";
+import { migrationStatus } from "./migrations.js";
 import { assertPartitionRunway } from "./partitions.js";
-
-const UNDEFINED_TABLE = "42P01";
 
 /** Every key id a sealed row holds must have a loaded key, or those rows could never be opened again. */
 async function assertKeysHeld(pool: AppPool, keys: KeyProvider): Promise<void> {
@@ -36,31 +34,10 @@ async function assertKeysHeld(pool: AppPool, keys: KeyProvider): Promise<void> {
  * Concurrent requests share one probe.
  */
 function readiness(pool: AppPool, keys: KeyProvider): () => Promise<void> {
-  let shipped: Promise<string[]> | undefined;
   let inFlight: Promise<void> | undefined;
 
   async function probe(): Promise<void> {
-    shipped ??= loadMigrations().then((all) => all.map(({ name }) => name));
-    // A failed read is not remembered: the next probe reads the folder again.
-    const names = await shipped.catch((error: unknown) => {
-      shipped = undefined;
-      throw error;
-    });
-    let applied = new Set<string>();
-    try {
-      const rows = (await pool.query("SELECT name FROM app.schema_migrations")).rows as { name: string }[];
-      applied = new Set(rows.map((row) => row.name));
-    } catch (error) {
-      if (isUnavailable(error)) {
-        throw new Refusal("service_unavailable", "database unreachable", {
-          cause: error,
-          details: { cause: "database_unreachable" },
-        });
-      }
-      // A database that was never migrated has no record table: every shipped file is missing.
-      if ((error as { code?: string }).code !== UNDEFINED_TABLE) throw error;
-    }
-    if (names.some((name) => !applied.has(name))) {
+    if ((await migrationStatus(pool)).pending.length > 0) {
       throw new Refusal("service_unavailable", "a shipped migration is not applied", {
         details: { cause: "migrations_missing" },
       });

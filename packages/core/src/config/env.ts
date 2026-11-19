@@ -104,6 +104,8 @@ const cidrList = z
   )
   .pipe(z.array(z.string().refine(isCidr, "must be a comma-separated list of CIDR ranges")));
 
+const RELEASE_CHANNELS = ["stable", "beta", "nightly"] as const;
+
 // The non-secret HTTP settings (R41). The origin has no default: a default would let CSRF accept a wrong origin.
 const httpSchema = z
   .object({
@@ -137,6 +139,8 @@ const httpSchema = z
       .string()
       .regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/, "must be a DNS label")
       .optional(),
+    // Build metadata the image sets per tag (what the admin screen shows); not a feature switch.
+    SHOUTORY_RELEASE_CHANNEL: z.enum(RELEASE_CHANNELS).default("stable"),
   })
   .superRefine((value, ctx) => {
     if (value.SHOUTORY_ROLE !== "worker" && value.SHOUTORY_PUBLIC_ORIGIN === undefined) {
@@ -280,6 +284,8 @@ export interface Config {
   mailFrom: string | undefined;
   mailMarketingFrom: string | undefined;
   mailDkimSelector: string | undefined;
+  /** The release channel of this build: `stable` unless the image says `beta` or `nightly`. */
+  releaseChannel: (typeof RELEASE_CHANNELS)[number];
   storage: StorageConfig;
   databaseUrls: Readonly<Record<Role, SealedSecret>>;
 }
@@ -346,6 +352,7 @@ export function parseEnv(env: Env): Config {
     mailFrom: http.data.SHOUTORY_MAIL_FROM,
     mailMarketingFrom: http.data.SHOUTORY_MAIL_MARKETING_FROM,
     mailDkimSelector: http.data.SHOUTORY_MAIL_DKIM_SELECTOR,
+    releaseChannel: http.data.SHOUTORY_RELEASE_CHANNEL,
     storage: parseStorageEnv(env),
     databaseUrls: Object.fromEntries(
       ROLES.map((r) => [r, secret(`SHOUTORY_DATABASE_URL_${r.toUpperCase()}`)]),

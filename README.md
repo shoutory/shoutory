@@ -98,6 +98,7 @@ requires `TZ=UTC`.
 | `SHOUTORY_MAIL_FROM`                                                        | The sender of transactional mail (`user@domain` or `Name <user@domain>`); required for the `worker` and `all` roles                |
 | `SHOUTORY_MAIL_MARKETING_FROM`                                              | The sender of marketing mail; optional, and it must differ from `SHOUTORY_MAIL_FROM`: marketing mail is refused without it        |
 | `SHOUTORY_MAIL_DKIM_SELECTOR`                                               | The DKIM selector `shoutory mail check` looks up; optional                                                                        |
+| `SHOUTORY_RELEASE_CHANNEL`                                                  | The release channel of this build, `stable` (default), `beta` or `nightly`; the image sets it, and the admin screen shows it      |
 | `SHOUTORY_DATABASE_URL_OWNER`, `_APP`, `_WORKER`, `_AUTH`, `_READONLY`      | One connection URL per database role                                                                                              |
 | `SHOUTORY_DATABASE_PASSWORD_OWNER`, `_APP`, `_WORKER`, `_AUTH`, `_READONLY` | The password each database role is created with                                                                                   |
 | `SHOUTORY_PUBLIC_ORIGIN`                                                    | The exact origin the web app is served from (`https://host[:port]`, no path, query or userinfo); no default; a worker may omit it |

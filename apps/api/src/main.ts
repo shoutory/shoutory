@@ -78,6 +78,8 @@ async function startServer(config: Config, logger: Logger): Promise<RunningServe
       auth,
       storage: createStorageDriver(config.storage),
       webRoot: config.webRoot,
+      mail: { from: config.mailFrom, dkimSelector: config.mailDkimSelector },
+      releaseChannel: config.releaseChannel,
     });
     const server = await listen(app.fetch, config.port, config.host);
     logger.info({ port: server.port, role: config.role }, "listening");

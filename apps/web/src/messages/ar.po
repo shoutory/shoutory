@@ -1414,3 +1414,227 @@ msgstr "التسجيل متوقف: يمكن للعناوين المدعوة فق
 #. js-lingui-explicit-id
 msgid "admin.signup.exceptions"
 msgstr "أول تسجيل على تثبيت فارغ يكون مفتوحًا دائمًا، ويمكن للعنوان المدعو أن يسجّل حتى لو كان التسجيل متوقفًا."
+
+#. js-lingui-explicit-id
+msgid "admin.nav.queue"
+msgstr "حالة الطوابير"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.title"
+msgstr "حالة الطوابير"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.seconds"
+msgstr "{seconds} ث"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.workers"
+msgstr "العمّال"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.col_worker"
+msgstr "العامل"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.col_role"
+msgstr "الدور"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.col_seen"
+msgstr "آخر ظهور"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.col_state"
+msgstr "الحالة"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.stale"
+msgstr "متوقف (العامل صامت)"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.running"
+msgstr "يعمل"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.no_worker"
+msgstr "لم يبلّغ أي عامل"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.no_worker_body"
+msgstr "لا شيء يعالج البريد أو المهام حتى يبدأ عامل ويبلّغ."
+
+#. js-lingui-explicit-id
+msgid "admin.not_available"
+msgstr "غير متاح"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.outbox_lag"
+msgstr "تأخر صندوق الأحداث"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.job_lag"
+msgstr "تأخر طابور المهام"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.jobs_missing"
+msgstr "طابور المهام غير مثبّت"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.stuck"
+msgstr "العمليات العالقة"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.reconciler"
+msgstr "متأخرات المطابقة"
+
+#. js-lingui-explicit-id
+msgid "admin.nav.system"
+msgstr "البريد والتخزين"
+
+#. js-lingui-explicit-id
+msgid "admin.system.title"
+msgstr "البريد والتخزين"
+
+#. js-lingui-explicit-id
+msgid "admin.system.intro"
+msgstr "هذه الفحوص لا تغيّر شيئًا، عدا أن رسالة الاختبار تضع رسالة اختبار واحدة في الطابور إلى عنوانك."
+
+#. js-lingui-explicit-id
+msgid "admin.system.running"
+msgstr "جارٍ التشغيل…"
+
+#. js-lingui-explicit-id
+msgid "admin.system.storage"
+msgstr "التخزين"
+
+#. js-lingui-explicit-id
+msgid "admin.system.storage_intro"
+msgstr "يكتب كائنًا صغيرًا ويقرأه ثم يحذفه."
+
+#. js-lingui-explicit-id
+msgid "admin.system.storage_button"
+msgstr "فحص التخزين"
+
+#. js-lingui-explicit-id
+msgid "admin.system.driver"
+msgstr "المشغّل:"
+
+#. js-lingui-explicit-id
+msgid "admin.system.writable"
+msgstr "قابل للكتابة والقراءة"
+
+#. js-lingui-explicit-id
+msgid "admin.system.write_failed"
+msgstr "تعذّرت الكتابة في التخزين"
+
+#. js-lingui-explicit-id
+msgid "admin.system.read_failed"
+msgstr "تعذّرت القراءة من التخزين"
+
+#. js-lingui-explicit-id
+msgid "admin.system.delete_failed"
+msgstr "تعذّر الحذف من التخزين"
+
+#. js-lingui-explicit-id
+msgid "admin.system.timeout"
+msgstr "انتهت المهلة"
+
+#. js-lingui-explicit-id
+msgid "admin.system.domain"
+msgstr "نطاق الإرسال"
+
+#. js-lingui-explicit-id
+msgid "admin.system.domain_intro"
+msgstr "يبحث عن سجلات SPF وDMARC وDKIM للمرسِل."
+
+#. js-lingui-explicit-id
+msgid "admin.system.domain_button"
+msgstr "فحص نطاق البريد"
+
+#. js-lingui-explicit-id
+msgid "admin.system.no_sender"
+msgstr "لم يُحدَّد مرسِل بريد، فلا نطاق لفحصه."
+
+#. js-lingui-explicit-id
+msgid "admin.system.present"
+msgstr "موجود"
+
+#. js-lingui-explicit-id
+msgid "admin.system.missing"
+msgstr "مفقود"
+
+#. js-lingui-explicit-id
+msgid "admin.system.unchecked"
+msgstr "تعذّر الفحص"
+
+#. js-lingui-explicit-id
+msgid "admin.system.not_checked"
+msgstr "لم يُفحص (لا يوجد محدِّد)"
+
+#. js-lingui-explicit-id
+msgid "admin.system.test"
+msgstr "رسالة اختبار"
+
+#. js-lingui-explicit-id
+msgid "admin.system.test_intro"
+msgstr "تضع رسالة اختبار واحدة في الطابور إلى عنوانك."
+
+#. js-lingui-explicit-id
+msgid "admin.system.test_button"
+msgstr "إرسال رسالة اختبار"
+
+#. js-lingui-explicit-id
+msgid "admin.system.queued"
+msgstr "في الطابور. لا يظهر إن كانت غادرت التثبيت إلا بوصول الرسالة إلى بريدك."
+
+#. js-lingui-explicit-id
+msgid "admin.system.backup"
+msgstr "النسخ الاحتياطي"
+
+#. js-lingui-explicit-id
+msgid "admin.system.backup_note"
+msgstr "انسخ قاعدة البيانات ومجلد التخزين معًا: نسخة أحدهما دون الآخر لا يمكن استعادتها."
+
+#. js-lingui-explicit-id
+msgid "admin.nav.releases"
+msgstr "الإصدارات"
+
+#. js-lingui-explicit-id
+msgid "admin.releases.title"
+msgstr "الإصدارات"
+
+#. js-lingui-explicit-id
+msgid "admin.releases.version"
+msgstr "الإصدار"
+
+#. js-lingui-explicit-id
+msgid "admin.releases.channel"
+msgstr "القناة"
+
+#. js-lingui-explicit-id
+msgid "admin.releases.channel_stable"
+msgstr "مستقرة"
+
+#. js-lingui-explicit-id
+msgid "admin.releases.channel_beta"
+msgstr "تجريبية"
+
+#. js-lingui-explicit-id
+msgid "admin.releases.channel_nightly"
+msgstr "ليلية"
+
+#. js-lingui-explicit-id
+msgid "admin.releases.migrations"
+msgstr "ترحيلات قاعدة البيانات"
+
+#. js-lingui-explicit-id
+msgid "admin.releases.all_applied"
+msgstr "كل الترحيلات مطبّقة ({applied} من {shipped})"
+
+#. js-lingui-explicit-id
+msgid "admin.releases.behind"
+msgstr "لم تُطبَّق بعد: هذا التثبيت متأخر عن إصداره ({applied} من {shipped} مطبّقة)."
+
+#. js-lingui-explicit-id
+msgid "admin.releases.updates"
+msgstr "لا يُفحص وجود تحديثات: لا يجري هذا التثبيت أي اتصال خارجي بحثًا عن إصدار جديد."

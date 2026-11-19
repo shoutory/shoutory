@@ -67,6 +67,13 @@ export const TEMPLATES = {
     text: ({ link, vars }) =>
       `You are invited to join ${vars.workspaceName} as ${vars.role}. Open this link to accept:\n\n${link}\n\n${IGNORE}\n`,
   }),
+  mail_test: template({
+    class: "transactional",
+    vars: z.strictObject({}),
+    subject: () => "Test message from Shoutory",
+    text: ({ link }) =>
+      `This is the test message you asked for from the admin screen. If you can read it, outgoing mail works. The screen is here:\n\n${link}\n`,
+  }),
 } as const;
 
 export type TemplateName = keyof typeof TEMPLATES;

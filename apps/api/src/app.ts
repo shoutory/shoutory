@@ -12,8 +12,11 @@ import { errorResponse, Refusal, toRefusal } from "./errors/refusal.js";
 import { registerHealth } from "./health/health.js";
 import { type Logger, logRequest } from "./logging/logger.js";
 import { registerAdmin } from "./routes/admin/admin.js";
+import { type MailSettings, registerMailChecks } from "./routes/admin/mail.js";
 import { registerAdminMe } from "./routes/admin/me.js";
+import { registerQueue } from "./routes/admin/queue.js";
 import { registerStorageCheck } from "./routes/admin/storage-check.js";
+import { registerSystem } from "./routes/admin/system.js";
 import { registerAudit } from "./routes/audit/audit.js";
 import { type App, type AppEnv, initRoutes } from "./routes/define-route.js";
 import { registerInstance } from "./routes/instance.js";
@@ -43,6 +46,10 @@ export interface AppOptions {
   readonly storage?: StorageDriver;
   /** The folder of the built web app; when set, the app serves it after every other route. */
   readonly webRoot?: string | undefined;
+  /** The release channel of this build (`stable`, `beta`, `nightly`); `stable` when absent. */
+  readonly releaseChannel?: string;
+  /** The sender the admin mail check reads; absent, the check finds no domain and looks nothing up. */
+  readonly mail?: MailSettings;
   /** The plan limits of a workspace; the self-host answer (nothing is limited) when absent. */
   readonly entitlements?: Entitlements;
 }
@@ -121,6 +128,9 @@ export function createApp(options: AppOptions): App {
   registerInstance(app, options.pool, options.now ?? Date.now);
   registerAdmin(app, options.auth);
   registerAdminMe(app);
+  registerQueue(app);
+  registerSystem(app, options.pool, options.releaseChannel ?? "stable");
+  registerMailChecks(app, options.auth, options.mail ?? { from: undefined, dkimSelector: undefined });
   if (options.storage) registerStorageCheck(app, options.auth, options.storage);
   app.notFound((c) => errorResponse(c, new Refusal("not_found", "no such route")));
   // Last, so a route added before it is never shadowed by the shell (R360).

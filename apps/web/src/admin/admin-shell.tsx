@@ -40,6 +40,15 @@ export function AdminShell() {
         <NavLink to="/admin/signup" className={NAV_LINK}>
           <Trans id="admin.nav.signup">Sign-up</Trans>
         </NavLink>
+        <NavLink to="/admin/queue" className={NAV_LINK}>
+          <Trans id="admin.nav.queue">Queue health</Trans>
+        </NavLink>
+        <NavLink to="/admin/system" className={NAV_LINK}>
+          <Trans id="admin.nav.system">Mail and storage</Trans>
+        </NavLink>
+        <NavLink to="/admin/releases" className={NAV_LINK}>
+          <Trans id="admin.nav.releases">Releases</Trans>
+        </NavLink>
         <NavLink to="/admin/providers" className={NAV_LINK}>
           <Trans id="admin.nav.providers">Provider apps</Trans>
         </NavLink>

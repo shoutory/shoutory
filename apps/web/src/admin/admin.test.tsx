@@ -59,7 +59,7 @@ describe("the Admin entry and frame", () => {
     expect(adminCalls(stub)).toHaveLength(0);
   });
 
-  it("an instance admin sees the entry, /admin lands on the flags, and the nav lists the three screens", async () => {
+  it("an instance admin sees the entry, /admin lands on the flags, and the nav lists the six screens", async () => {
     const { host, router } = await openAdmin("/admin");
     expect(host.querySelector('nav a[href="/admin"]')?.textContent).toBe("Admin");
     expect(router.state.location.pathname).toBe("/admin/flags");
@@ -67,6 +67,9 @@ describe("the Admin entry and frame", () => {
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
       "/admin/flags",
       "/admin/signup",
+      "/admin/queue",
+      "/admin/system",
+      "/admin/releases",
       "/admin/providers",
     ]);
   });

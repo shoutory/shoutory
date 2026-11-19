@@ -221,6 +221,23 @@ describe("start-up: HTTP settings", () => {
   });
 });
 
+// The release channel is build metadata the image sets per tag, not a feature switch: stable unless it says otherwise.
+describe("start-up: release channel", () => {
+  it.each([
+    ["unset", undefined, "stable"],
+    ["stable", "stable", "stable"],
+    ["beta", "beta", "beta"],
+    ["nightly", "nightly", "nightly"],
+  ])("reads the release channel when it is %s", (_name, value, channel) => {
+    const env = value === undefined ? valid : withValue("SHOUTORY_RELEASE_CHANNEL", value);
+    expect((parseEnv(env) as unknown as { releaseChannel: string }).releaseChannel).toBe(channel);
+  });
+
+  it.each(["canary", "", "Stable"])("refuses the value %j and names the variable", (value) => {
+    expect(refusedVariable(withValue("SHOUTORY_RELEASE_CHANNEL", value))).toBe("SHOUTORY_RELEASE_CHANNEL");
+  });
+});
+
 describe("start-up: mail senders (R322)", () => {
   const mail = valid;
   const noFrom = (role: string): Env => ({ ...without("SHOUTORY_MAIL_FROM"), SHOUTORY_ROLE: role });

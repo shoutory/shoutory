@@ -1416,3 +1416,227 @@ msgstr "Sign-up is off: only invited addresses can sign up."
 #. js-lingui-explicit-id
 msgid "admin.signup.exceptions"
 msgstr "The first sign-up on an empty instance is always open, and an invited address may still sign up while this is off."
+
+#. js-lingui-explicit-id
+msgid "admin.nav.queue"
+msgstr "Queue health"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.title"
+msgstr "Queue health"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.seconds"
+msgstr "{seconds} s"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.workers"
+msgstr "Workers"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.col_worker"
+msgstr "Worker"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.col_role"
+msgstr "Role"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.col_seen"
+msgstr "Last seen"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.col_state"
+msgstr "State"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.stale"
+msgstr "Stale (worker silent)"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.running"
+msgstr "Running"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.no_worker"
+msgstr "No worker has reported"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.no_worker_body"
+msgstr "Nothing processes mail or jobs until a worker starts and reports."
+
+#. js-lingui-explicit-id
+msgid "admin.not_available"
+msgstr "Not available"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.outbox_lag"
+msgstr "Event outbox lag"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.job_lag"
+msgstr "Job queue lag"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.jobs_missing"
+msgstr "The job queue is not installed"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.stuck"
+msgstr "Stuck operations"
+
+#. js-lingui-explicit-id
+msgid "admin.queue.reconciler"
+msgstr "Reconciler backlog"
+
+#. js-lingui-explicit-id
+msgid "admin.nav.system"
+msgstr "Mail and storage"
+
+#. js-lingui-explicit-id
+msgid "admin.system.title"
+msgstr "Mail and storage"
+
+#. js-lingui-explicit-id
+msgid "admin.system.intro"
+msgstr "These checks change nothing, except that the test message queues one test message to your own address."
+
+#. js-lingui-explicit-id
+msgid "admin.system.running"
+msgstr "Running…"
+
+#. js-lingui-explicit-id
+msgid "admin.system.storage"
+msgstr "Storage"
+
+#. js-lingui-explicit-id
+msgid "admin.system.storage_intro"
+msgstr "Writes a small object, reads it back and deletes it."
+
+#. js-lingui-explicit-id
+msgid "admin.system.storage_button"
+msgstr "Check storage"
+
+#. js-lingui-explicit-id
+msgid "admin.system.driver"
+msgstr "Driver:"
+
+#. js-lingui-explicit-id
+msgid "admin.system.writable"
+msgstr "Writable and readable"
+
+#. js-lingui-explicit-id
+msgid "admin.system.write_failed"
+msgstr "Could not write to the storage"
+
+#. js-lingui-explicit-id
+msgid "admin.system.read_failed"
+msgstr "Could not read from the storage"
+
+#. js-lingui-explicit-id
+msgid "admin.system.delete_failed"
+msgstr "Could not delete from the storage"
+
+#. js-lingui-explicit-id
+msgid "admin.system.timeout"
+msgstr "Timed out"
+
+#. js-lingui-explicit-id
+msgid "admin.system.domain"
+msgstr "Sending domain"
+
+#. js-lingui-explicit-id
+msgid "admin.system.domain_intro"
+msgstr "Looks up the SPF, DMARC and DKIM records of the sender."
+
+#. js-lingui-explicit-id
+msgid "admin.system.domain_button"
+msgstr "Check mail domain"
+
+#. js-lingui-explicit-id
+msgid "admin.system.no_sender"
+msgstr "No mail sender is set, so there is no domain to check."
+
+#. js-lingui-explicit-id
+msgid "admin.system.present"
+msgstr "present"
+
+#. js-lingui-explicit-id
+msgid "admin.system.missing"
+msgstr "missing"
+
+#. js-lingui-explicit-id
+msgid "admin.system.unchecked"
+msgstr "could not be checked"
+
+#. js-lingui-explicit-id
+msgid "admin.system.not_checked"
+msgstr "not checked (no selector)"
+
+#. js-lingui-explicit-id
+msgid "admin.system.test"
+msgstr "Test message"
+
+#. js-lingui-explicit-id
+msgid "admin.system.test_intro"
+msgstr "Queues one test message to your own address."
+
+#. js-lingui-explicit-id
+msgid "admin.system.test_button"
+msgstr "Send test message"
+
+#. js-lingui-explicit-id
+msgid "admin.system.queued"
+msgstr "Queued. Whether it left the installation shows only as the message arriving in your inbox."
+
+#. js-lingui-explicit-id
+msgid "admin.system.backup"
+msgstr "Backups"
+
+#. js-lingui-explicit-id
+msgid "admin.system.backup_note"
+msgstr "Back up the database and the storage folder together: a backup of one without the other cannot be restored."
+
+#. js-lingui-explicit-id
+msgid "admin.nav.releases"
+msgstr "Releases"
+
+#. js-lingui-explicit-id
+msgid "admin.releases.title"
+msgstr "Releases"
+
+#. js-lingui-explicit-id
+msgid "admin.releases.version"
+msgstr "Version"
+
+#. js-lingui-explicit-id
+msgid "admin.releases.channel"
+msgstr "Channel"
+
+#. js-lingui-explicit-id
+msgid "admin.releases.channel_stable"
+msgstr "Stable"
+
+#. js-lingui-explicit-id
+msgid "admin.releases.channel_beta"
+msgstr "Beta"
+
+#. js-lingui-explicit-id
+msgid "admin.releases.channel_nightly"
+msgstr "Nightly"
+
+#. js-lingui-explicit-id
+msgid "admin.releases.migrations"
+msgstr "Database migrations"
+
+#. js-lingui-explicit-id
+msgid "admin.releases.all_applied"
+msgstr "All migrations are applied ({applied} of {shipped})"
+
+#. js-lingui-explicit-id
+msgid "admin.releases.behind"
+msgstr "Not applied yet: this instance is behind its build ({applied} of {shipped} applied)."
+
+#. js-lingui-explicit-id
+msgid "admin.releases.updates"
+msgstr "Updates are not checked: this installation makes no outbound call to look for a new release."

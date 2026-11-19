@@ -21,7 +21,7 @@ const overrideBody = z.strictObject({ on: z.boolean().nullable() });
 const signupBody = z.strictObject({ value: z.boolean() });
 
 /** Runs `run` in the caller's transaction once the caller is shown to be an instance admin. */
-const asAdmin = <T>(inUserTx: InUserTx, run: (tx: TenantTx) => Promise<T>): Promise<T> =>
+export const asAdmin = <T>(inUserTx: InUserTx, run: (tx: TenantTx) => Promise<T>): Promise<T> =>
   inUserTx(async (tx) => {
     const check = await tx.query<{ ok: boolean }>("SELECT app.instance_admin_check() AS ok");
     if (check.rows[0]?.ok !== true) throw new Refusal("not_found", "the caller is not an instance admin");
