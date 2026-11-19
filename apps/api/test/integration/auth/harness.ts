@@ -5,7 +5,7 @@ import { createAppPool, createAuthDb } from "@shoutory/db/pool";
 import { cloneTemplate, readTestEnv, type TestDatabase, withAdminClient } from "@shoutory/db/testing";
 import { inject } from "vitest";
 import { createApp } from "../../../src/app.js";
-import { createAuth } from "../../../src/auth/auth.js";
+import { type AuthService, createAuth } from "../../../src/auth/auth.js";
 import { createLogger } from "../../../src/logging/logger.js";
 import { emailLinkAad } from "../../../src/mail/enqueue.js";
 
@@ -47,6 +47,8 @@ export interface Fixture {
   /** Builds an app whose library runs on the given pool URL (a dead URL simulates its database failing). */
   appOn(authUrl: string): ReturnType<typeof createApp>;
   readonly app: ReturnType<typeof createApp>;
+  /** The authentication service of `app`, for a test that calls the library in process. */
+  readonly auth: AuthService;
   request(
     path: string,
     init?: { method?: string; body?: unknown; headers?: Record<string, string>; peer?: string },
@@ -237,6 +239,10 @@ export interface FixtureOptions {
   readonly pepper?: SealedSecret;
   /** Values the logger must mask, as the real process registers its secrets. */
   readonly secrets?: readonly string[];
+  /** Sign-up is open to anyone unless a test says `false`: the first verified user closes it by becoming the owner. */
+  readonly signupOpen?: boolean;
+  /** The clock of the app's in-process caches. */
+  readonly now?: () => number;
 }
 
 const mailsOf =
@@ -292,8 +298,49 @@ function accountHelpers({
   };
 }
 
+/** The state of an instance that has switched sign-up on: any address may register. */
+const openSignup = (database: string) =>
+  withAdminClient(env, database, (client) =>
+    client.query("INSERT INTO app.instance_settings (key, value) VALUES ('signup_enabled', 'true'::jsonb)"),
+  );
+
+interface Parts {
+  readonly logger: ReturnType<typeof createLogger>;
+  readonly hibp: HibpFake;
+  readonly authPool: ReturnType<TestDatabase["pool"]>;
+  readonly appPool: ReturnType<TestDatabase["pool"]>;
+  readonly options: FixtureOptions;
+}
+
+/** One app and its authentication service, with the library running on `libraryPool`. */
+function buildOn({ logger, hibp, authPool, appPool, options }: Parts, libraryPool: Parts["authPool"]) {
+  const auth = createAuth({
+    publicOrigin: ORIGIN,
+    secret: SECRET,
+    pepper: options.pepper ?? new SealedSecret(PEPPER),
+    keys,
+    db: createAuthDb(libraryPool),
+    pool: authPool,
+    appPool,
+    fetch: hibp.fetch,
+    logger,
+  });
+  const clock = options.now ? { now: options.now } : {};
+  const app = createApp({
+    publicOrigin: ORIGIN,
+    trustedProxies: [],
+    pool: appPool,
+    keys,
+    logger,
+    auth,
+    ...clock,
+  });
+  return { app, auth };
+}
+
 export async function startFixture(options: FixtureOptions = {}): Promise<Fixture> {
   const db = await cloneTemplate(env, inject("shoutoryTemplate"));
+  if (options.signupOpen !== false) await openSignup(db.name);
   const logged: string[] = [];
   const logger = createLogger({
     secrets: [SECRET, PEPPER, ...(options.secrets ?? [])],
@@ -306,23 +353,13 @@ export async function startFixture(options: FixtureOptions = {}): Promise<Fixtur
   const extraPools: (typeof authPool)[] = [];
   // A library URL replaces only the library's database: the throttle, the mail queue and the owner claim keep the
   // live pool, so a request still reaches the library before its database fails.
-  const buildApp = (libraryUrl: string | undefined) => {
+  const make = (libraryUrl: string | undefined) => {
     const libraryPool = libraryUrl ? createAppPool(libraryUrl, () => undefined) : authPool;
     if (libraryUrl) extraPools.push(libraryPool);
-    const auth = createAuth({
-      publicOrigin: ORIGIN,
-      secret: SECRET,
-      pepper: options.pepper ?? new SealedSecret(PEPPER),
-      keys,
-      db: createAuthDb(libraryPool),
-      pool: authPool,
-      appPool,
-      fetch: hibp.fetch,
-      logger,
-    });
-    return createApp({ publicOrigin: ORIGIN, trustedProxies: [], pool: appPool, keys, logger, auth });
+    return buildOn({ logger, hibp, authPool, appPool, options }, libraryPool);
   };
-  const app = buildApp(undefined);
+  const buildApp = (libraryUrl: string | undefined) => make(libraryUrl).app;
+  const { app, auth } = make(undefined);
   const request: Fixture["request"] = (path, init, on = app) => send(on, path, init);
   const admin: Fixture["admin"] = (run) => withAdminClient(env, db.name, run);
   const mails = mailsOf(admin);
@@ -332,6 +369,7 @@ export async function startFixture(options: FixtureOptions = {}): Promise<Fixtur
     db,
     logged,
     app,
+    auth,
     appOn: buildApp,
     request,
     mails,

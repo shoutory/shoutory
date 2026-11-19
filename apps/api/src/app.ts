@@ -9,8 +9,10 @@ import { registerAuthRoutes } from "./auth/mount.js";
 import { errorResponse, Refusal, toRefusal } from "./errors/refusal.js";
 import { registerHealth } from "./health/health.js";
 import { type Logger, logRequest } from "./logging/logger.js";
+import { registerAdmin } from "./routes/admin/admin.js";
 import { registerAudit } from "./routes/audit/audit.js";
 import { type App, type AppEnv, initRoutes } from "./routes/define-route.js";
+import { registerInstance } from "./routes/instance.js";
 import { registerInvitations } from "./routes/invitations/invitations.js";
 import { registerMembers } from "./routes/members/members.js";
 import { registerOrganizations } from "./routes/organizations/organization.js";
@@ -29,6 +31,8 @@ export interface AppOptions {
   readonly logger: Logger;
   /** Sign-up, sign-in, sessions and the route policies that read them. */
   readonly auth: AuthService;
+  /** The clock of the in-process caches, in milliseconds; the system clock when absent. */
+  readonly now?: () => number;
 }
 
 const SELF = ["'self'"];
@@ -98,6 +102,8 @@ export function createApp(options: AppOptions): App {
   registerMembers(app, options.auth.ipHmac);
   registerAudit(app);
   registerUnsubscribe(app, options.auth, options.pool);
+  registerInstance(app, options.pool, options.now ?? Date.now);
+  registerAdmin(app, options.auth);
   app.notFound((c) => errorResponse(c, new Refusal("not_found", "no such route")));
   return app;
 }

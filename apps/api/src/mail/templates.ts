@@ -50,6 +50,13 @@ export const TEMPLATES = {
     text: ({ link }) =>
       `Someone tried to sign up with this address, but an account already exists. To sign in, open:\n\n${link}\n\n${IGNORE}\n`,
   }),
+  signup_closed_notice: template({
+    class: "transactional",
+    vars: z.strictObject({}),
+    subject: () => "Sign-up is closed",
+    text: ({ link }) =>
+      `Someone tried to sign up with this address, but sign-up is closed on this instance. If it was you, ask the person who runs it for an invitation. To sign in to an account you already have, open:\n\n${link}\n\n${IGNORE}\n`,
+  }),
   invitation: template({
     class: "transactional",
     vars: z.strictObject({

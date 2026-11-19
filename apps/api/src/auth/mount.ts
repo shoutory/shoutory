@@ -17,13 +17,27 @@ import {
 } from "./forward.js";
 import { AUTH_BASE, AUTH_PATHS } from "./paths.js";
 import { listSessions, revokeOtherSessions, revokeSession } from "./sessions.js";
+import { allowSignup } from "./signup-gate.js";
+
+/**
+ * A closed instance without an invitation for the address: the same throttles, password screen and one password hash
+ * as an allowed sign-up, nothing created, one mail to the address, and the allowed sign-up's answer, so neither the
+ * answer nor its timing tells an invitation or an account from nothing.
+ */
+async function answerClosed(ctx: Ctx, email: string): Promise<Response> {
+  const context = await ctx.auth.library.$context;
+  await context.password.hash(text(ctx, "password"));
+  await ctx.auth.notifySignupClosed(email);
+  return respond(ctx.c, { user: { name: text(ctx, "name"), email, emailVerified: false } }, []);
+}
 
 const signUp: Handler = async (ctx) => {
   const email = text(ctx, "email").toLowerCase();
   await ctx.auth.throttle.spend("verification_resend", email);
   await ctx.auth.throttle.spendIp("verification_resend", ctx.ip);
   const outcome = await ctx.auth.passwords.screen(text(ctx, "password"));
-  const answer = await pass(ctx);
+  if (!(await ctx.auth.signupGate(email))) return answerClosed(ctx, email);
+  const answer = await allowSignup(email, () => pass(ctx));
   // An outage marks the new user for a re-check at the next sign-in. An existing email has no new password and
   // is marked as well: the extra check costs it nothing.
   const userId = outcome === "unavailable" ? await userIdByEmail(ctx, email) : undefined;

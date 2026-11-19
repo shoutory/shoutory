@@ -13,6 +13,9 @@ const DEFINERS = [
   "invitation_accept",
   "member_role_set",
   "member_remove",
+  "feature_flag_override_set",
+  "instance_setting_set",
+  "instance_settings_read",
 ];
 const isDefinerMessage = (message: unknown): message is string =>
   typeof message === "string" &&

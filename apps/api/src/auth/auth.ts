@@ -16,6 +16,7 @@ import { createPasswordGuard, type PasswordGuard } from "./hibp.js";
 import { DISABLED_PATHS } from "./paths.js";
 import { readSession } from "./session-check.js";
 import { digestSessionTokens } from "./session-token.js";
+import { signupAllowed } from "./signup-gate.js";
 import { createStepUp, type StepUp } from "./step-up.js";
 import { createThrottle, pepperDigest, type Throttle } from "./throttle.js";
 import { secondFactorThrottle } from "./two-factor.js";
@@ -66,6 +67,10 @@ export interface AuthService extends RouteAuth {
   readonly passwords: PasswordGuard;
   /** The first verified user becomes instance owner; the call is idempotent (a no-op once any admin exists). */
   claimOwner(userId: string): Promise<void>;
+  /** Whether the address may sign up: sign-up is open, or a pending invitation is addressed to it. */
+  signupGate(email: string): Promise<boolean>;
+  /** Mails the owner of an address that sign-up is closed; the sign-up answer does not differ from an allowed one. */
+  notifySignupClosed(email: string): Promise<void>;
   /** The keyed digest of a client address that the audit log stores, never the address itself. */
   ipHmac(clientAddress: string): Buffer;
   /**
@@ -175,6 +180,10 @@ function createLibrary(options: AuthOptions, effects: Effects, throttle: Throttl
     onAPIError: { throw: true },
     advanced: ADVANCED,
     databaseHooks: {
+      user: {
+        // Refuses a user the mount's gate did not let through (false ends the creation, the sign-up answers 400).
+        create: { before: async (user) => (signupAllowed(user.email) ? undefined : false) },
+      },
       session: {
         create: {
           // The column holds the keyed digest of the client address, never the address.
@@ -223,6 +232,16 @@ export function createAuth(options: AuthOptions): AuthService {
     resolveSession: (headers) => readSession(library, headers),
     hasStepUp: (session) => stepUp.has(session),
     claimOwner: effects.claimOwner,
+    signupGate: async (email) => {
+      const answer = await options.pool.query("SELECT app.signup_gate($1) AS open", [email]);
+      return answer.rows[0]?.open === true;
+    },
+    notifySignupClosed: (email) =>
+      effects.queue({
+        recipient: email,
+        template: "signup_closed_notice",
+        link: `${options.publicOrigin}/auth/sign-in`,
+      }),
     ipHmac,
     audit: async ({ action, userId, method, requestId, clientAddress }) => {
       try {
