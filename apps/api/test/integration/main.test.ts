@@ -1,9 +1,9 @@
 import { createServer } from "node:net";
 import {
-  type AppLogin,
   cloneTemplate,
-  createAppLogin,
+  createRoleLogin,
   emptyDatabase,
+  type RoleLogin,
   readTestEnv,
   type TestDatabase,
   withAdminClient,
@@ -13,7 +13,7 @@ import { main, type Started } from "../../src/main.js";
 
 const testEnv = readTestEnv();
 const ROLES = ["owner", "app", "worker", "auth", "readonly"] as const;
-let login: AppLogin;
+const logins: Partial<Record<"app" | "worker", RoleLogin>> = {};
 const PEPPER = "pepper-for-main-tests-0123456789ab";
 
 async function freePort(): Promise<number> {
@@ -24,10 +24,10 @@ async function freePort(): Promise<number> {
   return port;
 }
 
-// Only the app role connects, through a login whose password start-up accepts; the others are never opened.
+// Only the app and worker roles connect, through logins whose passwords start-up accepts; the others are never opened.
 const urlFor = (role: string, db: TestDatabase) =>
-  role === "app"
-    ? login.url(db.name)
+  role === "app" || role === "worker"
+    ? (logins[role] as RoleLogin).url(db.name)
     : `postgres://shoutory_${role}:${role}-test-secret-1@localhost:5432/${db.name}`;
 
 function envFor(db: TestDatabase, extra: Record<string, string>): NodeJS.ProcessEnv {
@@ -39,8 +39,9 @@ function envFor(db: TestDatabase, extra: Record<string, string>): NodeJS.Process
     SHOUTORY_SESSION_SECRET: "session-for-main-tests-0123456789a",
     SHOUTORY_SMTP_URL: "smtp://mailer-test:smtp-test-secret-1@mail.invalid:587",
     SHOUTORY_PUBLIC_ORIGIN: "https://app.example.test",
-    // Tests listen on loopback only, never on all interfaces.
+    // Tests listen on loopback only, never on all interfaces; the role is HTTP only unless a test asks for more.
     SHOUTORY_HOST: "127.0.0.1",
+    SHOUTORY_ROLE: "api",
     ...Object.fromEntries(
       ROLES.flatMap((role) => [
         [`SHOUTORY_DATABASE_PASSWORD_${role.toUpperCase()}`, `${role}-test-secret-1`],
@@ -66,26 +67,38 @@ let blank: TestDatabase;
 beforeAll(async () => {
   migrated = await cloneTemplate(testEnv, inject("shoutoryTemplate"));
   blank = await emptyDatabase(testEnv);
-  login = await createAppLogin(testEnv);
+  logins.app = await createRoleLogin(testEnv, "app");
+  logins.worker = await createRoleLogin(testEnv, "worker");
 });
 afterAll(async () => {
   await migrated.drop();
   await blank.drop();
-  await login.drop();
+  await Promise.all(Object.values(logins).map((login) => login.drop()));
+});
+
+// R316: `worker` runs no HTTP, `all` runs HTTP and the worker in one process; both beat before the start returns.
+describe("process roles", () => {
+  it.each(["worker", "all"] as const)("role %s beats at once, and only `all` listens", async (role) => {
+    const db = await cloneTemplate(testEnv, inject("shoutoryTemplate"));
+    const sink = io();
+    const port = await freePort();
+    const started = await main([], envFor(db, { SHOUTORY_ROLE: role, SHOUTORY_PORT: String(port) }), sink.io);
+    try {
+      const beats = await withAdminClient(testEnv, db.name, (admin) =>
+        admin.query("SELECT role FROM app.worker_heartbeats"),
+      );
+      expect(beats.rows).toEqual([{ role }]);
+      expect("server" in started).toBe(role === "all");
+      if (role === "worker") await expect(fetch(`http://127.0.0.1:${port}/healthz`)).rejects.toThrow();
+    } finally {
+      const running = "server" in started ? started.server : "worker" in started ? started.worker : undefined;
+      await running?.close();
+      await db.drop();
+    }
+  });
 });
 
 describe("process entry refusals", () => {
-  it("a worker role refuses to start with one line and exit code 2, before listening", async () => {
-    const sink = io();
-    const started = await main(
-      [],
-      envFor(migrated, { SHOUTORY_ROLE: "worker", SHOUTORY_PORT: String(await freePort()) }),
-      sink.io,
-    );
-    expect(refusal(started)).toBe(2);
-    expect(sink.err).toHaveLength(1);
-  });
-
   it.each([
     ["a TZ other than UTC", (db: TestDatabase) => envFor(db, { TZ: "Africa/Cairo" }), "TZ"],
     [
@@ -144,7 +157,12 @@ describe("process entry start", () => {
   it("main starts on a migrated database, answers /healthz and /readyz and closes", async () => {
     const sink = io();
     const port = await freePort();
-    const started = await main([], envFor(migrated, { SHOUTORY_PORT: String(port) }), sink.io);
+    // Role `all` runs the worker too, so its first beat makes /readyz ready.
+    const started = await main(
+      [],
+      envFor(migrated, { SHOUTORY_PORT: String(port), SHOUTORY_ROLE: "all" }),
+      sink.io,
+    );
     if (!("server" in started)) throw new Error(`did not start: ${sink.err.join("; ")}`);
     try {
       expect((await fetch(`http://127.0.0.1:${port}/healthz`)).status).toBe(200);

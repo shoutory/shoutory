@@ -4,6 +4,7 @@ import type { AppPool } from "@shoutory/db/pool";
 import { sealedKeyIds } from "@shoutory/db/startup";
 import { isUnavailable, Refusal } from "../errors/refusal.js";
 import { type App, defineRoute } from "../routes/define-route.js";
+import { assertJobsHealthy } from "./jobs.js";
 import { assertPartitionRunway } from "./partitions.js";
 
 const UNDEFINED_TABLE = "42P01";
@@ -30,8 +31,9 @@ async function assertKeysHeld(pool: AppPool, keys: KeyProvider): Promise<void> {
 }
 
 /**
- * The unauthenticated probe must stay cheap: the shipped names are read once and a probe is three queries (applied
- * migrations, held key ids, partition runway), each after the one before passed. Concurrent requests share one probe.
+ * The unauthenticated probe must stay cheap: the shipped names are read once and a probe is six queries (applied
+ * migrations, held key ids, partition runway, outbox lag, workers, job lag), each after the one before passed.
+ * Concurrent requests share one probe.
  */
 function readiness(pool: AppPool, keys: KeyProvider): () => Promise<void> {
   let shipped: Promise<string[]> | undefined;
@@ -65,6 +67,7 @@ function readiness(pool: AppPool, keys: KeyProvider): () => Promise<void> {
     }
     await assertKeysHeld(pool, keys);
     await assertPartitionRunway(pool);
+    await assertJobsHealthy(pool);
   }
 
   // Concurrent probes share one in-flight promise, so a burst costs one round trip.

@@ -139,6 +139,8 @@ describe("worker liveness and lag", () => {
 
   it("the job lag is the age of the oldest due job, and says not installed before the library is", async () => {
     const lag = async () => (await pool("app").query("SELECT * FROM app.job_lag()")).rows[0];
+    // The api's test setup installs the queue library into the template; this test starts without it.
+    await admin((a) => a.query("DROP SCHEMA IF EXISTS pgboss CASCADE"));
     expect(await lag()).toEqual({ installed: false, lag_seconds: null });
     // A stand-in with the three columns the function reads, in the schema name the queue library uses.
     await admin(async (a) => {

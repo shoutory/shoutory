@@ -85,7 +85,7 @@ requires `TZ=UTC`.
 | `SHOUTORY_PORT`                                                             | The port the API listens on, 1-65535; default 3000                                                                                |
 | `SHOUTORY_TRUSTED_PROXIES`                                                  | Comma-separated CIDR ranges of the reverse proxies whose `X-Forwarded-For` is believed; empty (the default) trusts none           |
 | `SHOUTORY_HOST`                                                             | The IPv4 or IPv6 address to listen on; unset (the default) listens on all interfaces                                              |
-| `SHOUTORY_ROLE`                                                             | `api`, `worker` or `all` (default); `worker` is not runnable yet                                                                  |
+| `SHOUTORY_ROLE`                                                             | `api` (HTTP only), `worker` (background jobs, no HTTP) or `all` (both, default)                                                   |
 
 Generate real values with `openssl rand -base64 32`. The values below are examples only and are refused at start-up. To
 rotate, add a new `SHOUTORY_KEK_<ID>`, point `SHOUTORY_ACTIVE_KEY_ID` at it and keep the old key until no row uses it.
@@ -101,6 +101,11 @@ export SHOUTORY_SESSION_SECRET=example-session-secret-do-not-use-in-production-0
 
 `pnpm build` compiles every package, then `node apps/api/dist/main.js` starts the server for the configured role. It checks the
 time zone, the configuration and the applied migrations before it listens, and answers `/healthz` and `/readyz`.
+
+`shoutory migrate` applies the migrations and installs the job queue's schema as the owner role; run it again after a
+job queue upgrade. A `worker` or `all` process then runs the scheduled upkeep, a 30-second heartbeat and the outbox relay
+as the worker role. `/readyz` is not ready while the outbox or the job queue is behind (60 s and 120 s), while no worker
+has beaten within 90 s, or before the job queue is installed; these limits are defaults to confirm.
 
 ### Logs and telemetry
 

@@ -2,8 +2,13 @@ import type { Pool, PoolClient } from "pg";
 
 // The one place that calls an advisory lock function; a contract test refuses a call anywhere else. A lock is
 // keyed by a fixed class id plus a hash of the key, and a code path takes classes in the order listed here.
-const CLASS_IDS = { migrate: 1, channel: 2 } as const;
+const CLASS_IDS = { migrate: 1, channel: 2, maintenance: 3 } as const;
 export type LockClass = keyof typeof CLASS_IDS;
+
+/** What a transaction-scoped lock needs of its transaction: it only sends statements (a pooled client or a tenant tx). */
+export interface QueryOnly {
+  query(text: string, values?: unknown[]): Promise<{ rowCount: number | null }>;
+}
 
 /**
  * The migrate class is instance-wide and held at session level on its own connection, so a migration file that
@@ -14,15 +19,18 @@ export function withAdvisoryLock<T>(
   lockClass: "migrate",
   run: (client: PoolClient) => Promise<T>,
 ): Promise<T>;
-/** Every other class is transaction-scoped: `tx` must already be inside a transaction, which releases the lock. */
+/**
+ * Every other class is transaction-scoped: `tx` must already be inside a transaction, which releases the lock. The
+ * `maintenance` class serializes the scheduled upkeep of the worker role across workers.
+ */
 export function withAdvisoryLock<T>(
-  tx: PoolClient,
-  lockClass: "channel",
+  tx: QueryOnly,
+  lockClass: "channel" | "maintenance",
   run: () => Promise<T>,
   key: string,
 ): Promise<T>;
 export function withAdvisoryLock<T>(
-  db: Pool | PoolClient,
+  db: Pool | QueryOnly,
   lockClass: LockClass,
   run: (client: PoolClient) => Promise<T>,
   key = "",
@@ -30,7 +38,7 @@ export function withAdvisoryLock<T>(
   const id = CLASS_IDS[lockClass];
   return lockClass === "migrate"
     ? withSessionLock(db as Pool, id, key, run)
-    : withTransactionLock(db as PoolClient, id, key, run);
+    : withTransactionLock(db as QueryOnly, id, key, run as () => Promise<T>);
 }
 
 async function withSessionLock<T>(
@@ -71,10 +79,10 @@ async function withSessionLock<T>(
 }
 
 async function withTransactionLock<T>(
-  tx: PoolClient,
+  tx: QueryOnly,
   id: number,
   key: string,
-  run: (client: PoolClient) => Promise<T>,
+  run: () => Promise<T>,
 ): Promise<T> {
   await tx.query("SELECT pg_advisory_xact_lock($1, hashtext($2))", [id, key]);
   // Outside a transaction the lock is already gone; refuse instead of running unprotected.
@@ -84,5 +92,5 @@ async function withTransactionLock<T>(
     [id, key],
   );
   if (held.rowCount === 0) throw new Error("withAdvisoryLock needs an open transaction for this lock class");
-  return run(tx);
+  return run();
 }

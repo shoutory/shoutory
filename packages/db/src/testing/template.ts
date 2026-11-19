@@ -60,26 +60,27 @@ async function createDatabase(env: TestEnv, source?: string): Promise<string> {
   return name;
 }
 
-export interface AppLogin {
+export interface RoleLogin {
   /** The URL of `database` for this login. */
   url(database: string): string;
   drop(): Promise<void>;
 }
 
 /**
- * A login with the privileges of `shoutory_app` under a password that start-up accepts: the development password of
- * the role itself is a known example value, which the API refuses, so a start-up test needs another one.
+ * A login with the privileges of `shoutory_app` (or another runtime role) under a password that start-up accepts: the
+ * development password of the role itself is a known example value, which the API refuses, so a start-up test needs
+ * another one.
  */
-export async function createAppLogin(env: TestEnv): Promise<AppLogin> {
+export async function createRoleLogin(env: TestEnv, role: "app" | "worker" = "app"): Promise<RoleLogin> {
   const id = randomUUID().replaceAll("-", "_");
   const name = `shoutory_login_${id}`;
   const password = `login-secret-${id}`;
   await asAdmin(env, (client) =>
-    client.query(`CREATE ROLE "${name}" LOGIN PASSWORD '${password}' IN ROLE shoutory_app`),
+    client.query(`CREATE ROLE "${name}" LOGIN PASSWORD '${password}' IN ROLE shoutory_${role}`),
   );
   return {
     url(database) {
-      const url = new URL(withDatabase(env.roleUrls.app, database));
+      const url = new URL(withDatabase(env.roleUrls[role], database));
       url.username = name;
       url.password = password;
       return url.toString();

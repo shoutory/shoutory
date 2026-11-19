@@ -49,11 +49,16 @@ async function freePort(): Promise<number> {
   return port;
 }
 
+// A ready answer needs a worker that has beaten (R315).
+const beat = (database: TestDatabase) =>
+  database.pool("worker").query("SELECT app.worker_heartbeat('http-test-worker', 'worker')");
+
 let db: TestDatabase;
 let owner: ReturnType<TestDatabase["pool"]>;
 beforeAll(async () => {
   db = await cloneTemplate(env, inject("shoutoryTemplate"));
   owner = db.pool("owner");
+  await beat(db);
 });
 afterAll(async () => {
   await db.drop();
@@ -75,7 +80,7 @@ const get = (app: ReturnType<typeof createApp>, path: string) =>
   Promise.resolve(app.request(path, {}, REMOTE));
 
 describe("readiness and health", () => {
-  it("N parallel /readyz probes share one probe of three database queries", async () => {
+  it("N parallel /readyz probes share one probe of six database queries", async () => {
     const pool = createAppPool(db.url("app"), () => undefined);
     const query = vi.spyOn(pool, "query");
     const app = createApp({
@@ -88,8 +93,8 @@ describe("readiness and health", () => {
     });
     const responses = await Promise.all(Array.from({ length: 20 }, () => get(app, "/readyz")));
     expect(responses.map((response) => response.status)).toEqual(Array(20).fill(200));
-    // Migrations applied, key ids held, partition runway.
-    expect(query).toHaveBeenCalledTimes(3);
+    // Migrations applied, key ids held, partition runway, outbox lag, workers, job lag.
+    expect(query).toHaveBeenCalledTimes(6);
     await pool.end();
   });
 
@@ -143,6 +148,7 @@ describe("readiness and held key ids", () => {
   let clone: TestDatabase;
   beforeAll(async () => {
     clone = await cloneTemplate(env, inject("shoutoryTemplate"));
+    await beat(clone);
     await withAdminClient(env, clone.name, (admin) =>
       admin.query(
         `INSERT INTO app.email_outbox (id, recipient, template, locale, vars, link_ciphertext, link_iv, link_auth_tag,

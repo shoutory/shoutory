@@ -8,6 +8,7 @@ import { assertMigrationsApplied, sealedKeyIds } from "@shoutory/db/startup";
 import { createApp } from "./app.js";
 import { createAuth } from "./auth/auth.js";
 import { type CliIo, collectSecrets, run } from "./cli/main.js";
+import { startWorker } from "./jobs/worker.js";
 import { createLogger, type Logger } from "./logging/logger.js";
 import { createScrubber } from "./logging/scrub.js";
 import { startTelemetry } from "./telemetry/telemetry.js";
@@ -16,11 +17,13 @@ export interface RunningServer {
   readonly port: number;
   close(): Promise<void>;
 }
-/** A process that refused to start (or ran a command) has an exit code and listens on nothing. */
-export type Started = { readonly exitCode: number } | { readonly server: RunningServer };
+/** A process that refused to start (or ran a command) has an exit code and listens on nothing; a worker has no port. */
+export type Started =
+  | { readonly exitCode: number }
+  | { readonly server: RunningServer }
+  | { readonly worker: { close(): Promise<void> } };
 
 const EXIT_FAILED = 1;
-const EXIT_REFUSED = 2;
 
 function listen(
   fetch: (request: Request, env: unknown) => Response | Promise<Response>,
@@ -90,33 +93,84 @@ async function startServer(config: Config, logger: Logger): Promise<RunningServe
   }
 }
 
+/** The worker role over its own pool: the queue client, schedules, heartbeat and outbox relay (R316). */
+async function startWorkerRole(
+  config: Config,
+  logger: Logger,
+  role: "worker" | "all",
+): Promise<{ close(): Promise<void> }> {
+  const url = config.databaseUrls.worker.expose();
+  const pool = createAppPool(url, (error) => logger.error({ err: error }, "worker database pool error"));
+  try {
+    await assertMigrationsApplied(pool);
+    const worker = await startWorker({ connectionString: url, pool, logger, role });
+    logger.info({ role }, "worker started");
+    return {
+      close: async () => {
+        await worker.close();
+        await pool.end();
+      },
+    };
+  } catch (error) {
+    await pool
+      .end()
+      .catch((endError: unknown) => logger.error({ err: endError }, "worker database pool did not close"));
+    throw error;
+  }
+}
+
+/** HTTP for `api` and `all`, the worker for `worker` and `all`; each part that started is closed if a later one fails. */
+async function startRole(config: Config, logger: Logger): Promise<Started> {
+  if (config.role === "worker") return { worker: await startWorkerRole(config, logger, "worker") };
+  const server = await startServer(config, logger);
+  if (config.role === "api") return { server };
+  try {
+    const worker = await startWorkerRole(config, logger, "all");
+    return {
+      server: {
+        port: server.port,
+        // The server closes even when the worker's close throws.
+        close: async () => {
+          try {
+            await worker.close();
+          } finally {
+            await server.close();
+          }
+        },
+      },
+    };
+  } catch (error) {
+    await server
+      .close()
+      .catch((closeError: unknown) => logger.error({ err: closeError }, "server did not close"));
+    throw error;
+  }
+}
+
 /** Start order: UTC, configuration, telemetry, logger, migration check, listen. Any refusal happens before listen. */
 async function start(env: NodeJS.ProcessEnv, io: CliIo): Promise<Started> {
   assertUtc(env);
   const config = parseEnv(env);
-  if (config.role === "worker") {
-    io.stderr("the worker role has no work until the job queue exists; start with SHOUTORY_ROLE=api or all");
-    return { exitCode: EXIT_REFUSED };
-  }
   const telemetry = await startTelemetry(env);
   const logger = createLogger({
     secrets: collectSecrets(env),
     stream: { write: (line) => io.stdout(line.trimEnd()) },
   });
-  let server: RunningServer;
+  let started: Started;
   try {
-    server = await startServer(config, logger);
+    started = await startRole(config, logger);
   } catch (error) {
     await telemetry
       ?.shutdown()
       .catch((stopError: unknown) => logger.error({ err: stopError }, "telemetry did not shut down"));
     throw error;
   }
+  const running = "server" in started ? started.server : "worker" in started ? started.worker : undefined;
   const close = async (): Promise<void> => {
-    await server.close();
+    await running?.close();
     await telemetry?.shutdown();
   };
-  return { server: { port: server.port, close } };
+  return "server" in started ? { server: { port: started.server.port, close } } : { worker: { close } };
 }
 
 /**
@@ -144,9 +198,10 @@ async function runProcess(): Promise<void> {
     process.exitCode = started.exitCode;
     return;
   }
+  const running = "server" in started ? started.server : started.worker;
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.once(signal, () => {
-      started.server.close().catch((error: unknown) => {
+      running.close().catch((error: unknown) => {
         io.stderr(error instanceof Error ? error.message : "shutdown failed");
         process.exitCode = EXIT_FAILED;
       });

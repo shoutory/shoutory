@@ -17,6 +17,10 @@
       "source": "./src/context/with-scope.ts",
       "default": "./dist/context/with-scope.js"
     },
+    "./locks": {
+      "source": "./src/locks.ts",
+      "default": "./dist/locks.js"
+    },
     "./migrate": {
       "source": "./src/migrate/runner.ts",
       "default": "./dist/migrate/runner.js"

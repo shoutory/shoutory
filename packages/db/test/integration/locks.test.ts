@@ -72,7 +72,11 @@ describe("withAdvisoryLock", () => {
   });
 });
 
-describe("withAdvisoryLock channel class", () => {
+// The two transaction-scoped classes behave alike; each row is one class with its fixed class id (R318).
+describe.each<["channel" | "maintenance", number]>([
+  ["channel", 2],
+  ["maintenance", 3],
+])("withAdvisoryLock %s class", (lockClass, classId) => {
   let db: TestDatabase;
   beforeAll(async () => {
     db = await cloneTemplate(env, inject("shoutoryTemplate"));
@@ -80,14 +84,15 @@ describe("withAdvisoryLock channel class", () => {
   afterAll(() => db.drop());
 
   // The probe must tell a two-key lock from a one-key lock with the same class and object numbers.
-  it("refuses a channel lock when only a one-key session lock matches its ids", async () => {
+  it("refuses the lock when only a one-key session lock matches its ids", async () => {
     const client = await db.pool("owner").connect();
     const oneKey = "pg_" + "advisory_lock";
     try {
-      await client.query(`SELECT ${oneKey}((2::bigint << 32) | (hashtext($1)::bigint & 4294967295))`, [
-        "channel-3",
+      await client.query(`SELECT ${oneKey}(($1::bigint << 32) | (hashtext($2)::bigint & 4294967295))`, [
+        classId,
+        "key-3",
       ]);
-      await expect(withAdvisoryLock(client, "channel", async () => undefined, "channel-3")).rejects.toThrow(
+      await expect(withAdvisoryLock(client, lockClass, async () => undefined, "key-3")).rejects.toThrow(
         "open transaction",
       );
     } finally {
@@ -96,10 +101,10 @@ describe("withAdvisoryLock channel class", () => {
     }
   });
 
-  it("refuses a channel lock taken outside a transaction", async () => {
+  it("refuses the lock taken outside a transaction", async () => {
     const client = await db.pool("owner").connect();
     try {
-      await expect(withAdvisoryLock(client, "channel", async () => undefined, "channel-2")).rejects.toThrow(
+      await expect(withAdvisoryLock(client, lockClass, async () => undefined, "key-2")).rejects.toThrow(
         "open transaction",
       );
     } finally {
@@ -107,14 +112,14 @@ describe("withAdvisoryLock channel class", () => {
     }
   });
 
-  it("holds a channel lock until its transaction ends", async () => {
+  it("holds the lock until its transaction ends", async () => {
     const client = await db.pool("owner").connect();
     try {
       await client.query("BEGIN");
-      await withAdvisoryLock(client, "channel", async () => undefined, "channel-1");
-      expect(await held(db, 2)).toBe(1);
+      await withAdvisoryLock(client, lockClass, async () => undefined, "key-1");
+      expect(await held(db, classId)).toBe(1);
       await client.query("COMMIT");
-      expect(await held(db, 2)).toBe(0);
+      expect(await held(db, classId)).toBe(0);
     } finally {
       client.release();
     }

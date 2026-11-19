@@ -22,6 +22,8 @@ let appPool: ReturnType<typeof createAppPool>;
 beforeAll(async () => {
   db = await cloneTemplate(env, inject("shoutoryTemplate"));
   owner = db.pool("owner");
+  // A ready answer needs a worker that has beaten (R315).
+  await db.pool("worker").query("SELECT app.worker_heartbeat('readiness-partitions-worker', 'worker')");
   appPool = createAppPool(db.url("app"), () => undefined);
   app = createApp({
     publicOrigin: ORIGIN,

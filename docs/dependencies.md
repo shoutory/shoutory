@@ -169,3 +169,14 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
   advisory fix (checked 2026-11-18). Re-read at each upgrade.
 - Rejected: Auth.js (maintenance mode), Lucia (deprecated), a self-written session layer (authentication and sessions are
   infrastructure we do not reinvent).
+
+## pg-boss 12.38.0
+
+- Used for: the job queue's wake-ups and schedules in `apps/api/src/jobs/` (the worker role). The operation ledger, not the
+  queue, holds the truth; jobs carry ids only. `shoutory migrate` installs its schema as the owner role, and the worker
+  starts it with `migrate: false` as the `shoutory_worker` role.
+- Licence: MIT. Published 2026-10-13, more than 14 days before adoption. Its runtime dependencies are `cron-parser`,
+  `rrule-temporal`, `serialize-error` (all MIT) and `pg` (already pinned at 8.23.1); `@opentelemetry/api` is a peer
+  that `apps/api` already declares.
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
+- Rejected: a hand-written queue engine (infrastructure we do not reinvent).

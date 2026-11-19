@@ -1,0 +1,174 @@
+import { withAdvisoryLock } from "@shoutory/db/locks";
+import { cloneTemplate, readTestEnv, type TestDatabase, withAdminClient } from "@shoutory/db/testing";
+import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
+import { PARTITION_CLASSES } from "../../src/jobs/registry.js";
+import { ensurePartitions, purgeExpired, startWorker } from "../../src/jobs/worker.js";
+import { createLogger } from "../../src/logging/logger.js";
+
+const env = readTestEnv();
+const lines: string[] = [];
+const logger = createLogger({ secrets: [], stream: { write: (line) => void lines.push(line) } });
+
+let db: TestDatabase;
+beforeAll(async () => {
+  db = await cloneTemplate(env, inject("shoutoryTemplate"));
+});
+afterAll(() => db.drop());
+const adminOf =
+  (database: () => TestDatabase) =>
+  <T>(run: Parameters<typeof withAdminClient<T>>[2]) =>
+    withAdminClient(env, database().name, run);
+const admin = adminOf(() => db);
+const options = (database: TestDatabase) => ({
+  connectionString: database.url("worker"),
+  pool: database.pool("worker"),
+  logger,
+  role: "worker" as const,
+});
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+// True once no connection of the queue client is left in `database`; false after a second.
+const queueClientGone = async (database: TestDatabase) => {
+  for (let tries = 0; tries < 50; tries++) {
+    const open = await adminOf(() => database)(
+      async (a) =>
+        (
+          await a.query(
+            "SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = $1 AND application_name = 'shoutory-worker'",
+            [database.name],
+          )
+        ).rows[0].n as number,
+    );
+    if (open === 0) return true;
+    await sleep(20);
+  }
+  return false;
+};
+
+describe("the scheduled upkeep of the worker role", () => {
+  it("registers ensure_partitions once and purge_expired once per retention class", async () => {
+    const worker = await startWorker(options(db));
+    try {
+      const { schedules, classes } = await admin(async (a) => ({
+        schedules: (await a.query("SELECT name, key FROM pgboss.schedule ORDER BY name, key")).rows,
+        classes: (await a.query("SELECT class, kind FROM app.retention_classes ORDER BY class")).rows,
+      }));
+      const wanted = classes.map(({ class: name }) => ({ name: "purge_expired", key: name }));
+      expect(schedules).toEqual([{ name: "ensure_partitions", key: "" }, ...wanted]);
+      const partitioned = classes.filter(({ kind }) => kind === "partition").map(({ class: name }) => name);
+      expect([...PARTITION_CLASSES].sort()).toEqual(partitioned);
+    } finally {
+      await worker.close();
+    }
+  });
+
+  it("purges a class in batches until none is left (R309)", async () => {
+    await admin((a) =>
+      a.query(
+        `INSERT INTO app.rate_buckets (scope, key, tokens, refilled_at)
+         SELECT 'invite', md5(n::text) || md5(n::text), 1, now() - interval '60 days' FROM generate_series(1, 5003) AS n`,
+      ),
+    );
+    expect(await purgeExpired(db.pool("worker"), "app.rate_buckets", logger)).toBe(5003);
+    expect((await admin((a) => a.query("SELECT count(*)::int AS n FROM app.rate_buckets"))).rows[0].n).toBe(
+      0,
+    );
+  });
+
+  it("names the leaf it keeps when an old outbox leaf still holds an undispatched event", async () => {
+    const day = new Date(Date.now() - 9 * 86_400_000).toISOString().slice(0, 10);
+    const next = new Date(Date.parse(`${day}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+    const leaf = `outbox_${day.replaceAll("-", "")}`;
+    await admin(async (a) => {
+      await a.query(
+        `CREATE TABLE app.${leaf} PARTITION OF app.outbox FOR VALUES FROM ('${day}') TO ('${next}')`,
+      );
+      await a.query(
+        "INSERT INTO app.outbox (id, created_at, type, payload) VALUES (uuidv7(), $1, 'test.event', '{}')",
+        [`${day}T12:00:00Z`],
+      );
+    });
+    const before = lines.length;
+    expect(await purgeExpired(db.pool("worker"), "outbox", logger)).toBe(0);
+    expect(lines.slice(before).some((line) => line.includes(leaf) && line.includes('"level":"warn"'))).toBe(
+      true,
+    );
+  });
+});
+
+// R320: one instance-wide key serializes every statement that takes ACCESS EXCLUSIVE on a partitioned parent. The
+// choice is to wait: a second run queues behind the first instead of failing, so no daily run is lost.
+describe("the maintenance lock", () => {
+  const waitingOnLock = async () => {
+    for (let tries = 0; tries < 100; tries++) {
+      const rows = await db.pool("owner").query(
+        `SELECT count(*)::int AS n FROM pg_locks WHERE locktype = 'advisory' AND classid = 3 AND NOT granted
+           AND database = (SELECT oid FROM pg_database WHERE datname = $1)`,
+        [db.name],
+      );
+      if (rows.rows[0].n === 1) return true;
+      await sleep(20);
+    }
+    return false;
+  };
+  const worker = () => db.pool("worker");
+
+  it.each<[string, () => Promise<number>, boolean]>([
+    ["the ensure_partitions run waits", () => ensurePartitions(worker()), true],
+    ["the purge of a partition class waits", () => purgeExpired(worker(), "outbox", logger), true],
+    [
+      "the purge of a window class does not",
+      () => purgeExpired(worker(), "app.worker_heartbeats", logger),
+      false,
+    ],
+  ])("%s for another holder of the lock", async (_name, run, waits) => {
+    const holder = await worker().connect();
+    try {
+      await holder.query("BEGIN");
+      await withAdvisoryLock(holder, "maintenance", async () => undefined, "partitions");
+      const started = run();
+      if (!waits) expect(await started).toBeGreaterThanOrEqual(0);
+      else expect(await waitingOnLock()).toBe(true);
+      await holder.query("COMMIT");
+      expect(await started).toBeGreaterThanOrEqual(0);
+    } finally {
+      await holder.query("ROLLBACK");
+      holder.release();
+    }
+  });
+});
+
+describe("the worker's start and close", () => {
+  it("close() stops the heartbeat, the relay and the queue client", async () => {
+    const worker = await startWorker({ ...options(db), heartbeatMs: 10, relayIntervalMs: 10 });
+    const planted = await admin(
+      async (a) =>
+        (
+          await a.query(
+            `INSERT INTO app.outbox (id, created_at, xid, type, payload)
+             VALUES (uuidv7(), now(), '1'::xid8, 'test.unhandled', '{}') RETURNING id`,
+          )
+        ).rows[0].id as string,
+    );
+    await worker.close();
+    const look = () =>
+      admin(async (a) => ({
+        seen: (await a.query("SELECT seen_at FROM app.worker_heartbeats")).rows,
+        attempts: (await a.query("SELECT attempts FROM app.outbox WHERE id = $1", [planted])).rows,
+      }));
+    const atClose = await look();
+    await sleep(150);
+    expect(await look()).toEqual(atClose);
+    expect(await queueClientGone(db)).toBe(true);
+  });
+
+  it("a failed start leaves no open queue connection", async () => {
+    const bare = await cloneTemplate(env, inject("shoutoryTemplate"));
+    try {
+      await adminOf(() => bare)((a) => a.query("DROP SCHEMA pgboss CASCADE"));
+      await expect(startWorker(options(bare))).rejects.toThrow();
+      expect(await queueClientGone(bare)).toBe(true);
+    } finally {
+      await bare.drop();
+    }
+  });
+});
