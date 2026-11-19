@@ -74,14 +74,6 @@ msgid "system.sign_in.title"
 msgstr "Sign in"
 
 #. js-lingui-explicit-id
-msgid "system.sign_in.body"
-msgstr "The sign-in form is not available in this version yet."
-
-#. js-lingui-explicit-id
-msgid "system.sign_in.action"
-msgstr "Try again"
-
-#. js-lingui-explicit-id
 msgid "system.loading"
 msgstr "Loading"
 
@@ -208,3 +200,163 @@ msgstr "Search workspaces"
 #. js-lingui-explicit-id
 msgid "shell.palette.empty"
 msgstr "Nothing found"
+
+#. js-lingui-explicit-id
+msgid "auth.offline"
+msgstr "You are offline. This needs the server."
+
+#. js-lingui-explicit-id
+msgid "auth.sign_in.email"
+msgstr "Email"
+
+#. js-lingui-explicit-id
+msgid "auth.sign_in.password"
+msgstr "Password"
+
+#. js-lingui-explicit-id
+msgid "auth.sign_in.submit"
+msgstr "Sign in"
+
+#. js-lingui-explicit-id
+msgid "auth.sign_in.resend"
+msgstr "Send the link again"
+
+#. js-lingui-explicit-id
+msgid "auth.sign_in.resent"
+msgstr "We sent the link again."
+
+#. js-lingui-explicit-id
+msgid "auth.sign_in.reset"
+msgstr "Reset your password"
+
+#. js-lingui-explicit-id
+msgid "auth.mfa.title"
+msgstr "Two-step verification"
+
+#. js-lingui-explicit-id
+msgid "auth.mfa.code_label"
+msgstr "Authentication code"
+
+#. js-lingui-explicit-id
+msgid "auth.mfa.recovery_label"
+msgstr "Recovery code"
+
+#. js-lingui-explicit-id
+msgid "auth.mfa.submit"
+msgstr "Verify"
+
+#. js-lingui-explicit-id
+msgid "auth.mfa.use_recovery"
+msgstr "Use a recovery code"
+
+#. js-lingui-explicit-id
+msgid "auth.mfa.use_code"
+msgstr "Use an authenticator code"
+
+#. js-lingui-explicit-id
+msgid "auth.mfa.start_again"
+msgstr "Start again"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.too_many.what"
+msgstr "Too many attempts"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.too_many.meaning"
+msgstr "Try again in a few minutes."
+
+#. js-lingui-explicit-id
+msgid "auth.copy.unavailable.what"
+msgstr "Shoutory is not reachable right now"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.unavailable.meaning"
+msgstr "Nothing was changed. Try again in a moment."
+
+#. js-lingui-explicit-id
+msgid "auth.copy.expired.what"
+msgstr "Your sign-in expired"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.expired.meaning"
+msgstr "Start again from the sign-in page."
+
+#. js-lingui-explicit-id
+msgid "auth.copy.sign_in.what"
+msgstr "We could not sign you in"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.sign_in.meaning"
+msgstr "Check your email and password, then try again."
+
+#. js-lingui-explicit-id
+msgid "auth.copy.unverified.what"
+msgstr "Confirm your email first"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.unverified.meaning"
+msgstr "We sent you a link when you signed up."
+
+#. js-lingui-explicit-id
+msgid "auth.copy.breached.what"
+msgstr "Choose a new password"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.breached.meaning"
+msgstr "This password appeared in a data breach, so you need a new password."
+
+#. js-lingui-explicit-id
+msgid "auth.copy.wrong_code.what"
+msgstr "That code is not right"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.wrong_code.meaning"
+msgstr "Check the code in your authenticator app and try again."
+
+#. js-lingui-explicit-id
+msgid "auth.copy.wrong_password.what"
+msgstr "That password is not right"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.wrong_password.meaning"
+msgstr "Check it and try again."
+
+#. js-lingui-explicit-id
+msgid "auth.copy.lock.meaning"
+msgstr "Repeated wrong passwords lock sign-in for a while. Try again in a few minutes."
+
+#. js-lingui-explicit-id
+msgid "auth.copy.sign_in_failed.what"
+msgstr "We could not sign you in"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.code_failed.what"
+msgstr "We could not check the code"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.password_failed.what"
+msgstr "We could not confirm your password"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.failed.meaning"
+msgstr "Nothing was changed. Try again."
+
+#. js-lingui-explicit-id
+msgid "auth.step_up.title"
+msgstr "Confirm your password"
+
+#. js-lingui-explicit-id
+msgid "auth.step_up.intro"
+msgstr "This action needs your password again."
+
+#. js-lingui-explicit-id
+msgid "auth.step_up.password"
+msgstr "Password"
+
+#. js-lingui-explicit-id
+msgid "auth.step_up.confirm"
+msgstr "Confirm"
+
+#. js-lingui-explicit-id
+msgid "auth.step_up.cancel"
+msgstr "Cancel"

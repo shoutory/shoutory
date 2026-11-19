@@ -1,0 +1,127 @@
+import { Trans, useLingui } from "@lingui/react/macro";
+import { useRef, useState } from "react";
+import { Form } from "react-aria-components";
+import { Link, useNavigate, useSearchParams } from "react-router";
+import { z } from "zod";
+import { request } from "../http/client";
+import { safeReturnTo } from "../session/return-to";
+import { Button } from "../ui/button";
+import { ErrorPanel } from "../ui/error-panel";
+import { TextField } from "../ui/text-field";
+import { authCopy } from "./auth-copy";
+import { AuthFrame, SubmitButton, useAction } from "./auth-frame";
+
+// `POST /api/auth/sign-in/email` answers a bare body: the user, or a challenge when a second factor is set.
+const answer = z.union([
+  z.object({ user: z.object({ id: z.string() }) }),
+  z.object({ twoFactorRedirect: z.literal(true) }),
+]);
+const sent = z.object({ status: z.boolean() });
+
+// The email is not confirmed yet: send the link again, and say so (the answer is alike for every address).
+function ResendLink({ email }: { email: string }) {
+  const [resent, setResent] = useState(false);
+  const resend = useAction(async () => {
+    await request(sent, "/api/auth/send-verification-email", {
+      method: "POST",
+      body: { email },
+      envelope: false,
+    });
+    setResent(true);
+  });
+  return (
+    <div className="flex flex-col items-start gap-2">
+      <Button onPress={() => void resend.run()} busy={resend.pending} aria-disabled={resend.pending}>
+        <Trans id="auth.sign_in.resend">Send the link again</Trans>
+      </Button>
+      {resent ? (
+        <p role="status">
+          <Trans id="auth.sign_in.resent">We sent the link again.</Trans>
+        </p>
+      ) : null}
+      {resend.failure ? <ErrorPanel error={resend.failure} {...authCopy("sign-in", resend.failure)} /> : null}
+    </div>
+  );
+}
+
+// The password step: where the visitor goes next. `return-to` passes `safeReturnTo` again wherever it finally takes
+// them (R378, R410), and a challenge carries it on to `/mfa`.
+async function credentialsStep(email: string, password: string, returnTo: string | null): Promise<string> {
+  const result = await request(answer, "/api/auth/sign-in/email", {
+    method: "POST",
+    body: { email, password },
+    envelope: false,
+  });
+  if (!("twoFactorRedirect" in result)) return safeReturnTo(returnTo);
+  return returnTo === null ? "/mfa" : `/mfa?return-to=${encodeURIComponent(returnTo)}`;
+}
+
+/** A-01 sign in (`/sign-in`): email and password; a challenge goes on to `/mfa`, carrying `return-to` along. */
+export function SignInPage() {
+  const { t } = useLingui();
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const returnTo = params.get("return-to");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const submit = useRef<HTMLButtonElement>(null);
+
+  const signIn = useAction(
+    async () => navigate(await credentialsStep(email, password, returnTo)),
+    // An unavailable server never saw the password: it stays, and Retry sends it again (R412).
+    (error) => error.state !== "maintenance" && setPassword(""),
+  );
+
+  const failure = signIn.failure;
+  return (
+    <AuthFrame title={<Trans id="system.sign_in.title">Sign in</Trans>}>
+      <Form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void signIn.run();
+        }}
+        className="flex flex-col gap-5"
+      >
+        <TextField
+          label={t({ id: "auth.sign_in.email", message: "Email" })}
+          name="email"
+          type="email"
+          autoComplete="username"
+          isRequired
+          value={email}
+          onChange={setEmail}
+        />
+        <TextField
+          label={t({ id: "auth.sign_in.password", message: "Password" })}
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          isRequired
+          value={password}
+          onChange={setPassword}
+        />
+        <SubmitButton ref={submit} pending={signIn.pending} online={signIn.online}>
+          <Trans id="auth.sign_in.submit">Sign in</Trans>
+        </SubmitButton>
+      </Form>
+      {failure ? (
+        <ErrorPanel
+          focusOnMount
+          error={failure}
+          onRetry={() => {
+            // The panel goes while Retry runs; focus waits on the submit button, not on the page.
+            submit.current?.focus();
+            void signIn.run();
+          }}
+          {...authCopy("sign-in", failure)}
+        />
+      ) : null}
+      {failure?.code === "email_not_verified" ? <ResendLink email={email} /> : null}
+      {failure?.code === "password_reset_required" ? (
+        <Link to="/forgot" className="text-link underline">
+          <Trans id="auth.sign_in.reset">Reset your password</Trans>
+        </Link>
+      ) : null}
+    </AuthFrame>
+  );
+}

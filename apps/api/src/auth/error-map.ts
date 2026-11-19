@@ -1,15 +1,21 @@
 import { APIError } from "better-auth";
 import { isUnavailable, Refusal, toRefusal } from "../errors/refusal.js";
 
+// A wrong password or a wrong second-factor code (R404). The challenge cookie's own error is not here: it stays
+// `unauthenticated`, and the screen reads it as "sign-in expired, start again".
+const WRONG_CREDENTIAL_CODES: ReadonlySet<string> = new Set([
+  "INVALID_EMAIL_OR_PASSWORD",
+  "INVALID_CODE",
+  "INVALID_BACKUP_CODE",
+]);
+
 /** The one table that turns a library answer (status and error code) into our envelope's code (R113). */
 export function refusalFromAnswer(status: number, code: string | undefined): Refusal {
   const message = `auth answered ${status}${code ? ` ${code}` : ""}`;
   if (status === 400 || status === 422) return new Refusal("validation_failed", message);
   if (status === 401) {
-    return new Refusal(
-      code === "INVALID_EMAIL_OR_PASSWORD" ? "invalid_credentials" : "unauthenticated",
-      message,
-    );
+    const wrong = code !== undefined && WRONG_CREDENTIAL_CODES.has(code);
+    return new Refusal(wrong ? "invalid_credentials" : "unauthenticated", message);
   }
   if (status === 403) {
     return new Refusal(code === "EMAIL_NOT_VERIFIED" ? "email_not_verified" : "forbidden", message);

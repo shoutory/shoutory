@@ -71,21 +71,6 @@ describe("the session guard (R378)", () => {
 
   it.each([
     [
-      "sign-in, an absolute URL",
-      `/sign-in?return-to=${encodeURIComponent("https://evil.example.test/x")}`,
-      "/",
-    ],
-    [
-      "sign-in, a protocol-relative URL",
-      `/sign-in?return-to=${encodeURIComponent("//evil.example.test")}`,
-      "/",
-    ],
-    [
-      "sign-in, a path on this origin",
-      `/sign-in?return-to=${encodeURIComponent("/calendar?view=week")}`,
-      "/calendar?view=week",
-    ],
-    [
       "session-expired, a protocol-relative URL",
       `/session-expired?return-to=${encodeURIComponent("//evil.example.test")}`,
       "/sign-in?return-to=%2F",

@@ -27,7 +27,11 @@ export function AccountMenu() {
     setFailure(null);
     let signedOut = true;
     try {
-      await request(z.undefined(), "/api/auth/sign-out", { method: "POST", body: {}, envelope: false });
+      await request(z.object({ success: z.boolean() }), "/api/auth/sign-out", {
+        method: "POST",
+        body: {},
+        envelope: false,
+      });
     } catch (error) {
       // An ended session is already signed out; anything else keeps the user in and says so.
       if (!(error instanceof ApiError)) throw error;

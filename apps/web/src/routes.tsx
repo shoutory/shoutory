@@ -2,7 +2,10 @@ import type { MessageDescriptor } from "@lingui/core";
 import { msg } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
 import { type ReactElement, useEffect, useState } from "react";
-import { Outlet, type RouteObject, useMatches, useRouteError } from "react-router";
+import { Outlet, type RouteObject, replace, useMatches, useRouteError } from "react-router";
+import { MfaPage } from "./auth/mfa";
+import { SignInPage } from "./auth/sign-in";
+import { StepUpProvider } from "./auth/step-up";
 import { ApiError } from "./http/client";
 import { type PageHandle, usePageTitleAndFocus } from "./page-title";
 import {
@@ -10,7 +13,6 @@ import {
   MaintenancePage,
   NotFoundPage,
   SessionExpiredPage,
-  SignInPlaceholder,
   StartupFailurePage,
 } from "./pages/system-pages";
 import { SESSION_ROUTE_ID, sessionGuard } from "./session/session";
@@ -21,6 +23,7 @@ import { Button } from "./ui/button";
 // The page names, in the words of each page's heading (system-pages.tsx).
 const TITLES = {
   signIn: msg({ id: "system.sign_in.title", message: "Sign in" }),
+  mfa: msg({ id: "auth.mfa.title", message: "Two-step verification" }),
   sessionExpired: msg({ id: "system.session_expired.title", message: "Your session has ended" }),
   notFound: msg({ id: "system.not_found.title", message: "Page not found" }),
   workspace: msg({ id: "shell.workspace.title", message: "Workspace" }),
@@ -68,7 +71,12 @@ function Root() {
       })
       .findLast(Boolean),
   );
-  return <Outlet />;
+  // The step-up dialog is one for the whole app: any screen's sensitive call may ask for the password (X-04).
+  return (
+    <StepUpProvider>
+      <Outlet />
+    </StepUpProvider>
+  );
 }
 
 const SKELETON_DELAY_MS = 300;
@@ -108,7 +116,11 @@ export const routes: RouteObject[] = [
     element: <Root />,
     errorElement: <RouteError />,
     children: [
-      { path: "sign-in", handle: handle(TITLES.signIn), element: <SignInPlaceholder /> },
+      // The auth pages are outside the session guard: a visitor with no session must be able to open them.
+      { path: "sign-in", handle: handle(TITLES.signIn), element: <SignInPage /> },
+      { path: "mfa", handle: handle(TITLES.mfa), element: <MfaPage /> },
+      // The mailed link points at /auth/sign-in (R403).
+      { path: "auth/sign-in", loader: () => replace("/sign-in") },
       { path: "session-expired", handle: handle(TITLES.sessionExpired), element: <SessionExpiredPage /> },
       {
         id: SESSION_ROUTE_ID,

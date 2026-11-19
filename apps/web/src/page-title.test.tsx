@@ -50,9 +50,9 @@ describe("a route change", () => {
   it("a change of the query alone moves no focus", async () => {
     stubApi();
     const { router, host } = await openApp("/sign-in");
-    const link = host.querySelector("a");
-    act(() => link?.focus());
+    const field = host.querySelector("input");
+    act(() => field?.focus());
     await act(() => router.navigate("/sign-in?return-to=%2Fcalendar"));
-    expect(document.activeElement).toBe(link);
+    expect(document.activeElement).toBe(field);
   });
 });

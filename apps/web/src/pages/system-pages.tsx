@@ -111,19 +111,3 @@ export function StartupFailurePage({ requestId }: { requestId?: string | undefin
     </Page>
   );
 }
-
-// Sign-in is built with the first form (A-01); until then the page says so, and its retry link goes back to the page
-// the visitor asked for, which asks the guard again.
-export function SignInPlaceholder() {
-  const [params] = useSearchParams();
-  return (
-    <Page title={<Trans id="system.sign_in.title">Sign in</Trans>}>
-      <p>
-        <Trans id="system.sign_in.body">The sign-in form is not available in this version yet.</Trans>
-      </p>
-      <a href={safeReturnTo(params.get("return-to"))} className={ACTION}>
-        <Trans id="system.sign_in.action">Try again</Trans>
-      </a>
-    </Page>
-  );
-}

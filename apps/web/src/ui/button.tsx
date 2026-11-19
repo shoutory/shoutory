@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from "react";
+import { type Ref, useEffect, useId, useRef } from "react";
 import { Button as AriaButton, type ButtonProps } from "react-aria-components";
 
 type Props = Omit<ButtonProps, "isDisabled"> & {
@@ -8,6 +8,8 @@ type Props = Omit<ButtonProps, "isDisabled"> & {
   reason?: string;
   /** A submit in progress: the button says so with `aria-busy` (ux-spec 2.1 L) and the caller ignores a second press. */
   busy?: boolean;
+  /** The button element, for a caller that moves focus to it. */
+  ref?: Ref<HTMLButtonElement>;
 };
 
 const BASE =
@@ -37,10 +39,16 @@ export function Button({
   busy = false,
   reason,
   className,
+  ref: outer,
   ...rest
 }: Props) {
   const reasonId = useId();
-  const ref = useRef<HTMLButtonElement>(null);
+  const ref = useRef<HTMLButtonElement | null>(null);
+  const setRef = (node: HTMLButtonElement | null) => {
+    ref.current = node;
+    if (typeof outer === "function") outer(node);
+    else if (outer) outer.current = node;
+  };
   const explained = unavailable && reason !== undefined;
   // React Aria drops `aria-busy` from the props it passes on, so a submitting button's state is set on the element.
   useEffect(() => {
@@ -50,7 +58,7 @@ export function Button({
   return (
     <>
       <AriaButton
-        ref={ref}
+        ref={setRef}
         {...(unavailable ? withoutHandlers(rest) : rest)}
         className={withBase(className)}
         {...(unavailable ? { type: "button" as const, "aria-disabled": true as const } : {})}

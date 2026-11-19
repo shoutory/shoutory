@@ -45,9 +45,19 @@ describe("the api client", () => {
     await expect(request(answer, "/api/v1/x")).rejects.toMatchObject({ state, code, requestId: "r1" });
   });
 
-  it("a 401 whose body is not our envelope still means the session expired", async () => {
-    stubFetch(new Response("<html>gateway</html>", { status: 401 }));
-    await expect(request(answer, "/api/v1/x")).rejects.toMatchObject({ state: "session_expired" });
+  // R410: only the code `unauthenticated` is an ended session; a 401 that says anything else (wrong credentials, a
+  // wrong code) is an answer of the screen's own form and never reads as an ended session.
+  it.each([
+    ["unauthenticated", json({ error: { code: "unauthenticated", message: "m" } }, 401), "session_expired"],
+    ["invalid_credentials", json({ error: { code: "invalid_credentials", message: "m" } }, 401), "error"],
+    [
+      "a body that is not our envelope",
+      new Response("<html>gateway</html>", { status: 401 }),
+      "session_expired",
+    ],
+  ])("a 401 with %s leads to the state %s", async (_name, response, state) => {
+    stubFetch(response);
+    await expect(request(answer, "/api/v1/x")).rejects.toMatchObject({ state });
   });
 
   it("a refused connection means maintenance", async () => {
@@ -107,19 +117,33 @@ describe("the api client while it reads the body", () => {
   });
 });
 
-// R394: a library-forwarded answer has no `{data}` envelope (sign-out answers `{success}`); `envelope: false` checks the
-// status and ignores the body, with the header, timeout and error mapping of every other call.
+// R394, R410: a library-forwarded answer has no `{data}` envelope (sign-in answers `{user}` or `{twoFactorRedirect}`,
+// sign-out `{success}`); `envelope: false` parses the bare body with the schema, with the header, timeout and error
+// mapping of every other call.
+const bare = z.union([
+  z.object({ user: z.object({ id: z.string() }) }),
+  z.object({ twoFactorRedirect: z.literal(true) }),
+]);
+const bareCall = () =>
+  request(bare, "/api/auth/sign-in/email", { method: "POST", body: {}, envelope: false });
+
 describe("a call without an answer envelope", () => {
   it.each([
-    ["a bare success object", () => json({ success: true })],
-    ["an empty body", () => new Response(null, { status: 200 })],
-    ["a body that is not JSON", () => new Response("ok", { status: 200 })],
-  ])("resolves on %s", async (_name, answerWith) => {
-    const fetchStub = stubFetch(answerWith());
-    await expect(
-      request(z.undefined(), "/api/auth/sign-out", { method: "POST", body: {}, envelope: false }),
-    ).resolves.toBeUndefined();
+    ["a user", { user: { id: "u1" } }],
+    ["a challenge", { twoFactorRedirect: true }],
+  ])("returns the bare body: %s", async (_name, body) => {
+    const fetchStub = stubFetch(json(body));
+    await expect(bareCall()).resolves.toEqual(body);
     expect(new Headers(fetchStub.mock.calls[0]?.[1]?.headers).get("X-Shoutory-Client")).toBe("web");
+  });
+
+  it.each([
+    ["a body of the wrong shape", json({ nope: true })],
+    ["an empty body", new Response(null, { status: 200 })],
+    ["a body that is not JSON", new Response("ok", { status: 200 })],
+  ])("refuses %s", async (_name, response) => {
+    stubFetch(response);
+    await expect(bareCall()).rejects.toMatchObject({ code: "invalid_response" });
   });
 
   it.each([
@@ -128,8 +152,6 @@ describe("a call without an answer envelope", () => {
     ["a 500 with no envelope", new Response("boom", { status: 500 }), "error"],
   ])("still maps %s to the state %s", async (_name, response, state) => {
     stubFetch(response);
-    await expect(
-      request(z.undefined(), "/api/auth/sign-out", { method: "POST", body: {}, envelope: false }),
-    ).rejects.toMatchObject({ state });
+    await expect(bareCall()).rejects.toMatchObject({ state });
   });
 });

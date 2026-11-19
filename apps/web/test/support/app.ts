@@ -2,7 +2,7 @@ import { i18n, type Messages } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { createMemoryRouter, RouterProvider } from "react-router";
+import { createMemoryRouter, type RouteObject, RouterProvider } from "react-router";
 import { vi } from "vitest";
 import { routes } from "../../src/routes";
 
@@ -46,7 +46,14 @@ export interface Api {
   organizations?: Answer;
   workspaces?: Answer;
   signOut?: Answer;
+  signIn?: Answer;
+  verifyTotp?: Answer;
+  verifyBackupCode?: Answer;
+  verifyPassword?: Answer;
+  resend?: Answer;
 }
+
+export const USER = { id: "u1", email: "person@example.test", emailVerified: true };
 
 /** The fetch stub: each api path has its answer, signed in with `ORGS` and `WORKSPACES` unless a test says otherwise. */
 export function stubApi(api: Api = {}) {
@@ -55,6 +62,12 @@ export function stubApi(api: Api = {}) {
     "/api/v1/organizations": api.organizations ?? (() => page(ORGS)),
     "/api/v1/workspaces": api.workspaces ?? (() => page(WORKSPACES)),
     "/api/auth/sign-out": api.signOut ?? (() => json({ success: true })),
+    // The library-forwarded answers are bare: no `{data}` envelope.
+    "/api/auth/sign-in/email": api.signIn ?? (() => json({ user: USER })),
+    "/api/auth/two-factor/verify-totp": api.verifyTotp ?? (() => json({ user: USER })),
+    "/api/auth/two-factor/verify-backup-code": api.verifyBackupCode ?? (() => json({ user: USER })),
+    "/api/auth/verify-password": api.verifyPassword ?? (() => json({ status: true })),
+    "/api/auth/send-verification-email": api.resend ?? (() => json({ status: true })),
   };
   const stub = vi.fn((path: string, _init?: RequestInit) => {
     const answer = answers[new URL(path, "http://same-origin.invalid").pathname];
@@ -78,6 +91,19 @@ export async function openApp(path: string, locale: "en" | "ar" = "en") {
   i18n.load(locale, catalogs[`../../src/messages/${locale}.po`]?.messages ?? {});
   i18n.activate(locale);
   const router = createMemoryRouter(routes, { initialEntries: [path] });
+  const host = document.body.appendChild(document.createElement("div"));
+  root = createRoot(host);
+  await act(async () => {
+    root?.render(createElement(I18nProvider, { i18n }, createElement(RouterProvider, { router })));
+  });
+  return { router, host };
+}
+
+/** Opens some routes of the test's own (a provider or a component under test) in a memory router. */
+export async function mountRouted(routeObjects: RouteObject[], path: string, locale: "en" | "ar" = "en") {
+  i18n.load(locale, catalogs[`../../src/messages/${locale}.po`]?.messages ?? {});
+  i18n.activate(locale);
+  const router = createMemoryRouter(routeObjects, { initialEntries: [path] });
   const host = document.body.appendChild(document.createElement("div"));
   root = createRoot(host);
   await act(async () => {

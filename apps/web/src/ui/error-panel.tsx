@@ -1,5 +1,5 @@
 import { Trans } from "@lingui/react/macro";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import type { ApiError } from "../http/client";
 import { Button } from "./button";
 import { DirText } from "./dir-text";
@@ -34,14 +34,23 @@ export function ErrorPanel({
   meaning,
   error,
   onRetry,
+  focusOnMount = false,
 }: {
   what: ReactNode;
   meaning: ReactNode;
   error: ApiError;
   onRetry?: () => void;
+  /** A failed submit moves focus here, so the user is told what failed (WI-F07). */
+  focusOnMount?: boolean;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (focusOnMount) ref.current?.focus();
+  }, [focusOnMount]);
   return (
     <div
+      ref={ref}
+      tabIndex={focusOnMount ? -1 : undefined}
       role="alert"
       className="flex flex-col gap-3 rounded-md border-s-4 border-danger bg-danger-bg px-5 py-4"
     >

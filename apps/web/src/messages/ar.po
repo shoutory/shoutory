@@ -72,14 +72,6 @@ msgid "system.sign_in.title"
 msgstr "تسجيل الدخول"
 
 #. js-lingui-explicit-id
-msgid "system.sign_in.body"
-msgstr "نموذج تسجيل الدخول غير متاح في هذا الإصدار بعد."
-
-#. js-lingui-explicit-id
-msgid "system.sign_in.action"
-msgstr "حاول مرة أخرى"
-
-#. js-lingui-explicit-id
 msgid "system.loading"
 msgstr "جارٍ التحميل"
 
@@ -206,3 +198,163 @@ msgstr "ابحث في مساحات العمل"
 #. js-lingui-explicit-id
 msgid "shell.palette.empty"
 msgstr "لا توجد نتائج"
+
+#. js-lingui-explicit-id
+msgid "auth.offline"
+msgstr "أنت غير متصل بالإنترنت. هذا الإجراء يحتاج إلى الخادم."
+
+#. js-lingui-explicit-id
+msgid "auth.sign_in.email"
+msgstr "البريد الإلكتروني"
+
+#. js-lingui-explicit-id
+msgid "auth.sign_in.password"
+msgstr "كلمة المرور"
+
+#. js-lingui-explicit-id
+msgid "auth.sign_in.submit"
+msgstr "تسجيل الدخول"
+
+#. js-lingui-explicit-id
+msgid "auth.sign_in.resend"
+msgstr "أرسل الرابط مرة أخرى"
+
+#. js-lingui-explicit-id
+msgid "auth.sign_in.resent"
+msgstr "أرسلنا الرابط مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "auth.sign_in.reset"
+msgstr "إعادة تعيين كلمة المرور"
+
+#. js-lingui-explicit-id
+msgid "auth.mfa.title"
+msgstr "التحقق بخطوتين"
+
+#. js-lingui-explicit-id
+msgid "auth.mfa.code_label"
+msgstr "رمز التحقق"
+
+#. js-lingui-explicit-id
+msgid "auth.mfa.recovery_label"
+msgstr "رمز الاسترداد"
+
+#. js-lingui-explicit-id
+msgid "auth.mfa.submit"
+msgstr "تحقّق"
+
+#. js-lingui-explicit-id
+msgid "auth.mfa.use_recovery"
+msgstr "استخدم رمز استرداد"
+
+#. js-lingui-explicit-id
+msgid "auth.mfa.use_code"
+msgstr "استخدم رمز تطبيق المصادقة"
+
+#. js-lingui-explicit-id
+msgid "auth.mfa.start_again"
+msgstr "ابدأ من جديد"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.too_many.what"
+msgstr "محاولات كثيرة"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.too_many.meaning"
+msgstr "حاول مرة أخرى بعد قليل."
+
+#. js-lingui-explicit-id
+msgid "auth.copy.unavailable.what"
+msgstr "تعذّر الوصول إلى Shoutory حاليًا"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.unavailable.meaning"
+msgstr "لم يتغيّر شيء. حاول مرة أخرى بعد لحظة."
+
+#. js-lingui-explicit-id
+msgid "auth.copy.expired.what"
+msgstr "انتهت صلاحية تسجيل دخولك"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.expired.meaning"
+msgstr "ابدأ من جديد من صفحة تسجيل الدخول."
+
+#. js-lingui-explicit-id
+msgid "auth.copy.sign_in.what"
+msgstr "تعذّر تسجيل دخولك"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.sign_in.meaning"
+msgstr "تحقق من بريدك الإلكتروني وكلمة المرور ثم حاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "auth.copy.unverified.what"
+msgstr "أكّد بريدك الإلكتروني أولًا"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.unverified.meaning"
+msgstr "أرسلنا إليك رابطًا عند إنشاء حسابك."
+
+#. js-lingui-explicit-id
+msgid "auth.copy.breached.what"
+msgstr "اختر كلمة مرور جديدة"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.breached.meaning"
+msgstr "ظهرت كلمة المرور هذه في تسريب بيانات، لذلك تحتاج إلى كلمة مرور جديدة."
+
+#. js-lingui-explicit-id
+msgid "auth.copy.wrong_code.what"
+msgstr "الرمز غير صحيح"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.wrong_code.meaning"
+msgstr "تحقق من الرمز في تطبيق المصادقة وحاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "auth.copy.wrong_password.what"
+msgstr "كلمة المرور غير صحيحة"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.wrong_password.meaning"
+msgstr "تحقق منها وحاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "auth.copy.lock.meaning"
+msgstr "تكرار إدخال كلمة مرور خاطئة يوقف تسجيل الدخول لفترة. حاول مرة أخرى بعد قليل."
+
+#. js-lingui-explicit-id
+msgid "auth.copy.sign_in_failed.what"
+msgstr "تعذّر تسجيل دخولك"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.code_failed.what"
+msgstr "تعذّر التحقق من الرمز"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.password_failed.what"
+msgstr "تعذّر تأكيد كلمة المرور"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.failed.meaning"
+msgstr "لم يتغيّر شيء. حاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "auth.step_up.title"
+msgstr "أكّد كلمة المرور"
+
+#. js-lingui-explicit-id
+msgid "auth.step_up.intro"
+msgstr "يحتاج هذا الإجراء إلى كلمة المرور مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "auth.step_up.password"
+msgstr "كلمة المرور"
+
+#. js-lingui-explicit-id
+msgid "auth.step_up.confirm"
+msgstr "تأكيد"
+
+#. js-lingui-explicit-id
+msgid "auth.step_up.cancel"
+msgstr "إلغاء"
