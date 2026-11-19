@@ -116,7 +116,7 @@ export function registerWorkspaces(app: App, ipHmac: (address: string) => Buffer
     handler: async ({ c, query, inUserTx }) => {
       const rows = await inUserTx(async (tx) => {
         const found = await tx.query<{ id: string }>(
-          "SELECT workspace_id AS id, organization_id, name, slug FROM app.my_workspaces($1, $2)",
+          "SELECT workspace_id AS id, organization_id, name, slug, role_key AS role FROM app.my_workspaces($1, $2)",
           [query.limit, query.cursor ?? null],
         );
         return found.rows;

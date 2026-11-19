@@ -368,3 +368,17 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
 - Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
 - Rejected: `react-qr-code` (pulls `prop-types` and `qrcode-generator`), `qrcode` (three dependencies, last release
   2024-08), `qrcode-generator` (556 KB).
+
+## cldr-dates-full 49.0.0 (with its peers cldr-numbers-full and cldr-core 49.0.0)
+
+- Used for: the build-time generator of the time-zone city list (`apps/web/scripts/generate-zones.mjs`), which reads the
+  English and Arabic exemplar cities and writes `apps/web/src/zones/cities.json` (a development dependency; nothing of it
+  ships). The browser's `Intl` does not expose city names. The peers are installed by pnpm because the package asks for them
+  (the lockfile pins both at 49.0.0); the generator reads only the two `timeZoneNames.json` files.
+- Licence: Unicode-3.0 (OSI-approved, permissive, no copyleft; added to the licence allowlist). The generated file
+  carries the Unicode copyright and licence notice the licence asks for. Published 2026-10-22, more than 14 days before
+  adoption.
+- Install scripts: none in any of the three (their `package.json` files have no `scripts` block and no dependencies).
+- Advisories: `pnpm audit --audit-level=high` reported none after adding them. Re-read at each upgrade.
+- Rejected: IANA last segments in English only (an Arabic page would show English cities), a hand-written list of about 80
+  cities (drifts from CLDR and the server's zone list).

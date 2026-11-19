@@ -14,7 +14,7 @@
     "outDir": "dist/tsc",
     "tsBuildInfoFile": "dist/tsc/tsconfig.tsbuildinfo"
   },
-  "include": ["src"],
+  "include": ["src", "src/zones/cities.json"],
   "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"],
   "references": [{ "path": "../../packages/core" }]
 }

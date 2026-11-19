@@ -7,12 +7,16 @@ const organization = z.object({
   name: z.string(),
   slug: z.string(),
   type: z.enum(["agency", "team", "personal"]),
+  // The caller's own role in the organization (`owner`, `admin` or `member`).
+  org_role: z.string(),
 });
 const workspace = z.object({
   id: z.string(),
   organization_id: z.string(),
   name: z.string(),
   slug: z.string(),
+  // The caller's own role in the workspace.
+  role: z.string(),
 });
 
 export type Organization = z.infer<typeof organization>;

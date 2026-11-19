@@ -16,22 +16,24 @@ export interface Organization {
   name: string;
   slug: string;
   type: "agency" | "team" | "personal";
+  org_role: "owner" | "admin" | "member";
 }
 export interface Workspace {
   id: string;
   organization_id: string;
   name: string;
   slug: string;
+  role: "owner" | "admin" | "editor" | "approver" | "viewer";
 }
 
 export const ORGS: Organization[] = [
-  { id: "o1", name: "Acme Agency", slug: "acme", type: "agency" },
-  { id: "o2", name: "Beta Team", slug: "beta", type: "team" },
+  { id: "o1", name: "Acme Agency", slug: "acme", type: "agency", org_role: "owner" },
+  { id: "o2", name: "Beta Team", slug: "beta", type: "team", org_role: "owner" },
 ];
 export const WORKSPACES: Workspace[] = [
-  { id: "w1", organization_id: "o1", name: "Acme One", slug: "acme-one" },
-  { id: "w2", organization_id: "o1", name: "Acme Two", slug: "acme-two" },
-  { id: "w3", organization_id: "o2", name: "Beta Main", slug: "beta-main" },
+  { id: "w1", organization_id: "o1", name: "Acme One", slug: "acme-one", role: "owner" },
+  { id: "w2", organization_id: "o1", name: "Acme Two", slug: "acme-two", role: "owner" },
+  { id: "w3", organization_id: "o2", name: "Beta Main", slug: "beta-main", role: "owner" },
 ];
 
 export const json = (body: unknown, status = 200) =>
@@ -59,6 +61,8 @@ export interface Api {
   enable?: Answer;
   acceptInvitation?: Answer;
   profile?: Answer;
+  createOrganization?: Answer;
+  createWorkspace?: Answer;
   sessions?: Answer;
   revokeSession?: Answer;
   revokeOthers?: Answer;
@@ -91,9 +95,38 @@ export const DEVICES = [
   },
 ];
 
+export const NEW_ORG = "0190a000-0000-7000-8000-0000000000a1";
+export const NEW_WORKSPACE = "0190a000-0000-7000-8000-0000000000b1";
+
+// The create calls of the onboarding: an organization, then its first workspace (both answer 201 with the row).
+function onboardingAnswers(api: Api): Record<string, Answer> {
+  return {
+    "/api/v1/organizations:POST":
+      api.createOrganization ??
+      (() => json({ data: { id: NEW_ORG, name: "New Org", slug: "o-new", type: "agency" } }, 201)),
+    "/api/v1/workspaces:POST":
+      api.createWorkspace ??
+      (() =>
+        json(
+          {
+            data: {
+              id: NEW_WORKSPACE,
+              organization_id: NEW_ORG,
+              name: "New Client",
+              slug: "new-client",
+              colour: null,
+              default_tz: "UTC",
+            },
+          },
+          201,
+        )),
+  };
+}
+
 // The answers of the security page's calls (the sessions, the password change, the two-factor status and codes).
 function securityAnswers(api: Api): Record<string, Answer> {
   return {
+    ...onboardingAnswers(api),
     "/api/auth/sessions": api.sessions ?? (() => json({ data: DEVICES })),
     "/api/auth/sessions/revoke": api.revokeSession ?? (() => json({ data: { revoked: true } })),
     "/api/auth/sessions/revoke-others": api.revokeOthers ?? (() => json({ data: { revoked: true } })),
@@ -142,8 +175,10 @@ export function stubApi(api: Api = {}) {
     ...moreAnswers(api),
     ...securityAnswers(api),
   };
-  const stub = vi.fn((path: string, _init?: RequestInit) => {
-    const answer = answers[new URL(path, "http://same-origin.invalid").pathname];
+  const stub = vi.fn((path: string, init?: RequestInit) => {
+    const pathname = new URL(path, "http://same-origin.invalid").pathname;
+    // A create call to a path that also lists (organizations, workspaces) has its own `<path>:POST` answer.
+    const answer = answers[`${pathname}:${init?.method ?? "GET"}`] ?? answers[pathname];
     return Promise.resolve(answer ? answer() : refusal("not_found", 404));
   });
   vi.stubGlobal("fetch", stub);

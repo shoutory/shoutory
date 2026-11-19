@@ -1,6 +1,16 @@
 import { act } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { byText, click, closeApp, json, openApp, refusal, stubApi, type } from "../../test/support/app";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  byText,
+  click,
+  closeApp,
+  combobox,
+  json,
+  openApp,
+  refusal,
+  stubApi,
+  type,
+} from "../../test/support/app";
 import { detectLocale, storedLocale } from "../i18n/i18n";
 
 afterEach(() => {
@@ -127,5 +137,72 @@ describe("the profile page when the session ends", () => {
     const { host, router } = await openApp("/account/profile");
     await save(host, "Any Name");
     expect(router.state.location.pathname).toBe("/sign-in");
+  });
+});
+
+// UX 4.7: zones are shown by their localized city with the offset and a note when the clock changes, never by an IANA id.
+describe("the profile time zone", () => {
+  const options = () =>
+    [...document.querySelectorAll('[role="option"]')].map((option) => option.textContent ?? "");
+  const zoneInput = (host: ParentNode, label: string) => combobox(host, label);
+
+  // The browser's zone is fixed, so a typed city is never the zone already selected (the host's own zone may be it).
+  beforeEach(() => {
+    vi.spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions").mockReturnValue({
+      timeZone: "UTC",
+    } as Intl.ResolvedDateTimeFormatOptions);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    ["en", "Time zone", "Cairo", "Cairo (UTC+2)", /summer/i],
+    ["ar", "المنطقة الزمنية", "القاهرة", "القاهرة (UTC+2)", /الصيف/],
+  ] as const)(
+    "the %s picker finds Cairo by its name, with offset and note, never a raw id",
+    async (locale, label, query, shown, note) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-01-15T12:00:00Z"));
+      stubApi();
+      const { host } = await openApp("/account/profile", locale);
+      type(zoneInput(host, label), query);
+      const found = options().find((text) => text.includes(shown));
+      expect(found).toMatch(note);
+      expect(document.body.textContent).not.toContain("Africa/Cairo");
+    },
+  );
+
+  it("a zone with no clock change shows no note", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-01-15T12:00:00Z"));
+    stubApi();
+    const { host } = await openApp("/account/profile");
+    type(zoneInput(host, "Time zone"), "Riyadh");
+    expect(options().filter((text) => text.startsWith("Riyadh"))).toEqual(["Riyadh (UTC+3)"]);
+  });
+});
+
+describe("the profile time zone choice", () => {
+  const zoneInput = (host: ParentNode, label: string) => combobox(host, label);
+  afterEach(() => vi.restoreAllMocks());
+
+  it("starts with the browser's zone, and a pick is stored and shown again after a reload", async () => {
+    vi.spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions").mockReturnValue({
+      timeZone: "Asia/Tokyo",
+    } as Intl.ResolvedDateTimeFormatOptions);
+    stubApi();
+    const first = await openApp("/account/profile");
+    expect(zoneInput(first.host, "Time zone").value).toBe("Tokyo");
+    type(zoneInput(first.host, "Time zone"), "Cairo");
+    click(byText(document.body, '[role="option"]', "Cairo"));
+    expect(localStorage.getItem("shoutory.zone")).toBe("Africa/Cairo");
+    // A reload keeps the browser's storage; the harness's cleanup empties it, so it is put back.
+    closeApp();
+    localStorage.setItem("shoutory.zone", "Africa/Cairo");
+    stubApi();
+    const again = await openApp("/account/profile");
+    expect(zoneInput(again.host, "Time zone").value).toBe("Cairo");
   });
 });

@@ -81,12 +81,9 @@ describe("opening a workspace", () => {
     expect(document.title).toBe("Page not found - Shoutory");
   });
 
-  it.each([
-    ["the workspace page", "/w/w1"],
-    ["the start page with no workspace at all", "/"],
-  ])("%s shows the first-use state when there is nothing to show", async (_name, path) => {
+  it("the workspace page shows the first-use state when there is nothing to show", async () => {
     stubApi({ workspaces: () => json({ data: [], meta: { next_cursor: null } }) });
-    const { host } = await openApp(path);
+    const { host } = await openApp("/w/w1");
     expect(host.querySelector('main [data-kind="first-use"]')).not.toBeNull();
   });
 });

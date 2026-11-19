@@ -770,6 +770,90 @@ msgid "account.security.action"
 msgstr "Action"
 
 #. js-lingui-explicit-id
+msgid "account.profile.zone"
+msgstr "Time zone"
+
+#. js-lingui-explicit-id
+msgid "zones.clock_changes"
+msgstr "Clocks change in summer"
+
+#. js-lingui-explicit-id
+msgid "onboarding.title"
+msgstr "Set up Shoutory"
+
+#. js-lingui-explicit-id
+msgid "onboarding.resume_title"
+msgstr "Finish setting up"
+
+#. js-lingui-explicit-id
+msgid "onboarding.resume_org"
+msgstr "Organization"
+
+#. js-lingui-explicit-id
+msgid "onboarding.org_name"
+msgstr "Organization name"
+
+#. js-lingui-explicit-id
+msgid "onboarding.type"
+msgstr "Type"
+
+#. js-lingui-explicit-id
+msgid "onboarding.type_agency"
+msgstr "Agency"
+
+#. js-lingui-explicit-id
+msgid "onboarding.type_team"
+msgstr "Team"
+
+#. js-lingui-explicit-id
+msgid "onboarding.type_personal"
+msgstr "Just me"
+
+#. js-lingui-explicit-id
+msgid "onboarding.helper_agency"
+msgstr "Each client you add gets its own channels, calendar and approvals."
+
+#. js-lingui-explicit-id
+msgid "onboarding.helper_team"
+msgstr "Your team works together in one workspace with shared channels and approvals."
+
+#. js-lingui-explicit-id
+msgid "onboarding.helper_personal"
+msgstr "Just you: one workspace and no switchers."
+
+#. js-lingui-explicit-id
+msgid "onboarding.workspace_agency"
+msgstr "Name of your first client"
+
+#. js-lingui-explicit-id
+msgid "onboarding.workspace_team"
+msgstr "Name of your first workspace"
+
+#. js-lingui-explicit-id
+msgid "onboarding.workspace_personal"
+msgstr "Name of your workspace"
+
+#. js-lingui-explicit-id
+msgid "onboarding.name_required"
+msgstr "Enter a name."
+
+#. js-lingui-explicit-id
+msgid "onboarding.create"
+msgstr "Create"
+
+#. js-lingui-explicit-id
+msgid "onboarding.member_title"
+msgstr "You are not in a workspace yet"
+
+#. js-lingui-explicit-id
+msgid "onboarding.member_body"
+msgstr "Ask an admin to invite you, or start your own organization."
+
+#. js-lingui-explicit-id
+msgid "onboarding.start_own"
+msgstr "Start your own organization"
+
+#. js-lingui-explicit-id
 msgid "account.profile.sample"
 msgstr "Example:"
 

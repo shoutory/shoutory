@@ -1,6 +1,6 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import { type ReactNode, useState } from "react";
-import { Form, Label, Radio, RadioGroup } from "react-aria-components";
+import { useState } from "react";
+import { Form } from "react-aria-components";
 import { useNavigate, useRevalidator, useRouteLoaderData } from "react-router";
 import { z } from "zod";
 import { authCopy } from "../auth/auth-copy";
@@ -8,10 +8,12 @@ import { SubmitButton, useAction } from "../auth/auth-frame";
 import { request } from "../http/client";
 import { activateLocale, applyLocale, type Digits, type Locale, storeLocale } from "../i18n/i18n";
 import { SESSION_ROUTE_ID, type Session } from "../session/session";
+import { Choice, Choices } from "../ui/choices";
 import { ErrorPanel } from "../ui/error-panel";
 import { LocalizedNumber } from "../ui/localized";
 import { TextField } from "../ui/text-field";
-import { readDigits, readTheme, setDigits, setTheme, type Theme } from "./prefs";
+import { ZonePicker } from "../zones/zone-picker";
+import { readDigits, readTheme, readZone, setDigits, setTheme, setZone, type Theme } from "./prefs";
 
 const MAX_NAME = 100;
 const saved = z.object({ name: z.string() });
@@ -72,33 +74,6 @@ function NameForm({ current }: { current: string }) {
         <ErrorPanel focusOnMount error={save.failure} {...authCopy("link", save.failure)} />
       ) : null}
     </Form>
-  );
-}
-
-function Choice({ value, children }: { value: string; children: ReactNode }) {
-  return (
-    <Radio value={value} className="flex min-h-6 pointer-coarse:min-h-11 items-center gap-3">
-      {children}
-    </Radio>
-  );
-}
-
-function Choices({
-  label,
-  value,
-  onChange,
-  children,
-}: {
-  label: ReactNode;
-  value: string;
-  onChange: (value: string) => void;
-  children: ReactNode;
-}) {
-  return (
-    <RadioGroup value={value} onChange={onChange} className="flex flex-col gap-2">
-      <Label className="text-sm font-medium">{label}</Label>
-      {children}
-    </RadioGroup>
   );
 }
 
@@ -182,7 +157,23 @@ function Settings() {
   );
 }
 
-/** A-06 (`/account/profile`): the name is the server's; language, theme and digits stay in this browser. */
+// The zone stays in this browser too; it starts as the browser's own.
+function ZoneField() {
+  const { t } = useLingui();
+  const [zone, setZoneState] = useState(readZone);
+  return (
+    <ZonePicker
+      label={t({ id: "account.profile.zone", message: "Time zone" })}
+      value={zone}
+      onChange={(next) => {
+        setZoneState(next);
+        setZone(next);
+      }}
+    />
+  );
+}
+
+/** A-06 (`/account/profile`): the name is the server's; language, theme, digits and zone stay in this browser. */
 export function ProfilePage() {
   const session = useRouteLoaderData<Session>(SESSION_ROUTE_ID);
   return (
@@ -192,6 +183,7 @@ export function ProfilePage() {
       </h1>
       {session ? <NameForm current={session.user.name} /> : null}
       <Settings />
+      <ZoneField />
     </>
   );
 }

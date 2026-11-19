@@ -18,7 +18,7 @@ import {
 afterEach(closeApp);
 
 const page = (rows: unknown[]) => () => json({ data: rows, meta: { next_cursor: null } });
-const PERSONAL: Organization = { id: "o1", name: "Me", slug: "me", type: "personal" };
+const PERSONAL: Organization = { id: "o1", name: "Me", slug: "me", type: "personal", org_role: "owner" };
 const options = () => [...document.querySelectorAll('[role="option"]')].map((option) => option.textContent);
 const openList = (input: HTMLInputElement) => press(input, "ArrowDown");
 

@@ -1,7 +1,8 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect } from "react";
 import { Link as AriaLink } from "react-aria-components";
-import { Link, Navigate, Outlet, useParams, useRevalidator } from "react-router";
+import { Link, Navigate, Outlet, useParams, useRevalidator, useSearchParams } from "react-router";
+import { Onboarding } from "../onboarding/onboarding";
 import { NotFoundPage } from "../pages/system-pages";
 import { DirText } from "../ui/dir-text";
 import { EmptyState } from "../ui/empty-state";
@@ -121,15 +122,46 @@ function NoWorkspaces() {
   );
 }
 
-/** `/`: the last-used workspace if it is still one of mine, else the first; with none, the first-use page. */
+// A person who is only a member of organizations that have no workspace waits for an invitation, or starts their own.
+function AskAnAdmin() {
+  return (
+    <>
+      <Welcome />
+      <EmptyState
+        kind="first-use"
+        title={<Trans id="onboarding.member_title">You are not in a workspace yet</Trans>}
+      >
+        <Trans id="onboarding.member_body">Ask an admin to invite you, or start your own organization.</Trans>
+      </EmptyState>
+      <Link to="/?new=1" className="text-link underline">
+        <Trans id="onboarding.start_own">Start your own organization</Trans>
+      </Link>
+    </>
+  );
+}
+
+/**
+ * `/`: the last-used workspace if it is still one of mine, else the first. With none: the onboarding for a person with
+ * no organization, or who owns or administers one that has no workspace (the first such, in list order); a person who
+ * is only a member is told to ask an admin and may start their own organization (`?new`).
+ */
 export function StartPage() {
   const data = useShellData();
+  const [params] = useSearchParams();
   // A failed list is shown in the top bar; the page still has its heading.
   if ("error" in data) return <Welcome />;
-  if (data.workspaces.length === 0) return <NoWorkspaces />;
-  const stored = lastWorkspace();
-  const target = data.workspaces.find((workspace) => workspace.id === stored) ?? data.workspaces[0];
-  return <Navigate to={`/w/${target?.id}`} replace />;
+  if (data.workspaces.length > 0) {
+    const stored = lastWorkspace();
+    const target = data.workspaces.find((workspace) => workspace.id === stored) ?? data.workspaces[0];
+    return <Navigate to={`/w/${target?.id}`} replace />;
+  }
+  // An organization I own or administer with no workspace is always resumed, `?new` or not: a reload after a failed
+  // workspace call must not start a second organization.
+  const own = data.organizations.find((org) => org.org_role === "owner" || org.org_role === "admin");
+  if (own || params.has("new") || data.organizations.length === 0) {
+    return <Onboarding resume={own} focusHeading={params.has("new")} />;
+  }
+  return <AskAnAdmin />;
 }
 
 /** `/w/:ws`: the workspace scope. An id that is not one of mine is the not-found page (R392, R393). */

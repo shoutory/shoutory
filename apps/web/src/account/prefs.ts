@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { Digits } from "../i18n/i18n";
+import { isKnownZone } from "../zones/zone-picker";
 
 // The theme and the digits stay in this browser: the keys are the ones the page reads at start-up (the theme before
 // first paint, in theme/bootstrap.js).
@@ -35,6 +36,20 @@ export function setTheme(theme: Theme) {
   write(THEME_KEY, theme);
   const dark = theme === "dark" || (theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.dataset.theme = dark ? "dark" : "light";
+}
+
+const ZONE_KEY = "shoutory.zone";
+
+/** The person's time zone: the stored choice if it is a listed zone, else the browser's, else UTC. */
+export function readZone(): string {
+  const stored = read(ZONE_KEY);
+  if (isKnownZone(stored)) return stored;
+  const browser = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return isKnownZone(browser) ? browser : "UTC";
+}
+
+export function setZone(zone: string) {
+  write(ZONE_KEY, zone);
 }
 
 const listeners = new Set<() => void>();

@@ -10,9 +10,9 @@
       "project": ["test/**"]
     },
     "apps/web": {
-      "entry": ["src/theme/bootstrap.js"],
-      "project": ["src/**"],
-      "ignoreDependencies": ["happy-dom", "@lingui/cli"]
+      "entry": ["src/theme/bootstrap.js", "scripts/*.mjs"],
+      "project": ["src/**", "scripts/**"],
+      "ignoreDependencies": ["happy-dom", "@lingui/cli", "cldr-dates-full"]
     },
     "apps/api": {
       "entry": ["src/main.ts"],

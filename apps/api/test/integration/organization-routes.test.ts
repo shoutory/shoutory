@@ -42,7 +42,7 @@ describe("POST /api/v1/organizations", () => {
         ).rows[0]?.org_role,
     );
     expect(role).toBe("owner");
-    expect((await fetchList(user.cookie)).body.data).toEqual([data]);
+    expect((await fetchList(user.cookie)).body.data).toEqual([{ ...data, org_role: "owner" }]);
   });
 
   it.each([

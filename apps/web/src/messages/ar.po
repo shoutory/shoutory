@@ -768,6 +768,90 @@ msgid "account.security.action"
 msgstr "الإجراء"
 
 #. js-lingui-explicit-id
+msgid "account.profile.zone"
+msgstr "المنطقة الزمنية"
+
+#. js-lingui-explicit-id
+msgid "zones.clock_changes"
+msgstr "يتغير التوقيت في الصيف"
+
+#. js-lingui-explicit-id
+msgid "onboarding.title"
+msgstr "إعداد Shoutory"
+
+#. js-lingui-explicit-id
+msgid "onboarding.resume_title"
+msgstr "إكمال الإعداد"
+
+#. js-lingui-explicit-id
+msgid "onboarding.resume_org"
+msgstr "المؤسسة"
+
+#. js-lingui-explicit-id
+msgid "onboarding.org_name"
+msgstr "اسم المؤسسة"
+
+#. js-lingui-explicit-id
+msgid "onboarding.type"
+msgstr "النوع"
+
+#. js-lingui-explicit-id
+msgid "onboarding.type_agency"
+msgstr "وكالة"
+
+#. js-lingui-explicit-id
+msgid "onboarding.type_team"
+msgstr "فريق"
+
+#. js-lingui-explicit-id
+msgid "onboarding.type_personal"
+msgstr "لي وحدي"
+
+#. js-lingui-explicit-id
+msgid "onboarding.helper_agency"
+msgstr "كل عميل تضيفه يحصل على قنواته وتقويمه وموافقاته الخاصة."
+
+#. js-lingui-explicit-id
+msgid "onboarding.helper_team"
+msgstr "يعمل فريقك معًا في مساحة عمل واحدة بقنوات وموافقات مشتركة."
+
+#. js-lingui-explicit-id
+msgid "onboarding.helper_personal"
+msgstr "لك وحدك: مساحة عمل واحدة بلا مبدّلات."
+
+#. js-lingui-explicit-id
+msgid "onboarding.workspace_agency"
+msgstr "اسم أول عميل لك"
+
+#. js-lingui-explicit-id
+msgid "onboarding.workspace_team"
+msgstr "اسم أول مساحة عمل لك"
+
+#. js-lingui-explicit-id
+msgid "onboarding.workspace_personal"
+msgstr "اسم مساحة عملك"
+
+#. js-lingui-explicit-id
+msgid "onboarding.name_required"
+msgstr "أدخل اسمًا."
+
+#. js-lingui-explicit-id
+msgid "onboarding.create"
+msgstr "إنشاء"
+
+#. js-lingui-explicit-id
+msgid "onboarding.member_title"
+msgstr "لست في أي مساحة عمل بعد"
+
+#. js-lingui-explicit-id
+msgid "onboarding.member_body"
+msgstr "اطلب من أحد المسؤولين دعوتك، أو ابدأ مؤسستك الخاصة."
+
+#. js-lingui-explicit-id
+msgid "onboarding.start_own"
+msgstr "ابدأ مؤسستك الخاصة"
+
+#. js-lingui-explicit-id
 msgid "account.profile.sample"
 msgstr "مثال:"
 

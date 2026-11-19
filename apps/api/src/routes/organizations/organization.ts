@@ -17,7 +17,7 @@ export function registerOrganizations(app: App, ipHmac: (address: string) => Buf
     handler: async ({ c, query, inUserTx }) => {
       const rows = await inUserTx(async (tx) => {
         const found = await tx.query<{ id: string }>(
-          "SELECT organization_id AS id, name, slug, type FROM app.my_organizations($1, $2)",
+          "SELECT organization_id AS id, name, slug, type, org_role FROM app.my_organizations($1, $2)",
           [query.limit, query.cursor ?? null],
         );
         return found.rows;
