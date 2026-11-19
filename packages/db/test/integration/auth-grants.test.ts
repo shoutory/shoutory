@@ -33,13 +33,17 @@ const MATRIX: Record<string, string[]> = {
   shoutory_owner: [...PRIVILEGES],
 };
 
+// The retention purge (purge_expired) is the one thing that deletes from three identity tables, and only as the definer.
+const DEFINER_DELETES = ["user", "session", "verification"];
+
 // `user` is a reserved word: it is the one name that must be quoted.
 const qualified = (table: string): string => (table === "user" ? 'auth."user"' : `auth.${table}`);
 
 async function privilegeViolations(pool: Pool): Promise<string[]> {
   const found: string[] = [];
-  for (const [role, allowed] of Object.entries(MATRIX)) {
+  for (const [role, base] of Object.entries(MATRIX)) {
     for (const table of TABLES) {
+      const allowed = role === "shoutory_definer" && DEFINER_DELETES.includes(table) ? ["DELETE"] : base;
       for (const privilege of PRIVILEGES) {
         const has = await pool.query("SELECT has_table_privilege($1, $2, $3) AS has", [
           role,
@@ -145,7 +149,8 @@ describe("the auth grant check catches a planted grant", () => {
   it.each([
     ["GRANT SELECT ON auth.session TO shoutory_app", "shoutory_app SELECT on session"],
     ["GRANT SELECT ON auth.account TO shoutory_readonly", "shoutory_readonly SELECT on account"],
-    ["GRANT DELETE ON auth.verification TO shoutory_definer", "shoutory_definer DELETE on verification"],
+    ["GRANT DELETE ON auth.account TO shoutory_definer", "shoutory_definer DELETE on account"],
+    ["GRANT UPDATE ON auth.verification TO shoutory_definer", "shoutory_definer UPDATE on verification"],
     ["GRANT TRUNCATE ON auth.two_factor TO shoutory_auth", "shoutory_auth TRUNCATE on two_factor"],
     ["ALTER TABLE auth.session OWNER TO shoutory_auth", "shoutory_auth owns auth.session"],
   ])("%s", async (statement, expected) => {

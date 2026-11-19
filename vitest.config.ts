@@ -25,6 +25,10 @@ export default defineConfig({
           // global-setup error (vitest-dev/vitest#11682). Remove when the pinned Vitest includes that fix.
           fsModuleCache: false,
           hookTimeout: 30_000,
+          // The sign-in tests run a dozen memory-hard password hashes each, and the database container shares the host's
+          // cores: with every core busy a test of 1.9 s alone took 4.5 s (a hash 90 ms alone, 200 ms loaded) and met its
+          // 5 s limit. Three files at a time keep it near 2 s, for a suite about 20 s longer.
+          maxWorkers: 3,
           include: [
             "{apps,packages}/*/test/integration/**/*.test.ts",
             "packages/providers/*/test/integration/**/*.test.ts",

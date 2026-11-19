@@ -125,9 +125,9 @@ describe("instance_admin_claim: who may call it and what the definer reads", () 
   );
 
   // The definer role reads these columns of auth.user and no others: id and email_verified (granted with the claim
-  // definer), name and image (granted with the access definers) and email (read by the invitation accept). A later
-  // grant adds its columns here.
-  const DEFINER_USER_COLUMNS = ["email", "email_verified", "id", "image", "name"];
+  // definer), name and image (granted with the access definers), email (read by the invitation accept) and created_at
+  // (the age of an unverified account, read by the retention purge). A later grant adds its columns here.
+  const DEFINER_USER_COLUMNS = ["created_at", "email", "email_verified", "id", "image", "name"];
 
   it("the definer role holds column SELECT on exactly the matrix columns of auth.user", async () => {
     const found = await t
@@ -147,7 +147,7 @@ describe("instance_admin_claim: who may call it and what the definer reads", () 
     try {
       await client.query("BEGIN");
       await client.query("SET LOCAL ROLE shoutory_definer");
-      const read = client.query(`SELECT created_at FROM auth."user"`);
+      const read = client.query(`SELECT two_factor_enabled FROM auth."user"`);
       await expect(read).rejects.toMatchObject({ code: "42501" });
     } finally {
       await client.query("ROLLBACK");

@@ -1,5 +1,6 @@
 import { SECRET_VARIABLES } from "@shoutory/core/config";
 import { createScrubber } from "../logging/scrub.js";
+import { auditVerifyCommand } from "./audit-verify.js";
 import { migrateCommand } from "./migrate.js";
 import { checkCommand } from "./secrets/check.js";
 import { resealCommand } from "./secrets/reseal.js";
@@ -9,7 +10,8 @@ export interface CliIo {
   readonly stderr: (line: string) => void;
 }
 
-const USAGE = "usage: shoutory <command>; commands: migrate, secrets check, secrets reseal";
+const USAGE =
+  "usage: shoutory <command>; commands: migrate, secrets check, secrets reseal, audit verify [YYYY-MM-DD]";
 const KEK_PREFIX = "SHOUTORY_KEK_";
 const MIN_SECRET_LENGTH = 8;
 
@@ -51,7 +53,11 @@ const COMMANDS: ReadonlyMap<string, Command> = new Map([
 
 /** Runs one command and returns its exit code; starting a process around it is the server slice's job. */
 export async function run(argv: readonly string[], env: NodeJS.ProcessEnv, io: CliIo): Promise<number> {
-  const command = COMMANDS.get(argv.join(" "));
+  // `audit verify` is the one command with an argument of its own (a day); it checks that argument itself.
+  const withDay = argv[0] === "audit" && argv[1] === "verify";
+  const command = withDay
+    ? (e: NodeJS.ProcessEnv, i: CliIo) => auditVerifyCommand(e, i, argv.slice(2))
+    : COMMANDS.get(argv.join(" "));
   if (!command) {
     io.stderr(USAGE);
     return 2;

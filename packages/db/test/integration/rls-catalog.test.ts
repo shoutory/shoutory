@@ -232,6 +232,30 @@ const DEFINERS: Definer[] = [
     args: "workspace_id uuid, user_id uuid, request_id text, ip_hmac bytea",
     callers: ["shoutory_app"],
   },
+  // 0012
+  { name: "signup_gate", args: "email text", callers: ["shoutory_auth"] },
+  { name: "signup_open", args: "", callers: ["shoutory_auth", "shoutory_app"] },
+  { name: "instance_settings_read", args: "", callers: ["shoutory_app"] },
+  { name: "audit_chain_check", args: "day date", callers: ["shoutory_owner"] },
+  { name: "worker_heartbeat", args: "worker_id text, role text", callers: ["shoutory_worker"] },
+  {
+    name: "email_suppression_add",
+    args: "email_digest text, reason text",
+    callers: ["shoutory_worker", "shoutory_app"],
+  },
+  { name: "email_outbox_claim", args: "lim integer", callers: ["shoutory_worker"] },
+  { name: "email_outbox_mark", args: "id uuid, attempt integer, ok boolean", callers: ["shoutory_worker"] },
+  { name: "outbox_claim", args: "lim integer", callers: ["shoutory_worker"] },
+  {
+    name: "outbox_mark",
+    args: "id uuid, created_at text, attempt integer",
+    callers: ["shoutory_worker"],
+  },
+  { name: "ensure_partitions", args: "", callers: ["shoutory_worker"] },
+  { name: "purge_expired", args: "class text", callers: ["shoutory_worker"] },
+  { name: "outbox_lag", args: "", callers: ["shoutory_app"] },
+  { name: "worker_status", args: "", callers: ["shoutory_app"] },
+  { name: "job_lag", args: "", callers: ["shoutory_app"] },
 ];
 const TENANCY_TABLES = ["organizations", "organization_members", "workspaces", "workspace_members", "roles"];
 const RUNTIME_AND_OWNER_ROLES = [

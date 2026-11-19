@@ -9,6 +9,10 @@
       "source": "./src/context/with-tenant.ts",
       "default": "./dist/context/with-tenant.js"
     },
+    "./context/system": {
+      "source": "./src/context/with-system.ts",
+      "default": "./dist/context/with-system.js"
+    },
     "./context/scope": {
       "source": "./src/context/with-scope.ts",
       "default": "./dist/context/with-scope.js"

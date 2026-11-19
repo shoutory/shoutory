@@ -176,7 +176,6 @@ describe("bucket_take refusals and bucket_state", () => {
 
   it.each([
     ["an unknown scope", fresh(), "nope", 1],
-    ["a scope that has no numbers yet", fresh(), "unsubscribe", 1],
     ["a raw email instead of a digest", "someone@example.test", "login_account", 1],
     ["an upper-case digest", `A${"0".repeat(63)}`, "login_account", 1],
     ["a digest one character short", "0".repeat(63), "login_account", 1],
@@ -190,7 +189,6 @@ describe("bucket_take refusals and bucket_state", () => {
 
   it.each([
     ["an unknown scope", fresh(), "nope"],
-    ["a scope that has no numbers yet", fresh(), "unsubscribe"],
     ["a raw email instead of a digest", "someone@example.test", "login_account"],
     ["a digest one character short", "0".repeat(63), "login_account"],
   ])("bucket_state refuses %s", async (_title, key, scope) => {

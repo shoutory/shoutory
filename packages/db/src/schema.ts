@@ -143,6 +143,7 @@ export const emailOutbox = app.table("email_outbox", {
   linkFormatVersion: integer("link_format_version"),
   linkGeneration: integer("link_generation"),
   linkDigest: text("link_digest"),
+  claimedUntil: stamp("claimed_until"),
 });
 
 export const instanceAdmins = app.table("instance_admins", {
@@ -281,6 +282,47 @@ export const auditLogs = app.table(
   },
   (table) => [primaryKey({ columns: [table.at, table.id] })],
 );
+
+// The event outbox: partitioned by day on `created_at`, leaves not declared, reached only through definers. `xid` is
+// the writer's transaction id (xid8), the relay's visibility cursor together with the id.
+const xid8 = customType<{ data: string }>({ dataType: () => "xid8" });
+export const outbox = app.table(
+  "outbox",
+  {
+    id: uuid("id").notNull().default(sql`uuidv7()`),
+    createdAt: stamp("created_at").notNull().default(sql`clock_timestamp()`),
+    xid: xid8("xid").notNull().default(sql`pg_current_xact_id()`),
+    workspaceId: uuid("workspace_id"),
+    type: text("type").notNull(),
+    payload: jsonb("payload").notNull().default(sql`'{}'`),
+    dispatchedAt: stamp("dispatched_at"),
+    claimedUntil: stamp("claimed_until"),
+    attempts: integer("attempts").notNull().default(0),
+  },
+  (table) => [primaryKey({ columns: [table.createdAt, table.id] })],
+);
+
+export const workerHeartbeats = app.table("worker_heartbeats", {
+  workerId: text("worker_id").primaryKey(),
+  role: text("role").notNull(),
+  startedAt: stamp("started_at").notNull().default(sql`clock_timestamp()`),
+  seenAt: stamp("seen_at").notNull().default(sql`clock_timestamp()`),
+});
+
+export const emailSuppressions = app.table("email_suppressions", {
+  emailDigest: text("email_digest").primaryKey(),
+  reason: text("reason").notNull(),
+  createdAt: stamp("created_at").notNull().default(sql`clock_timestamp()`),
+});
+
+export const retentionClasses = app.table("retention_classes", {
+  class: text("class").primaryKey(),
+  tableName: text("table_name").notNull(),
+  kind: text("kind").notNull(),
+  eventColumn: text("event_column"),
+  retain: interval("retain").notNull(),
+  partitionUnit: text("partition_unit"),
+});
 
 export const auditHeads = app.table("audit_heads", {
   id: id(),

@@ -52,6 +52,35 @@ async function primaryKeyDrift(pool: Pool, table: PgTable): Promise<string[]> {
     : [`primary key: catalog (${actual.join(",")}), declared (${declaredKey.join(",")})`];
 }
 
+const MIGRATED_TABLES = [
+  "app.audit_heads",
+  "app.audit_logs",
+  "app.email_outbox",
+  "app.email_suppressions",
+  "app.feature_flag_overrides",
+  "app.feature_flags",
+  "app.instance_admins",
+  "app.instance_settings",
+  "app.invitations",
+  "app.organization_members",
+  "app.organizations",
+  "app.outbox",
+  "app.rate_buckets",
+  "app.retention_classes",
+  "app.roles",
+  "app.schema_migrations",
+  "app.session_step_ups",
+  "app.user_profiles",
+  "app.worker_heartbeats",
+  "app.workspace_members",
+  "app.workspaces",
+  "auth.account",
+  "auth.session",
+  "auth.two_factor",
+  "auth.user",
+  "auth.verification",
+];
+
 describe("Drizzle metadata equals the migrated catalog", () => {
   let db: TestDatabase;
   beforeAll(async () => {
@@ -60,30 +89,7 @@ describe("Drizzle metadata equals the migrated catalog", () => {
   afterAll(() => db.drop());
 
   it("declares every table of the migrations so far", () => {
-    expect(declared.map(nameOf).sort()).toEqual([
-      "app.audit_heads",
-      "app.audit_logs",
-      "app.email_outbox",
-      "app.feature_flag_overrides",
-      "app.feature_flags",
-      "app.instance_admins",
-      "app.instance_settings",
-      "app.invitations",
-      "app.organization_members",
-      "app.organizations",
-      "app.rate_buckets",
-      "app.roles",
-      "app.schema_migrations",
-      "app.session_step_ups",
-      "app.user_profiles",
-      "app.workspace_members",
-      "app.workspaces",
-      "auth.account",
-      "auth.session",
-      "auth.two_factor",
-      "auth.user",
-      "auth.verification",
-    ]);
+    expect(declared.map(nameOf).sort()).toEqual(MIGRATED_TABLES);
   });
 
   it.each(declared.map((table) => [nameOf(table), table] as const))(
