@@ -58,6 +58,22 @@ export SHOUTORY_TEST_ADMIN_URL=postgres://postgres:postgres-dev-password@localho
 
 A test run without a reachable database fails; it never skips. Remove the container with `docker rm -f shoutory-pg`.
 
+### Local S3 simulator
+
+The S3 driver's tests run against the Versity S3 gateway, a small Apache-2.0 server. Start it with the keys the tests carry
+(throwaway values) and a temporary folder for its data, then export its address:
+
+```sh
+MSYS_NO_PATHCONV=1 docker run -d --name shoutory-s3 -p 127.0.0.1:7070:7070 --tmpfs /data \
+  versity/versitygw:v1.10.0@sha256:89cad13cc981986ee284cbafea4613f9533ce6fd5f37a2c96c4c4fb8adb3a316 \
+  --access shoutory-s3-access-1 --secret shoutory-s3-secret-1 posix /data
+
+export SHOUTORY_TEST_S3_URL=http://127.0.0.1:7070
+```
+
+An unsigned request to it is answered 403, which is how to tell it is up. A test run without `SHOUTORY_TEST_S3_URL` fails; it
+never skips. `pnpm verify` does not start containers. Remove it with `docker rm -f shoutory-s3`.
+
 `docker/compose.yml` starts the same PostgreSQL bound to `127.0.0.1` only. It takes every credential from the
 environment and refuses to start when one is unset, so export the five `SHOUTORY_DATABASE_PASSWORD_*` values above and a
 superuser password first, then run `docker compose -f docker/compose.yml up -d`:
@@ -89,8 +105,12 @@ requires `TZ=UTC`.
 | `SHOUTORY_TRUSTED_PROXIES`                                                  | Comma-separated CIDR ranges of the reverse proxies whose `X-Forwarded-For` is believed; empty (the default) trusts none           |
 | `SHOUTORY_HOST`                                                             | The IPv4 or IPv6 address to listen on; unset (the default) listens on all interfaces                                              |
 | `SHOUTORY_ROLE`                                                             | `api` (HTTP only), `worker` (background jobs, no HTTP) or `all` (both, default)                                                   |
-| `SHOUTORY_STORAGE_DRIVER`                                                   | `fs` (the filesystem, default); the only driver so far                                                                            |
+| `SHOUTORY_STORAGE_DRIVER`                                                   | `fs` (the filesystem, default) or `s3` (an S3-compatible server; its settings below are then all required)                        |
 | `SHOUTORY_DATA_DIR`                                                         | The absolute folder the `fs` driver stores objects in; default `/data`; it must exist and be writable (`shoutory storage check`)  |
+| `SHOUTORY_S3_ENDPOINT`                                                      | With driver `s3`: the S3-compatible endpoint, `http` or `https`, no userinfo, no metadata or link-local address                   |
+| `SHOUTORY_S3_REGION`, `SHOUTORY_S3_BUCKET`                                  | With driver `s3`: the region and the bucket, which must already exist (the server never creates one)                              |
+| `SHOUTORY_S3_ACCESS_KEY_ID`, `SHOUTORY_S3_SECRET_ACCESS_KEY`                | With driver `s3`: the access key pair; secrets, never logged and never part of an answer                                          |
+| `SHOUTORY_S3_FORCE_PATH_STYLE`                                              | With driver `s3`: `true` for servers that need path-style addressing; default `false`                                             |
 
 Generate real values with `openssl rand -base64 32`. The values below are examples only and are refused at start-up. To
 rotate, add a new `SHOUTORY_KEK_<ID>`, point `SHOUTORY_ACTIVE_KEY_ID` at it and keep the old key until no row uses it.

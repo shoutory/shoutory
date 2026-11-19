@@ -36,7 +36,7 @@ export interface StorageCheckInfo {
 }
 
 export interface StorageDriver {
-  readonly name: "fs";
+  readonly name: "fs" | "s3";
   /** Stores the body under `key`, replacing any object there; refuses and leaves nothing when it passes `maxBytes`. */
   put(key: string, body: ReadableStream<Uint8Array>, maxBytes: number): Promise<void>;
   /** The object's bytes, or null for a missing key. */

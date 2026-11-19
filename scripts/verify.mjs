@@ -117,9 +117,10 @@ export const STEPS = [
       "{apps,packages}/*/test/integration/**/*.test.ts",
       "packages/providers/*/test/integration/**/*.test.ts",
     ],
-    // The names read by readTestEnv in packages/db/src/testing/template.ts.
+    // The names read by readTestEnv in packages/db/src/testing/template.ts, and the S3 simulator's address (README).
     env: [
       "SHOUTORY_TEST_ADMIN_URL",
+      "SHOUTORY_TEST_S3_URL",
       ...["OWNER", "APP", "WORKER", "AUTH", "READONLY"].map((role) => `SHOUTORY_DATABASE_URL_${role}`),
     ],
     ...vitest("integration"),
@@ -254,7 +255,9 @@ function skippedTests(step, stdout, cwd) {
 // missing variable is named here instead of surfacing as "No test files found".
 function missingEnv(step) {
   const name = (step.env ?? []).find((variable) => !process.env[variable]);
-  return name ? `${name} is not set; this step needs the local database of the README` : null;
+  return name
+    ? `${name} is not set; this step needs the local database and the S3 simulator of the README`
+    : null;
 }
 
 function execute(step, files, cwd) {

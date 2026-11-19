@@ -263,15 +263,92 @@ describe("start-up: storage settings (R331, R340)", () => {
       driver: "fs",
       dataDir: "/srv/shoutory",
     });
-    expect(parseStorageEnv({ SHOUTORY_DATA_DIR: "C:\\shoutory\\data" }).dataDir).toBe("C:\\shoutory\\data");
+    expect(parseStorageEnv({ SHOUTORY_DATA_DIR: "C:\\shoutory\\data" })).toMatchObject({
+      dataDir: "C:\\shoutory\\data",
+    });
   });
 
   it.each([
     ["a relative data directory", "SHOUTORY_DATA_DIR", "data/files"],
     ["an empty data directory", "SHOUTORY_DATA_DIR", ""],
-    ["a driver that does not exist yet", "SHOUTORY_STORAGE_DRIVER", "s3"],
+    ["a driver that does not exist", "SHOUTORY_STORAGE_DRIVER", "gcs"],
   ])("refuses %s and names the variable", (_name, key, value) => {
     expect(refusedVariable(withValue(key, value))).toBe(key);
+  });
+});
+
+const S3: Record<string, string> = {
+  SHOUTORY_STORAGE_DRIVER: "s3",
+  SHOUTORY_S3_ENDPOINT: "https://s3.example.test",
+  SHOUTORY_S3_REGION: "eu-west-1",
+  SHOUTORY_S3_BUCKET: "media-bucket-for-tests-1",
+  SHOUTORY_S3_ACCESS_KEY_ID: "access-key-id-for-tests-1",
+  SHOUTORY_S3_SECRET_ACCESS_KEY: "secret-access-key-for-tests-1",
+};
+const s3With = (key: string, value: string): Env => ({ ...valid, ...S3, [key]: value });
+const ENDPOINT_MARKERS = [
+  "user-marker",
+  "pass-marker",
+  "169.254",
+  "2852039166",
+  "0xa9fea9fe",
+  "fd00:ec2",
+  "fe80",
+  "a9fe",
+  "ff9b",
+];
+
+describe("start-up: S3 storage endpoint (R332)", () => {
+  // Each endpoint carries a marker that an error text must never repeat.
+  it.each([
+    ["userinfo", "https://user-marker:pass-marker@s3.example.test"],
+    ["the metadata address", "http://169.254.169.254/latest"],
+    ["the metadata address in decimal", "http://2852039166"],
+    ["the metadata address in hex", "http://0xa9fea9fe"],
+    ["the metadata address as an IPv4-mapped IPv6 literal", "http://[::ffff:169.254.169.254]"],
+    ["the IPv6 metadata address", "http://[fd00:ec2::254]"],
+    ["the metadata address behind the NAT64 prefix", "http://[64:ff9b::a9fe:a9fe]"],
+    ["the metadata address in dotted form behind the NAT64 prefix", "http://[64:ff9b::169.254.169.254]"],
+    ["the metadata address in the SIIT translated range", "http://[::ffff:0:a9fe:a9fe]"],
+    ["the metadata address as an IPv4-compatible IPv6 address", "http://[::a9fe:a9fe]"],
+    ["another link-local IPv4 address", "http://169.254.10.10:9000"],
+    ["a link-local IPv6 address", "http://[fe80::1]:9000"],
+    ["a scheme other than http and https", "ftp://s3.example.test"],
+    ["no URL at all", "s3.example.test"],
+  ])("refuses an endpoint with %s, naming the variable and never the value", (_name, endpoint) => {
+    const refused = refusal(s3With("SHOUTORY_S3_ENDPOINT", endpoint));
+    expect(refused?.variable).toBe("SHOUTORY_S3_ENDPOINT");
+    for (const marker of ENDPOINT_MARKERS) expect(refused?.shown).not.toContain(marker);
+  });
+
+  it.each(["https://s3.example.test", "http://127.0.0.1:7070", "http://object-store:9000"])(
+    "accepts the endpoint %s",
+    (endpoint) => {
+      expect(refusedVariable(s3With("SHOUTORY_S3_ENDPOINT", endpoint))).toBeUndefined();
+    },
+  );
+});
+
+describe("start-up: S3 storage settings (R331)", () => {
+  it.each([
+    "SHOUTORY_S3_ENDPOINT",
+    "SHOUTORY_S3_REGION",
+    "SHOUTORY_S3_BUCKET",
+    "SHOUTORY_S3_ACCESS_KEY_ID",
+    "SHOUTORY_S3_SECRET_ACCESS_KEY",
+  ])("with driver s3 a missing %s fails the parse and the error names only the variable", (variable) => {
+    const { [variable]: _gone, ...rest } = S3;
+    const refused = refusal({ ...valid, ...rest });
+    expect(refused?.variable).toBe(variable);
+    for (const value of Object.values(S3)) expect(refused?.shown).not.toContain(value);
+  });
+
+  it("shows neither key through JSON or inspect of the parsed settings", () => {
+    const config = parseEnv({ ...valid, ...S3 });
+    expect(config.storage.driver).toBe("s3");
+    const shown = [JSON.stringify(config), inspect(config, { depth: 8 })].join("\n");
+    expect(shown).not.toContain(String(S3.SHOUTORY_S3_ACCESS_KEY_ID));
+    expect(shown).not.toContain(String(S3.SHOUTORY_S3_SECRET_ACCESS_KEY));
   });
 });
 

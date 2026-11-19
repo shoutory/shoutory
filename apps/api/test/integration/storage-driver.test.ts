@@ -1,12 +1,17 @@
 import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { parseStorageEnv } from "@shoutory/core/config";
 import { type StorageDriver, StorageError } from "@shoutory/core/storage";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createStorageDriver } from "../../src/storage/driver.js";
 import { createFsDriver } from "../../src/storage/fs-driver.js";
+import { createBucket, s3Env } from "../support/s3.js";
 
-// The filesystem driver against a real folder. The S3 driver joins the first table in its own slice.
+// The drivers against real storage: the filesystem driver on a folder, the S3 driver on the simulator. The first table
+// runs on both; the rest is the filesystem driver's own (its root, its links).
 const MAX = 1024;
+const BUCKET = "driver-table-1";
 const stream = (text: string) => new Blob([text]).stream();
 const read = async (body: ReadableStream<Uint8Array> | null) =>
   body === null ? null : new TextDecoder().decode(await new Response(body).arrayBuffer());
@@ -15,6 +20,8 @@ let base: string;
 let root: string;
 let outside: string;
 let driver: StorageDriver;
+const pick = (name: "fs" | "s3"): StorageDriver =>
+  name === "fs" ? driver : createStorageDriver(parseStorageEnv(s3Env(BUCKET)));
 beforeAll(async () => {
   base = await mkdtemp(join(tmpdir(), "shoutory-fs-driver-"));
   root = join(base, "root");
@@ -25,32 +32,42 @@ beforeAll(async () => {
   // A directory link: it is how a path inside the root could lead out of it.
   await symlink(outside, join(root, "link"), "junction");
   driver = createFsDriver(root);
+  await createBucket(BUCKET);
 });
 afterAll(() => rm(base, { recursive: true, force: true }));
 
-describe("fs driver: put, get, delete", () => {
+describe.each(["fs", "s3"] as const)("%s driver: put, get, delete", (name) => {
   it("round trips an object, replaces it and deletes it; a missing key reads null and deletes quietly", async () => {
-    await driver.put("media/a1", stream("first"), MAX);
-    expect(await read(await driver.get("media/a1"))).toBe("first");
-    await driver.put("media/a1", stream("second"), MAX);
-    expect(await read(await driver.get("media/a1"))).toBe("second");
-    await driver.delete("media/a1");
-    expect(await driver.get("media/a1")).toBeNull();
-    expect(await driver.get("media/never-written")).toBeNull();
-    expect(await driver.get("no-folder/never-written")).toBeNull();
-    await expect(driver.delete("media/never-written")).resolves.toBeUndefined();
+    const shared = pick(name);
+    await shared.put("media/a1", stream("first"), MAX);
+    expect(await read(await shared.get("media/a1"))).toBe("first");
+    await shared.put("media/a1", stream("second"), MAX);
+    expect(await read(await shared.get("media/a1"))).toBe("second");
+    await shared.delete("media/a1");
+    expect(await shared.get("media/a1")).toBeNull();
+    expect(await shared.get("media/never-written")).toBeNull();
+    expect(await shared.get("no-folder/never-written")).toBeNull();
+    await expect(shared.delete("media/never-written")).resolves.toBeUndefined();
   });
 
   it("refuses a body over maxBytes, leaves nothing and keeps the object it would have replaced", async () => {
-    await driver.put("limited/kept", stream("kept"), MAX);
-    await expect(driver.put("limited/kept", stream("x".repeat(11)), 10)).rejects.toMatchObject({
+    const shared = pick(name);
+    await shared.put("limited/kept", stream("kept"), MAX);
+    await expect(shared.put("limited/kept", stream("x".repeat(11)), 10)).rejects.toMatchObject({
       kind: "too_large",
     });
-    const fresh = driver.put("limited/fresh", stream("x".repeat(11)), 10);
+    const fresh = shared.put("limited/fresh", stream("x".repeat(11)), 10);
     await expect(fresh).rejects.toBeInstanceOf(StorageError);
-    expect(await read(await driver.get("limited/kept"))).toBe("kept");
-    expect(await driver.get("limited/fresh")).toBeNull();
-    expect(await readdir(join(root, "limited"))).toEqual(["kept"]);
+    expect(await read(await shared.get("limited/kept"))).toBe("kept");
+    expect(await shared.get("limited/fresh")).toBeNull();
+    await shared.delete("limited/kept");
+  });
+});
+
+describe("fs driver: a refused put leaves no temporary file", () => {
+  it("leaves the folder empty", async () => {
+    await expect(driver.put("temp-free/a1", stream("x".repeat(11)), 10)).rejects.toBeInstanceOf(StorageError);
+    expect(await readdir(join(root, "temp-free"))).toEqual([]);
   });
 });
 

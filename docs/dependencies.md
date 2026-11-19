@@ -192,3 +192,15 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
   operator egress exception that the egress policy lists.
 - Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
 - Rejected: a hand-written SMTP client and MIME composer (infrastructure we do not reinvent).
+
+## @aws-sdk/client-s3 3.1161.0
+
+- Used for: the optional S3-compatible storage driver in `apps/api/src/storage/s3-driver.ts` (put, get and delete of whole
+  objects). The presigner package and multipart upload are not added; the slices that need them add their own cards.
+- Licence: Apache-2.0. Published 2026-10-30, more than 14 days before adoption. Its install scripts: none (no package in
+  its tree needs a build script, so `strictDepBuilds` stays satisfied).
+- Egress: the SDK keeps its own HTTP handler; the operator-chosen endpoint is checked at start-up (http or https, no
+  userinfo, no metadata or link-local host) until the egress policy lists S3 as an operator exception.
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
+- Rejected: `@aws-sdk/lib-storage` (multipart is not needed for the objects this driver writes); a hand-written SigV4 client
+  (signing is infrastructure we do not reinvent); the MinIO client (its server is archived).

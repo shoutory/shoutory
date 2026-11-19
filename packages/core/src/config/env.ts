@@ -145,24 +145,116 @@ const httpSchema = z
 
 export type ServerRole = z.infer<typeof httpSchema>["SHOUTORY_ROLE"];
 
-// Where objects are stored (R331). Only the filesystem driver exists yet; the data directory is never created by the
-// driver, so a relative path (which would follow the working directory) is refused at start-up.
+// Where objects are stored (R331). The filesystem driver's data directory is never created by the driver, so a relative
+// path (which would follow the working directory) is refused at start-up. With driver s3 every S3 setting is required.
 const isAbsolutePath = (value: string) => posix.isAbsolute(value) || win32.isAbsolute(value);
-const storageSchema = z.object({
-  SHOUTORY_STORAGE_DRIVER: z.enum(["fs"]).default("fs"),
+const driverSchema = z.object({ SHOUTORY_STORAGE_DRIVER: z.enum(["fs", "s3"]).default("fs") });
+const fsSchema = z.object({
   SHOUTORY_DATA_DIR: z.string().refine(isAbsolutePath, "must be an absolute path").default("/data"),
 });
 
-export interface StorageConfig {
-  driver: "fs";
-  dataDir: string;
+/** The eight 16-bit groups of an IPv6 address the URL parser has normalized (it writes hex groups only). */
+function hextets(address: string): number[] {
+  const [head = "", tail] = address.split("::");
+  const left = head ? head.split(":") : [];
+  const right = tail ? tail.split(":") : [];
+  const zeros = tail === undefined ? [] : Array<string>(8 - left.length - right.length).fill("0");
+  return [...left, ...zeros, ...right].map((group) => Number.parseInt(group, 16));
+}
+
+const isLinkLocalV4 = (first: number, second: number) => first === 169 && second === 254;
+
+// The first six groups of the IPv6 ranges that carry an IPv4 address in their last 32 bits: IPv4-mapped, SIIT (RFC 2765),
+// IPv4-compatible and NAT64 (RFC 6052, 64:ff9b::/96). Behind any of them a link-local IPv4 address is still link-local.
+const V4_EMBEDDING_PREFIXES: readonly (readonly number[])[] = [
+  [0, 0, 0, 0, 0, 0xffff],
+  [0, 0, 0, 0, 0xffff, 0],
+  [0, 0, 0, 0, 0, 0],
+  [0x64, 0xff9b, 0, 0, 0, 0],
+];
+
+/** A literal host in a cloud metadata or link-local range, in any spelling the URL parser normalizes (R332). */
+function isMetadataOrLinkLocal(hostname: string): boolean {
+  const bare = hostname.replace(/^\[|\]$/g, "");
+  const family = isIP(bare);
+  if (family === 4) {
+    const [first = 0, second = 0] = bare.split(".").map(Number);
+    return isLinkLocalV4(first, second);
+  }
+  if (family !== 6) return false;
+  const groups = hextets(bare);
+  const last = groups[6] ?? 0;
+  const embedsV4 = V4_EMBEDDING_PREFIXES.some((prefix) => prefix.every((group, i) => groups[i] === group));
+  if (embedsV4 && isLinkLocalV4(last >> 8, last & 0xff)) return true;
+  const awsMetadata =
+    groups[0] === 0xfd00 &&
+    groups[1] === 0x0ec2 &&
+    groups.slice(2, 7).every((group) => group === 0) &&
+    groups[7] === 0x254;
+  return ((groups[0] ?? 0) & 0xffc0) === 0xfe80 || awsMetadata;
+}
+
+// http or https only, no userinfo (a secret never rides in a URL), and no literal metadata or link-local host. The egress
+// policy of M1 replaces this check (R332).
+const isS3Endpoint = (value: string) => {
+  if (!URL.canParse(value)) return false;
+  const url = new URL(value);
+  const plain = ["http:", "https:"].includes(url.protocol) && !url.username && !url.password;
+  return plain && !isMetadataOrLinkLocal(url.hostname);
+};
+const s3Schema = z.object({
+  SHOUTORY_S3_ENDPOINT: text.refine(
+    isS3Endpoint,
+    "must be an http or https URL with no userinfo and no metadata or link-local address",
+  ),
+  SHOUTORY_S3_REGION: text,
+  SHOUTORY_S3_BUCKET: text,
+  SHOUTORY_S3_FORCE_PATH_STYLE: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
+  SHOUTORY_S3_ACCESS_KEY_ID: text,
+  SHOUTORY_S3_SECRET_ACCESS_KEY: text,
+});
+
+/** The S3 credentials; the logger and the command-line scrubber register their values like the other secrets. */
+export const STORAGE_SECRET_VARIABLES: readonly string[] = [
+  "SHOUTORY_S3_ACCESS_KEY_ID",
+  "SHOUTORY_S3_SECRET_ACCESS_KEY",
+];
+
+export type StorageConfig =
+  | { driver: "fs"; dataDir: string }
+  | {
+      driver: "s3";
+      endpoint: string;
+      region: string;
+      bucket: string;
+      forcePathStyle: boolean;
+      accessKeyId: SealedSecret;
+      secretAccessKey: SealedSecret;
+    };
+
+function parseWith<S extends z.ZodType>(schema: S, env: Env): z.output<S> {
+  const parsed = schema.safeParse(env);
+  if (!parsed.success) throw refusal(parsed.error);
+  return parsed.data;
 }
 
 /** The storage settings alone: `shoutory storage check` needs no other setting. */
 export function parseStorageEnv(env: Env): StorageConfig {
-  const parsed = storageSchema.safeParse(env);
-  if (!parsed.success) throw refusal(parsed.error);
-  return { driver: parsed.data.SHOUTORY_STORAGE_DRIVER, dataDir: parsed.data.SHOUTORY_DATA_DIR };
+  const { SHOUTORY_STORAGE_DRIVER: driver } = parseWith(driverSchema, env);
+  if (driver === "fs") return { driver, dataDir: parseWith(fsSchema, env).SHOUTORY_DATA_DIR };
+  const s3 = parseWith(s3Schema, env);
+  return {
+    driver,
+    endpoint: s3.SHOUTORY_S3_ENDPOINT,
+    region: s3.SHOUTORY_S3_REGION,
+    bucket: s3.SHOUTORY_S3_BUCKET,
+    forcePathStyle: s3.SHOUTORY_S3_FORCE_PATH_STYLE,
+    accessKeyId: new SealedSecret(s3.SHOUTORY_S3_ACCESS_KEY_ID),
+    secretAccessKey: new SealedSecret(s3.SHOUTORY_S3_SECRET_ACCESS_KEY),
+  };
 }
 
 export interface Config {

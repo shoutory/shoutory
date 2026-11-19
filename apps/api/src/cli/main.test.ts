@@ -75,6 +75,8 @@ describe("collectSecrets", () => {
       SHOUTORY_SMTP_URL: "smtps://mailer:p%40ss-word-0001@mail.example.test:465",
       SHOUTORY_DATABASE_URL_APP: "postgres://app:db-password-0001@db.example.test/shoutory",
       SHOUTORY_DATABASE_PASSWORD_APP: "",
+      SHOUTORY_S3_ACCESS_KEY_ID: "planted-s3-access-value",
+      SHOUTORY_S3_SECRET_ACCESS_KEY: "planted-s3-secret-value",
     });
     expect(secrets.sort()).toEqual(
       [
@@ -82,6 +84,8 @@ describe("collectSecrets", () => {
         "p@ss-word-0001",
         "planted-kek-value-0001",
         "planted-pepper-value-0001",
+        "planted-s3-access-value",
+        "planted-s3-secret-value",
         "postgres://app:db-password-0001@db.example.test/shoutory",
         "smtps://mailer:p%40ss-word-0001@mail.example.test:465",
       ].sort(),

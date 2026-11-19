@@ -1,4 +1,4 @@
-import { SECRET_VARIABLES } from "@shoutory/core/config";
+import { SECRET_VARIABLES, STORAGE_SECRET_VARIABLES } from "@shoutory/core/config";
 import { createScrubber } from "../logging/scrub.js";
 import { auditVerifyCommand } from "./audit-verify.js";
 import { mailCheckCommand } from "./mail-check.js";
@@ -29,7 +29,11 @@ function decodedPassword(value: string): string | undefined {
 
 /** The values the logger must never print: every set secret variable, every KEK and the password inside a URL. */
 export function collectSecrets(env: NodeJS.ProcessEnv): string[] {
-  const names = [...SECRET_VARIABLES, ...Object.keys(env).filter((name) => name.startsWith(KEK_PREFIX))];
+  const names = [
+    ...SECRET_VARIABLES,
+    ...STORAGE_SECRET_VARIABLES,
+    ...Object.keys(env).filter((name) => name.startsWith(KEK_PREFIX)),
+  ];
   const values = names.flatMap((name) => {
     const value = env[name];
     return value ? [value, decodedPassword(value)] : [];

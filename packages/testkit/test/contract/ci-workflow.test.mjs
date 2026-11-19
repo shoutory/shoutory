@@ -100,6 +100,24 @@ test("the integration job runs the role script twice, probes the database on the
   assert.ok(verify.env.SHOUTORY_TEST_ADMIN_URL, "only the step that runs the tests holds the admin URL");
 });
 
+test("the integration job starts the S3 simulator by digest, waits for it and gives only the test step its address", () => {
+  const job = jobs.integration;
+  const start = job.steps.findIndex((step) =>
+    /docker run .*versity\/versitygw:v[\d.]+@sha256:[0-9a-f]{64}/s.test(step.run ?? ""),
+  );
+  assert.ok(start >= 0, "a step must start the pinned S3 gateway image");
+  assert.ok(job.steps[start].run.includes("--tmpfs /data") && job.steps[start].run.includes("posix /data"));
+  assert.match(
+    job.steps[start + 1].run,
+    /curl .*http_code.*127\.0\.0\.1:7070/s,
+    "the next step must wait for it",
+  );
+  const verify = job.steps.findIndex((step) => checkCommand.test(step.run ?? ""));
+  assert.ok(start + 1 < verify, "the simulator must be ready before the tests run");
+  assert.equal(job.steps[verify].env.SHOUTORY_TEST_S3_URL, "http://127.0.0.1:7070");
+  assert.equal(job.env.SHOUTORY_TEST_S3_URL, undefined);
+});
+
 test("the package manager is set up before node and no job restores a package cache", () => {
   for (const [id, job] of Object.entries(jobs)) {
     const uses = job.steps.map((step) => step.uses ?? "");
