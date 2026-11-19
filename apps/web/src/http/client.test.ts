@@ -106,3 +106,30 @@ describe("the api client while it reads the body", () => {
     });
   });
 });
+
+// R394: a library-forwarded answer has no `{data}` envelope (sign-out answers `{success}`); `envelope: false` checks the
+// status and ignores the body, with the header, timeout and error mapping of every other call.
+describe("a call without an answer envelope", () => {
+  it.each([
+    ["a bare success object", () => json({ success: true })],
+    ["an empty body", () => new Response(null, { status: 200 })],
+    ["a body that is not JSON", () => new Response("ok", { status: 200 })],
+  ])("resolves on %s", async (_name, answerWith) => {
+    const fetchStub = stubFetch(answerWith());
+    await expect(
+      request(z.undefined(), "/api/auth/sign-out", { method: "POST", body: {}, envelope: false }),
+    ).resolves.toBeUndefined();
+    expect(new Headers(fetchStub.mock.calls[0]?.[1]?.headers).get("X-Shoutory-Client")).toBe("web");
+  });
+
+  it.each([
+    ["a 401", json({ error: { code: "unauthenticated", message: "m" } }, 401), "session_expired"],
+    ["a 503", json({ error: { code: "service_unavailable", message: "m" } }, 503), "maintenance"],
+    ["a 500 with no envelope", new Response("boom", { status: 500 }), "error"],
+  ])("still maps %s to the state %s", async (_name, response, state) => {
+    stubFetch(response);
+    await expect(
+      request(z.undefined(), "/api/auth/sign-out", { method: "POST", body: {}, envelope: false }),
+    ).rejects.toMatchObject({ state });
+  });
+});

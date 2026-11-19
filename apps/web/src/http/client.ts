@@ -39,6 +39,8 @@ const TIMEOUT_MS = 15_000;
 export interface RequestInit {
   method?: string;
   body?: unknown;
+  /** `false`: the answer has no `{data}` envelope; the status is checked and the body ignored (R394). */
+  envelope?: boolean;
 }
 
 // A refused connection, a dropped stream and a timeout are the only failures a caller can act on (maintenance);
@@ -87,7 +89,10 @@ export async function request<T>(schema: ZodType<T>, path: string, init: Request
     }
     throw new ApiError("invalid_response", response.status);
   }
-  const parsed = z.object({ data: schema }).safeParse(body);
+  // A library-forwarded answer has no `{data}` envelope: the status was the answer, the schema parses `undefined`.
+  const bare = init.envelope === false;
+  const answer = bare ? schema : z.object({ data: schema }).transform((envelope) => envelope.data);
+  const parsed = answer.safeParse(bare ? undefined : body);
   if (!parsed.success) throw new ApiError("invalid_response", response.status);
-  return parsed.data.data;
+  return parsed.data;
 }

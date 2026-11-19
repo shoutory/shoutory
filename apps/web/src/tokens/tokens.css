@@ -128,6 +128,13 @@
   }
 }
 
+/* The bottom bar (under 768 px) must never cover the focused control (SC 2.4.11). */
+@media (width < 48rem) {
+  html {
+    scroll-padding-block-end: 5rem;
+  }
+}
+
 body {
   background-color: var(--color-bg);
   color: var(--color-text);

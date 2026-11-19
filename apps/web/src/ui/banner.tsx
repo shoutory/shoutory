@@ -9,10 +9,19 @@ const TONES: Record<Tone, string> = {
 };
 
 /** A message that stays on the screen until the cause is gone. Only a danger banner is an alert (WI-F12). */
-export function Banner({ tone, children }: { tone: Tone; children: ReactNode }) {
+export function Banner({
+  tone,
+  children,
+  announce = true,
+}: {
+  tone: Tone;
+  children: ReactNode;
+  /** `false` when the caller keeps its own live region around the banner (WI-F13: a region mounted before its text). */
+  announce?: boolean;
+}) {
   return (
     <div
-      role={tone === "danger" ? "alert" : "status"}
+      {...(announce ? { role: tone === "danger" ? "alert" : "status" } : {})}
       className={`rounded-md border-s-4 px-5 py-4 text-md text-text ${TONES[tone]}`}
     >
       {children}

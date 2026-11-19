@@ -4,6 +4,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { closeApp, openApp, stubApi } from "../test/support/app";
 import { routes } from "./routes";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -29,6 +30,7 @@ beforeAll(() => {
 });
 
 afterEach(() => {
+  closeApp();
   act(() => root?.unmount());
   document.body.replaceChildren();
   vi.useRealTimers();
@@ -52,9 +54,12 @@ async function visit(path: string, answer?: () => Promise<Response>) {
 }
 
 describe("the session guard (R378)", () => {
-  it("lets a signed-in visitor in", async () => {
-    const { host } = await visit("/");
-    expect(host.querySelector("main")?.textContent).toBe("Shoutory");
+  // The shell loader asks for the organizations and workspaces too, so each path has its own answer (the harness).
+  it("lets a signed-in visitor in: `/` opens the first workspace in the shell", async () => {
+    stubApi();
+    const { host, router } = await openApp("/");
+    expect(router.state.location.pathname).toBe("/w/w1");
+    expect(host.querySelector("main h1")?.textContent).toBe("Acme One");
   });
 
   it("sends a signed-out visitor to sign-in with the page they asked for", async () => {

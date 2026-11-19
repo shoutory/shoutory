@@ -84,3 +84,127 @@ msgstr "Try again"
 #. js-lingui-explicit-id
 msgid "system.loading"
 msgstr "Loading"
+
+#. js-lingui-explicit-id
+msgid "system.error.retry"
+msgstr "Retry"
+
+#. js-lingui-explicit-id
+msgid "system.error.copy"
+msgstr "Copy"
+
+#. js-lingui-explicit-id
+msgid "system.error.details"
+msgstr "Details"
+
+#. js-lingui-explicit-id
+msgid "system.error.reference"
+msgstr "Reference"
+
+#. js-lingui-explicit-id
+msgid "system.empty.clear_filters"
+msgstr "Clear filters"
+
+#. js-lingui-explicit-id
+msgid "shell.offline.banner"
+msgstr "You are offline. Changes you make here are not saved to the server yet."
+
+#. js-lingui-explicit-id
+msgid "shell.still_loading"
+msgstr "Still loading"
+
+#. js-lingui-explicit-id
+msgid "shell.skip"
+msgstr "Skip to main content"
+
+#. js-lingui-explicit-id
+msgid "shell.help"
+msgstr "Help"
+
+#. js-lingui-explicit-id
+msgid "shell.help_label"
+msgstr "Help (opens in a new tab)"
+
+#. js-lingui-explicit-id
+msgid "shell.nav_label"
+msgstr "Main navigation"
+
+#. js-lingui-explicit-id
+msgid "shell.nav.home"
+msgstr "Home"
+
+#. js-lingui-explicit-id
+msgid "shell.account"
+msgstr "Account"
+
+#. js-lingui-explicit-id
+msgid "shell.sign_out"
+msgstr "Sign out"
+
+#. js-lingui-explicit-id
+msgid "shell.signing_out"
+msgstr "Signing out"
+
+#. js-lingui-explicit-id
+msgid "shell.sign_out_offline"
+msgstr "You are offline. Signing out needs the server."
+
+#. js-lingui-explicit-id
+msgid "shell.sign_out_failed.what"
+msgstr "We could not sign you out"
+
+#. js-lingui-explicit-id
+msgid "shell.sign_out_failed.meaning"
+msgstr "You are still signed in."
+
+#. js-lingui-explicit-id
+msgid "shell.lists_error.what"
+msgstr "We could not load your organizations and workspaces"
+
+#. js-lingui-explicit-id
+msgid "shell.lists_error.meaning"
+msgstr "Nothing was changed. The rest of the page still works."
+
+#. js-lingui-explicit-id
+msgid "shell.welcome"
+msgstr "Welcome to Shoutory"
+
+#. js-lingui-explicit-id
+msgid "shell.no_workspaces.title"
+msgstr "You have no workspaces yet"
+
+#. js-lingui-explicit-id
+msgid "shell.no_workspaces.body"
+msgstr "A workspace holds the channels and posts of one client or brand."
+
+#. js-lingui-explicit-id
+msgid "shell.workspace.title"
+msgstr "Workspace"
+
+#. js-lingui-explicit-id
+msgid "shell.workspace.empty_title"
+msgstr "Nothing here yet"
+
+#. js-lingui-explicit-id
+msgid "shell.workspace.empty_body"
+msgstr "The screens for this workspace are not available in this version yet."
+
+#. js-lingui-explicit-id
+msgid "shell.switcher.organization"
+msgstr "Organization"
+
+#. js-lingui-explicit-id
+msgid "shell.switcher.workspace"
+msgstr "Workspace"
+
+#. js-lingui-explicit-id
+msgid "shell.palette.title"
+msgstr "Switch workspace"
+
+#. js-lingui-explicit-id
+msgid "shell.palette.search"
+msgstr "Search workspaces"
+
+#. js-lingui-explicit-id
+msgid "shell.palette.empty"
+msgstr "Nothing found"

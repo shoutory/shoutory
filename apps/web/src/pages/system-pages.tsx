@@ -1,18 +1,24 @@
 import { Trans } from "@lingui/react/macro";
 import type { ReactNode } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link, useRouteLoaderData, useSearchParams } from "react-router";
 import { safeReturnTo } from "../session/return-to";
+import { SHELL_ROUTE_ID } from "../shell/shell-data";
 import { Button } from "../ui/button";
 import { DirText } from "../ui/dir-text";
 
 // The system pages (X-07). Each says what happened, what it means for the user's content and what to do (ux-spec 6.2);
 // none shows a status code, a stack trace or the server's own words.
+// Under the shell the shell owns `main`; a page outside it (sign-in, the error page) keeps its own (R397 7).
 function Page({ title, children }: { title: ReactNode; children: ReactNode }) {
+  const Frame = useRouteLoaderData(SHELL_ROUTE_ID) === undefined ? "main" : "div";
   return (
-    <main id="main" className="mx-auto flex max-w-prose flex-col gap-5 px-5 py-10">
+    <Frame
+      {...(Frame === "main" ? { id: "main" } : {})}
+      className="mx-auto flex max-w-prose flex-col gap-5 px-5 py-10"
+    >
       <h1 className="font-heading text-2xl">{title}</h1>
       {children}
-    </main>
+    </Frame>
   );
 }
 

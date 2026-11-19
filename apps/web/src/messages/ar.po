@@ -82,3 +82,127 @@ msgstr "حاول مرة أخرى"
 #. js-lingui-explicit-id
 msgid "system.loading"
 msgstr "جارٍ التحميل"
+
+#. js-lingui-explicit-id
+msgid "system.error.retry"
+msgstr "إعادة المحاولة"
+
+#. js-lingui-explicit-id
+msgid "system.error.copy"
+msgstr "نسخ"
+
+#. js-lingui-explicit-id
+msgid "system.error.details"
+msgstr "التفاصيل"
+
+#. js-lingui-explicit-id
+msgid "system.error.reference"
+msgstr "المرجع"
+
+#. js-lingui-explicit-id
+msgid "system.empty.clear_filters"
+msgstr "مسح عوامل التصفية"
+
+#. js-lingui-explicit-id
+msgid "shell.offline.banner"
+msgstr "أنت غير متصل بالإنترنت. التغييرات التي تجريها هنا لم تُحفظ على الخادم بعد."
+
+#. js-lingui-explicit-id
+msgid "shell.still_loading"
+msgstr "ما زال التحميل جارياً"
+
+#. js-lingui-explicit-id
+msgid "shell.skip"
+msgstr "تخطَّ إلى المحتوى الرئيسي"
+
+#. js-lingui-explicit-id
+msgid "shell.help"
+msgstr "المساعدة"
+
+#. js-lingui-explicit-id
+msgid "shell.help_label"
+msgstr "المساعدة (تُفتح في تبويب جديد)"
+
+#. js-lingui-explicit-id
+msgid "shell.nav_label"
+msgstr "التنقل الرئيسي"
+
+#. js-lingui-explicit-id
+msgid "shell.nav.home"
+msgstr "الرئيسية"
+
+#. js-lingui-explicit-id
+msgid "shell.account"
+msgstr "الحساب"
+
+#. js-lingui-explicit-id
+msgid "shell.sign_out"
+msgstr "تسجيل الخروج"
+
+#. js-lingui-explicit-id
+msgid "shell.signing_out"
+msgstr "جارٍ تسجيل الخروج"
+
+#. js-lingui-explicit-id
+msgid "shell.sign_out_offline"
+msgstr "أنت غير متصل بالإنترنت. تسجيل الخروج يحتاج إلى الخادم."
+
+#. js-lingui-explicit-id
+msgid "shell.sign_out_failed.what"
+msgstr "تعذّر تسجيل خروجك"
+
+#. js-lingui-explicit-id
+msgid "shell.sign_out_failed.meaning"
+msgstr "ما زلت مسجَّل الدخول."
+
+#. js-lingui-explicit-id
+msgid "shell.lists_error.what"
+msgstr "تعذّر تحميل مؤسساتك ومساحات عملك"
+
+#. js-lingui-explicit-id
+msgid "shell.lists_error.meaning"
+msgstr "لم يتغيّر شيء. بقية الصفحة ما زالت تعمل."
+
+#. js-lingui-explicit-id
+msgid "shell.welcome"
+msgstr "مرحباً بك في Shoutory"
+
+#. js-lingui-explicit-id
+msgid "shell.no_workspaces.title"
+msgstr "ليس لديك مساحات عمل بعد"
+
+#. js-lingui-explicit-id
+msgid "shell.no_workspaces.body"
+msgstr "تضم مساحة العمل قنوات ومنشورات عميل واحد أو علامة تجارية واحدة."
+
+#. js-lingui-explicit-id
+msgid "shell.workspace.title"
+msgstr "مساحة العمل"
+
+#. js-lingui-explicit-id
+msgid "shell.workspace.empty_title"
+msgstr "لا يوجد شيء هنا بعد"
+
+#. js-lingui-explicit-id
+msgid "shell.workspace.empty_body"
+msgstr "شاشات مساحة العمل هذه غير متاحة في هذا الإصدار بعد."
+
+#. js-lingui-explicit-id
+msgid "shell.switcher.organization"
+msgstr "المؤسسة"
+
+#. js-lingui-explicit-id
+msgid "shell.switcher.workspace"
+msgstr "مساحة العمل"
+
+#. js-lingui-explicit-id
+msgid "shell.palette.title"
+msgstr "تبديل مساحة العمل"
+
+#. js-lingui-explicit-id
+msgid "shell.palette.search"
+msgstr "ابحث في مساحات العمل"
+
+#. js-lingui-explicit-id
+msgid "shell.palette.empty"
+msgstr "لا توجد نتائج"
