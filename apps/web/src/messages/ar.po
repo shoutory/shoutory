@@ -1062,3 +1062,239 @@ msgstr "لا شيء لعرضه بعد"
 #. js-lingui-explicit-id
 msgid "billing.empty_body"
 msgstr "يظهر الاستخدام عندما يكون في المؤسسة عميل يمكنك الوصول إليه."
+
+#. js-lingui-explicit-id
+msgid "shell.nav.members"
+msgstr "الأعضاء"
+
+#. js-lingui-explicit-id
+msgid "members.title"
+msgstr "الأعضاء"
+
+#. js-lingui-explicit-id
+msgid "members.col_name"
+msgstr "الاسم"
+
+#. js-lingui-explicit-id
+msgid "members.col_role"
+msgstr "الدور"
+
+#. js-lingui-explicit-id
+msgid "members.col_status"
+msgstr "الحالة"
+
+#. js-lingui-explicit-id
+msgid "members.you"
+msgstr "(أنت)"
+
+#. js-lingui-explicit-id
+msgid "members.one_owner"
+msgstr "تحتاج مساحة العمل إلى مالك واحد."
+
+#. js-lingui-explicit-id
+msgid "members.status_active"
+msgstr "نشط"
+
+#. js-lingui-explicit-id
+msgid "members.status_suspended"
+msgstr "موقوف"
+
+#. js-lingui-explicit-id
+msgid "members.org_admins"
+msgstr "مالكو المؤسسة ومديروها لديهم وصول إلى كل مساحات العمل دون أن يُدرجوا هنا."
+
+#. js-lingui-explicit-id
+msgid "members.need_admin"
+msgstr "تحتاج دور المدير لرؤية الأعضاء."
+
+#. js-lingui-explicit-id
+msgid "invitations.title"
+msgstr "الدعوات المعلّقة"
+
+#. js-lingui-explicit-id
+msgid "invitations.col_email"
+msgstr "البريد الإلكتروني"
+
+#. js-lingui-explicit-id
+msgid "invitations.col_expires"
+msgstr "تنتهي"
+
+#. js-lingui-explicit-id
+msgid "invitations.expired"
+msgstr "منتهية"
+
+#. js-lingui-explicit-id
+msgid "invitations.empty_title"
+msgstr "لا توجد دعوات معلّقة"
+
+#. js-lingui-explicit-id
+msgid "invitations.empty_body"
+msgstr "ادعُ شخصًا بالبريد الإلكتروني وسيظهر هنا حتى ينضم."
+
+#. js-lingui-explicit-id
+msgid "members.role_of"
+msgstr "دور {name}"
+
+#. js-lingui-explicit-id
+msgid "members.saving"
+msgstr "جارٍ حفظ الدور الجديد…"
+
+#. js-lingui-explicit-id
+msgid "members.last_owner.what"
+msgstr "تحتاج مساحة العمل إلى مالك واحد"
+
+#. js-lingui-explicit-id
+msgid "members.last_owner.meaning"
+msgstr "لا يمكن للمالك الأخير أن يغادر أو يتغيّر دوره. لم يتغيّر شيء."
+
+#. js-lingui-explicit-id
+msgid "members.already_owner.what"
+msgstr "هذا الشخص هو المالك بالفعل"
+
+#. js-lingui-explicit-id
+msgid "members.already_owner.meaning"
+msgstr "لم يتغيّر شيء."
+
+#. js-lingui-explicit-id
+msgid "members.use_leave.what"
+msgstr "استخدم «مغادرة مساحة العمل» لإزالة نفسك"
+
+#. js-lingui-explicit-id
+msgid "members.use_leave.meaning"
+msgstr "إزالة نفسك تعني المغادرة. لم يتغيّر شيء."
+
+#. js-lingui-explicit-id
+msgid "members.not_confirmed.what"
+msgstr "لم تُؤكَّد كلمة المرور"
+
+#. js-lingui-explicit-id
+msgid "members.not_confirmed.meaning"
+msgstr "لم يتغيّر شيء."
+
+#. js-lingui-explicit-id
+msgid "members.forbidden.what"
+msgstr "لا يمكنك إجراء هذا التغيير"
+
+#. js-lingui-explicit-id
+msgid "members.forbidden.meaning"
+msgstr "ربما تغيّر دورك. لم يتغيّر شيء."
+
+#. js-lingui-explicit-id
+msgid "members.col_actions"
+msgstr "إجراءات"
+
+#. js-lingui-explicit-id
+msgid "members.dismiss"
+msgstr "ليس الآن"
+
+#. js-lingui-explicit-id
+msgid "members.remove"
+msgstr "إزالة"
+
+#. js-lingui-explicit-id
+msgid "members.remove_title"
+msgstr "إزالة <0>{name}</0>؟"
+
+#. js-lingui-explicit-id
+msgid "members.remove_body"
+msgstr "يفقد وصوله إلى مساحة العمل هذه الآن. يمكنك دعوته مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "members.leave"
+msgstr "مغادرة مساحة العمل"
+
+#. js-lingui-explicit-id
+msgid "members.leave_title"
+msgstr "مغادرة <0>{name}</0>؟"
+
+#. js-lingui-explicit-id
+msgid "members.leave_confirm"
+msgstr "مغادرة"
+
+#. js-lingui-explicit-id
+msgid "members.leave_body"
+msgstr "تفقد وصولك إلى مساحة العمل هذه الآن. يمكن لمالك أو مدير دعوتك مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "invite.open"
+msgstr "دعوة"
+
+#. js-lingui-explicit-id
+msgid "invite.title"
+msgstr "دعوة شخص"
+
+#. js-lingui-explicit-id
+msgid "invite.email"
+msgstr "البريد الإلكتروني"
+
+#. js-lingui-explicit-id
+msgid "invite.email_bad"
+msgstr "أدخل بريدًا إلكترونيًا صالحًا."
+
+#. js-lingui-explicit-id
+msgid "invite.role"
+msgstr "الدور"
+
+#. js-lingui-explicit-id
+msgid "invite.expiry"
+msgstr "تنتهي بعد"
+
+#. js-lingui-explicit-id
+msgid "invite.send"
+msgstr "إرسال الدعوة"
+
+#. js-lingui-explicit-id
+msgid "invite.exp_1h"
+msgstr "ساعة"
+
+#. js-lingui-explicit-id
+msgid "invite.exp_24h"
+msgstr "24 ساعة"
+
+#. js-lingui-explicit-id
+msgid "invite.exp_48h"
+msgstr "48 ساعة"
+
+#. js-lingui-explicit-id
+msgid "invite.exp_7d"
+msgstr "7 أيام"
+
+#. js-lingui-explicit-id
+msgid "invite.exp_14d"
+msgstr "14 يومًا"
+
+#. js-lingui-explicit-id
+msgid "invite.duplicate.what"
+msgstr "هذا الشخص مدعو بالفعل"
+
+#. js-lingui-explicit-id
+msgid "invite.duplicate.meaning"
+msgstr "لا تزال هناك دعوة معلّقة لهذا العنوان. ألغِها لإرسال دعوة جديدة. لم يتغيّر شيء."
+
+#. js-lingui-explicit-id
+msgid "invite.limit.what"
+msgstr "تعذّر إرسال الدعوة"
+
+#. js-lingui-explicit-id
+msgid "invite.limit.meaning"
+msgstr "لدى مساحة العمل هذه 100 دعوة معلّقة، وهو أقصى ما تستوعبه. ألغِ بعضها أولًا. لم يتغيّر شيء."
+
+#. js-lingui-explicit-id
+msgid "invitations.revoke"
+msgstr "إلغاء"
+
+#. js-lingui-explicit-id
+msgid "invitations.revoke_title"
+msgstr "إلغاء الدعوة المرسلة إلى <0>{email}</0>؟"
+
+#. js-lingui-explicit-id
+msgid "invitations.revoke_body"
+msgstr "يتوقف الرابط الذي أُرسل إليهم عن العمل. يمكنك دعوتهم مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "invitations.ended.what"
+msgstr "لم تعد هذه الدعوة معلّقة"
+
+#. js-lingui-explicit-id
+msgid "invitations.ended.meaning"
+msgstr "تم قبولها أو إلغاؤها بالفعل. لم يتغيّر شيء."

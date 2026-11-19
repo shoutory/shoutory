@@ -6,19 +6,16 @@ import {
   closeApp,
   combobox,
   openApp,
-  pageOf as page,
   refusal,
+  roleOf,
   settle,
   stubApi,
   type,
-  WORKSPACES,
 } from "../../test/support/app";
 
 afterEach(closeApp);
 
 const PATH = "/w/w1/settings/general";
-const roleOf = (role: string) =>
-  page(WORKSPACES.map((workspace) => (workspace.id === "w1" ? { ...workspace, role } : workspace)));
 const input = (host: ParentNode, name: string) =>
   host.querySelector<HTMLInputElement>(`input[name="${name}"]`);
 const save = (host: ParentNode) => byText<HTMLButtonElement>(host, "button", "Save");

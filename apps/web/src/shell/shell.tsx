@@ -93,6 +93,11 @@ function Rail() {
           <Trans id="shell.nav.billing">Billing</Trans>
         </NavLink>
       ) : null}
+      {ws && shared ? (
+        <NavLink to={`/w/${ws}/settings/members`} className={NAV_LINK}>
+          <Trans id="shell.nav.members">Members</Trans>
+        </NavLink>
+      ) : null}
       {ws ? (
         <NavLink to={`/w/${ws}/settings/general`} className={NAV_LINK}>
           <Trans id="shell.nav.settings">Settings</Trans>

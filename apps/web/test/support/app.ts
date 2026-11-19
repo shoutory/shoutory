@@ -38,8 +38,18 @@ export const WORKSPACES: Workspace[] = [
 
 export const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
-export const refusal = (code: string, status: number) =>
-  json({ error: { code, message: "words the user must never see", requestId: "req-42" } }, status);
+export const refusal = (code: string, status: number, details?: Record<string, string>) =>
+  json(
+    {
+      error: {
+        code,
+        message: "words the user must never see",
+        requestId: "req-42",
+        ...(details ? { details } : {}),
+      },
+    },
+    status,
+  );
 const page = (rows: unknown[]) => json({ data: rows, meta: { next_cursor: null } });
 
 /** An answer that lists `rows` as one page. */
@@ -77,6 +87,55 @@ export interface Api {
   changePassword?: Answer;
   twoFactorStatus?: Answer;
   generateCodes?: Answer;
+  /** The members page of workspace w1: both lists, and each change (the id in the path is any member or invitation). */
+  members?: Answer;
+  invitations?: Answer;
+  changeRole?: Answer;
+  removeMember?: Answer;
+  leave?: Answer;
+  invite?: Answer;
+  revokeInvitation?: Answer;
+}
+
+/** The members of w1 as the caller sees them: the others, plus the caller (u1) in `role`; below an Owner caller sits an Owner. */
+export function membersFor(role: string) {
+  const row = (id: string, name: string, as: string, status = "active") => ({
+    user_id: id,
+    name,
+    image: null,
+    role: as,
+    status,
+  });
+  const others = [
+    row("u2", "Admin Two", "admin"),
+    row("u3", "Editor Three", "editor"),
+    row("u4", "Viewer Four", "viewer"),
+    row("u5", "Suspended Five", "editor", "suspended"),
+  ];
+  const self = row("u1", "Person Sample", role);
+  return role === "owner" ? [self, ...others] : [row("u0", "Owner Zero", "owner"), self, ...others];
+}
+export const INVITATIONS = [
+  { id: "i1", email: "pending@example.test", role_key: "editor", expires_at: "2099-11-21T10:00:00.000Z" },
+  { id: "i2", email: "old@example.test", role_key: "viewer", expires_at: "2026-11-01T10:00:00.000Z" },
+];
+
+// The members and invitations calls of workspace w1; the changes to one member or invitation match by method.
+function membersAnswers(api: Api, pathname: string, method: string): Answer | undefined {
+  const base = "/api/v1/workspaces/w1";
+  // A member or an invitation id in the path is any id: `*`.
+  const route = pathname.replace(/\/(members|invitations)\/(?!me\/)[^/]+$/, "/$1/*");
+  const answers: Record<string, Answer> = {
+    [`${base}/members:GET`]: api.members ?? (() => page(membersFor("admin"))),
+    [`${base}/invitations:GET`]: api.invitations ?? (() => page(INVITATIONS)),
+    [`${base}/members/me/leave:POST`]: api.leave ?? (() => json({ data: null })),
+    [`${base}/invitations:POST`]:
+      api.invite ?? (() => json({ data: { id: "i3", email: "new@example.test", role_key: "viewer" } }, 201)),
+    [`${base}/members/*:PATCH`]: api.changeRole ?? (() => json({ data: { user_id: "u3", role: "viewer" } })),
+    [`${base}/members/*:DELETE`]: api.removeMember ?? (() => json({ data: null })),
+    [`${base}/invitations/*:DELETE`]: api.revokeInvitation ?? (() => json({ data: null })),
+  };
+  return answers[`${route}:${method}`];
 }
 
 export const DEVICES = [
@@ -208,7 +267,9 @@ export function stubApi(api: Api = {}) {
   const stub = vi.fn((path: string, init?: RequestInit) => {
     const pathname = new URL(path, "http://same-origin.invalid").pathname;
     // A create call to a path that also lists (organizations, workspaces) has its own `<path>:POST` answer.
-    const answer = answers[`${pathname}:${init?.method ?? "GET"}`] ?? answers[pathname];
+    const method = init?.method ?? "GET";
+    const answer =
+      answers[`${pathname}:${method}`] ?? answers[pathname] ?? membersAnswers(api, pathname, method);
     return Promise.resolve(answer ? answer() : refusal("not_found", 404));
   });
   vi.stubGlobal("fetch", stub);
@@ -311,3 +372,52 @@ export const press = (element: Element, key: string, modifiers: KeyboardEventIni
   });
 
 export const click = (element: HTMLElement) => act(() => element.click());
+
+/** The workspace list with the caller's own role in w1 set to `role`. */
+export const roleOf = (role: string) =>
+  pageOf(WORKSPACES.map((workspace) => (workspace.id === "w1" ? { ...workspace, role } : workspace)));
+
+/** The table row whose text contains `text`. */
+export function rowOf(host: ParentNode, text: string) {
+  const row = [...host.querySelectorAll<HTMLElement>("tr")].find((candidate) =>
+    candidate.textContent?.includes(text),
+  );
+  if (!row) throw new Error(`no row with the text "${text}"`);
+  return row;
+}
+
+/** The trigger of the Select inside `scope` whose label contains `label`. */
+export function selectTrigger(scope: ParentNode, label: string) {
+  const trigger = [...scope.querySelectorAll<HTMLElement>('button[aria-haspopup="listbox"]')].find((button) =>
+    (button.getAttribute("aria-labelledby") ?? "")
+      .split(" ")
+      .some((id) => document.getElementById(id)?.textContent?.includes(label)),
+  );
+  if (!trigger) throw new Error(`no Select labelled "${label}"`);
+  return trigger;
+}
+
+/** The texts of the options of the open list, in order. */
+export const optionTexts = () =>
+  [...document.body.querySelectorAll('[role="option"]')].map((option) => option.textContent);
+
+/** Opens the Select labelled `label` in `scope` and chooses the option whose text is exactly `option`. */
+export function pick(scope: ParentNode, label: string, option: string) {
+  click(selectTrigger(scope, label));
+  const found = [...document.body.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (candidate) => candidate.textContent === option,
+  );
+  if (!found) throw new Error(`no option "${option}"`);
+  click(found);
+}
+
+/** Opens the members page of w1 as a caller whose role there is `role`; `api` overrides any answer. */
+export async function openMembers(role: string, api: Api = {}) {
+  const stub = stubApi({ workspaces: roleOf(role), members: pageOf(membersFor(role)), ...api });
+  const opened = await openApp("/w/w1/settings/members");
+  return { stub, ...opened };
+}
+
+/** The calls to a path (a part of it) with a method. */
+export const callsTo = (stub: ReturnType<typeof stubApi>, method: string, part: string) =>
+  stub.mock.calls.filter(([url, init]) => url.includes(part) && (init?.method ?? "GET") === method);

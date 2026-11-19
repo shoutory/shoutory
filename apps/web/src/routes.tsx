@@ -27,6 +27,7 @@ import {
 } from "./pages/system-pages";
 import { SESSION_ROUTE_ID, sessionGuard } from "./session/session";
 import { GeneralPage } from "./settings/general";
+import { MembersPage } from "./settings/members";
 import { Shell, StartPage, WorkspaceHome } from "./shell/shell";
 import {
   isUnknownOrganization,
@@ -55,6 +56,7 @@ const TITLES = {
   clients: msg({ id: "org.clients.title", message: "Clients" }),
   general: msg({ id: "settings.general.title", message: "General" }),
   billing: msg({ id: "billing.title", message: "Billing" }),
+  members: msg({ id: "members.title", message: "Members" }),
   forbidden: msg({ id: "system.forbidden.title", message: "You do not have access to this page" }),
   maintenance: msg({ id: "system.maintenance.title", message: "Shoutory is not reachable right now" }),
   startupFailure: msg({ id: "system.startup_failure.title", message: "Shoutory did not start correctly" }),
@@ -202,6 +204,11 @@ export const routes: RouteObject[] = [
                 path: "w/:ws/settings/general",
                 handle: titled(TITLES.general, (shell, params) => isUnknownWorkspace(shell, params.ws)),
                 element: <GeneralPage />,
+              },
+              {
+                path: "w/:ws/settings/members",
+                handle: titled(TITLES.members, (shell, params) => isUnknownWorkspace(shell, params.ws)),
+                element: <MembersPage />,
               },
               {
                 path: "o/:org/billing",

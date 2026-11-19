@@ -8,8 +8,11 @@ export type Loaded<T> =
   | { readonly status: "done"; readonly data: T }
   | { readonly status: "failed"; readonly error: ApiError };
 
-/** Reads one path when the block appears: `replace` swaps the data without a read, `reload` reads again. */
-export function useLoad<T>(schema: ZodType<T>, path: string) {
+/**
+ * Reads one path when the block appears: `replace` swaps the data without a read, `reload` reads again from the
+ * loading state, and `refresh` (or a new `stamp`) reads again quietly, keeping what is shown until the answer lands.
+ */
+export function useLoad<T>(schema: ZodType<T>, path: string, stamp = 0) {
   const [state, setState] = useState<Loaded<T>>({ status: "loading" });
   const [version, setVersion] = useState(0);
   const navigate = useNavigate();
@@ -17,6 +20,7 @@ export function useLoad<T>(schema: ZodType<T>, path: string) {
   useEffect(() => {
     let current = true;
     void version;
+    void stamp;
     request(schema, path).then(
       (data) => current && setState({ status: "done", data }),
       (error: unknown) => {
@@ -33,10 +37,11 @@ export function useLoad<T>(schema: ZodType<T>, path: string) {
     return () => {
       current = false;
     };
-  }, [schema, path, version, navigate, pathname]);
+  }, [schema, path, version, stamp, navigate, pathname]);
   return {
     state,
     replace: (data: T) => setState({ status: "done", data }),
+    refresh: () => setVersion((now) => now + 1),
     reload: () => {
       setState({ status: "loading" });
       setVersion((now) => now + 1);

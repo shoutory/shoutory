@@ -1064,3 +1064,239 @@ msgstr "Nothing to show yet"
 #. js-lingui-explicit-id
 msgid "billing.empty_body"
 msgstr "Usage appears once the organization has a client you can reach."
+
+#. js-lingui-explicit-id
+msgid "shell.nav.members"
+msgstr "Members"
+
+#. js-lingui-explicit-id
+msgid "members.title"
+msgstr "Members"
+
+#. js-lingui-explicit-id
+msgid "members.col_name"
+msgstr "Name"
+
+#. js-lingui-explicit-id
+msgid "members.col_role"
+msgstr "Role"
+
+#. js-lingui-explicit-id
+msgid "members.col_status"
+msgstr "Status"
+
+#. js-lingui-explicit-id
+msgid "members.you"
+msgstr "(you)"
+
+#. js-lingui-explicit-id
+msgid "members.one_owner"
+msgstr "A workspace needs one Owner."
+
+#. js-lingui-explicit-id
+msgid "members.status_active"
+msgstr "Active"
+
+#. js-lingui-explicit-id
+msgid "members.status_suspended"
+msgstr "Suspended"
+
+#. js-lingui-explicit-id
+msgid "members.org_admins"
+msgstr "Organization owners and admins have access to every workspace without being listed here."
+
+#. js-lingui-explicit-id
+msgid "members.need_admin"
+msgstr "You need the admin role to see the members."
+
+#. js-lingui-explicit-id
+msgid "invitations.title"
+msgstr "Pending invitations"
+
+#. js-lingui-explicit-id
+msgid "invitations.col_email"
+msgstr "Email"
+
+#. js-lingui-explicit-id
+msgid "invitations.col_expires"
+msgstr "Expires"
+
+#. js-lingui-explicit-id
+msgid "invitations.expired"
+msgstr "Expired"
+
+#. js-lingui-explicit-id
+msgid "invitations.empty_title"
+msgstr "No pending invitations"
+
+#. js-lingui-explicit-id
+msgid "invitations.empty_body"
+msgstr "Invite a person by email and they appear here until they join."
+
+#. js-lingui-explicit-id
+msgid "members.role_of"
+msgstr "Role of {name}"
+
+#. js-lingui-explicit-id
+msgid "members.saving"
+msgstr "Saving the new role…"
+
+#. js-lingui-explicit-id
+msgid "members.last_owner.what"
+msgstr "A workspace needs one Owner"
+
+#. js-lingui-explicit-id
+msgid "members.last_owner.meaning"
+msgstr "The last Owner cannot leave or be changed. Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "members.already_owner.what"
+msgstr "That person is already the Owner"
+
+#. js-lingui-explicit-id
+msgid "members.already_owner.meaning"
+msgstr "Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "members.use_leave.what"
+msgstr "Use Leave workspace to remove yourself"
+
+#. js-lingui-explicit-id
+msgid "members.use_leave.meaning"
+msgstr "Removing yourself is leaving. Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "members.not_confirmed.what"
+msgstr "Your password was not confirmed"
+
+#. js-lingui-explicit-id
+msgid "members.not_confirmed.meaning"
+msgstr "Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "members.forbidden.what"
+msgstr "You cannot make that change"
+
+#. js-lingui-explicit-id
+msgid "members.forbidden.meaning"
+msgstr "Your role may have changed. Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "members.col_actions"
+msgstr "Actions"
+
+#. js-lingui-explicit-id
+msgid "members.dismiss"
+msgstr "Not now"
+
+#. js-lingui-explicit-id
+msgid "members.remove"
+msgstr "Remove"
+
+#. js-lingui-explicit-id
+msgid "members.remove_title"
+msgstr "Remove <0>{name}</0>?"
+
+#. js-lingui-explicit-id
+msgid "members.remove_body"
+msgstr "They lose access to this workspace now. You can invite them again."
+
+#. js-lingui-explicit-id
+msgid "members.leave"
+msgstr "Leave workspace"
+
+#. js-lingui-explicit-id
+msgid "members.leave_title"
+msgstr "Leave <0>{name}</0>?"
+
+#. js-lingui-explicit-id
+msgid "members.leave_confirm"
+msgstr "Leave"
+
+#. js-lingui-explicit-id
+msgid "members.leave_body"
+msgstr "You lose access to this workspace now. An owner or admin can invite you again."
+
+#. js-lingui-explicit-id
+msgid "invite.open"
+msgstr "Invite"
+
+#. js-lingui-explicit-id
+msgid "invite.title"
+msgstr "Invite someone"
+
+#. js-lingui-explicit-id
+msgid "invite.email"
+msgstr "Email"
+
+#. js-lingui-explicit-id
+msgid "invite.email_bad"
+msgstr "Enter a valid email address."
+
+#. js-lingui-explicit-id
+msgid "invite.role"
+msgstr "Role"
+
+#. js-lingui-explicit-id
+msgid "invite.expiry"
+msgstr "Expires after"
+
+#. js-lingui-explicit-id
+msgid "invite.send"
+msgstr "Send invitation"
+
+#. js-lingui-explicit-id
+msgid "invite.exp_1h"
+msgstr "1 hour"
+
+#. js-lingui-explicit-id
+msgid "invite.exp_24h"
+msgstr "24 hours"
+
+#. js-lingui-explicit-id
+msgid "invite.exp_48h"
+msgstr "48 hours"
+
+#. js-lingui-explicit-id
+msgid "invite.exp_7d"
+msgstr "7 days"
+
+#. js-lingui-explicit-id
+msgid "invite.exp_14d"
+msgstr "14 days"
+
+#. js-lingui-explicit-id
+msgid "invite.duplicate.what"
+msgstr "That person is already invited"
+
+#. js-lingui-explicit-id
+msgid "invite.duplicate.meaning"
+msgstr "An invitation to that address is still pending. Revoke it to send a new one. Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "invite.limit.what"
+msgstr "We could not send the invitation"
+
+#. js-lingui-explicit-id
+msgid "invite.limit.meaning"
+msgstr "This workspace already has 100 pending invitations, the most it can hold. Revoke some first. Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "invitations.revoke"
+msgstr "Revoke"
+
+#. js-lingui-explicit-id
+msgid "invitations.revoke_title"
+msgstr "Revoke the invitation to <0>{email}</0>?"
+
+#. js-lingui-explicit-id
+msgid "invitations.revoke_body"
+msgstr "The link they were sent stops working. You can invite them again."
+
+#. js-lingui-explicit-id
+msgid "invitations.ended.what"
+msgstr "That invitation is no longer pending"
+
+#. js-lingui-explicit-id
+msgid "invitations.ended.meaning"
+msgstr "It was accepted or revoked already. Nothing was changed."

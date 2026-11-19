@@ -25,6 +25,8 @@ describe("the organization and settings routes", () => {
     ["an unknown organization's billing", "/o/zzz/billing", {}],
     ["an unknown workspace's general settings", "/w/zzz/settings/general", {}],
     ["a personal organization's clients", "/o/o1/clients", personal],
+    ["an unknown workspace's members", "/w/zzz/settings/members", {}],
+    ["a personal organization's members", "/w/w1/settings/members", personal],
   ])("%s open the not-found page and make no call", async (_name, path, api) => {
     const stub = stubApi(api);
     const { host } = await openApp(path);
@@ -36,7 +38,7 @@ describe("the organization and settings routes", () => {
 
 describe("the rail", () => {
   it.each([
-    ["an agency workspace shows Clients, Billing and Settings", {}, true],
+    ["an agency workspace shows Clients, Billing, Members and Settings", {}, true],
     ["a personal organization keeps only Settings", personal, false],
   ])("%s", async (_name, api, org) => {
     stubApi(api);
@@ -44,5 +46,6 @@ describe("the rail", () => {
     expect(linkTo(host, "/w/w1/settings/general")?.textContent).toBe("Settings");
     expect(linkTo(host, "/o/o1/clients")?.textContent ?? null).toBe(org ? "Clients" : null);
     expect(linkTo(host, "/o/o1/billing")?.textContent ?? null).toBe(org ? "Billing" : null);
+    expect(linkTo(host, "/w/w1/settings/members")?.textContent ?? null).toBe(org ? "Members" : null);
   });
 });

@@ -1,4 +1,3 @@
-import { msg } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useRef, useState } from "react";
 import { Form } from "react-aria-components";
@@ -9,6 +8,7 @@ import { authCopy } from "../auth/auth-copy";
 import { SubmitButton, useAction } from "../auth/auth-frame";
 import { type ApiError, request } from "../http/client";
 import { NotFoundPage } from "../pages/system-pages";
+import { ROLES } from "../settings/roles";
 import { type Organization, useShellData, type Workspace } from "../shell/shell-data";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
@@ -21,15 +21,6 @@ import { ZonePicker } from "../zones/zone-picker";
 // The server's limit for a workspace name.
 const MAX_NAME = 128;
 const created = z.object({ id: z.string() });
-
-const ROLES = {
-  owner: msg({ id: "role.owner", message: "Owner" }),
-  admin: msg({ id: "role.admin", message: "Admin" }),
-  editor: msg({ id: "role.editor", message: "Editor" }),
-  approver: msg({ id: "role.approver", message: "Approver" }),
-  viewer: msg({ id: "role.viewer", message: "Viewer" }),
-  member: msg({ id: "role.member", message: "Member" }),
-} as const;
 
 // The organization holds 100 clients at most: that refusal has its own words, the rest are the generic ones.
 function clientCopy(error: ApiError) {
