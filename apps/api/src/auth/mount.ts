@@ -119,6 +119,20 @@ const profile: Handler = async (ctx) => {
   return respond(ctx.c, { data: { name } }, []);
 };
 
+// Whether the second factor is on and how many recovery codes are left. The count is all that leaves: no HTTP route
+// of ours shows a code, and the library's own view route is server-only.
+const twoFactorStatus: Handler = async (ctx) => {
+  const { userId } = ctx.c.get("session");
+  const context = await ctx.auth.library.$context;
+  const user = await context.adapter.findOne<{ twoFactorEnabled?: boolean | null }>({
+    model: "user",
+    where: [{ field: "id", value: userId }],
+  });
+  const enabled = user?.twoFactorEnabled === true;
+  const codes = enabled ? await ctx.auth.library.api.viewBackupCodes({ body: { userId } }) : null;
+  return respond(ctx.c, { data: { enabled, recovery_codes_left: codes?.backupCodes.length ?? null } }, []);
+};
+
 const sessions: Handler = async (ctx) =>
   respond(ctx.c, { data: await listSessions(ctx.auth, ctx.c.get("session")) }, []);
 
@@ -141,6 +155,7 @@ const HANDLERS: Readonly<Record<string, Handler>> = {
   [`POST ${AUTH_BASE}/verify-email`]: verifyEmail,
   [`GET ${AUTH_BASE}/get-session`]: getSession,
   [`POST ${AUTH_BASE}/profile`]: profile,
+  [`GET ${AUTH_BASE}/two-factor/status`]: twoFactorStatus,
   [`GET ${AUTH_BASE}/sessions`]: sessions,
   [`POST ${AUTH_BASE}/sessions/revoke`]: revoke,
   [`POST ${AUTH_BASE}/sessions/revoke-others`]: revokeOthers,

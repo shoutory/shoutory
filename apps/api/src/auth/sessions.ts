@@ -33,10 +33,38 @@ export async function revokeOtherSessions(auth: AuthService, current: AuthSessio
   });
 }
 
-/** The user's live sessions by row id. The stored token digest and the address digest are never part of an item. */
+const LIST_LIMIT = 100;
+
+interface SessionRow {
+  readonly id: string;
+  readonly createdAt: Date;
+  readonly expiresAt: Date;
+  readonly userAgent?: string | null;
+}
+
+/**
+ * The user's live sessions, newest first, at most 100, by row id. The current session is always in the answer: when it
+ * is older than the newest 100 it takes the last place. The stored token digest and the address digest are never part
+ * of an item.
+ */
 export async function listSessions(auth: AuthService, current: AuthSession): Promise<SessionListItem[]> {
   const context = await auth.library.$context;
-  const rows = await context.internalAdapter.listSessions(current.userId);
+  const rows = await context.adapter.findMany<SessionRow>({
+    model: "session",
+    where: [
+      { field: "userId", value: current.userId },
+      { field: "expiresAt", value: new Date(), operator: "gt" },
+    ],
+    sortBy: { field: "createdAt", direction: "desc" },
+    limit: LIST_LIMIT,
+  });
+  if (!rows.some((row) => row.id === current.id)) {
+    const own = await context.adapter.findOne<SessionRow>({
+      model: "session",
+      where: [{ field: "id", value: current.id }],
+    });
+    if (own) rows.splice(LIST_LIMIT - 1, rows.length, own);
+  }
   return rows.map((row) => ({
     id: row.id,
     createdAt: row.createdAt,

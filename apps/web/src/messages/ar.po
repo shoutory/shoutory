@@ -668,6 +668,106 @@ msgid "account.profile.language_failed"
 msgstr "تعذّر تحميل هذه اللغة. لم تتغير لغتك."
 
 #. js-lingui-explicit-id
+msgid "shell.security"
+msgstr "الأمان"
+
+#. js-lingui-explicit-id
+msgid "account.security.title"
+msgstr "الأمان"
+
+#. js-lingui-explicit-id
+msgid "account.security.password"
+msgstr "كلمة المرور"
+
+#. js-lingui-explicit-id
+msgid "account.security.current_password"
+msgstr "كلمة المرور الحالية"
+
+#. js-lingui-explicit-id
+msgid "account.security.new_password"
+msgstr "كلمة المرور الجديدة"
+
+#. js-lingui-explicit-id
+msgid "account.security.change"
+msgstr "تغيير كلمة المرور"
+
+#. js-lingui-explicit-id
+msgid "account.security.changed"
+msgstr "تم تغيير كلمة المرور. تم تسجيل خروج الأجهزة الأخرى. يبقى هذا الجهاز مسجّل الدخول."
+
+#. js-lingui-explicit-id
+msgid "account.security.breached.what"
+msgstr "ظهرت كلمة المرور هذه في تسريب بيانات"
+
+#. js-lingui-explicit-id
+msgid "account.security.breached.meaning"
+msgstr "اختر كلمة مرور لم تستخدمها من قبل."
+
+#. js-lingui-explicit-id
+msgid "account.security.devices"
+msgstr "الأجهزة المسجّلة"
+
+#. js-lingui-explicit-id
+msgid "account.security.device"
+msgstr "الجهاز"
+
+#. js-lingui-explicit-id
+msgid "account.security.signed_in"
+msgstr "تاريخ الدخول"
+
+#. js-lingui-explicit-id
+msgid "account.security.this_device"
+msgstr "هذا الجهاز"
+
+#. js-lingui-explicit-id
+msgid "account.security.unknown_device"
+msgstr "جهاز غير معروف"
+
+#. js-lingui-explicit-id
+msgid "account.security.end_session"
+msgstr "إنهاء الجلسة"
+
+#. js-lingui-explicit-id
+msgid "account.security.end_others"
+msgstr "تسجيل خروج الأجهزة الأخرى"
+
+#. js-lingui-explicit-id
+msgid "account.security.two_factor"
+msgstr "التحقق بخطوتين"
+
+#. js-lingui-explicit-id
+msgid "account.security.off"
+msgstr "التحقق بخطوتين غير مفعّل."
+
+#. js-lingui-explicit-id
+msgid "account.security.on"
+msgstr "التحقق بخطوتين مفعّل."
+
+#. js-lingui-explicit-id
+msgid "account.security.set_up"
+msgstr "إعداد"
+
+#. js-lingui-explicit-id
+msgid "account.security.new_codes"
+msgstr "رموز استرداد جديدة"
+
+#. js-lingui-explicit-id
+msgid "account.security.generate"
+msgstr "إنشاء الرموز"
+
+#. js-lingui-explicit-id
+msgid "account.security.codes_none"
+msgstr "لم يتبق لديك أي رمز استرداد. أنشئ رموزًا جديدة لتتمكن من تسجيل الدخول إذا فقدت تطبيق المصادقة."
+
+#. js-lingui-explicit-id
+msgid "account.security.codes_left"
+msgstr "رموز الاسترداد المتبقية: {count}"
+
+#. js-lingui-explicit-id
+msgid "account.security.action"
+msgstr "الإجراء"
+
+#. js-lingui-explicit-id
 msgid "account.profile.sample"
 msgstr "مثال:"
 

@@ -59,6 +59,50 @@ export interface Api {
   enable?: Answer;
   acceptInvitation?: Answer;
   profile?: Answer;
+  sessions?: Answer;
+  revokeSession?: Answer;
+  revokeOthers?: Answer;
+  changePassword?: Answer;
+  twoFactorStatus?: Answer;
+  generateCodes?: Answer;
+}
+
+export const DEVICES = [
+  {
+    id: "s-here",
+    createdAt: "2026-11-19T10:00:00.000Z",
+    expiresAt: "2026-12-19T10:00:00.000Z",
+    userAgent: "Mozilla/5.0 (Windows NT 10.0) Firefox/130.0",
+    current: true,
+  },
+  {
+    id: "s-phone",
+    createdAt: "2026-11-18T08:00:00.000Z",
+    expiresAt: "2026-12-18T08:00:00.000Z",
+    userAgent: "Mozilla/5.0 (iPhone) Safari/604.1",
+    current: false,
+  },
+  {
+    id: "s-old",
+    createdAt: "2026-11-01T08:00:00.000Z",
+    expiresAt: "2026-12-01T08:00:00.000Z",
+    userAgent: null,
+    current: false,
+  },
+];
+
+// The answers of the security page's calls (the sessions, the password change, the two-factor status and codes).
+function securityAnswers(api: Api): Record<string, Answer> {
+  return {
+    "/api/auth/sessions": api.sessions ?? (() => json({ data: DEVICES })),
+    "/api/auth/sessions/revoke": api.revokeSession ?? (() => json({ data: { revoked: true } })),
+    "/api/auth/sessions/revoke-others": api.revokeOthers ?? (() => json({ data: { revoked: true } })),
+    "/api/auth/change-password": api.changePassword ?? (() => json({ user: USER })),
+    "/api/auth/two-factor/status":
+      api.twoFactorStatus ?? (() => json({ data: { enabled: false, recovery_codes_left: null } })),
+    "/api/auth/two-factor/generate-backup-codes":
+      api.generateCodes ?? (() => json({ status: true, backupCodes: [] })),
+  };
 }
 
 export const USER = { id: "u1", name: "Person Sample", email: "person@example.test", emailVerified: true };
@@ -96,6 +140,7 @@ export function stubApi(api: Api = {}) {
     "/api/auth/verify-password": api.verifyPassword ?? (() => json({ status: true })),
     "/api/auth/send-verification-email": api.resend ?? (() => json({ status: true })),
     ...moreAnswers(api),
+    ...securityAnswers(api),
   };
   const stub = vi.fn((path: string, _init?: RequestInit) => {
     const answer = answers[new URL(path, "http://same-origin.invalid").pathname];

@@ -4,6 +4,7 @@ import { Trans } from "@lingui/react/macro";
 import { type ReactElement, useEffect, useState } from "react";
 import { Outlet, type RouteObject, replace, useMatches, useRouteError } from "react-router";
 import { ProfilePage } from "./account/profile";
+import { SecurityPage } from "./account/security";
 import { ForgotPage } from "./auth/forgot";
 import { InvitePage, inviteLoader } from "./auth/invite";
 import { MfaPage } from "./auth/mfa";
@@ -33,6 +34,7 @@ const TITLES = {
   mfa: msg({ id: "auth.mfa.title", message: "Two-step verification" }),
   twoFactorSetup: msg({ id: "auth.setup.title", message: "Set up two-step verification" }),
   profile: msg({ id: "account.profile.title", message: "Profile" }),
+  security: msg({ id: "account.security.title", message: "Security" }),
   invite: msg({ id: "auth.invite.title", message: "Accept your invitation" }),
   signUp: msg({ id: "auth.sign_up.title", message: "Create your account" }),
   forgot: msg({ id: "auth.forgot.title", message: "Reset your password" }),
@@ -162,6 +164,7 @@ export const routes: RouteObject[] = [
             children: [
               { index: true, element: <StartPage /> },
               { path: "account/profile", handle: handle(TITLES.profile), element: <ProfilePage /> },
+              { path: "account/security", handle: handle(TITLES.security), element: <SecurityPage /> },
               {
                 path: "account/security/two-factor",
                 handle: handle(TITLES.twoFactorSetup),

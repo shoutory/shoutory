@@ -151,6 +151,7 @@ export const AUTH_PATHS: readonly AuthPath[] = [
     ours: true,
     body: z.strictObject({ name: personName }),
   },
+  { method: "GET", path: `${AUTH_BASE}/two-factor/status`, policy: "session", ours: true },
   { method: "GET", path: `${AUTH_BASE}/sessions`, policy: "session", ours: true },
   {
     method: "POST",

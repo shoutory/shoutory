@@ -29,11 +29,13 @@ export function useNewPassword() {
 
 export function NewPasswordField({
   label,
+  name = "password",
   value,
   onChange,
   short,
 }: {
   label: string;
+  name?: string;
   value: string;
   onChange: (value: string) => void;
   short: boolean;
@@ -43,7 +45,7 @@ export function NewPasswordField({
   return (
     <TextField
       label={label}
-      name="password"
+      name={name}
       type="password"
       autoComplete="new-password"
       isRequired

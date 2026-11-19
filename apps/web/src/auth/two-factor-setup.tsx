@@ -1,11 +1,11 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { Form } from "react-aria-components";
 import { Link } from "react-router";
 import { encode } from "uqr";
 import { z } from "zod";
+import { CodesStep, CopyButton, StepHeading } from "../account/recovery-codes";
 import { type ApiError, request } from "../http/client";
-import { Button } from "../ui/button";
 import { ErrorPanel } from "../ui/error-panel";
 import { TextField } from "../ui/text-field";
 import { authCopy } from "./auth-copy";
@@ -51,45 +51,6 @@ function QrImage({ text }: { text: string }) {
     >
       <path d={path} fill="black" />
     </svg>
-  );
-}
-
-function CopyButton({ text, children }: { text: string; children: ReactNode }) {
-  const [result, setResult] = useState<"copied" | "refused" | null>(null);
-  if (!navigator.clipboard) return null;
-  const copy = () => {
-    navigator.clipboard.writeText(text).then(
-      () => setResult("copied"),
-      (error: unknown) => {
-        // A refused clipboard permission is a normal answer: the text stays on the page to select by hand.
-        if (!(error instanceof DOMException)) throw error;
-        setResult("refused");
-      },
-    );
-  };
-  return (
-    <span className="flex items-center gap-3">
-      <Button onPress={copy}>{children}</Button>
-      <span role="status">
-        {result === "copied" ? <Trans id="auth.setup.copied">Copied</Trans> : null}
-        {result === "refused" ? (
-          <Trans id="auth.setup.copy_failed">Could not copy; select the text instead.</Trans>
-        ) : null}
-      </span>
-    </span>
-  );
-}
-
-// Each step names itself; a step after the first moves focus to its heading.
-function StepHeading({ children, focus }: { children: ReactNode; focus: boolean }) {
-  const heading = useRef<HTMLHeadingElement>(null);
-  useEffect(() => {
-    if (focus) heading.current?.focus();
-  }, [focus]);
-  return (
-    <h2 ref={heading} tabIndex={-1} className="font-heading text-xl">
-      {children}
-    </h2>
   );
 }
 
@@ -201,78 +162,6 @@ function QrStep({ qr, onConfirmed }: { qr: Qr; onConfirmed: () => void }) {
         <ErrorPanel focusOnMount error={confirm.failure} {...authCopy("challenge", confirm.failure)} />
       ) : null}
     </Form>
-  );
-}
-
-// A browser may read the Blob after the click returns, so its URL is revoked after this long or on leaving the codes.
-const REVOKE_AFTER_MS = 40_000;
-
-function useDownload(codes: string[]) {
-  const urls = useRef(new Set<string>());
-  useEffect(() => {
-    const held = urls.current;
-    return () => {
-      for (const url of held) URL.revokeObjectURL(url);
-      held.clear();
-    };
-  }, []);
-  return () => {
-    const url = URL.createObjectURL(new Blob([codes.join("\n")], { type: "text/plain" }));
-    urls.current.add(url);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "shoutory-recovery-codes.txt";
-    document.body.append(link);
-    link.click();
-    link.remove();
-    setTimeout(() => {
-      if (urls.current.delete(url)) URL.revokeObjectURL(url);
-    }, REVOKE_AFTER_MS);
-  };
-}
-
-// The codes are shown once: closing or reloading the tab while they are on screen asks first.
-function useLeaveGuard() {
-  useEffect(() => {
-    const ask = (event: BeforeUnloadEvent) => event.preventDefault();
-    window.addEventListener("beforeunload", ask);
-    return () => window.removeEventListener("beforeunload", ask);
-  }, []);
-}
-
-function CodesStep({ codes, onSaved }: { codes: string[]; onSaved: () => void }) {
-  const download = useDownload(codes);
-  useLeaveGuard();
-  return (
-    <section className="flex flex-col gap-5">
-      <StepHeading focus>
-        <Trans id="auth.setup.codes_heading">Save your recovery codes</Trans>
-      </StepHeading>
-      <p>
-        <Trans id="auth.setup.codes_body">
-          Each code works once if you lose your authenticator app. They are shown only now. This device stays
-          signed in.
-        </Trans>
-      </p>
-      <ul className="grid grid-cols-2 gap-2" dir="ltr">
-        {codes.map((code) => (
-          <li key={code}>
-            <code>{code}</code>
-          </li>
-        ))}
-      </ul>
-      <div className="flex flex-wrap gap-3">
-        <CopyButton text={codes.join("\n")}>
-          <Trans id="auth.setup.copy_codes">Copy codes</Trans>
-        </CopyButton>
-        <Button onPress={download}>
-          <Trans id="auth.setup.download">Download</Trans>
-        </Button>
-        <Button onPress={onSaved}>
-          <Trans id="auth.setup.saved">I saved my codes</Trans>
-        </Button>
-      </div>
-    </section>
   );
 }
 

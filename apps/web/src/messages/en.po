@@ -670,6 +670,106 @@ msgid "account.profile.language_failed"
 msgstr "Could not load that language. Your language was not changed."
 
 #. js-lingui-explicit-id
+msgid "shell.security"
+msgstr "Security"
+
+#. js-lingui-explicit-id
+msgid "account.security.title"
+msgstr "Security"
+
+#. js-lingui-explicit-id
+msgid "account.security.password"
+msgstr "Password"
+
+#. js-lingui-explicit-id
+msgid "account.security.current_password"
+msgstr "Current password"
+
+#. js-lingui-explicit-id
+msgid "account.security.new_password"
+msgstr "New password"
+
+#. js-lingui-explicit-id
+msgid "account.security.change"
+msgstr "Change password"
+
+#. js-lingui-explicit-id
+msgid "account.security.changed"
+msgstr "Your password was changed. Other devices were signed out. This device stays signed in."
+
+#. js-lingui-explicit-id
+msgid "account.security.breached.what"
+msgstr "That password appeared in a data breach"
+
+#. js-lingui-explicit-id
+msgid "account.security.breached.meaning"
+msgstr "Choose a password you have not used before."
+
+#. js-lingui-explicit-id
+msgid "account.security.devices"
+msgstr "Signed-in devices"
+
+#. js-lingui-explicit-id
+msgid "account.security.device"
+msgstr "Device"
+
+#. js-lingui-explicit-id
+msgid "account.security.signed_in"
+msgstr "Signed in"
+
+#. js-lingui-explicit-id
+msgid "account.security.this_device"
+msgstr "This device"
+
+#. js-lingui-explicit-id
+msgid "account.security.unknown_device"
+msgstr "Unknown device"
+
+#. js-lingui-explicit-id
+msgid "account.security.end_session"
+msgstr "End session"
+
+#. js-lingui-explicit-id
+msgid "account.security.end_others"
+msgstr "Sign out other devices"
+
+#. js-lingui-explicit-id
+msgid "account.security.two_factor"
+msgstr "Two-step verification"
+
+#. js-lingui-explicit-id
+msgid "account.security.off"
+msgstr "Two-step verification is off."
+
+#. js-lingui-explicit-id
+msgid "account.security.on"
+msgstr "Two-step verification is on."
+
+#. js-lingui-explicit-id
+msgid "account.security.set_up"
+msgstr "Set up"
+
+#. js-lingui-explicit-id
+msgid "account.security.new_codes"
+msgstr "New recovery codes"
+
+#. js-lingui-explicit-id
+msgid "account.security.generate"
+msgstr "Generate codes"
+
+#. js-lingui-explicit-id
+msgid "account.security.codes_none"
+msgstr "You have no recovery codes left. Make new ones so you can still sign in if you lose your authenticator app."
+
+#. js-lingui-explicit-id
+msgid "account.security.codes_left"
+msgstr "Recovery codes remaining: {count}"
+
+#. js-lingui-explicit-id
+msgid "account.security.action"
+msgstr "Action"
+
+#. js-lingui-explicit-id
 msgid "account.profile.sample"
 msgstr "Example:"
 

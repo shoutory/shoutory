@@ -65,6 +65,9 @@ export function AccountMenu() {
           <Link to="/account/profile" onClick={() => setOpen(false)} className="text-link underline">
             <Trans id="shell.profile">Profile</Trans>
           </Link>
+          <Link to="/account/security" onClick={() => setOpen(false)} className="text-link underline">
+            <Trans id="shell.security">Security</Trans>
+          </Link>
           <Button
             aria-disabled={unavailable}
             busy={signingOut}

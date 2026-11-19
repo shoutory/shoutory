@@ -90,7 +90,12 @@ export function createPasswordGuard({ fetch: fetchRange, pool, appPool, logger }
   return {
     async screen(password) {
       const outcome = await check(password);
-      if (outcome === "breached") throw new Refusal("validation_failed", "the password is in a breach list");
+      if (outcome === "breached") {
+        // The reason lets a screen tell this refusal from a wrong current password; it names no list and no source.
+        throw new Refusal("validation_failed", "the password is in a breach list", {
+          details: { reason: "password_breached" },
+        });
+      }
       return outcome;
     },
     async settle(userId, outcome) {
