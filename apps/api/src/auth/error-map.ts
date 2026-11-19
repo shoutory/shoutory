@@ -1,7 +1,7 @@
 import { APIError } from "better-auth";
 import { isUnavailable, Refusal, toRefusal } from "../errors/refusal.js";
 
-// A wrong password or a wrong second-factor code (R404). The challenge cookie's own error is not here: it stays
+// A wrong password or a wrong second-factor code. The challenge cookie's own error is not here: it stays
 // `unauthenticated`, and the screen reads it as "sign-in expired, start again".
 const WRONG_CREDENTIAL_CODES: ReadonlySet<string> = new Set([
   "INVALID_EMAIL_OR_PASSWORD",
@@ -9,9 +9,15 @@ const WRONG_CREDENTIAL_CODES: ReadonlySet<string> = new Set([
   "INVALID_BACKUP_CODE",
 ]);
 
-/** The one table that turns a library answer (status and error code) into our envelope's code (R113). */
+// The library's answers for a mailed link it rejects: unknown, used or expired.
+const BAD_LINK_CODES: ReadonlySet<string> = new Set(["INVALID_TOKEN", "TOKEN_EXPIRED", "USER_NOT_FOUND"]);
+
+/** The one table that turns a library answer (status and error code) into our envelope's code. */
 export function refusalFromAnswer(status: number, code: string | undefined): Refusal {
   const message = `auth answered ${status}${code ? ` ${code}` : ""}`;
+  if (status === 400 && code !== undefined && BAD_LINK_CODES.has(code)) {
+    return new Refusal("link_unusable", message);
+  }
   if (status === 400 || status === 422) return new Refusal("validation_failed", message);
   if (status === 401) {
     const wrong = code !== undefined && WRONG_CREDENTIAL_CODES.has(code);
@@ -34,13 +40,11 @@ export function refusalFromThrown(error: unknown): Refusal {
   return toRefusal(error);
 }
 
-const BAD_LINK_CODES: ReadonlySet<string> = new Set(["INVALID_TOKEN", "TOKEN_EXPIRED", "USER_NOT_FOUND"]);
-
-/** A mailed link the library rejects is a bad request of ours (400), not a missing login (401). */
+/** A mailed link the library rejects is `link_unusable` (400), not a missing login (401) and not a refused input. */
 export function refusalFromLinkError(error: unknown): Refusal {
   const code = error instanceof APIError ? (error.body as { code?: unknown } | undefined)?.code : undefined;
   if (typeof code === "string" && BAD_LINK_CODES.has(code)) {
-    return new Refusal("validation_failed", `the link was rejected: ${code}`);
+    return new Refusal("link_unusable", `the link was rejected: ${code}`);
   }
   return refusalFromThrown(error);
 }

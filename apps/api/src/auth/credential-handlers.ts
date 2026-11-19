@@ -1,3 +1,4 @@
+import { Refusal } from "../errors/refusal.js";
 import { liveSessionCookie } from "./cookie.js";
 import { audit, type Ctx, forward, type Handler, pass, respond, sessionAfter, text } from "./forward.js";
 import { AUTH_BASE } from "./paths.js";
@@ -76,12 +77,16 @@ const requestReset: Handler = async (ctx) => {
 
 const resetPassword: Handler = async (ctx) => {
   await ctx.auth.throttle.spendIp("link_confirm", ctx.ip);
-  const outcome = await ctx.auth.passwords.screen(text(ctx, "newPassword"));
-  // The token names the user; the library consumes it, so the user is read before.
+  // The token is looked up first: a link that is unknown, used or expired is `link_unusable` whatever the new
+  // password is, never reported as a refused password. It names the user, and the library consumes it, so the user is
+  // read here too.
   const context = await ctx.auth.library.$context;
   const token = await context.internalAdapter.findVerificationValue(`reset-password:${text(ctx, "token")}`);
+  if (!token || token.expiresAt < new Date())
+    throw new Refusal("link_unusable", "the reset link is unusable");
+  const outcome = await ctx.auth.passwords.screen(text(ctx, "newPassword"));
   const answer = await pass(ctx);
-  if (token) await ctx.auth.passwords.settle(token.value, outcome);
+  await ctx.auth.passwords.settle(token.value, outcome);
   return answer;
 };
 

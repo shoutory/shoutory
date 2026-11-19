@@ -2,13 +2,13 @@ import { Trans } from "@lingui/react/macro";
 import type { ReactNode } from "react";
 import type { ApiError } from "../http/client";
 
-export type Screen = "sign-in" | "challenge" | "step-up";
+export type Screen = "sign-in" | "challenge" | "step-up" | "sign-up" | "reset" | "link";
 interface Words {
   what: ReactNode;
   meaning: ReactNode;
 }
 
-// The error-to-copy table (ux-spec 6.2): what happened and what it means, chosen by the answer's `code`, never by its
+// The error-to-copy table: what happened and what it means, chosen by the answer's `code`, never by its
 // status. The wrong-credentials copy names no lock and no time (A-01), and no answer reads Retry-After.
 const TOO_MANY: Words = {
   what: <Trans id="auth.copy.too_many.what">Too many attempts</Trans>,
@@ -23,7 +23,16 @@ const EXPIRED: Words = {
   meaning: <Trans id="auth.copy.expired.meaning">Start again from the sign-in page.</Trans>,
 };
 
+// A refused new password (too weak, common or breached) is told apart from a dead link by its code.
+const PASSWORD_REFUSED: Words = {
+  what: <Trans id="auth.copy.password_refused.what">That password is not accepted</Trans>,
+  meaning: <Trans id="auth.copy.password_refused.meaning">Choose a longer or less common password.</Trans>,
+};
+
 const BY_CODE: Record<Screen, Record<string, Words>> = {
+  "sign-up": { validation_failed: PASSWORD_REFUSED },
+  reset: { validation_failed: PASSWORD_REFUSED },
+  link: {},
   "sign-in": {
     invalid_credentials: {
       what: <Trans id="auth.copy.sign_in.what">We could not sign you in</Trans>,
@@ -71,6 +80,18 @@ const BY_CODE: Record<Screen, Record<string, Words>> = {
 };
 
 const GENERIC: Record<Screen, Words> = {
+  "sign-up": {
+    what: <Trans id="auth.copy.sign_up_failed.what">We could not create your account</Trans>,
+    meaning: <Trans id="auth.copy.failed.meaning">Nothing was changed. Try again.</Trans>,
+  },
+  reset: {
+    what: <Trans id="auth.copy.reset_failed.what">We could not set your new password</Trans>,
+    meaning: <Trans id="auth.copy.failed.meaning">Nothing was changed. Try again.</Trans>,
+  },
+  link: {
+    what: <Trans id="auth.copy.link_failed.what">We could not complete that</Trans>,
+    meaning: <Trans id="auth.copy.failed.meaning">Nothing was changed. Try again.</Trans>,
+  },
   "sign-in": {
     what: <Trans id="auth.copy.sign_in_failed.what">We could not sign you in</Trans>,
     meaning: <Trans id="auth.copy.failed.meaning">Nothing was changed. Try again.</Trans>,

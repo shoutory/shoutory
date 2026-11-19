@@ -3,9 +3,13 @@ import { msg } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
 import { type ReactElement, useEffect, useState } from "react";
 import { Outlet, type RouteObject, replace, useMatches, useRouteError } from "react-router";
+import { ForgotPage } from "./auth/forgot";
 import { MfaPage } from "./auth/mfa";
+import { ResetPage } from "./auth/reset";
 import { SignInPage } from "./auth/sign-in";
+import { SignUpPage } from "./auth/sign-up";
 import { StepUpProvider } from "./auth/step-up";
+import { VerifyPage } from "./auth/verify";
 import { ApiError } from "./http/client";
 import { type PageHandle, usePageTitleAndFocus } from "./page-title";
 import {
@@ -24,6 +28,10 @@ import { Button } from "./ui/button";
 const TITLES = {
   signIn: msg({ id: "system.sign_in.title", message: "Sign in" }),
   mfa: msg({ id: "auth.mfa.title", message: "Two-step verification" }),
+  signUp: msg({ id: "auth.sign_up.title", message: "Create your account" }),
+  forgot: msg({ id: "auth.forgot.title", message: "Reset your password" }),
+  verify: msg({ id: "auth.verify.title", message: "Confirm your email" }),
+  reset: msg({ id: "auth.reset.title", message: "Choose a new password" }),
   sessionExpired: msg({ id: "system.session_expired.title", message: "Your session has ended" }),
   notFound: msg({ id: "system.not_found.title", message: "Page not found" }),
   workspace: msg({ id: "shell.workspace.title", message: "Workspace" }),
@@ -33,7 +41,7 @@ const TITLES = {
 };
 const handle = (title: MessageDescriptor): PageHandle => ({ title });
 
-// The system page for a failed call, chosen from its typed state (R382: only a 503 or a network failure is
+// The system page for a failed call, chosen from its typed state (only a 503 or a network failure is
 // maintenance). Anything else that fails while the page loads is the start-up failure page.
 function errorPage(error: unknown): { title: MessageDescriptor; page: ReactElement } {
   const state = error instanceof ApiError ? error.state : "error";
@@ -82,7 +90,7 @@ function Root() {
 const SKELETON_DELAY_MS = 300;
 const STILL_LOADING_MS = 10_000;
 
-// While the server is asked (ux-spec 2.1 L): nothing for 300 ms (a fast answer never flashes), then a status line, and
+// While the server is asked: nothing for 300 ms (a fast answer never flashes), then a status line, and
 // after 10 s "Still loading" with Retry.
 function Pending() {
   const [stage, setStage] = useState<"quiet" | "loading" | "slow">("quiet");
@@ -119,7 +127,12 @@ export const routes: RouteObject[] = [
       // The auth pages are outside the session guard: a visitor with no session must be able to open them.
       { path: "sign-in", handle: handle(TITLES.signIn), element: <SignInPage /> },
       { path: "mfa", handle: handle(TITLES.mfa), element: <MfaPage /> },
-      // The mailed link points at /auth/sign-in (R403).
+      { path: "sign-up", handle: handle(TITLES.signUp), element: <SignUpPage /> },
+      { path: "forgot", handle: handle(TITLES.forgot), element: <ForgotPage /> },
+      // The mailed links open these two; the token is in the fragment, never the path.
+      { path: "auth/verify", handle: handle(TITLES.verify), element: <VerifyPage /> },
+      { path: "auth/reset", handle: handle(TITLES.reset), element: <ResetPage /> },
+      // The mailed link points at /auth/sign-in.
       { path: "auth/sign-in", loader: () => replace("/sign-in") },
       { path: "session-expired", handle: handle(TITLES.sessionExpired), element: <SessionExpiredPage /> },
       {

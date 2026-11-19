@@ -1,7 +1,33 @@
+import { APIError } from "better-auth";
 import { describe, expect, it } from "vitest";
-import { refusalFromAnswer } from "./error-map.js";
+import { refusalFromAnswer, refusalFromLinkError } from "./error-map.js";
 
-// R113 and R404: the one table from a library answer to our envelope's code. A wrong second-factor code is a wrong
+// A mailed link the library rejects (unknown, used or expired) is `link_unusable` on both paths: the answer
+// of a forwarded reset (a status and a code) and the thrown error of the in-process verify. A refused input is not.
+describe("the mailed-link answers", () => {
+  it.each([
+    ["an unknown or used token", "INVALID_TOKEN"],
+    ["an expired token", "TOKEN_EXPIRED"],
+    ["a token whose user is gone", "USER_NOT_FOUND"],
+  ])("%s answers 400 as link_unusable on the forwarded path", (_name, code) => {
+    expect(refusalFromAnswer(400, code).code).toBe("link_unusable");
+  });
+
+  it.each(["INVALID_TOKEN", "TOKEN_EXPIRED", "USER_NOT_FOUND"])(
+    "%s thrown by the verify is link_unusable",
+    (code) => {
+      expect(refusalFromLinkError(new APIError("BAD_REQUEST", { message: code, code })).code).toBe(
+        "link_unusable",
+      );
+    },
+  );
+
+  it("a refused password stays validation_failed", () => {
+    expect(refusalFromAnswer(400, "PASSWORD_TOO_SHORT").code).toBe("validation_failed");
+  });
+});
+
+// The one table from a library answer to our envelope's code. A wrong second-factor code is a wrong
 // credential (the screen says "that code is not right"); only the challenge cookie's own error reads as a login that
 // has ended (the screen says "sign-in expired, start again").
 describe("the auth answer table", () => {

@@ -49,9 +49,12 @@ function inlineScripts(html: string) {
 const fixtures = mkdtempSync(join(tmpdir(), "web-bundle-fixture-"));
 // An extra entry that reads the server's secret the two ways a mistake would, so a leak has somewhere to land.
 const planted = join(fixtures, "planted.js");
+// The core file the web reads the password limits from, `@shoutory/core/password-limits`: the planted entry
+// imports only the constant, so a list that is kept shows up in the bundle.
+const limits = join(webRoot, "../../packages/core/src/password/limits.ts").replaceAll("\\", "/");
 writeFileSync(
   planted,
-  "export const a = process.env.SHOUTORY_CANARY;\nexport const b = import.meta.env.SHOUTORY_CANARY;\n",
+  `export const a = process.env.SHOUTORY_CANARY;\nexport const b = import.meta.env.SHOUTORY_CANARY;\nexport { PASSWORD_MIN_LENGTH } from "${limits}";\n`,
 );
 
 // The real web build config plus the planted entry; `extra` is how a test changes the config to prove the check.
@@ -105,6 +108,16 @@ describe("the built client bundle", () => {
     mkdirSync(dir);
     writeFileSync(join(dir, "chunk.js"), `export const leaked = "${spelling}";`);
     expect(scan(dir).hits).toContain(`chunk.js: ${form}`);
+  });
+
+  // The client checks the length only; the 10,000-entry list (74 KB) must not ride along with the constant.
+  it("an entry of the common-password list is absent from the built bundle", () => {
+    const text = readdirSync(out, { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".js"))
+      .map((entry) => readFileSync(join(entry.parentPath, entry.name), "utf8"))
+      .join("\n");
+    expect(text).toContain("15");
+    expect(text).not.toContain("jasmine");
   });
 
   it("the built page holds exactly one inline script, the theme bootstrap", () => {

@@ -51,6 +51,11 @@ export interface Api {
   verifyBackupCode?: Answer;
   verifyPassword?: Answer;
   resend?: Answer;
+  signUpMode?: Answer;
+  signUp?: Answer;
+  verifyEmail?: Answer;
+  requestReset?: Answer;
+  resetPassword?: Answer;
 }
 
 export const USER = { id: "u1", email: "person@example.test", emailVerified: true };
@@ -68,6 +73,13 @@ export function stubApi(api: Api = {}) {
     "/api/auth/two-factor/verify-backup-code": api.verifyBackupCode ?? (() => json({ user: USER })),
     "/api/auth/verify-password": api.verifyPassword ?? (() => json({ status: true })),
     "/api/auth/send-verification-email": api.resend ?? (() => json({ status: true })),
+    "/api/v1/instance/signup": api.signUpMode ?? (() => json({ data: { open: true } })),
+    "/api/auth/sign-up/email":
+      api.signUp ?? (() => json({ user: { name: "T", email: "new@example.test", emailVerified: false } })),
+    // The verify route answers in our envelope; the reset routes are library answers, bare.
+    "/api/auth/verify-email": api.verifyEmail ?? (() => json({ data: { verified: true } })),
+    "/api/auth/request-password-reset": api.requestReset ?? (() => json({ status: true })),
+    "/api/auth/reset-password": api.resetPassword ?? (() => json({ status: true })),
   };
   const stub = vi.fn((path: string, _init?: RequestInit) => {
     const answer = answers[new URL(path, "http://same-origin.invalid").pathname];

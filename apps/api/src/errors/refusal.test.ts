@@ -1,5 +1,20 @@
+import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { isUnavailable, toRefusal } from "./refusal.js";
+import { errorResponse, isUnavailable, Refusal, toRefusal } from "./refusal.js";
+
+describe("the answer of a link that cannot be used", () => {
+  it("is a 400 with its own code and a fixed message that echoes no input", async () => {
+    const app = new Hono();
+    app.onError((error, c) => errorResponse(c as never, toRefusal(error)));
+    app.get("/link", () => {
+      throw new Refusal("link_unusable", "token abc123 was rejected");
+    });
+    const answer = await app.request("/link");
+    const body = (await answer.json()) as { error: { code: string; message: string } };
+    expect([answer.status, body.error.code]).toEqual([400, "link_unusable"]);
+    expect(body.error.message).toBe("The link can no longer be used.");
+  });
+});
 
 const refused = () => Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" });
 const wrapped = (inner: Error, depth: number): Error =>

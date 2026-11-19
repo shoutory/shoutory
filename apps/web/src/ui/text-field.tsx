@@ -17,7 +17,11 @@ export function TextField({ label, errorMessage, ...rest }: Props) {
   return (
     <AriaTextField {...rest} isInvalid={errorMessage !== undefined} className="flex flex-col gap-2">
       <Label className="text-sm font-medium">{label}</Label>
-      <Input className="min-h-10 pointer-coarse:min-h-11 rounded-md border border-border-control bg-surface px-3 text-md outline-offset-2 focus-visible:outline-2 focus-visible:outline-focus" />
+      <Input
+        // An address is Latin and reads left to right even in an Arabic page.
+        {...(rest.type === "email" ? { dir: "ltr" } : {})}
+        className="min-h-10 pointer-coarse:min-h-11 rounded-md border border-border-control bg-surface px-3 text-md outline-offset-2 focus-visible:outline-2 focus-visible:outline-focus"
+      />
       <FieldError className="text-sm text-danger">{errorMessage}</FieldError>
     </AriaTextField>
   );

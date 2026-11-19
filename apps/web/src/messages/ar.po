@@ -358,3 +358,107 @@ msgstr "تأكيد"
 #. js-lingui-explicit-id
 msgid "auth.step_up.cancel"
 msgstr "إلغاء"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.password_refused.what"
+msgstr "كلمة المرور هذه غير مقبولة"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.password_refused.meaning"
+msgstr "اختر كلمة مرور أطول أو أقل شيوعًا."
+
+#. js-lingui-explicit-id
+msgid "auth.copy.sign_up_failed.what"
+msgstr "تعذّر إنشاء حسابك"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.reset_failed.what"
+msgstr "تعذّر تعيين كلمة المرور الجديدة"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.link_failed.what"
+msgstr "تعذّر إكمال ذلك"
+
+#. js-lingui-explicit-id
+msgid "auth.bad_link.what"
+msgstr "لا يمكن استخدام هذا الرابط"
+
+#. js-lingui-explicit-id
+msgid "auth.bad_link.meaning"
+msgstr "ربما انتهت صلاحيته أو استُخدم من قبل. يمكننا إرسال رابط جديد."
+
+#. js-lingui-explicit-id
+msgid "auth.password.short"
+msgstr "استخدم {min} حرفًا على الأقل."
+
+#. js-lingui-explicit-id
+msgid "auth.sign_up.title"
+msgstr "إنشاء حسابك"
+
+#. js-lingui-explicit-id
+msgid "auth.sign_up.name"
+msgstr "الاسم"
+
+#. js-lingui-explicit-id
+msgid "auth.sign_up.submit"
+msgstr "إنشاء الحساب"
+
+#. js-lingui-explicit-id
+msgid "auth.sign_up.sent"
+msgstr "تحقق من بريدك الإلكتروني. إن كان بإمكان هذا العنوان التسجيل، أرسلنا رابطًا لتأكيده."
+
+#. js-lingui-explicit-id
+msgid "auth.sign_up.closed"
+msgstr "هذا التثبيت بالدعوة فقط. إن كنت مدعوًّا فاستخدم العنوان الذي أُرسلت إليه الدعوة."
+
+#. js-lingui-explicit-id
+msgid "auth.verify.title"
+msgstr "تأكيد بريدك الإلكتروني"
+
+#. js-lingui-explicit-id
+msgid "auth.verify.submit"
+msgstr "أكّد بريدي الإلكتروني"
+
+#. js-lingui-explicit-id
+msgid "auth.verify.done"
+msgstr "تم تأكيد بريدك الإلكتروني."
+
+#. js-lingui-explicit-id
+msgid "auth.verify.resend"
+msgstr "أرسل رابطًا جديدًا"
+
+#. js-lingui-explicit-id
+msgid "auth.verify.resent"
+msgstr "إن كان هذا العنوان بحاجة إلى تأكيد، أرسلنا رابطًا جديدًا."
+
+#. js-lingui-explicit-id
+msgid "auth.forgot.title"
+msgstr "إعادة تعيين كلمة المرور"
+
+#. js-lingui-explicit-id
+msgid "auth.forgot.submit"
+msgstr "أرسل الرابط"
+
+#. js-lingui-explicit-id
+msgid "auth.forgot.sent"
+msgstr "إن كان هناك حساب بهذا العنوان، أرسلنا رابطًا لإعادة تعيين كلمة المرور."
+
+#. js-lingui-explicit-id
+msgid "auth.reset.title"
+msgstr "اختر كلمة مرور جديدة"
+
+#. js-lingui-explicit-id
+msgid "auth.reset.password"
+msgstr "كلمة المرور الجديدة"
+
+#. js-lingui-explicit-id
+msgid "auth.reset.submit"
+msgstr "تعيين كلمة المرور الجديدة"
+
+#. js-lingui-explicit-id
+msgid "auth.reset.done"
+msgstr "تم تغيير كلمة المرور. تم تسجيل خروج الأجهزة الأخرى."
+
+#. js-lingui-explicit-id
+msgid "auth.reset.new_link"
+msgstr "أرسل رابطًا جديدًا"

@@ -70,10 +70,10 @@ describe("email verification", () => {
     expect(cookieOf(await signIn("verify-1@example.test"))).not.toBe("");
   });
 
-  it("a bad token on the verify POST answers 400 in our envelope", async () => {
+  it("a bad token on the verify POST answers 400 link_unusable in our envelope", async () => {
     const answer = await fx.request("/api/auth/verify-email", { body: { token: "not-a-token-1" } });
     expect(answer.status).toBe(400);
-    expect(((await answer.json()) as { error: { code: string } }).error.code).toBe("validation_failed");
+    expect(((await answer.json()) as { error: { code: string } }).error.code).toBe("link_unusable");
   });
 });
 

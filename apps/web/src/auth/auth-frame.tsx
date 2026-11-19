@@ -1,19 +1,56 @@
-import { useLingui } from "@lingui/react/macro";
-import { type ReactNode, type Ref, useRef, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { type ReactNode, type Ref, useEffect, useRef, useState } from "react";
 import { ApiError } from "../http/client";
 import { useOnline } from "../shell/offline-banner";
 import { Button } from "../ui/button";
 
-/** The page of an auth screen (ux-spec X-04's neighbours A-01..A-04): the brand, one heading, the form. */
-export function AuthFrame({ title, children }: { title: ReactNode; children: ReactNode }) {
+/**
+ * The page of an auth screen: the brand, one heading, the form. When `step` changes (the form gives way to its
+ * confirmation, a dead link or a success) focus moves to the heading, so a screen reader is told the page changed.
+ */
+export function AuthFrame({
+  title,
+  step,
+  children,
+}: {
+  title: ReactNode;
+  step?: string;
+  children: ReactNode;
+}) {
+  const heading = useRef<HTMLHeadingElement>(null);
+  const shown = useRef(step);
+  useEffect(() => {
+    if (shown.current === step) return;
+    shown.current = step;
+    heading.current?.focus();
+  }, [step]);
   return (
     <main id="main" className="mx-auto flex w-full max-w-md flex-col gap-5 px-5 py-10">
       <span translate="no" className="font-heading text-lg">
         Shoutory
       </span>
-      <h1 className="font-heading text-2xl">{title}</h1>
+      <h1 ref={heading} tabIndex={-1} className="font-heading text-2xl">
+        {title}
+      </h1>
       {children}
     </main>
+  );
+}
+
+/** A mailed link that cannot be used (unknown, used, expired, or opened with no token): what to do instead is `action`. */
+export function BadLink({ action }: { action: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-3">
+      <h2 className="font-heading text-xl">
+        <Trans id="auth.bad_link.what">This link cannot be used</Trans>
+      </h2>
+      <p>
+        <Trans id="auth.bad_link.meaning">
+          It may have expired or been used already. We can send a new one.
+        </Trans>
+      </p>
+      {action}
+    </section>
   );
 }
 

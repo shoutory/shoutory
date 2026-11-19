@@ -33,6 +33,10 @@
       "source": "./src/errors/codes.ts",
       "default": "./dist/errors/codes.js"
     },
+    "./password-limits": {
+      "source": "./src/password/limits.ts",
+      "default": "./dist/password/limits.js"
+    },
     "./password": {
       "source": "./src/password/policy.ts",
       "default": "./dist/password/policy.js"

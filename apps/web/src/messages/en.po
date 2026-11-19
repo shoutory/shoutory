@@ -360,3 +360,107 @@ msgstr "Confirm"
 #. js-lingui-explicit-id
 msgid "auth.step_up.cancel"
 msgstr "Cancel"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.password_refused.what"
+msgstr "That password is not accepted"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.password_refused.meaning"
+msgstr "Choose a longer or less common password."
+
+#. js-lingui-explicit-id
+msgid "auth.copy.sign_up_failed.what"
+msgstr "We could not create your account"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.reset_failed.what"
+msgstr "We could not set your new password"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.link_failed.what"
+msgstr "We could not complete that"
+
+#. js-lingui-explicit-id
+msgid "auth.bad_link.what"
+msgstr "This link cannot be used"
+
+#. js-lingui-explicit-id
+msgid "auth.bad_link.meaning"
+msgstr "It may have expired or been used already. We can send a new one."
+
+#. js-lingui-explicit-id
+msgid "auth.password.short"
+msgstr "Use at least {min} characters."
+
+#. js-lingui-explicit-id
+msgid "auth.sign_up.title"
+msgstr "Create your account"
+
+#. js-lingui-explicit-id
+msgid "auth.sign_up.name"
+msgstr "Name"
+
+#. js-lingui-explicit-id
+msgid "auth.sign_up.submit"
+msgstr "Create account"
+
+#. js-lingui-explicit-id
+msgid "auth.sign_up.sent"
+msgstr "Check your email. If this address can sign up, we sent a link to confirm it."
+
+#. js-lingui-explicit-id
+msgid "auth.sign_up.closed"
+msgstr "This installation is invitation-only. If you were invited, use the address the invitation was sent to."
+
+#. js-lingui-explicit-id
+msgid "auth.verify.title"
+msgstr "Confirm your email"
+
+#. js-lingui-explicit-id
+msgid "auth.verify.submit"
+msgstr "Confirm my email"
+
+#. js-lingui-explicit-id
+msgid "auth.verify.done"
+msgstr "Your email is confirmed."
+
+#. js-lingui-explicit-id
+msgid "auth.verify.resend"
+msgstr "Send a new link"
+
+#. js-lingui-explicit-id
+msgid "auth.verify.resent"
+msgstr "If this address needs confirming, we sent a new link."
+
+#. js-lingui-explicit-id
+msgid "auth.forgot.title"
+msgstr "Reset your password"
+
+#. js-lingui-explicit-id
+msgid "auth.forgot.submit"
+msgstr "Send the link"
+
+#. js-lingui-explicit-id
+msgid "auth.forgot.sent"
+msgstr "If an address matches, we sent a link to reset the password."
+
+#. js-lingui-explicit-id
+msgid "auth.reset.title"
+msgstr "Choose a new password"
+
+#. js-lingui-explicit-id
+msgid "auth.reset.password"
+msgstr "New password"
+
+#. js-lingui-explicit-id
+msgid "auth.reset.submit"
+msgstr "Set new password"
+
+#. js-lingui-explicit-id
+msgid "auth.reset.done"
+msgstr "Your password was changed. Other devices were signed out."
+
+#. js-lingui-explicit-id
+msgid "auth.reset.new_link"
+msgstr "Send a new link"

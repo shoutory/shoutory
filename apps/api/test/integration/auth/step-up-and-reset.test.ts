@@ -154,8 +154,18 @@ describe("password reset", () => {
     const reset = await post("reset-password", { token, newPassword: NEW_PASSWORD });
     expect(reset.status).toBe(200);
     const replay = await post("reset-password", { token, newPassword: "yet-another-password-9" });
-    expect(replay.status).toBe(400);
+    expect([replay.status, await codeOf(replay)]).toEqual([400, "link_unusable"]);
     expect((await post("sign-in/email", { email, password: NEW_PASSWORD })).status).toBe(200);
+  });
+
+  // The token is looked up before the password is screened, so a dead link is never reported as a refused password.
+  it("an unknown token with a breached password answers link_unusable, not validation_failed", async () => {
+    fx.hibp.breached.add("breached-password-1234");
+    const answer = await post("reset-password", {
+      token: "unknown-token-1",
+      newPassword: "breached-password-1234",
+    });
+    expect([answer.status, await codeOf(answer)]).toEqual([400, "link_unusable"]);
   });
 
   it("a reset or change-password with a breached password is refused through our hook and the reset token stays unused", async () => {

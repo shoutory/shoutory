@@ -1,9 +1,6 @@
 import { z } from "zod";
 import { COMMON_PASSWORDS } from "./common-passwords.js";
-
-/** NFR-SEC-28: 15 to 128 Unicode code points, no composition rules. */
-export const PASSWORD_MIN_LENGTH = 15;
-export const PASSWORD_MAX_LENGTH = 128;
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "./limits.js";
 
 const LENGTH_MESSAGE = "The password must be 15 to 128 characters.";
 
