@@ -5,13 +5,72 @@ import { APP_ORIGIN } from "./support/stack";
 const QUALITY = ["a11y-m0", "reflow", "focus", "recovery-download"].map((name) => `${name}.spec.ts`);
 const UX = "ux-acceptance.spec.ts";
 const VISUAL = "rtl-visual.spec.ts";
+// The restore drill ends with the database restored under the stack, so only a run that asks for it (the weekly job,
+// or `SHOUTORY_E2E_RESTORE=true pnpm e2e --project restore`) has the project, and that run has no other.
+const RESTORE = "restore-drill.spec.ts";
+const RESTORE_RUN = process.env.SHOUTORY_E2E_RESTORE === "true";
+const JOURNEY = { name: "journey", testMatch: "j1-onboarding.spec.ts" };
 // Screenshots differ between platforms, so the baselines are made and compared on one: Linux, as in CI. The project
 // does not exist anywhere else, and a CI run with the update input makes new baselines.
 const LINUX = process.platform === "linux";
 
+// The switch is set for the restore project alone. The runner reads the command line; a worker loads this file again
+// with arguments of its own and must not check them.
+const selectsRestore = process.argv.some(
+  (word, at) => word === "--project=restore" || (word === "--project" && process.argv[at + 1] === "restore"),
+);
+if (RESTORE_RUN && !process.env.TEST_WORKER_INDEX && !selectsRestore) {
+  throw new Error("SHOUTORY_E2E_RESTORE=true runs only the restore drill: add --project restore");
+}
+
+// The first journey creates the founder, since sign-up closes after the first administrator; every other spec runs
+// after it, as that founder, one at a time because they share the stack.
+const FULL = [
+  JOURNEY,
+  {
+    name: "founder",
+    testIgnore: ["j1-onboarding.spec.ts", "no-telemetry.spec.ts", UX, VISUAL, RESTORE, ...QUALITY],
+    dependencies: ["journey"],
+    use: { storageState: FOUNDER_STATE },
+  },
+  // The screen quality checks walk the whole catalogue, as the founder or in an empty browser each spec opens.
+  {
+    name: "quality",
+    testMatch: QUALITY,
+    // After the founder project, whose keyboard spec makes the member the challenge screen is opened with.
+    dependencies: ["founder"],
+    use: { storageState: FOUNDER_STATE },
+  },
+  // Photographs of every screen; before the UX checks, which change the workspace's members.
+  ...(LINUX
+    ? [
+        {
+          name: "visual",
+          testMatch: VISUAL,
+          dependencies: ["quality"],
+          use: { storageState: FOUNDER_STATE },
+        },
+      ]
+    : []),
+  // The UX acceptance checks come after the screen checks; its last test makes the first journey's member leave the
+  // founder's workspace, so nothing runs after it that needs that member.
+  {
+    name: "ux",
+    testMatch: UX,
+    dependencies: LINUX ? ["quality", "visual"] : ["quality"],
+    use: { storageState: FOUNDER_STATE },
+  },
+  // Last, so the lookups it reads cover the start-up and every spec above, whatever the files are called.
+  {
+    name: "telemetry",
+    testMatch: "no-telemetry.spec.ts",
+    dependencies: ["founder", "quality", "ux"],
+    use: { storageState: FOUNDER_STATE },
+  },
+];
+
 // Specs live in e2e/specs, helpers in e2e/support, data and simulators in e2e/fixtures. One stack serves the whole run
-// (global setup). The first journey creates the founder, since sign-up closes after the first administrator; every
-// other spec runs after it, as that founder, one at a time because they share the stack.
+// (global setup).
 export default defineConfig({
   testDir: "./specs",
   globalSetup: "./global-setup.ts",
@@ -27,47 +86,7 @@ export default defineConfig({
     // A trace holds cookies and typed values: it stays on the runner and is never uploaded as a CI artifact.
     trace: "retain-on-failure",
   },
-  projects: [
-    { name: "journey", testMatch: "j1-onboarding.spec.ts" },
-    {
-      name: "founder",
-      testIgnore: ["j1-onboarding.spec.ts", "no-telemetry.spec.ts", UX, VISUAL, ...QUALITY],
-      dependencies: ["journey"],
-      use: { storageState: FOUNDER_STATE },
-    },
-    // The screen quality checks walk the whole catalogue, as the founder or in an empty browser each spec opens.
-    {
-      name: "quality",
-      testMatch: QUALITY,
-      // After the founder project, whose keyboard spec makes the member the challenge screen is opened with.
-      dependencies: ["founder"],
-      use: { storageState: FOUNDER_STATE },
-    },
-    // Photographs of every screen; before the UX checks, which change the workspace's members.
-    ...(LINUX
-      ? [
-          {
-            name: "visual",
-            testMatch: VISUAL,
-            dependencies: ["quality"],
-            use: { storageState: FOUNDER_STATE },
-          },
-        ]
-      : []),
-    // The UX acceptance checks come after the screen checks; its last test makes the first journey's member leave the
-    // founder's workspace, so nothing runs after it that needs that member.
-    {
-      name: "ux",
-      testMatch: UX,
-      dependencies: LINUX ? ["quality", "visual"] : ["quality"],
-      use: { storageState: FOUNDER_STATE },
-    },
-    // Last, so the lookups it reads cover the start-up and every spec above, whatever the files are called.
-    {
-      name: "telemetry",
-      testMatch: "no-telemetry.spec.ts",
-      dependencies: ["founder", "quality", "ux"],
-      use: { storageState: FOUNDER_STATE },
-    },
-  ],
+  projects: RESTORE_RUN
+    ? [JOURNEY, { name: "restore", testMatch: RESTORE, dependencies: ["journey"] }]
+    : FULL,
 });

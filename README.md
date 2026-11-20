@@ -92,6 +92,10 @@ is set. To build the image yourself instead of pulling it, run
 The container runs as a non-root user with a read-only filesystem, keeps uploads in the `/data` volume, and `pnpm verify
 --only image-smoke` (needs Docker) checks the built image end to end.
 
+### Backup and restore
+
+What to keep, how to dump and restore, and how to test your backups: [docs/self-host/backup-restore.md](docs/self-host/backup-restore.md).
+
 ### Release channels
 
 Release images are published to `ghcr.io/shoutory/shoutory` for `linux/amd64` and `linux/arm64`. A stable release `1.2.3` is

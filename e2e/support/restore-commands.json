@@ -1,0 +1,7 @@
+{
+  "dump": "docker compose exec -T postgres pg_dump -U postgres -d shoutory -Fc -f /tmp/shoutory.dump",
+  "copyOut": "docker compose cp postgres:/tmp/shoutory.dump ./shoutory.dump",
+  "copyIn": "docker compose cp ./shoutory.dump postgres:/tmp/shoutory.dump",
+  "restore": "docker compose exec -T postgres pg_restore -U postgres -d shoutory --exit-on-error /tmp/shoutory.dump",
+  "secretsCheck": "docker compose run --rm --no-deps -T shoutory secrets check"
+}

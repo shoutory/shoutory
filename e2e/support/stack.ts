@@ -17,6 +17,8 @@ export interface Stack {
   readonly project: string;
   /** Where the mail catcher's API answers on this machine. */
   readonly mailUrl: string;
+  /** The environment the stack runs with, secrets included; only the restore drill hands it on, to run compose itself. */
+  readonly env: NodeJS.ProcessEnv;
   down(): void;
 }
 
@@ -60,6 +62,20 @@ function compose(project: string, env: NodeJS.ProcessEnv, args: string[], allowF
     throw new Error(`docker compose ${args[0]} exited ${result.status}: ${tail}`);
   }
   return result;
+}
+
+/**
+ * Runs compose against the run's own stack from a spec. It needs the stack's environment in the process's own, which
+ * global setup provides only for the restore drill, so any other spec that calls it fails here, not in compose.
+ */
+export function composeInStack(args: string[], allowFailure = false, extra: NodeJS.ProcessEnv = {}) {
+  const project = process.env.SHOUTORY_E2E_PROJECT;
+  if (!project || !process.env.SHOUTORY_POSTGRES_PASSWORD) {
+    throw new Error(
+      "the stack has not handed its environment to the specs (SHOUTORY_E2E_RESTORE is not true)",
+    );
+  }
+  return compose(project, { ...process.env, ...extra }, args, allowFailure);
 }
 
 const PREFIX = "shoutory-e2e-";
@@ -140,7 +156,7 @@ export function startStack(removeBy: string): Stack {
     const port = compose(project, env, ["port", "mail", "8025"]).stdout.trim().split(":").at(-1);
     if (!port) throw new Error("the mail catcher has no published port");
     plantFlags(project, env, removeBy);
-    return { project, mailUrl: `http://127.0.0.1:${port}`, down };
+    return { project, mailUrl: `http://127.0.0.1:${port}`, env, down };
   } catch (error) {
     down();
     throw error;

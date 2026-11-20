@@ -18,6 +18,7 @@ const list = (value) => [value ?? []].flat();
 const PINS = {
   "actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",
   "actions/setup-node": "949feb2413d6458794dcd2491c4babbbce0c15c1",
+  "pnpm/action-setup": "73e46992e05b19abd31f2f3c20e0e7370d762115",
   "googleapis/release-please-action": "45996ed1f6d02564a971a2fa1b5860e934307cf7",
   "actions/upload-artifact": "cf430e030ddbb5b0abf93d22962f4752f3646cd9",
   "actions/download-artifact": "9000827ccba6bdab643e8b6fd33ac0654aef8333",
@@ -165,16 +166,45 @@ test("provenance is attested without a storage record and the SBOM is a cosign a
   );
 });
 
-test("nightly.yml has no id-token and no tag trigger, publishes no package, signs nothing and runs only from main", () => {
+const DAILY = "17 3 * * *";
+const WEEKLY = "43 4 * * 0";
+
+test("nightly.yml has no id-token and no tag trigger, signs nothing, and only its image job writes a package and only from main", () => {
   const nightly = workflow("nightly.yml");
   assert.deepEqual(Object.keys(nightly.on).sort(), ["schedule", "workflow_dispatch"]);
-  for (const job of Object.values(nightly.jobs)) {
-    assert.equal(job.permissions?.["id-token"], undefined);
-    assert.match(job.if ?? "", /refs\/heads\/main/);
-    assert.deepEqual(job.permissions, { contents: "read", packages: "write" });
+  assert.deepEqual(
+    nightly.on.schedule.map((entry) => entry.cron),
+    [DAILY, WEEKLY],
+  );
+  for (const [id, job] of Object.entries(nightly.jobs)) {
+    assert.equal(job.permissions?.["id-token"], undefined, `${id}: id-token`);
+    if (id === "image") {
+      assert.match(job.if ?? "", /refs\/heads\/main/);
+      assert.ok(
+        job.if.includes(`github.event.schedule != '${WEEKLY}'`),
+        "the weekly drill run also pushes an image",
+      );
+      assert.deepEqual(job.permissions, { contents: "read", packages: "write" });
+    } else {
+      assert.deepEqual(job.permissions, { contents: "read" }, `${id}: it writes something`);
+    }
   }
   const text = read(".github/workflows/nightly.yml");
   assert.doesNotMatch(text, /npm publish|pnpm publish|cosign/);
+});
+
+test("the restore-drill job only reads, runs weekly and on dispatch from any ref, and runs the restore project with Chromium installed first", () => {
+  const job = workflow("nightly.yml").jobs["restore-drill"];
+  assert.ok(job, "no restore-drill job");
+  assert.deepEqual(job.permissions, { contents: "read" });
+  const condition = job.if ?? "";
+  assert.match(condition, /github\.event_name == 'workflow_dispatch'/);
+  assert.ok(condition.includes(`github.event.schedule == '${WEEKLY}'`), "the weekly cron does not start it");
+  assert.doesNotMatch(condition, /refs\/heads|github\.ref\b/, "a dispatch is limited to a ref");
+  const install = runs(job).findIndex((text) => /playwright install --with-deps chromium/.test(text));
+  const drill = steps(job).findIndex((step) => /pnpm e2e --project restore/.test(step.run ?? ""));
+  assert.ok(install >= 0 && drill > install, "the drill does not run after Chromium is installed");
+  assert.equal(steps(job)[drill].env?.SHOUTORY_E2E_RESTORE, "true");
 });
 
 test("the build job runs only on a refs/tags/v ref, so a push to main or beta pushes no image", () => {
