@@ -165,13 +165,33 @@ function dockerOutput(args: string[]): { stdout: string; stderr: string } {
  * filtered out here: an unexpected name is for the caller to see.
  */
 export function lookedUpNames(): string[] {
-  const project = process.env.SHOUTORY_E2E_PROJECT;
-  if (!project) throw new Error("the stack has not published its project name");
-  const filters = [`label=com.docker.compose.project=${project}`, "label=com.docker.compose.service=dns"];
-  const found = dockerOutput(["ps", "--all", "--quiet", ...filters.flatMap((f) => ["--filter", f])]);
-  const id = found.stdout.trim();
-  if (!id) throw new Error("the stack has no DNS sidecar container");
-  const logs = dockerOutput(["logs", id]);
+  const logs = dockerOutput(["logs", containerOf("dns")]);
   const queries = `${logs.stdout}${logs.stderr}`.matchAll(/"[A-Z0-9]+ IN (\S+) (?:udp|tcp) /g);
   return [...new Set([...queries].map(([, name]) => (name ?? "").replace(/\.$/, "").toLowerCase()))].sort();
+}
+
+function containerOf(service: string): string {
+  const project = process.env.SHOUTORY_E2E_PROJECT;
+  if (!project) throw new Error("the stack has not published its project name");
+  const filters = [
+    `label=com.docker.compose.project=${project}`,
+    `label=com.docker.compose.service=${service}`,
+  ];
+  const found = dockerOutput(["ps", "--all", "--quiet", ...filters.flatMap((f) => ["--filter", f])]);
+  const id = found.stdout.trim();
+  if (!id) throw new Error(`the stack has no ${service} container`);
+  return id;
+}
+
+/**
+ * The search domains the app container inherited from its host (the last `search` line of its resolv.conf, lower
+ * case). A resolver that is refused a name may retry it under each of them, so the sidecar sees those forms too. No
+ * `search` line is a valid answer: there are none. The image has no shell, so its own node reads the file.
+ */
+export function appSearchDomains(): string[] {
+  const read = "process.stdout.write(require('node:fs').readFileSync('/etc/resolv.conf', 'utf8'))";
+  const file = dockerOutput(["exec", containerOf("shoutory"), "/nodejs/bin/node", "-e", read]).stdout;
+  const line = file.split("\n").findLast((entry) => /^search\s/.test(entry));
+  const domains = line ? line.trim().split(/\s+/).slice(1) : [];
+  return domains.map((domain) => domain.toLowerCase().replace(/\.$/, ""));
 }

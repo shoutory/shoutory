@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { loadFounder } from "../support/journey";
-import { APP_ORIGIN, lookedUpNames } from "../support/stack";
+import { APP_ORIGIN, appSearchDomains, lookedUpNames } from "../support/stack";
 
 // The breach check is the one documented outside call: its range lookup carries five hex characters of a hash.
 const BREACH_CHECK = "api.pwnedpasswords.com";
@@ -26,8 +26,10 @@ test("a fresh install makes no outbound telemetry call: the DNS sidecar saw only
   expect([...origins]).toEqual([APP_ORIGIN]);
 
   // Every name the app looked up outside the stack since it started, which includes the whole first journey. The
-  // breach check must appear, or a dead sidecar would pass this row.
+  // breach check must appear, or a dead sidecar would pass this row. The host's search domains are inherited by the
+  // container, and a refused name is retried under each of them, so those forms of the breach host are the same call.
+  const allowed = [BREACH_CHECK, ...appSearchDomains().map((domain) => `${BREACH_CHECK}.${domain}`)];
   const names = lookedUpNames();
   expect(names).toContain(BREACH_CHECK);
-  expect(names.filter((name) => name !== BREACH_CHECK)).toEqual([]);
+  expect(names.filter((name) => !allowed.includes(name))).toEqual([]);
 });
