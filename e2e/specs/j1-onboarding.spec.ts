@@ -52,5 +52,5 @@ test("J1: sign up, confirm by mail, enrol TOTP, sign in with a code, create a wo
   await expect(guestPage.getByTestId("workspace-name")).toHaveText(workspace.name);
   await guest.close();
 
-  await saveFounder(page, { account: founder, secret, workspace: { id, name: workspace.name } });
+  await saveFounder(page, { account: founder, secret, workspace: { id, name: workspace.name }, member });
 });

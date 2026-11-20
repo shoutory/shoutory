@@ -59,6 +59,7 @@ function OverrideCell({ flag, expired, refresh }: { flag: Flag; expired: boolean
     <>
       <Select
         hideLabel
+        testId={`override-${key}`}
         label={label}
         value={choiceOf(flag)}
         options={options}
@@ -80,20 +81,25 @@ function FlagRow({ flag, today, refresh }: { flag: Flag; today: string; refresh:
   // The removal date is a UTC calendar date: a flag is expired from the day after it.
   const expired = flag.remove_by < today;
   return (
-    <tr {...(expired ? { "data-expired": "true" } : {})} className={expired ? "bg-attention-bg" : undefined}>
+    <tr
+      data-testid={`flag-${flag.key}`}
+      data-state={flag.effective ? "on" : "off"}
+      {...(expired ? { "data-expired": "true" } : {})}
+      className={expired ? "bg-attention-bg" : undefined}
+    >
       <td className="py-2 pe-5 wrap-anywhere">
         <DirText dir="ltr">{flag.key}</DirText>
         <p className="text-sm text-text-muted">{flag.description}</p>
       </td>
-      <td className="py-2 pe-5">
+      <td className="py-2 pe-5" data-testid="flag-owner">
         <DirText dir="ltr">{flag.owner}</DirText>
       </td>
-      <td className="py-2 pe-5">
+      <td className="py-2 pe-5" data-testid="flag-remove-by">
         <DirText dir="ltr">{flag.remove_by}</DirText> (UTC)
         {expired ? (
           <>
             {" "}
-            <strong>
+            <strong data-testid="flag-expired">
               <Trans id="admin.flags.expired">Expired</Trans>
             </strong>
           </>

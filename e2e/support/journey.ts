@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { expect, type Page } from "@playwright/test";
+import { type Browser, expect, type Page } from "@playwright/test";
+import { waitForLink } from "./mail";
 import { STATE_DIR } from "./stack";
 import { nextTotp } from "./totp";
 
@@ -18,6 +19,8 @@ export interface Founder {
   readonly account: Account;
   readonly secret: string;
   readonly workspace: { readonly id: string; readonly name: string };
+  /** The person the first journey invited: a member of the workspace, not an administrator of the instance. */
+  readonly member: Account;
 }
 
 /** A person with an address and a password made for this run only. */
@@ -122,6 +125,49 @@ export async function enrolTotp(page: Page, account: Account): Promise<string> {
   await field(page, "recovery-saved").click();
   await expect(field(page, "setup-done")).toBeVisible();
   return secret;
+}
+
+async function inviteMember(page: Page, workspaceId: string, email: string): Promise<void> {
+  await page.goto(`/w/${workspaceId}/settings/members`);
+  await field(page, "invite-open").click();
+  await field(page, "invite-email").fill(email);
+  await field(page, "invite-submit").click();
+  await expect(field(page, "invite-email")).toBeHidden();
+}
+
+/**
+ * A new person with the second factor on: `inviter` (a signed-in administrator's page) invites them to every
+ * workspace, they sign up through the first invitation, accept each one, and enrol. Ends signed out; the caller signs
+ * in as them, with the next code of the returned secret.
+ */
+export async function createMember(options: {
+  browser: Browser;
+  inviter: Page;
+  label: string;
+  workspaces: ReadonlyArray<{ readonly id: string; readonly name: string }>;
+}): Promise<{ account: Account; secret: string }> {
+  const account = newAccount(options.label);
+  const context = await options.browser.newContext({ storageState: { cookies: [], origins: [] } });
+  try {
+    const page = await context.newPage();
+    const used: string[] = [];
+    for (const [index, workspace] of options.workspaces.entries()) {
+      await inviteMember(options.inviter, workspace.id, account.email);
+      if (index === 0) {
+        await signUp(page, account);
+        await confirmEmail(page, await waitForLink({ to: account.email, path: "/auth/verify" }));
+        await signIn(page, account);
+      }
+      used.push(await waitForLink({ to: account.email, path: "/invite/", skip: used }));
+      await page.goto(used.at(-1) ?? "");
+      await field(page, "invite-accept").click();
+      await expect(field(page, "workspace-name")).toHaveText(workspace.name);
+    }
+    return { account, secret: await enrolTotp(page, account) };
+  } finally {
+    // A step that fails must not leave the browser context open.
+    await context.close();
+  }
 }
 
 export async function saveFounder(page: Page, founder: Founder): Promise<void> {

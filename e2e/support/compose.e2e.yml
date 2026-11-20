@@ -14,9 +14,24 @@ services:
     build:
       args:
         SHOUTORY_RELEASE_CHANNEL: beta
+    # Only the app is pointed at the sidecar: Docker's own resolver still answers the names of this stack, and every
+    # other name goes to the sidecar, which records it and refuses it. The address is read after the sidecar starts.
+    dns:
+      - ${SHOUTORY_E2E_DNS_IP:-127.0.0.1}
     depends_on:
       mail:
         condition: service_healthy
+      dns:
+        condition: service_started
+
+  dns:
+    # CoreDNS 1.15.0 (Apache-2.0) logs every query and has no plugin that forwards or answers from data, so an outside
+    # name is recorded and refused. Index digest read 2026-11-20, pushed 2026-10-21.
+    image: coredns/coredns:1.15.0@sha256:0a9d8c8ddf34347eb59aad9a8784f0710de88d6d112726d11d271f9bc6daca26
+    command: ["-conf", "/Corefile"]
+    configs:
+      - source: corefile
+        target: /Corefile
 
   mail:
     # Mailpit v1.33.0 (MIT), index digest read 2026-11-20, pushed 2026-10-31. SMTP on 1025, API on 8025.
@@ -31,3 +46,13 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
+
+configs:
+  corefile:
+    content: |
+      . {
+        log
+        template ANY ANY {
+          rcode NXDOMAIN
+        }
+      }

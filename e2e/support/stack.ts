@@ -6,12 +6,15 @@ import { fileURLToPath } from "node:url";
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 /** Where a run keeps the founder's saved session; removed with the stack. */
 export const STATE_DIR = `${ROOT}.artifacts/e2e`;
-const ORIGIN = "http://localhost:3000";
+/** The one address the app answers on: the compose file publishes this port, and the secure cookies need `localhost`. */
+export const APP_ORIGIN = "http://localhost:3000";
 const ROLES = ["owner", "app", "worker", "auth", "readonly"] as const;
 const FILES = ["-f", "docker/compose.yml", "-f", "e2e/support/compose.e2e.yml"];
 const STACK_TIMEOUT_MS = 600_000;
 
 export interface Stack {
+  /** The compose project of this run, which names its containers for the log reader. */
+  readonly project: string;
   /** Where the mail catcher's API answers on this machine. */
   readonly mailUrl: string;
   down(): void;
@@ -35,7 +38,7 @@ function runEnvironment(image: string): NodeJS.ProcessEnv {
     ...Object.fromEntries(roleVariables),
     SHOUTORY_IMAGE: image,
     SHOUTORY_POSTGRES_PASSWORD: secret(),
-    SHOUTORY_PUBLIC_ORIGIN: ORIGIN,
+    SHOUTORY_PUBLIC_ORIGIN: APP_ORIGIN,
     SHOUTORY_MAIL_FROM: "Shoutory <noreply@e2e.test>",
     SHOUTORY_SMTP_URL: "smtp://mail:1025",
     SHOUTORY_HMAC_PEPPER: secret(),
@@ -79,24 +82,96 @@ function removeStale(): void {
   rmSync(STATE_DIR, { recursive: true, force: true });
 }
 
+const OWNER = "e2e-owner";
+export const REMOVE_BY_VARIABLE = "SHOUTORY_E2E_FLAG_REMOVE_BY";
+
+/** The removal date of the live flags: 90 days ahead, read once per run (global setup) and handed to every spec. */
+export const flagRemovalDate = () => new Date(Date.now() + 90 * 86_400_000).toISOString().slice(0, 10);
+
+/**
+ * The flag rows the stack plants: the migrations seed none, so the flags screen would have nothing to show. The
+ * specs call it without an argument and get the run's date from the environment.
+ */
+export function plantedFlags(removeBy = process.env[REMOVE_BY_VARIABLE]) {
+  if (!removeBy) throw new Error("the stack has not published the flags' removal date");
+  return {
+    live: { key: "e2e_live_flag", owner: OWNER, removeBy, defaultOn: false },
+    defaultOn: { key: "e2e_default_on_flag", owner: OWNER, removeBy, defaultOn: true },
+    expired: { key: "e2e_expired_flag", owner: OWNER, removeBy: "2000-01-01", defaultOn: false },
+  } as const;
+}
+
+/** Inserts the planted flags as the database superuser, through the running container (the tables have no app grant). */
+function plantFlags(project: string, env: NodeJS.ProcessEnv, removeBy: string): void {
+  const rows = Object.values(plantedFlags(removeBy)).map(
+    (flag) =>
+      `('${flag.key}', 'planted by the e2e stack', '${flag.owner}', date '${flag.removeBy}', ${flag.defaultOn})`,
+  );
+  const sql = `INSERT INTO app.feature_flags (key, description, owner, remove_by, default_on) VALUES ${rows.join(", ")};`;
+  const asSuperuser = ["psql", "-U", "postgres", "-d", "shoutory", "-v", "ON_ERROR_STOP=1"];
+  compose(project, env, ["exec", "-T", "postgres", ...asSuperuser, "-c", sql]);
+}
+
+/** The DNS sidecar starts first, because the app's `dns:` needs its address, which only exists once it runs. */
+function startSidecar(project: string, env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  compose(project, env, ["up", "--detach", "--wait", "dns"]);
+  const id = compose(project, env, ["ps", "--quiet", "dns"]).stdout.trim();
+  // The address on the stack's own network, named: a container on two networks would otherwise give two addresses.
+  const format = `{{(index .NetworkSettings.Networks "${project}_default").IPAddress}}`;
+  const inspected = spawnSync("docker", ["inspect", "--format", format, id], { encoding: "utf8" });
+  const address = inspected.stdout.trim();
+  if (!address) throw new Error("the DNS sidecar has no address on the stack's network");
+  return { ...env, SHOUTORY_E2E_DNS_IP: address };
+}
+
 /** Builds the image from this checkout and starts the self-host stack with a mail catcher; `down` removes it all. */
-export function startStack(): Stack {
+export function startStack(removeBy: string): Stack {
   removeStale();
   const project = `${PREFIX}${randomBytes(4).toString("hex")}`;
   const image = `${project}:local`;
-  const env = runEnvironment(image);
   const down = () => {
-    compose(project, env, ["down", "--volumes", "--remove-orphans"], true);
+    compose(project, runEnvironment(image), ["down", "--volumes", "--remove-orphans"], true);
     spawnSync("docker", ["image", "rm", "--force", image], { stdio: "ignore" });
     rmSync(STATE_DIR, { recursive: true, force: true });
   };
   try {
+    const env = startSidecar(project, runEnvironment(image));
     compose(project, env, ["up", "--detach", "--build", "--wait", "--wait-timeout", "300"]);
     const port = compose(project, env, ["port", "mail", "8025"]).stdout.trim().split(":").at(-1);
     if (!port) throw new Error("the mail catcher has no published port");
-    return { mailUrl: `http://127.0.0.1:${port}`, down };
+    plantFlags(project, env, removeBy);
+    return { project, mailUrl: `http://127.0.0.1:${port}`, down };
   } catch (error) {
     down();
     throw error;
   }
+}
+
+const LOG_BUFFER_BYTES = 64 * 1024 * 1024;
+
+/** A docker command's output; a command that fails to run or exits non-zero is an error, never an empty answer. */
+function dockerOutput(args: string[]): { stdout: string; stderr: string } {
+  const result = spawnSync("docker", args, { encoding: "utf8", maxBuffer: LOG_BUFFER_BYTES });
+  if (result.error || result.status !== 0) {
+    const reason = result.error?.message ?? `exit ${result.status}: ${result.stderr.trim().slice(-300)}`;
+    throw new Error(`docker ${args[0]} failed: ${reason}`);
+  }
+  return result;
+}
+
+/**
+ * Every name the app looked up outside the stack since it started, from the sidecar's query log (each name once,
+ * lower case, without its trailing dot). Names of the stack's own services never reach the sidecar. Nothing is
+ * filtered out here: an unexpected name is for the caller to see.
+ */
+export function lookedUpNames(): string[] {
+  const project = process.env.SHOUTORY_E2E_PROJECT;
+  if (!project) throw new Error("the stack has not published its project name");
+  const filters = [`label=com.docker.compose.project=${project}`, "label=com.docker.compose.service=dns"];
+  const found = dockerOutput(["ps", "--all", "--quiet", ...filters.flatMap((f) => ["--filter", f])]);
+  const id = found.stdout.trim();
+  if (!id) throw new Error("the stack has no DNS sidecar container");
+  const logs = dockerOutput(["logs", id]);
+  const queries = `${logs.stdout}${logs.stderr}`.matchAll(/"[A-Z0-9]+ IN (\S+) (?:udp|tcp) /g);
+  return [...new Set([...queries].map(([, name]) => (name ?? "").replace(/\.$/, "").toLowerCase()))].sort();
 }

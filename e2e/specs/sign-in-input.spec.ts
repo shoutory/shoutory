@@ -1,0 +1,44 @@
+import { expect, type Page, test } from "@playwright/test";
+import { createMember, loadFounder } from "../support/journey";
+import { nextTotp } from "../support/totp";
+
+const CAPTCHA = 'iframe, [data-sitekey], [class*="captcha" i], [id*="captcha" i]';
+
+async function paste(page: Page, id: string, text: string): Promise<void> {
+  await page.evaluate((value) => navigator.clipboard.writeText(value), text);
+  await page.getByTestId(id).focus();
+  await page.keyboard.press("ControlOrMeta+V");
+  await expect(page.getByTestId(id)).toHaveValue(text);
+}
+
+// Nothing on the sign-in path blocks a password manager or an authenticator's copied code.
+test("sign-in accepts a pasted password and a pasted code, the code field has autocomplete=one-time-code, and no CAPTCHA appears", async ({
+  page,
+  browser,
+}) => {
+  const founder = await loadFounder();
+  const { account, secret } = await createMember({
+    browser,
+    inviter: page,
+    label: "paste",
+    workspaces: [founder.workspace],
+  });
+  const guest = await browser.newContext({
+    storageState: { cookies: [], origins: [] },
+    permissions: ["clipboard-read", "clipboard-write"],
+  });
+  const seen = await guest.newPage();
+  await seen.goto("/sign-in");
+  await expect(seen.locator(CAPTCHA)).toHaveCount(0);
+  await seen.getByTestId("sign-in-email").fill(account.email);
+  await paste(seen, "sign-in-password", account.password);
+  await seen.getByTestId("sign-in-submit").click();
+
+  await seen.waitForURL(/\/mfa/);
+  await expect(seen.getByTestId("mfa-code")).toHaveAttribute("autocomplete", "one-time-code");
+  await expect(seen.locator(CAPTCHA)).toHaveCount(0);
+  await paste(seen, "mfa-code", await nextTotp(secret));
+  await seen.getByTestId("mfa-submit").click();
+  await seen.waitForURL(/\/w\//);
+  await guest.close();
+});

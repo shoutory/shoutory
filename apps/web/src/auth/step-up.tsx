@@ -64,6 +64,7 @@ function PasswordForm({
       <TextField
         label={t({ id: "auth.step_up.password", message: "Password" })}
         name="password"
+        testId="stepup-password"
         type="password"
         autoComplete="current-password"
         isRequired
@@ -72,7 +73,7 @@ function PasswordForm({
       />
       {failure ? <ErrorPanel focusOnMount error={failure} {...authCopy("step-up", failure)} /> : null}
       <div className="flex flex-wrap gap-3">
-        <SubmitButton pending={check.pending} online={check.online}>
+        <SubmitButton testId="stepup-submit" pending={check.pending} online={check.online}>
           <Trans id="auth.step_up.confirm">Confirm</Trans>
         </SubmitButton>
         {/* While the check runs, cancel and dismiss are unavailable: the answer would arrive at a closed dialog. */}

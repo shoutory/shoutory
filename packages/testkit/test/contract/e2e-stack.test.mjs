@@ -38,6 +38,26 @@ test("the e2e override pins the mail catcher by digest, publishes only to 127.0.
   }
 });
 
+test("the DNS sidecar is pinned by digest, logs every query, forwards none, and only the app uses it", () => {
+  const text = readFileSync(join(root, OVERRIDE), "utf8");
+  const { services, configs } = parse(text);
+  assert.match(services.dns?.image ?? "", /^coredns\/coredns:1\.15\.0@sha256:[0-9a-f]{64}$/);
+  const lines = text.split("\n");
+  const at = lines.findIndex((line) => line.includes(services.dns.image));
+  assert.match(lines[at - 1], /^\s*# .*\b20\d\d-\d\d-\d\d\b/, "no date above the digest");
+  assert.equal(services.dns.ports, undefined, "the sidecar publishes no port");
+  const corefile = configs[services.dns.configs[0].source].content;
+  assert.match(corefile, /^\s*log\s*$/m, "the Corefile does not log queries");
+  assert.doesNotMatch(corefile, /forward|proxy|\bfile\b|\bhosts\b/, "the Corefile answers from somewhere");
+  assert.deepEqual(services.shoutory.dns, ["${SHOUTORY_E2E_DNS_IP:-127.0.0.1}"]);
+  const withDns = (file) =>
+    Object.entries(parse(readFileSync(join(root, file), "utf8")).services)
+      .filter(([, service]) => service.dns !== undefined)
+      .map(([name]) => name);
+  assert.deepEqual(withDns(OVERRIDE), ["shoutory"], "only the app is pointed at the sidecar");
+  assert.deepEqual(withDns("docker/compose.yml"), [], "the self-host file sets no resolver");
+});
+
 test("the e2e and image-smoke steps are Docker steps, so a missing Docker is named before Playwright starts", () => {
   for (const name of ["e2e", "image-smoke"]) {
     assert.equal(STEPS.find((step) => step.name === name).docker, true, name);
