@@ -92,7 +92,7 @@ export function Sessions() {
       ) : null}
       {state.status === "done" ? (
         <>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" data-testid="sessions-scroll">
             <table
               aria-label={t({ id: "account.security.devices", message: "Signed-in devices" })}
               className="w-full text-start"

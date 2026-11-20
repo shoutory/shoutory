@@ -28,7 +28,7 @@ function TopBar() {
       <span translate="no" className="font-heading text-lg">
         Shoutory
       </span>
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+      <div className="flex min-w-0 flex-[1_1_16rem] flex-wrap items-center gap-3">
         {"error" in data ? (
           <ErrorPanel
             what={

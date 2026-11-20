@@ -34,9 +34,9 @@ export function Palette({ workspaces }: { workspaces: Workspace[] }) {
 
   return (
     <>
-      <Button onPress={() => setOpen(true)}>
+      <Button onPress={() => setOpen(true)} className="max-w-full flex-wrap">
         <Trans id="shell.palette.title">Switch workspace</Trans>
-        <kbd dir="ltr" className="text-sm text-text-muted">
+        <kbd dir="ltr" className="text-sm text-on-primary">
           Ctrl/Cmd+K
         </kbd>
       </Button>
@@ -51,7 +51,10 @@ export function Palette({ workspaces }: { workspaces: Workspace[] }) {
             <Label>
               <Trans id="shell.palette.search">Search workspaces</Trans>
             </Label>
-            <Input className="min-h-10 pointer-coarse:min-h-11 rounded-md border border-border-control bg-surface px-3 text-md" />
+            <Input
+              data-testid="palette-search"
+              className="min-h-10 pointer-coarse:min-h-11 rounded-md border border-border-control bg-surface px-3 text-md"
+            />
           </SearchField>
           <ListBox
             items={workspaces}

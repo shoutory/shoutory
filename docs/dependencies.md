@@ -405,3 +405,15 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
 - Advisories: none recorded at adoption (to be re-read at each upgrade).
 - Rejected: hand-written TOTP (no hand-written crypto), `otpauth` and `otplib` (a second implementation beside the one
   the server uses, with more dependencies).
+
+## @axe-core/playwright 4.14.0
+
+- Used for: the screen quality specs in `e2e/` (a root development dependency; nothing of it ships). It runs the axe
+  rules in the page Playwright drives, over every screen in both languages and both themes, and the specs require zero
+  violations.
+- Licence: MPL-2.0 (on the licence allowlist). Published 2026-10-15, more than 14 days before adoption. It depends on
+  `axe-core` at `~4.14.0` (published 2026-10-05) and has a peer on `playwright-core`, which `@playwright/test` brings.
+- Install scripts: none.
+- Advisories: none recorded at adoption (to be re-read at each upgrade).
+- Rejected: a hand-written rule set (the rules are infrastructure we do not reinvent) and a separate command-line
+  scanner (it would not run inside the logged-in browser the specs already drive).

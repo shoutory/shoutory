@@ -25,13 +25,13 @@ function Switcher({
       defaultItems={choices}
       selectedKey={selectedId}
       onSelectionChange={(key) => key !== null && onSelect(String(key))}
-      className="flex items-center gap-2"
+      className="flex w-full flex-wrap items-center gap-2 md:w-auto"
     >
       <Label className="text-sm">{label}</Label>
-      <div className="flex items-center gap-1">
+      <div className="flex min-w-0 flex-1 items-center gap-1">
         <Input
           data-testid={testId}
-          className="min-h-10 pointer-coarse:min-h-11 rounded-md border border-border-control bg-surface px-3 text-md"
+          className="min-h-10 w-full min-w-0 pointer-coarse:min-h-11 rounded-md border border-border-control bg-surface px-3 text-md"
         />
         <Button className="min-h-10 min-w-10 pointer-coarse:min-h-11 pointer-coarse:min-w-11 rounded-md border border-border-control">
           <span aria-hidden="true">▾</span>

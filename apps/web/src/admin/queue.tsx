@@ -32,7 +32,7 @@ function Seconds({ value }: { value: number }) {
 function WorkerTable({ workers }: { workers: Queue["workers"] }) {
   const { t } = useLingui();
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto" data-testid="queue-scroll">
       <table aria-label={t({ id: "admin.queue.workers", message: "Workers" })} className="w-full text-start">
         <thead>
           <tr>

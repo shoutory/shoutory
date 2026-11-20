@@ -65,6 +65,7 @@ const PINS = {
   typescript: "7.0.2",
   vitest: "5.0.5",
   vite: "8.3.5",
+  "@axe-core/playwright": "4.14.0",
   "@better-auth/utils": "0.5.1",
   "@biomejs/biome": "2.6.4",
   turbo: "2.11.10",

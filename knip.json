@@ -1,7 +1,7 @@
 {
   "workspaces": {
     ".": {
-      "entry": ["scripts/*.mjs"],
+      "entry": ["scripts/*.mjs", "e2e/support/screens.ts"],
       "project": ["scripts/**", "e2e/**"],
       "ignoreDependencies": ["@commitlint/cli", "turbo"]
     },

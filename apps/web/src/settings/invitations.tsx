@@ -72,7 +72,7 @@ function InvitationTable({
 }) {
   const { t } = useLingui();
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto" data-testid="invitations-scroll">
       <table
         aria-label={t({ id: "invitations.title", message: "Pending invitations" })}
         className="w-full text-start"

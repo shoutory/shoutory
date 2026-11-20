@@ -95,7 +95,7 @@ export function CodesStep({ codes, onSaved }: { codes: string[]; onSaved: () => 
   const download = useDownload(codes);
   useLeaveGuard();
   return (
-    <section className="flex flex-col gap-5">
+    <section className="flex flex-col gap-5" data-testid="recovery-codes">
       <StepHeading focus>
         <Trans id="auth.setup.codes_heading">Save your recovery codes</Trans>
       </StepHeading>
@@ -108,7 +108,7 @@ export function CodesStep({ codes, onSaved }: { codes: string[]; onSaved: () => 
       <ul className="grid grid-cols-2 gap-2" dir="ltr">
         {codes.map((code) => (
           <li key={code}>
-            <code>{code}</code>
+            <code data-testid="recovery-code">{code}</code>
           </li>
         ))}
       </ul>
@@ -116,7 +116,7 @@ export function CodesStep({ codes, onSaved }: { codes: string[]; onSaved: () => 
         <CopyButton text={codes.join("\n")}>
           <Trans id="auth.setup.copy_codes">Copy codes</Trans>
         </CopyButton>
-        <Button onPress={download}>
+        <Button onPress={download} data-testid="codes-download">
           <Trans id="auth.setup.download">Download</Trans>
         </Button>
         <Button onPress={onSaved} data-testid="recovery-saved">

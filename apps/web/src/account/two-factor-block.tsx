@@ -56,13 +56,14 @@ function NewCodesForm({ onCodes }: { onCodes: (codes: string[]) => void }) {
       <TextField
         label={t({ id: "auth.sign_in.password", message: "Password" })}
         name="password"
+        testId="codes-password"
         type="password"
         autoComplete="current-password"
         isRequired
         value={password}
         onChange={setPassword}
       />
-      <SubmitButton pending={generate.pending} online={generate.online}>
+      <SubmitButton testId="codes-generate" pending={generate.pending} online={generate.online}>
         <Trans id="account.security.generate">Generate codes</Trans>
       </SubmitButton>
       {generate.failure ? (
@@ -148,7 +149,7 @@ export function TwoFactorBlock() {
             />
           ) : (
             <div>
-              <Button onPress={() => setAsking(true)}>
+              <Button onPress={() => setAsking(true)} data-testid="codes-new">
                 <Trans id="account.security.new_codes">New recovery codes</Trans>
               </Button>
             </div>

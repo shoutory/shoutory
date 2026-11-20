@@ -125,7 +125,7 @@ function ClientRow({ client }: { client: Workspace }) {
 function ClientTable({ clients }: { clients: Workspace[] }) {
   const { t } = useLingui();
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto" data-testid="clients-scroll">
       <table aria-label={t({ id: "org.clients.title", message: "Clients" })} className="w-full text-start">
         <thead>
           <tr>

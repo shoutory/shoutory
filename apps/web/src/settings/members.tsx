@@ -209,7 +209,7 @@ function MemberRow({ member, actor }: { member: Member; actor: Actor }) {
 function MemberTable({ members, actor }: { members: Member[]; actor: Actor }) {
   const { t } = useLingui();
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto" data-testid="members-scroll">
       <table aria-label={t({ id: "members.title", message: "Members" })} className="w-full text-start">
         <thead>
           <tr>

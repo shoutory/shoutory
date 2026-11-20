@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { type Browser, expect, type Page } from "@playwright/test";
 import { waitForLink } from "./mail";
 import { STATE_DIR } from "./stack";
@@ -127,7 +127,7 @@ export async function enrolTotp(page: Page, account: Account): Promise<string> {
   return secret;
 }
 
-async function inviteMember(page: Page, workspaceId: string, email: string): Promise<void> {
+export async function inviteMember(page: Page, workspaceId: string, email: string): Promise<void> {
   await page.goto(`/w/${workspaceId}/settings/members`);
   await field(page, "invite-open").click();
   await field(page, "invite-email").fill(email);
@@ -163,11 +163,23 @@ export async function createMember(options: {
       await field(page, "invite-accept").click();
       await expect(field(page, "workspace-name")).toHaveText(workspace.name);
     }
-    return { account, secret: await enrolTotp(page, account) };
+    const made = { account, secret: await enrolTotp(page, account) };
+    mkdirSync(STATE_DIR, { recursive: true });
+    writeFileSync(`${STATE_DIR}/member-${options.label}.json`, JSON.stringify(made));
+    return made;
   } finally {
     // A step that fails must not leave the browser context open.
     await context.close();
   }
+}
+
+/** A member `createMember` made earlier in this run, by its label; later specs reuse it instead of signing up again. */
+export function loadMember(label: string): { account: Account; secret: string } {
+  const file = `${STATE_DIR}/member-${label}.json`;
+  if (!existsSync(file)) {
+    throw new Error(`no member "${label}" was made: the founder project's specs make it, and they run first`);
+  }
+  return JSON.parse(readFileSync(file, "utf8")) as { account: Account; secret: string };
 }
 
 export async function saveFounder(page: Page, founder: Founder): Promise<void> {

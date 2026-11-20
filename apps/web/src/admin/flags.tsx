@@ -127,6 +127,7 @@ function FlagTable({ flags, refresh }: { flags: Flag[]; refresh: () => void }) {
       role="region"
       aria-label={t({ id: "admin.flags.title", message: "Feature flags" })}
       className="overflow-x-auto"
+      data-testid="flags-scroll"
       // biome-ignore lint/a11y/noNoninteractiveTabindex: a scroll container must be focusable to scroll by keyboard
       tabIndex={0}
     >
