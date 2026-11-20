@@ -20,10 +20,8 @@ RUN rm -rf node_modules apps/*/node_modules packages/*/node_modules packages/pro
   && pnpm install --frozen-lockfile --prod --filter @shoutory/api... \
   && mkdir /data
 
-# Distroless Node 26.13.0 on Debian 13, the nonroot variant, built from its source commit of 2026-11-02 (the image config
-# carries no date). Index digest read 2026-11-20.
-FROM gcr.io/distroless/nodejs26-debian13:nonroot@sha256:9b945e92c1b5463a4b75f11e8417515e4bea7355f6adfd79ec220fbbe905dda8
-ARG SHOUTORY_RELEASE_CHANNEL
+# The files both images carry, one copy of the layout: the repository files the runtime needs, and the data folder.
+FROM scratch AS app
 WORKDIR /app
 # The root package.json holds the version the admin screen shows (read from beside the build).
 COPY --from=build /app/package.json /app/package.json
@@ -39,7 +37,32 @@ COPY --from=build /app/packages/db/package.json /app/packages/db/package.json
 COPY --from=build /app/packages/db/dist /app/packages/db/dist
 COPY --from=build /app/packages/db/migrations /app/packages/db/migrations
 COPY --from=build /app/packages/db/node_modules /app/packages/db/node_modules
-COPY --from=build --chown=nonroot:nonroot /data /data
+COPY --from=build /data /data
+
+# The debug image, for support only (a release builds it with `--target debug`): the same files on the distroless
+# debug variant, which adds a busybox shell. Node 26.13.0 on Debian 13, the debug build of the same distroless source
+# commits as the default image below (`node --version` prints v26.13.0 in both); uploaded 2026-10-31T23:45:59Z per the
+# registry's tag list. Index digest read 2026-11-20.
+FROM gcr.io/distroless/nodejs26-debian13:debug-nonroot@sha256:cbe836227180a05575ec5d3c7075df4ea73649ead0df6be06e92d34586d248c8 AS debug
+ARG SHOUTORY_RELEASE_CHANNEL
+WORKDIR /app
+COPY --from=app /app /app
+COPY --from=app --chown=nonroot:nonroot /data /data
+ENV TZ=UTC
+ENV SHOUTORY_RELEASE_CHANNEL=${SHOUTORY_RELEASE_CHANNEL}
+ENV SHOUTORY_WEB_ROOT=/app/apps/web/dist/client
+ENV NODE_ENV=production
+USER nonroot
+VOLUME /data
+ENTRYPOINT ["/nodejs/bin/node", "/app/apps/api/dist/main.js"]
+
+# Distroless Node 26.13.0 on Debian 13, the nonroot variant, built from its source commit of 2026-11-02 (the image config
+# carries no date). Index digest read 2026-11-20.
+FROM gcr.io/distroless/nodejs26-debian13:nonroot@sha256:9b945e92c1b5463a4b75f11e8417515e4bea7355f6adfd79ec220fbbe905dda8
+ARG SHOUTORY_RELEASE_CHANNEL
+WORKDIR /app
+COPY --from=app /app /app
+COPY --from=app --chown=nonroot:nonroot /data /data
 ENV TZ=UTC
 ENV SHOUTORY_RELEASE_CHANNEL=${SHOUTORY_RELEASE_CHANNEL}
 ENV SHOUTORY_WEB_ROOT=/app/apps/web/dist/client

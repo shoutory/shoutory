@@ -40,6 +40,43 @@ test("the runtime stage is distroless and non-root, runs in UTC and takes the ch
   assert.doesNotMatch(runtime, /^RUN /m, "a distroless runtime has no shell to run anything");
 });
 
+// The debug image carries a shell for support; it is a target of its own, and the default build (the last stage) is
+// still the nonroot one.
+test("the debug stage pins its shell base by digest and date and the last stage is still the distroless nonroot one", () => {
+  const debug = lines.findIndex((line) =>
+    /^FROM gcr\.io\/distroless\/nodejs26-debian13:debug-nonroot@sha256:[0-9a-f]{64} AS debug$/.test(line),
+  );
+  assert.ok(debug > 0, "no debug stage");
+  assert.match(lines[debug - 1], /^# .*\b20\d\d-\d\d-\d\d\b/, "no date above the debug pin");
+  assert.ok(
+    lines.some((line) => /^FROM scratch AS app$/.test(line)),
+    "no shared app stage",
+  );
+  const last = lines.findLastIndex((line) => line.startsWith("FROM "));
+  assert.match(lines[last], /^FROM gcr\.io\/distroless\/nodejs26-debian13:nonroot@sha256:[0-9a-f]{64}$/);
+  assert.ok(debug < last, "the debug stage is not before the default stage");
+  const shell = dockerfile.slice(dockerfile.indexOf(lines[debug]), dockerfile.indexOf(lines[last]));
+  assert.match(shell, /^USER nonroot$/m);
+});
+
+// The support image must reproduce the shipped one, so both distroless bases run the same Node; the comment above
+// each pin names the Node version of its digest.
+test("the debug and the default runtime bases name the same Node version", () => {
+  const versionAbove = (pattern) => {
+    const at = lines.findIndex((line) => pattern.test(line));
+    assert.ok(at > 0, `no line for ${pattern}`);
+    let block = "";
+    for (let line = at - 1; line >= 0 && lines[line].startsWith("#"); line -= 1)
+      block = `${lines[line]} ${block}`;
+    const found = /Node (\d+\.\d+\.\d+)/.exec(block);
+    assert.ok(found, `no "Node x.y.z" in the comment above ${pattern}`);
+    return found[1];
+  };
+  const debug = versionAbove(/^FROM gcr\.io\/distroless\/nodejs26-debian13:debug-nonroot@/);
+  const base = versionAbove(/^FROM gcr\.io\/distroless\/nodejs26-debian13:nonroot@/);
+  assert.equal(debug, base, "the debug image runs another Node than the shipped one");
+});
+
 test("the Dockerfile downloads nothing and uses no package runner or corepack", () => {
   assert.ok(dockerfile.length > 0, "there is no docker/Dockerfile");
   for (const word of ["npx", "dlx", "corepack", "curl", "wget", "apt-get"]) {

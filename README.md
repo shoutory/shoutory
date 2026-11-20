@@ -92,6 +92,18 @@ is set. To build the image yourself instead of pulling it, run
 The container runs as a non-root user with a read-only filesystem, keeps uploads in the `/data` volume, and `pnpm verify
 --only image-smoke` (needs Docker) checks the built image end to end.
 
+### Release channels
+
+Release images are published to `ghcr.io/shoutory/shoutory` for `linux/amd64` and `linux/arm64`. A stable release `1.2.3` is
+tagged `1.2.3`, `1.2`, `1` (the major tag is left out while the major is 0) and `stable`; a beta release `1.3.0-beta.2`
+is tagged `1.3.0-beta.2` and `beta` and never moves `stable`; the build of `main` is tagged `nightly` and
+`nightly-YYYYMMDD`. Each release image also has a `-debug` variant under the exact tag plus `-debug` (for example
+`1.2.3-debug`, and `beta-debug` for the beta channel), which adds a shell for support. Release images are signed with
+cosign and carry an SBOM and a build provenance attestation; check one with
+`cosign verify --certificate-identity https://github.com/shoutory/shoutory/.github/workflows/release.yml@refs/tags/v1.2.3
+--certificate-oidc-issuer https://token.actions.githubusercontent.com ghcr.io/shoutory/shoutory@<digest>`. The nightly
+image is not signed and is built for `linux/amd64` only.
+
 ## Configuration
 
 The process refuses to start when a secret is missing, empty, shorter than its floor, all zero, or equal to an example
