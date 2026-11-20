@@ -23,9 +23,12 @@ export interface Founder {
   readonly member: Account;
 }
 
-/** A person with an address and a password made for this run only. */
+/**
+ * A person with an address and a password made for this run only. The tag is eight decimal digits, which the page's
+ * font sets at one width each, so a name or address is as wide in every run and a table's columns do not move.
+ */
 export function newAccount(label: string): Account {
-  const tag = randomBytes(4).toString("hex");
+  const tag = Array.from(randomBytes(8), (byte) => byte % 10).join("");
   return {
     name: `${label} ${tag}`,
     email: `${label}-${tag}@e2e.test`,
@@ -137,14 +140,16 @@ export async function inviteMember(page: Page, workspaceId: string, email: strin
 
 /**
  * A new person with the second factor on: `inviter` (a signed-in administrator's page) invites them to every
- * workspace, they sign up through the first invitation, accept each one, and enrol. Ends signed out; the caller signs
- * in as them, with the next code of the returned secret.
+ * workspace, they sign up through the first invitation, accept each one (unless `accept` is false: the invitation stays
+ * pending and the person has no workspace), and enrol. Ends signed out; the caller signs in as them, with the next
+ * code of the returned secret.
  */
 export async function createMember(options: {
   browser: Browser;
   inviter: Page;
   label: string;
   workspaces: ReadonlyArray<{ readonly id: string; readonly name: string }>;
+  accept?: boolean;
 }): Promise<{ account: Account; secret: string }> {
   const account = newAccount(options.label);
   const context = await options.browser.newContext({ storageState: { cookies: [], origins: [] } });
@@ -158,6 +163,7 @@ export async function createMember(options: {
         await confirmEmail(page, await waitForLink({ to: account.email, path: "/auth/verify" }));
         await signIn(page, account);
       }
+      if (options.accept === false) continue;
       used.push(await waitForLink({ to: account.email, path: "/invite/", skip: used }));
       await page.goto(used.at(-1) ?? "");
       await field(page, "invite-accept").click();

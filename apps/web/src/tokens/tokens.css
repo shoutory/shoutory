@@ -26,8 +26,12 @@
   --color-info-bg: color-mix(in srgb, var(--color-info) 12%, var(--color-surface));
   --color-neutral-bg: color-mix(in srgb, var(--color-neutral) 12%, var(--color-surface));
 
-  --font-body: "IBM Plex Sans", "IBM Plex Sans Arabic", system-ui, sans-serif;
-  --font-heading: "Bricolage Grotesque Variable", "IBM Plex Sans Arabic", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", "IBM Plex Sans Fallback", "IBM Plex Sans Arabic", system-ui, sans-serif;
+  --font-heading:
+    "Bricolage Grotesque Variable", "Bricolage Grotesque Fallback", "IBM Plex Sans Arabic", system-ui,
+    sans-serif;
+  /* Keys, ids and code; Tailwind's base styles give `code`, `kbd`, `samp` and `pre` this stack. */
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
 
   --text-xs: 0.75rem;
   --text-xs--line-height: 1rem;

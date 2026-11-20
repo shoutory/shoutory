@@ -118,6 +118,24 @@ test("the integration job starts the S3 simulator by digest, waits for it and gi
   assert.equal(job.env.SHOUTORY_TEST_S3_URL, undefined);
 });
 
+test("the screenshot update input reaches Playwright only through env, and the artifact holds screenshots only", () => {
+  const ci = parse(read("ci.yml"));
+  assert.equal(ci.on.workflow_dispatch.inputs["update-visual-snapshots"].type, "boolean");
+  const job = jobs.e2e;
+  for (const step of job.steps) {
+    assert.doesNotMatch(step.run ?? "", /\$\{\{/, "an expression inside a run string");
+  }
+  const verify = job.steps.find((step) => step.run === "pnpm verify --only e2e");
+  assert.match(verify.env.SHOUTORY_E2E_UPDATE_VISUAL, /inputs\.update-visual-snapshots/);
+  const upload = job.steps.find((step) => (step.uses ?? "").startsWith("actions/upload-artifact@"));
+  assert.match(upload.with.path, /\.png$/, "the artifact holds more than screenshots");
+  // Only a run asked to update, and only when the e2e step passed: pictures of a failed run are never uploaded.
+  assert.match(upload.if, /inputs\.update-visual-snapshots/, "the upload is not gated by the input");
+  assert.match(upload.if, /success\(\)/, "the upload does not wait for the e2e step to pass");
+  assert.doesNotMatch(upload.if, /cancelled|always|failure/, "the upload runs after a failed run");
+  assert.deepEqual(job.permissions, { contents: "read" });
+});
+
 test("the package manager is set up before node and no job restores a package cache", () => {
   for (const [id, job] of Object.entries(jobs)) {
     const uses = job.steps.map((step) => step.uses ?? "");

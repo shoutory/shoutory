@@ -22,6 +22,8 @@ test("sign-in accepts a pasted password and a pasted code, the code field has au
     inviter: page,
     label: "paste",
     workspaces: [founder.workspace],
+    // The person needs the invitation to sign up, not the workspace: the invitation stays pending.
+    accept: false,
   });
   const guest = await browser.newContext({
     storageState: { cookies: [], origins: [] },
@@ -39,6 +41,7 @@ test("sign-in accepts a pasted password and a pasted code, the code field has au
   await expect(seen.locator(CAPTCHA)).toHaveCount(0);
   await paste(seen, "mfa-code", await nextTotp(secret));
   await seen.getByTestId("mfa-submit").click();
-  await seen.waitForURL(/\/w\//);
+  // Signed in: a person with no workspace yet is shown the form that makes the first one.
+  await expect(seen.getByTestId("onboarding-create")).toBeVisible();
   await guest.close();
 });

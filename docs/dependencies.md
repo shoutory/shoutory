@@ -296,6 +296,16 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
 - Rejected: a font CDN (the web app makes no runtime call to a third-party host for fonts); vendoring the files by hand (the package keeps the licence and
   the subsets in step with each release).
 
+## @fontsource/ibm-plex-mono 5.3.0
+
+- Used for: the face of keys, ids and code in `apps/web` (`kbd`, `code`, `samp`, `pre`), self-hosted as a WOFF2 file that
+  Vite bundles and the server serves from the same origin. Weight 400, Latin subset only: that is all the screens use.
+- Licence: OFL-1.1 (the SIL Open Font License; the package carries the licence text). Published 2026-07-19, more than 14
+  days before adoption. Its install scripts: none.
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
+- Rejected: the operating system's monospace face (it differs by platform, which moves every screenshot), a font CDN, and
+  every weight and subset of the package (files no screen uses).
+
 ## @fontsource/ibm-plex-sans 5.3.0
 
 - Used for: the Latin body and interface face of `apps/web` (weights 400, 500 and 600, Latin subset only).

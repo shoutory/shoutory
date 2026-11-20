@@ -55,10 +55,16 @@ export interface AppOptions {
 }
 
 const SELF = ["'self'"];
+// React Aria inserts two `<style>` elements with fixed text (a press and a scroll lock). The page allows exactly those
+// texts by hash; the contract test recomputes both from the installed package, so an upgrade that changes one fails.
+const INJECTED_STYLE_HASHES = [
+  "'sha256-38RhXrc7EdReTKsOm23ZPOCUgniTUUcjky8QOOrQx6o='",
+  "'sha256-gYiS/BvZvRcK27JIXTuwhZ3hs2+VJ1X+2gUlE+farlg='",
+];
 const cspFor = (scriptSources: string[]) => ({
   defaultSrc: SELF,
   scriptSrc: scriptSources,
-  styleSrc: SELF,
+  styleSrc: [...SELF, ...INJECTED_STYLE_HASHES],
   imgSrc: ["'self'", "data:", "blob:"],
   connectSrc: SELF,
   objectSrc: ["'none'"],

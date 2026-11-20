@@ -97,6 +97,7 @@ function RemoveCell({ member, actor }: { member: Member; actor: Actor }) {
   return (
     <>
       <Button
+        data-testid="member-remove"
         onPress={() => {
           setDeclined(null);
           setOpen(true);
@@ -266,7 +267,7 @@ function ManageMembers({ workspace, focusHeading }: { workspace: Workspace; focu
           Organization owners and admins have access to every workspace without being listed here.
         </Trans>
       </p>
-      <Listed state={state} reload={reload}>
+      <Listed state={state} reload={reload} reserve="min-h-56">
         {(members) => <MemberTable members={members} actor={actor} />}
       </Listed>
       <Invitations workspace={workspace} stamp={stamp} />

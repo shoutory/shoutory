@@ -2,6 +2,7 @@ import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import "./zod-config.js";
 import { App } from "./app.js";
 import { CatalogFallback } from "./i18n/catalog-fallback.js";
 import { activateLocale, detectLocale, storedLocale } from "./i18n/i18n.js";

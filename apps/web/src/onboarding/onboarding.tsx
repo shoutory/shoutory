@@ -238,7 +238,7 @@ function OrganizationStep({
         <Choice value="team">
           <Trans id="onboarding.type_team">Team</Trans>
         </Choice>
-        <Choice value="personal">
+        <Choice value="personal" testId="onboarding-type-personal">
           <Trans id="onboarding.type_personal">Just me</Trans>
         </Choice>
       </Choices>

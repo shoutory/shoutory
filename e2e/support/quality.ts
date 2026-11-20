@@ -11,6 +11,7 @@ import {
 } from "./journey";
 import {
   type Context,
+  expectNoPolicyViolation,
   founderContext,
   type Locale,
   type Screen,
@@ -66,20 +67,43 @@ export async function inPage<T>(
     locale: Locale;
     theme: Theme;
     viewport?: { width: number; height: number };
+    /** For a check that adds its own style to the page, which the page's content policy would refuse. */
+    bypassCSP?: boolean;
   },
   use: (page: Page) => Promise<T>,
 ): Promise<T> {
   const context = await browser.newContext({
     storageState: options.audience === "founder" ? FOUNDER_STATE : SIGNED_OUT,
     ...(options.viewport ? { viewport: options.viewport } : {}),
+    ...(options.bypassCSP ? { bypassCSP: true } : {}),
   });
   try {
     const page = await context.newPage();
     await setPreferences(page, options.locale, options.theme);
-    return await use(page);
+    const result = await use(page);
+    // A refusal that comes after the screen is ready (an overlay's style, a late script) is caught here.
+    if (!page.isClosed()) await expectNoPolicyViolation(page);
+    return result;
   } finally {
     await context.close();
   }
+}
+
+/**
+ * Makes the signed-in person's password check fresh, as the dialog does, so a change that asks for one goes through
+ * without it. The run is long enough for the check made at sign-in to have passed its ten minutes.
+ */
+export async function refreshStepUp(page: Page, password: string): Promise<void> {
+  const status = await page.evaluate(async (value) => {
+    const answer = await fetch("/api/auth/verify-password", {
+      method: "POST",
+      // The app's own client sends this header on every call, and the server refuses a call without it.
+      headers: { "content-type": "application/json", "X-Shoutory-Client": "web" },
+      body: JSON.stringify({ password: value }),
+    });
+    return answer.status;
+  }, password);
+  if (status !== 200) throw new Error(`the password check answered ${status}`);
 }
 
 /**

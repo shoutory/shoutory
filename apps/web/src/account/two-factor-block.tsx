@@ -117,7 +117,8 @@ export function TwoFactorBlock() {
         <Trans id="account.security.two_factor">Two-step verification</Trans>
       </StepHeading>
       {loaded.status === "loading" ? (
-        <p role="status">
+        // The room of the settled block (the status, the codes left and the button), so the devices below stay put.
+        <p role="status" className="min-h-28">
           <Trans id="system.loading">Loading</Trans>
         </p>
       ) : null}

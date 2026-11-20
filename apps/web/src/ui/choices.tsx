@@ -2,9 +2,13 @@ import type { ReactNode } from "react";
 import { Label, Radio, RadioGroup } from "react-aria-components";
 
 /** One option of a `Choices` group. */
-export function Choice({ value, children }: { value: string; children: ReactNode }) {
+export function Choice({ value, children, testId }: { value: string; children: ReactNode; testId?: string }) {
   return (
-    <Radio value={value} className="flex min-h-6 pointer-coarse:min-h-11 items-center gap-3">
+    <Radio
+      value={value}
+      className="flex min-h-6 pointer-coarse:min-h-11 items-center gap-3"
+      {...(testId ? { "data-testid": testId } : {})}
+    >
       {children}
     </Radio>
   );

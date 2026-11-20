@@ -76,7 +76,7 @@ function Details({ system }: { system: System }) {
         <dt className="font-medium">
           <Trans id="admin.releases.migrations">Database migrations</Trans>
         </dt>
-        <dd>
+        <dd data-testid="release-migrations">
           <MigrationStatus migrations={system.migrations} />
         </dd>
       </div>

@@ -24,11 +24,11 @@ function TopBar() {
   const data = useShellData();
   const { revalidate } = useRevalidator();
   return (
-    <header className="flex flex-wrap items-center gap-3 border-b border-border bg-surface px-5 py-3">
+    <header className="flex flex-wrap items-center gap-3 border-b border-border bg-surface px-5 py-3 lg:flex-nowrap">
       <span translate="no" className="font-heading text-lg">
         Shoutory
       </span>
-      <div className="flex min-w-0 flex-[1_1_16rem] flex-wrap items-center gap-3">
+      <div className="flex min-w-0 flex-[1_1_16rem] flex-wrap items-center gap-3 lg:flex-nowrap">
         {"error" in data ? (
           <ErrorPanel
             what={

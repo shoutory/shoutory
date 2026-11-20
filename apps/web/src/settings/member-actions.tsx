@@ -42,15 +42,18 @@ export function useHeadingFocus() {
 export function Listed<T>({
   state,
   reload,
+  reserve,
   children,
 }: {
   state: Loaded<T>;
   reload: () => void;
+  /** A min-height class that holds the room the list takes once it has loaded, so what is below does not move. */
+  reserve?: string;
   children: (data: T) => ReactNode;
 }) {
   if (state.status === "loading")
     return (
-      <p role="status">
+      <p role="status" className={reserve}>
         <Trans id="system.loading">Loading</Trans>
       </p>
     );
@@ -126,7 +129,7 @@ export function ConfirmChange({
           >
             {label}
           </Button>
-          <Button aria-disabled={action.pending} onPress={onClose}>
+          <Button aria-disabled={action.pending} onPress={onClose} data-testid="confirm-cancel">
             <Trans id="members.dismiss">Not now</Trans>
           </Button>
         </div>

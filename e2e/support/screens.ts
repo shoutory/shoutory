@@ -48,9 +48,19 @@ export const EXEMPT: Readonly<Record<string, string>> = {
 // the screen.
 const LINK_PART = "e2e-quality-link-0123456789-ABCDEFGHIJKLMNO";
 
+/**
+ * Fails when the page's content security policy refused anything since it opened (an inline style, a script, a font):
+ * a refusal the person never sees but that means the page is not as built. Events are recorded by `setPreferences`.
+ */
+export async function expectNoPolicyViolation(page: Page): Promise<void> {
+  const refused = await page.evaluate(() => (window as unknown as { __policy?: string[] }).__policy ?? []);
+  if (refused.length > 0) throw new Error(`the content security policy refused: ${refused.join(" | ")}`);
+}
+
 const ready = async (page: Page) => {
   await page.waitForLoadState("networkidle");
   await page.locator("h1").first().waitFor();
+  await expectNoPolicyViolation(page);
 };
 const visit = (path: (context: Context) => string) => async (page: Page, context: Context) => {
   await page.goto(path(context));
@@ -194,6 +204,16 @@ export async function setPreferences(page: Page, locale: Locale, theme: Theme): 
     },
     [locale, theme],
   );
+  await page.addInitScript(() => {
+    const refused: string[] = [];
+    (window as unknown as { __policy: string[] }).__policy = refused;
+    document.addEventListener("securitypolicyviolation", (event) => {
+      const where = `${event.sourceFile}:${event.lineNumber}`;
+      refused.push(
+        `${event.violatedDirective} ${event.blockedURI} at ${where} ${event.sample}`.slice(0, 200),
+      );
+    });
+  });
   await page.emulateMedia({ colorScheme: theme });
 }
 

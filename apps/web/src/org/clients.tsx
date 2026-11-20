@@ -95,13 +95,17 @@ function AddClient({ orgId, onDone }: { orgId: string; onDone: () => void }) {
   );
 }
 
+// A link in a table cell is not a link in a sentence, so it is a target of its own: at least 24 px each way (44 px on a
+// touch screen).
+const ROW_LINK = "inline-flex min-h-6 min-w-6 pointer-coarse:min-h-11 items-center text-link underline";
+
 function ClientRow({ client }: { client: Workspace }) {
   const { i18n } = useLingui();
   const role = ROLES[client.role as keyof typeof ROLES];
   return (
     <tr>
       <td className="py-2 pe-5 wrap-anywhere">
-        <Link to={`/w/${client.id}`} className="text-link underline">
+        <Link to={`/w/${client.id}`} className={ROW_LINK}>
           <DirText>{client.name}</DirText>
         </Link>
       </td>
@@ -110,7 +114,7 @@ function ClientRow({ client }: { client: Workspace }) {
       </td>
       <td className="py-2 pe-5">{i18n._(role ?? ROLES.member)}</td>
       <td className="py-2">
-        <Link to={`/w/${client.id}/settings/general`} className="text-link underline">
+        <Link to={`/w/${client.id}/settings/general`} className={ROW_LINK}>
           <Trans id="org.clients.settings">Settings</Trans>
           <span className="sr-only">
             {" "}
