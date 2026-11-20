@@ -208,7 +208,7 @@ function AcceptForm({ token, onEnded }: { token: string; onEnded: (outcome: Outc
       }}
       className="flex flex-col gap-5"
     >
-      <SubmitButton pending={accept.pending} online={accept.online}>
+      <SubmitButton testId="invite-accept" pending={accept.pending} online={accept.online}>
         <Trans id="auth.invite.accept">Accept invitation</Trans>
       </SubmitButton>
       {failure ? <ErrorPanel focusOnMount error={failure} {...authCopy("link", failure)} /> : null}

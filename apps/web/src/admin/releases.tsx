@@ -60,13 +60,17 @@ function Details({ system }: { system: System }) {
         <dt className="font-medium">
           <Trans id="admin.releases.version">Version</Trans>
         </dt>
-        <dd>{system.version ? <DirText dir="ltr">{system.version}</DirText> : <NotAvailable />}</dd>
+        <dd data-testid="release-version">
+          {system.version ? <DirText dir="ltr">{system.version}</DirText> : <NotAvailable />}
+        </dd>
       </div>
       <div>
         <dt className="font-medium">
           <Trans id="admin.releases.channel">Channel</Trans>
         </dt>
-        <dd>{channel ? i18n._(channel) : system.channel}</dd>
+        <dd data-testid="release-channel" data-channel={system.channel}>
+          {channel ? i18n._(channel) : system.channel}
+        </dd>
       </div>
       <div>
         <dt className="font-medium">

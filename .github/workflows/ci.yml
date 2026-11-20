@@ -261,7 +261,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions: { contents: read } # check out the repository
-    outputs: { placeholder: "${{ steps.verify.outputs.placeholder }}" }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
@@ -269,8 +268,10 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version-file: .nvmrc, package-manager-cache: false }
       - run: pnpm install --frozen-lockfile
-      - id: verify
-        run: pnpm verify --only e2e
+      # The browser build is the one the pinned Playwright package fixes; the stack builds its image from the digest-pinned
+      # base images of the Dockerfile.
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm verify --only e2e
 
   image-smoke:
     name: image-smoke (${{ matrix.runner }})

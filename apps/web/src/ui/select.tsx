@@ -26,8 +26,11 @@ export function Select({
   hideLabel = false,
   unavailable = false,
   reason,
+  testId,
 }: {
   label: string;
+  /** A stable handle for end-to-end tests: on the button, and `<testId>-<value>` on each option. */
+  testId?: string;
   value: string;
   onChange: (value: string) => void;
   options: readonly SelectOption[];
@@ -48,6 +51,7 @@ export function Select({
     >
       <Label className={hideLabel ? "sr-only" : "text-sm font-medium"}>{label}</Label>
       <Button
+        {...(testId ? { "data-testid": testId } : {})}
         {...(unavailable ? { "aria-disabled": true } : {})}
         className="flex min-h-10 pointer-coarse:min-h-11 items-center justify-between gap-3 rounded-md border border-border-control bg-surface px-3 text-md outline-offset-2 focus-visible:outline-2 focus-visible:outline-focus"
       >
@@ -66,6 +70,7 @@ export function Select({
               key={option.value}
               id={option.value}
               textValue={option.label}
+              {...(testId ? { "data-testid": `${testId}-${option.value}` } : {})}
               className="min-h-6 pointer-coarse:min-h-11 cursor-default rounded-sm px-3 py-2 outline-none data-[focused]:bg-highlight"
             >
               {option.label}

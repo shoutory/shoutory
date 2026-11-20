@@ -35,7 +35,7 @@ function HomeLink() {
 export function NotFoundPage() {
   return (
     <Page title={<Trans id="system.not_found.title">Page not found</Trans>}>
-      <p>
+      <p data-testid="not-found">
         <Trans id="system.not_found.body">We could not find the page you asked for.</Trans>
       </p>
       <HomeLink />

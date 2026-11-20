@@ -71,6 +71,7 @@ function AddClient({ orgId, onDone }: { orgId: string; onDone: () => void }) {
       <TextField
         label={t({ id: "org.clients.name", message: "Name of the client" })}
         name="name"
+        testId="clients-name"
         maxLength={MAX_NAME}
         value={name}
         onChange={(value) => {
@@ -86,7 +87,7 @@ function AddClient({ orgId, onDone }: { orgId: string; onDone: () => void }) {
         value={zone}
         onChange={setZone}
       />
-      <SubmitButton pending={add.pending} online={add.online}>
+      <SubmitButton testId="clients-create" pending={add.pending} online={add.online}>
         <Trans id="onboarding.create">Create</Trans>
       </SubmitButton>
       {add.failure ? <ErrorPanel focusOnMount error={add.failure} {...clientCopy(add.failure)} /> : null}
@@ -174,7 +175,12 @@ function Clients({ org, clients }: { org: Organization; clients: Workspace[] }) 
       <p role="status">{added > 0 ? <Trans id="org.clients.added">Client added.</Trans> : null}</p>
       {empty && canAdd ? null : (
         <div className="flex flex-col items-start gap-2">
-          <Button aria-disabled={!canAdd} onPress={show} {...(canAdd ? {} : { reason: why })}>
+          <Button
+            data-testid="clients-add"
+            aria-disabled={!canAdd}
+            onPress={show}
+            {...(canAdd ? {} : { reason: why })}
+          >
             <Trans id="org.clients.add">Add client</Trans>
           </Button>
         </div>

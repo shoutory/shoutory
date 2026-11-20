@@ -11,7 +11,8 @@ import { TextField } from "../ui/text-field";
 import { authCopy } from "./auth-copy";
 import { AuthFrame, SubmitButton, useAction } from "./auth-frame";
 
-const verified = z.object({ user: z.object({ id: z.string() }) });
+// The server's answer to a code carries the person's name, address and verified flag, and no id.
+const verified = z.object({ user: z.object({ email: z.string() }) });
 
 /** A-04 challenge (`/mfa`): the code of the authenticator app, or a recovery code; then back to `return-to`. */
 export function MfaPage() {
@@ -48,13 +49,14 @@ export function MfaPage() {
               : t({ id: "auth.mfa.code_label", message: "Authentication code" })
           }
           name="code"
+          testId="mfa-code"
           autoComplete="one-time-code"
           inputMode={recovery ? "text" : "numeric"}
           isRequired
           value={code}
           onChange={setCode}
         />
-        <SubmitButton pending={verify.pending} online={verify.online}>
+        <SubmitButton testId="mfa-submit" pending={verify.pending} online={verify.online}>
           <Trans id="auth.mfa.submit">Verify</Trans>
         </SubmitButton>
       </Form>

@@ -83,7 +83,7 @@ export function VerifyPage() {
   if (done) {
     return (
       <AuthFrame title={title} step="done">
-        <p role="status">
+        <p role="status" data-testid="verify-done">
           <Trans id="auth.verify.done">Your email is confirmed.</Trans>
         </p>
         <Link to="/sign-in" className="text-link underline">
@@ -100,7 +100,7 @@ export function VerifyPage() {
           void confirm.run();
         }}
       >
-        <SubmitButton pending={confirm.pending} online={confirm.online}>
+        <SubmitButton testId="verify-confirm" pending={confirm.pending} online={confirm.online}>
           <Trans id="auth.verify.submit">Confirm my email</Trans>
         </SubmitButton>
       </Form>

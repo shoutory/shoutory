@@ -1,9 +1,5 @@
 [
   {
-    "name": "e2e",
-    "reason": "no end-to-end tests exist yet"
-  },
-  {
     "name": "upgrade",
     "reason": "there is no earlier release to upgrade from"
   }

@@ -111,6 +111,7 @@ function WorkspaceStep({
       <TextField
         label={labels[s.target?.type ?? s.type]}
         name="workspace"
+        testId="onboarding-workspace"
         maxLength={MAX_NAME}
         value={s.workspaceName}
         onChange={onTyped}
@@ -189,7 +190,7 @@ export function Onboarding({
           v.clear("workspace");
         }}
       />
-      <SubmitButton pending={s.create.pending} online={s.create.online}>
+      <SubmitButton testId="onboarding-create" pending={s.create.pending} online={s.create.online}>
         <Trans id="onboarding.create">Create</Trans>
       </SubmitButton>
       {s.create.failure ? (
@@ -218,6 +219,7 @@ function OrganizationStep({
       <TextField
         label={t({ id: "onboarding.org_name", message: "Organization name" })}
         name="organization"
+        testId="onboarding-organization"
         maxLength={MAX_NAME}
         value={name}
         onChange={onName}

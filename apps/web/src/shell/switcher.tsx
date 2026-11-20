@@ -9,11 +9,13 @@ import type { Organization, Workspace } from "./shell-data";
 // A ComboBox with search (ux-spec X-01); the label is the caller's own words.
 function Switcher({
   label,
+  testId,
   choices,
   selectedId,
   onSelect,
 }: {
   label: ReactNode;
+  testId: string;
   choices: Choice[];
   selectedId: string | null;
   onSelect: (id: string) => void;
@@ -27,7 +29,10 @@ function Switcher({
     >
       <Label className="text-sm">{label}</Label>
       <div className="flex items-center gap-1">
-        <Input className="min-h-10 pointer-coarse:min-h-11 rounded-md border border-border-control bg-surface px-3 text-md" />
+        <Input
+          data-testid={testId}
+          className="min-h-10 pointer-coarse:min-h-11 rounded-md border border-border-control bg-surface px-3 text-md"
+        />
         <Button className="min-h-10 min-w-10 pointer-coarse:min-h-11 pointer-coarse:min-w-11 rounded-md border border-border-control">
           <span aria-hidden="true">▾</span>
         </Button>
@@ -65,6 +70,7 @@ export function Switchers({
       {organization && organization.type !== "personal" ? (
         <Switcher
           label={<Trans id="shell.switcher.organization">Organization</Trans>}
+          testId="switcher-organization"
           choices={organizations}
           selectedId={organizationId ?? null}
           onSelect={(id) => setChosen({ on: current?.id, id })}
@@ -73,6 +79,7 @@ export function Switchers({
       {visible.some((workspace) => workspace.id !== current?.id) ? (
         <Switcher
           label={<Trans id="shell.switcher.workspace">Workspace</Trans>}
+          testId="switcher-workspace"
           choices={visible}
           selectedId={
             visible.some((workspace) => workspace.id === current?.id) ? (current?.id ?? null) : null

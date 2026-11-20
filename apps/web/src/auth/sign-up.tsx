@@ -58,6 +58,7 @@ function SignUpForm({ onSent }: { onSent: () => void }) {
         <TextField
           label={t({ id: "auth.sign_up.name", message: "Name" })}
           name="name"
+          testId="sign-up-name"
           autoComplete="name"
           isRequired
           value={name}
@@ -66,6 +67,7 @@ function SignUpForm({ onSent }: { onSent: () => void }) {
         <TextField
           label={t({ id: "auth.sign_in.email", message: "Email" })}
           name="email"
+          testId="sign-up-email"
           type="email"
           autoComplete="email"
           isRequired
@@ -74,9 +76,10 @@ function SignUpForm({ onSent }: { onSent: () => void }) {
         />
         <NewPasswordField
           label={t({ id: "auth.sign_in.password", message: "Password" })}
+          testId="sign-up-password"
           {...password.props}
         />
-        <SubmitButton pending={signUp.pending} online={signUp.online}>
+        <SubmitButton testId="sign-up-submit" pending={signUp.pending} online={signUp.online}>
           <Trans id="auth.sign_up.submit">Create account</Trans>
         </SubmitButton>
       </Form>
@@ -103,7 +106,7 @@ export function SignUpPage() {
     >
       {sent ? (
         <>
-          <p role="status">
+          <p role="status" data-testid="sign-up-sent">
             <Trans id="auth.sign_up.sent">
               Check your email. If this address can sign up, we sent a link to confirm it.
             </Trans>

@@ -88,11 +88,13 @@ export function SubmitButton({
   online,
   children,
   ref,
+  testId,
 }: {
   pending: boolean;
   online: boolean;
   children: ReactNode;
   ref?: Ref<HTMLButtonElement>;
+  testId?: string;
 }) {
   const { t } = useLingui();
   const reason = t({ id: "auth.offline", message: "You are offline. This needs the server." });
@@ -103,6 +105,7 @@ export function SubmitButton({
       aria-disabled={pending || !online}
       {...(online ? {} : { reason })}
       {...(ref ? { ref } : {})}
+      {...(testId ? { "data-testid": testId } : {})}
     >
       {children}
     </Button>

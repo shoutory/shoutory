@@ -17,12 +17,13 @@
     "test:contract": "vitest run --passWithNoTests --project contract && node --test \"packages/testkit/test/contract/*.test.mjs\"",
     "test:focus": "vitest run --passWithNoTests",
     "image-smoke": "node scripts/image-smoke.mjs",
-    "e2e": "playwright test --config e2e/playwright.config.ts --pass-with-no-tests",
+    "e2e": "playwright test --config e2e/playwright.config.ts",
     "build": "tsc -b && pnpm --filter @shoutory/web run build",
     "knip": "knip",
     "verify": "node scripts/verify.mjs"
   },
   "devDependencies": {
+    "@better-auth/utils": "0.5.1",
     "@biomejs/biome": "2.6.4",
     "@commitlint/cli": "21.2.4",
     "@commitlint/config-conventional": "21.2.4",

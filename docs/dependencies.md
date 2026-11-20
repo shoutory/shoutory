@@ -382,3 +382,26 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
 - Advisories: `pnpm audit --audit-level=high` reported none after adding them. Re-read at each upgrade.
 - Rejected: IANA last segments in English only (an Arabic page would show English cities), a hand-written list of about 80
   cities (drifts from CLDR and the server's zone list).
+
+## @playwright/test 1.64.1
+
+- Used for: the end-to-end specs in `e2e/` (a root development dependency; nothing of it ships). It drives one Chromium
+  against the production image started from the self-host compose file.
+- Licence: Apache-2.0. Published 2026-10-14, more than 14 days before adoption. The package has no install script; the
+  browser is fetched only by `playwright install chromium`, at a revision the pinned package fixes, from the Playwright
+  download hosts. It runs in CI and on a developer machine, never in the image; the stack it tests is built by compose
+  from the digest-pinned base images of the Dockerfile.
+- Advisories: none recorded at adoption (to be re-read at each upgrade).
+- Rejected: the Playwright container image (the browser would need the app's network namespace to keep `localhost` for the
+  `__Host-` cookies), and a hand-written browser driver.
+
+## @better-auth/utils 0.5.1
+
+- Used for: the end-to-end second-factor helper (`e2e/support/totp.ts`): `createOTP` from `@better-auth/utils/otp` and
+  `base32` from `@better-auth/utils/base32` turn the secret the setup screen shows as text into the current code (a root
+  development dependency; nothing of it ships). It is the library the server's own `better-auth` pin builds its codes
+  with, and it is already installed at this version as a dependency of that pin.
+- Licence: MIT. Published 2026-10-24, more than 14 days before adoption.
+- Advisories: none recorded at adoption (to be re-read at each upgrade).
+- Rejected: hand-written TOTP (no hand-written crypto), `otpauth` and `otplib` (a second implementation beside the one
+  the server uses, with more dependencies).

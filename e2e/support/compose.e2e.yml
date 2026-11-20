@@ -1,0 +1,33 @@
+# The self-host compose file plus what a test run adds: a mail catcher, the beta channel and no published database port.
+# Used only with `-f docker/compose.yml -f e2e/support/compose.e2e.yml`; the self-host file itself stays as it is.
+services:
+  postgres:
+    # A developer's own database may already hold 5432; the tests reach this one through `compose exec`.
+    ports: !reset []
+
+  migrate:
+    build:
+      args:
+        SHOUTORY_RELEASE_CHANNEL: beta
+
+  shoutory:
+    build:
+      args:
+        SHOUTORY_RELEASE_CHANNEL: beta
+    depends_on:
+      mail:
+        condition: service_healthy
+
+  mail:
+    # Mailpit v1.33.0 (MIT), index digest read 2026-11-20, pushed 2026-10-31. SMTP on 1025, API on 8025.
+    image: axllent/mailpit:v1.33.0@sha256:9b3a463be15354c0f0eba91697d80e3e0d8a5623ef0e627cacc836bc17fd5231
+    environment:
+      MP_DISABLE_VERSION_CHECK: "true"
+    # An ephemeral host port, so two runs never collide; the stack reads it with `compose port`.
+    ports:
+      - "127.0.0.1::8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 12

@@ -12,7 +12,8 @@ import { authCopy } from "./auth-copy";
 import { SubmitButton, useAction } from "./auth-frame";
 
 const checked = z.object({ status: z.boolean() });
-const confirmed = z.object({ user: z.object({ id: z.string() }) });
+// The server's answer to a code carries the person's name, address and verified flag, and no id.
+const confirmed = z.object({ user: z.object({ email: z.string() }) });
 
 interface Qr {
   uri: string;
@@ -89,13 +90,14 @@ function PasswordStep({ onStarted }: { onStarted: (qr: Qr, codes: string[]) => v
       <TextField
         label={t({ id: "auth.sign_in.password", message: "Password" })}
         name="password"
+        testId="setup-password"
         type="password"
         autoComplete="current-password"
         isRequired
         value={password}
         onChange={setPassword}
       />
-      <SubmitButton pending={start.pending} online={start.online}>
+      <SubmitButton testId="setup-start" pending={start.pending} online={start.online}>
         <Trans id="auth.setup.continue">Continue</Trans>
       </SubmitButton>
       {start.failure ? (
@@ -139,7 +141,7 @@ function QrStep({ qr, onConfirmed }: { qr: Qr; onConfirmed: () => void }) {
       <p>
         <Trans id="auth.setup.secret_label">Secret for typing in by hand</Trans>
         <br />
-        <code className="break-all" dir="ltr">
+        <code className="break-all" dir="ltr" data-testid="setup-secret">
           {qr.secret}
         </code>
       </p>
@@ -149,13 +151,14 @@ function QrStep({ qr, onConfirmed }: { qr: Qr; onConfirmed: () => void }) {
       <TextField
         label={t({ id: "auth.mfa.code_label", message: "Authentication code" })}
         name="code"
+        testId="setup-code"
         autoComplete="one-time-code"
         inputMode="numeric"
         isRequired
         value={code}
         onChange={setCode}
       />
-      <SubmitButton pending={confirm.pending} online={confirm.online}>
+      <SubmitButton testId="setup-confirm" pending={confirm.pending} online={confirm.online}>
         <Trans id="auth.setup.turn_on">Turn on</Trans>
       </SubmitButton>
       {confirm.failure ? (
@@ -177,7 +180,7 @@ export function TwoFactorSetupPage() {
   let step: ReactNode;
   if (done) {
     step = (
-      <section className="flex flex-col gap-5">
+      <section className="flex flex-col gap-5" data-testid="setup-done">
         <StepHeading focus>
           <Trans id="auth.setup.done">Two-step verification is on</Trans>
         </StepHeading>

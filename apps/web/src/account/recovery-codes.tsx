@@ -119,7 +119,7 @@ export function CodesStep({ codes, onSaved }: { codes: string[]; onSaved: () => 
         <Button onPress={download}>
           <Trans id="auth.setup.download">Download</Trans>
         </Button>
-        <Button onPress={onSaved}>
+        <Button onPress={onSaved} data-testid="recovery-saved">
           <Trans id="auth.setup.saved">I saved my codes</Trans>
         </Button>
       </div>

@@ -212,7 +212,7 @@ export function WorkspaceHome() {
   if (!current) return <NotFoundPage />;
   return (
     <>
-      <h1 className="font-heading text-2xl">
+      <h1 className="font-heading text-2xl" data-testid="workspace-name">
         <DirText>{current.name}</DirText>
       </h1>
       <EmptyState kind="first-use" title={<Trans id="shell.workspace.empty_title">Nothing here yet</Trans>}>

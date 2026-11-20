@@ -18,6 +18,12 @@ test("compose runs PostgreSQL by digest, the one-shot migrate and the app only: 
   assert.doesNotMatch(compose, /redis|minio/i);
 });
 
+test("every healthcheck command is a list of strings, so compose accepts the file", () => {
+  for (const [name, service] of Object.entries(services)) {
+    for (const part of service.healthcheck?.test ?? []) assert.equal(typeof part, "string", name);
+  }
+});
+
 test("the database healthcheck connects over TCP, because the init-time server listens on its socket only", () => {
   assert.match(services.postgres.healthcheck.test.join(" "), /pg_isready .*-h 127\.0\.0\.1/);
 });

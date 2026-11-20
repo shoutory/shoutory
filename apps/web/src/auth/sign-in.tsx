@@ -56,9 +56,43 @@ async function credentialsStep(email: string, password: string, returnTo: string
   return returnTo === null ? "/mfa" : `/mfa?return-to=${encodeURIComponent(returnTo)}`;
 }
 
+interface Credentials {
+  email: string;
+  onEmail: (value: string) => void;
+  password: string;
+  onPassword: (value: string) => void;
+}
+
+function CredentialFields({ email, onEmail, password, onPassword }: Credentials) {
+  const { t } = useLingui();
+  return (
+    <>
+      <TextField
+        label={t({ id: "auth.sign_in.email", message: "Email" })}
+        name="email"
+        testId="sign-in-email"
+        type="email"
+        autoComplete="username"
+        isRequired
+        value={email}
+        onChange={onEmail}
+      />
+      <TextField
+        label={t({ id: "auth.sign_in.password", message: "Password" })}
+        name="password"
+        testId="sign-in-password"
+        type="password"
+        autoComplete="current-password"
+        isRequired
+        value={password}
+        onChange={onPassword}
+      />
+    </>
+  );
+}
+
 /** A-01 sign in (`/sign-in`): email and password; a challenge goes on to `/mfa`, carrying `return-to` along. */
 export function SignInPage() {
-  const { t } = useLingui();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const returnTo = params.get("return-to");
@@ -82,25 +116,8 @@ export function SignInPage() {
         }}
         className="flex flex-col gap-5"
       >
-        <TextField
-          label={t({ id: "auth.sign_in.email", message: "Email" })}
-          name="email"
-          type="email"
-          autoComplete="username"
-          isRequired
-          value={email}
-          onChange={setEmail}
-        />
-        <TextField
-          label={t({ id: "auth.sign_in.password", message: "Password" })}
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          isRequired
-          value={password}
-          onChange={setPassword}
-        />
-        <SubmitButton ref={submit} pending={signIn.pending} online={signIn.online}>
+        <CredentialFields email={email} onEmail={setEmail} password={password} onPassword={setPassword} />
+        <SubmitButton testId="sign-in-submit" ref={submit} pending={signIn.pending} online={signIn.online}>
           <Trans id="auth.sign_in.submit">Sign in</Trans>
         </SubmitButton>
       </Form>

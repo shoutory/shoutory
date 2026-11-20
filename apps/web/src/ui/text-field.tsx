@@ -8,16 +8,19 @@ import {
 
 type Props = Omit<TextFieldProps, "isDisabled" | "isInvalid" | "children"> & {
   label: string;
+  /** A stable handle on the input for end-to-end tests, which never select by visible copy. */
+  testId?: string;
   /** The server's refusal of this field, in words; it is tied to the input and marks it invalid. */
   errorMessage?: string;
 };
 
 /** A labelled text input whose error is text beside the field, never colour alone (WCAG 3.3.1). */
-export function TextField({ label, errorMessage, ...rest }: Props) {
+export function TextField({ label, testId, errorMessage, ...rest }: Props) {
   return (
     <AriaTextField {...rest} isInvalid={errorMessage !== undefined} className="flex flex-col gap-2">
       <Label className="text-sm font-medium">{label}</Label>
       <Input
+        {...(testId ? { "data-testid": testId } : {})}
         // An address is Latin and reads left to right even in an Arabic page.
         {...(rest.type === "email" ? { dir: "ltr" } : {})}
         className="min-h-10 pointer-coarse:min-h-11 rounded-md border border-border-control bg-surface px-3 text-md outline-offset-2 focus-visible:outline-2 focus-visible:outline-focus"

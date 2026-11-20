@@ -156,8 +156,8 @@ export const STEPS = [
   },
   // The entry files that make a placeholder step live; other files that arrive earlier must not break it.
   { name: "build", globs: ["apps/api/src/main.ts"], command: pnpm("run", "build") },
-  { name: "e2e", globs: ["e2e/**/*.spec.ts"], command: pnpm("run", "e2e") },
-  { name: "image-smoke", globs: ["docker/Dockerfile*"], command: pnpm("run", "image-smoke") },
+  { name: "e2e", docker: true, globs: ["e2e/**/*.spec.ts"], command: pnpm("run", "e2e") },
+  { name: "image-smoke", docker: true, globs: ["docker/Dockerfile*"], command: pnpm("run", "image-smoke") },
   { name: "upgrade", globs: ["e2e/upgrade/**"], command: pnpm("run", "upgrade") },
   {
     name: "semgrep",

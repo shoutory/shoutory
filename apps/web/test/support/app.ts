@@ -325,6 +325,8 @@ function securityAnswers(api: Api): Record<string, Answer> {
 }
 
 export const USER = { id: "u1", name: "Person Sample", email: "person@example.test", emailVerified: true };
+// What the server answers to a second-factor code: its allowlist has no id (apps/api auth paths).
+const CHALLENGE_USER = { name: USER.name, email: USER.email, emailVerified: true };
 
 // The answers of the sign-up, link, setup, invitation and profile calls (the rest are in `stubApi`).
 function moreAnswers(api: Api): Record<string, Answer> {
@@ -354,8 +356,8 @@ export function stubApi(api: Api = {}) {
     "/api/auth/sign-out": api.signOut ?? (() => json({ success: true })),
     // The library-forwarded answers are bare: no `{data}` envelope.
     "/api/auth/sign-in/email": api.signIn ?? (() => json({ user: USER })),
-    "/api/auth/two-factor/verify-totp": api.verifyTotp ?? (() => json({ user: USER })),
-    "/api/auth/two-factor/verify-backup-code": api.verifyBackupCode ?? (() => json({ user: USER })),
+    "/api/auth/two-factor/verify-totp": api.verifyTotp ?? (() => json({ user: CHALLENGE_USER })),
+    "/api/auth/two-factor/verify-backup-code": api.verifyBackupCode ?? (() => json({ user: CHALLENGE_USER })),
     "/api/auth/verify-password": api.verifyPassword ?? (() => json({ status: true })),
     "/api/auth/send-verification-email": api.resend ?? (() => json({ status: true })),
     ...moreAnswers(api),

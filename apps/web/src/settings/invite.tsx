@@ -52,6 +52,24 @@ function inviteCopy(error: ApiError) {
   return changeCopy(error);
 }
 
+function EmailField(props: { value: string; invalid: boolean; onChange: (value: string) => void }) {
+  const { t } = useLingui();
+  return (
+    <TextField
+      label={t({ id: "invite.email", message: "Email" })}
+      name="email"
+      testId="invite-email"
+      type="email"
+      maxLength={MAX_EMAIL}
+      value={props.value}
+      onChange={props.onChange}
+      {...(props.invalid
+        ? { errorMessage: t({ id: "invite.email_bad", message: "Enter a valid email address." }) }
+        : {})}
+    />
+  );
+}
+
 function InviteForm({ workspace, onSent }: { workspace: Workspace; onSent: () => void }) {
   const { t, i18n } = useLingui();
   const form = useRef<HTMLFormElement>(null);
@@ -82,22 +100,17 @@ function InviteForm({ workspace, onSent }: { workspace: Workspace; onSent: () =>
       }}
       className="flex flex-col gap-5"
     >
-      <TextField
-        label={t({ id: "invite.email", message: "Email" })}
-        name="email"
-        type="email"
-        maxLength={MAX_EMAIL}
+      <EmailField
         value={email}
+        invalid={invalid}
         onChange={(value) => {
           setEmail(value);
           setInvalid(false);
         }}
-        {...(invalid
-          ? { errorMessage: t({ id: "invite.email_bad", message: "Enter a valid email address." }) }
-          : {})}
       />
       <Select
         label={t({ id: "invite.role", message: "Role" })}
+        testId="invite-role"
         value={role}
         onChange={setRole}
         options={roles}
@@ -111,7 +124,7 @@ function InviteForm({ workspace, onSent }: { workspace: Workspace; onSent: () =>
       {invite.failure ? (
         <ErrorPanel focusOnMount error={invite.failure} {...inviteCopy(invite.failure)} />
       ) : null}
-      <SubmitButton pending={invite.pending} online={invite.online}>
+      <SubmitButton testId="invite-submit" pending={invite.pending} online={invite.online}>
         <Trans id="invite.send">Send invitation</Trans>
       </SubmitButton>
     </Form>
@@ -123,7 +136,7 @@ export function InviteButton({ workspace, onSent }: { workspace: Workspace; onSe
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button onPress={() => setOpen(true)}>
+      <Button onPress={() => setOpen(true)} data-testid="invite-open">
         <Trans id="invite.open">Invite</Trans>
       </Button>
       <Dialog title={<Trans id="invite.title">Invite someone</Trans>} isOpen={open} onOpenChange={setOpen}>
