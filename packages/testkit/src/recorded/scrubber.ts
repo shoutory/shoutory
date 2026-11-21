@@ -44,9 +44,13 @@ function credential(value: string): string[] {
   return colon < 0 ? [rest] : [rest, decodedPair.slice(colon + 1)];
 }
 
+// Headers whose value is a URL: a redirect carries the code and state of an authorization answer there.
+const URL_HEADERS = ["location", "content-location", "referer"];
+
 function headerSecrets(headers: Readonly<Record<string, string>>): string[] {
   return Object.entries(headers).flatMap(([name, value]) => {
     const key = lower(name);
+    if (URL_HEADERS.includes(key)) return urlSecrets(value);
     if (!isSecretName(SECRET_HEADERS, key)) return [];
     if (key === "authorization" || key === "proxy-authorization") return credential(value);
     if (key === "cookie" || key === "set-cookie") {

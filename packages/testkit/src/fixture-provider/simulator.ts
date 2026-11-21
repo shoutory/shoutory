@@ -54,7 +54,7 @@ function toFault(fault: MatrixFault): Fault {
   };
 }
 
-function fixtureRoutes(posts: Map<string, StoredPost>) {
+export function fixtureRoutes(posts: Map<string, StoredPost>): Readonly<Record<string, Handler>> {
   const keys = new Map<string, string>();
   let counter = 0;
 

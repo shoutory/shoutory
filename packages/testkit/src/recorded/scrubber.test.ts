@@ -117,6 +117,29 @@ const KINDS: [string, (secret: string) => Placed][] = [
   ],
   ["dpop proof header", (s) => ({ url: `${HOST}/posts`, headers: { dpop: s } })],
   [
+    "oauth code in a redirect location",
+    (s) => ({
+      url: `${HOST}/authorize?client_id=app-1`,
+      headers: {},
+      response: { headers: { location: `https://app.example/cb?code=${encodeURIComponent(s)}&x=1` } },
+    }),
+  ],
+  [
+    "access token in a redirect location fragment",
+    (s) => ({
+      url: `${HOST}/authorize?client_id=app-1`,
+      headers: {},
+      response: { headers: { location: `https://app.example/cb#access_token=${encodeURIComponent(s)}` } },
+    }),
+  ],
+  [
+    "oauth state in a referer",
+    (s) => ({
+      url: `${HOST}/posts`,
+      headers: { referer: `https://app.example/cb?state=${encodeURIComponent(s)}` },
+    }),
+  ],
+  [
     "access token in a url fragment",
     (s) => ({ url: `${HOST}/cb#access_token=${encodeURIComponent(s)}&token_type=bearer`, headers: {} }),
   ],
