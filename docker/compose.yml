@@ -67,6 +67,8 @@ services:
       SHOUTORY_SMTP_URL: ${SHOUTORY_SMTP_URL:?set SHOUTORY_SMTP_URL}
       # Set to the reverse proxy's address as this container sees it, or no X-Forwarded-For is believed.
       SHOUTORY_TRUSTED_PROXIES: ${SHOUTORY_TRUSTED_PROXIES:-}
+      # Private ranges that user-supplied URLs may reach (self-host only); empty allows none.
+      SHOUTORY_EGRESS_ALLOW_CIDRS: ${SHOUTORY_EGRESS_ALLOW_CIDRS:-}
       # A name with no value is passed only when it is set where compose runs, because the app refuses an empty one.
       SHOUTORY_MAIL_MARKETING_FROM:
       SHOUTORY_MAIL_DKIM_SELECTOR:

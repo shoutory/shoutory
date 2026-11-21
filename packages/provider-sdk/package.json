@@ -36,6 +36,7 @@
   },
   "dependencies": {
     "@shoutory/core": "workspace:*",
+    "undici": "8.12.3",
     "zod": "4.6.7"
   }
 }

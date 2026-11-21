@@ -379,6 +379,9 @@ importers:
       '@shoutory/core':
         specifier: workspace:*
         version: link:../core
+      undici:
+        specifier: 8.12.3
+        version: 8.12.3
       zod:
         specifier: 4.6.7
         version: 4.6.7
@@ -3747,6 +3750,10 @@ packages:
   undici-types@8.9.0:
     resolution: {integrity: sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg==}
 
+  undici@8.12.3:
+    resolution: {integrity: sha512-+fdndUTwBP86cVjihTp21hZHo7d6oj1c/47XPA3lL8mM0XHs+C4EkcjmgRsFnFk2f/UONGDy9ItBItmXsLOQHw==}
+    engines: {node: '>=22.19.0'}
+
   unicorn-magic@0.3.0:
     resolution: {integrity: sha512-+QBBXBCvifc56fsbuxZQ6Sic3wqqc3WWaqxs58gvJrcOuN83HGTCwz3oS5phzU9LthRNE9VrJCFCLUgHeeFnfA==}
     engines: {node: '>=18'}
@@ -7041,6 +7048,8 @@ snapshots:
   underscore@1.13.8: {}
 
   undici-types@8.9.0: {}
+
+  undici@8.12.3: {}
 
   unicorn-magic@0.3.0: {}
 

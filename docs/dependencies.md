@@ -101,6 +101,15 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
 - Used for: spans for outgoing `fetch` and undici requests.
 - Rejected: `auto-instrumentations-node`, as above.
 
+## undici 8.12.3
+
+- Used for: the egress client in `packages/provider-sdk` (an `Agent` with a custom connect-time `lookup` that pins the connection
+  to a checked address, per-host keep-alive, `request` with manual redirects). Node bundles undici but exports no `Agent`, so the
+  npm package is needed.
+- Licence: MIT. Published 2026-10-19, more than 14 days before adoption. It has no runtime dependencies.
+- Advisories: none reported by `pnpm audit --audit-level=high` at adoption.
+- Rejected: `node:http(s).Agent` with a custom lookup (the fallback; undici gives per-origin pools and timeouts with less code).
+
 ## hono 4.13.16
 
 - Used for: the HTTP framework of `apps/api` (routing, `bodyLimit`, `secureHeaders`, `getConnInfo` through the node adapter).

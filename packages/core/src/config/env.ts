@@ -3,6 +3,7 @@ import { posix, win32 } from "node:path";
 import { z } from "zod";
 import { SealedSecret } from "../crypto/envelope.js";
 import { EnvKeyProvider, KeyError, type KeyProvider } from "../crypto/keys.js";
+import { isMetadataOrLinkLocal } from "../net/address.js";
 
 export type Env = Readonly<Record<string, string | undefined>>;
 
@@ -134,6 +135,11 @@ const httpSchema = z
         z.number().min(1, "must be a port from 1 to 65535").max(MAX_PORT, "must be a port from 1 to 65535"),
       ),
     SHOUTORY_TRUSTED_PROXIES: cidrList,
+    // The one operator allowlist of the egress guard. Metadata and link-local ranges are never allowable.
+    SHOUTORY_EGRESS_ALLOW_CIDRS: cidrList.refine(
+      (list) => list.every((entry) => !isMetadataOrLinkLocal(entry.split("/")[0] ?? "")),
+      "must not list a metadata or link-local range",
+    ),
     // The built web app; unset means this process serves no web (a worker never does).
     SHOUTORY_WEB_ROOT: z
       .string()
@@ -173,49 +179,8 @@ const fsSchema = z.object({
   SHOUTORY_DATA_DIR: z.string().refine(isAbsolutePath, "must be an absolute path").default("/data"),
 });
 
-/** The eight 16-bit groups of an IPv6 address the URL parser has normalized (it writes hex groups only). */
-function hextets(address: string): number[] {
-  const [head = "", tail] = address.split("::");
-  const left = head ? head.split(":") : [];
-  const right = tail ? tail.split(":") : [];
-  const zeros = tail === undefined ? [] : Array<string>(8 - left.length - right.length).fill("0");
-  return [...left, ...zeros, ...right].map((group) => Number.parseInt(group, 16));
-}
-
-const isLinkLocalV4 = (first: number, second: number) => first === 169 && second === 254;
-
-// The first six groups of the IPv6 ranges that carry an IPv4 address in their last 32 bits: IPv4-mapped, SIIT (RFC 2765),
-// IPv4-compatible and NAT64 (RFC 6052, 64:ff9b::/96). Behind any of them a link-local IPv4 address is still link-local.
-const V4_EMBEDDING_PREFIXES: readonly (readonly number[])[] = [
-  [0, 0, 0, 0, 0, 0xffff],
-  [0, 0, 0, 0, 0xffff, 0],
-  [0, 0, 0, 0, 0, 0],
-  [0x64, 0xff9b, 0, 0, 0, 0],
-];
-
-/** A literal host in a cloud metadata or link-local range, in any spelling the URL parser normalizes (R332). */
-function isMetadataOrLinkLocal(hostname: string): boolean {
-  const bare = hostname.replace(/^\[|\]$/g, "");
-  const family = isIP(bare);
-  if (family === 4) {
-    const [first = 0, second = 0] = bare.split(".").map(Number);
-    return isLinkLocalV4(first, second);
-  }
-  if (family !== 6) return false;
-  const groups = hextets(bare);
-  const last = groups[6] ?? 0;
-  const embedsV4 = V4_EMBEDDING_PREFIXES.some((prefix) => prefix.every((group, i) => groups[i] === group));
-  if (embedsV4 && isLinkLocalV4(last >> 8, last & 0xff)) return true;
-  const awsMetadata =
-    groups[0] === 0xfd00 &&
-    groups[1] === 0x0ec2 &&
-    groups.slice(2, 7).every((group) => group === 0) &&
-    groups[7] === 0x254;
-  return ((groups[0] ?? 0) & 0xffc0) === 0xfe80 || awsMetadata;
-}
-
-// http or https only, no userinfo (a secret never rides in a URL), and no literal metadata or link-local host. The egress
-// policy of M1 replaces this check (R332).
+// http or https only, no userinfo (a secret never rides in a URL), and no literal metadata or link-local host (the shared
+// classifier of the egress guard, R332).
 const isS3Endpoint = (value: string) => {
   if (!URL.canParse(value)) return false;
   const url = new URL(value);
@@ -285,6 +250,8 @@ export interface Config {
   /** The address to listen on; unset means the Node default (all interfaces). */
   host: string | undefined;
   trustedProxies: readonly string[];
+  /** The operator egress allowlist (CIDR texts); empty by default, and the cloud composition root passes none. */
+  egressAllowCidrs: readonly string[];
   /** The folder of the built web app; unset means no web is served. */
   webRoot: string | undefined;
   keys: KeyProvider;
@@ -366,6 +333,7 @@ export function parseEnv(env: Env): Config {
     port: http.data.SHOUTORY_PORT,
     host: http.data.SHOUTORY_HOST,
     trustedProxies: http.data.SHOUTORY_TRUSTED_PROXIES,
+    egressAllowCidrs: http.data.SHOUTORY_EGRESS_ALLOW_CIDRS,
     webRoot: http.data.SHOUTORY_WEB_ROOT,
     keys: parseKeyRing(env),
     hmacPepper: secret("SHOUTORY_HMAC_PEPPER"),

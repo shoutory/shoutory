@@ -37,6 +37,10 @@
       "source": "./src/errors/codes.ts",
       "default": "./dist/errors/codes.js"
     },
+    "./net": {
+      "source": "./src/net/address.ts",
+      "default": "./dist/net/address.js"
+    },
     "./password-limits": {
       "source": "./src/password/limits.ts",
       "default": "./dist/password/limits.js"

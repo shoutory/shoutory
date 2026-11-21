@@ -430,6 +430,25 @@ describe("database URLs per process role (R488)", () => {
   });
 });
 
+describe("SHOUTORY_EGRESS_ALLOW_CIDRS (the operator egress allowlist)", () => {
+  const name = "SHOUTORY_EGRESS_ALLOW_CIDRS";
+
+  it("is empty by default and parses a comma list of CIDRs", () => {
+    expect(parseEnv(valid).egressAllowCidrs).toEqual([]);
+    expect(parseEnv(withValue(name, "10.0.0.0/8, fd12::/16")).egressAllowCidrs).toHaveLength(2);
+  });
+
+  it.each(["10.0.0.0/8,not-a-cidr-canary", "169.254.0.0/16", "fe80::/10", "10.0.0.0/99", "168.63.129.16/32"])(
+    "refuses %j at start-up, names the variable and never echoes the value",
+    (value) => {
+      const refused = refusal(withValue(name, value));
+      expect(refused?.variable).toBe(name);
+      expect(refused?.shown).not.toContain("not-a-cidr-canary");
+      expect(refused?.shown).not.toContain(value);
+    },
+  );
+});
+
 describe("parseKeyRing", () => {
   const example = "c2hvdXRvcnktZXhhbXBsZS1rZWstMDEyMzQ1Njc4OSE=";
 
