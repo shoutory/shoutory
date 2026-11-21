@@ -11,6 +11,10 @@ coverage/
 test-results/
 playwright-report/
 
+# mutation testing leaves its setup files in the root and its backups in a temp folder
+stryker-setup-*.js
+.stryker-tmp/
+
 # environment files
 .env
 .env.*

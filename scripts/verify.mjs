@@ -154,6 +154,16 @@ export const STEPS = [
     globs: ["scripts/check-no-planning-paths.mjs"],
     command: node("scripts/check-no-planning-paths.mjs"),
   },
+  {
+    // The typecheck step (or `tsc -b`) builds the registry the generator reads.
+    name: "capability-matrix",
+    globs: [
+      "packages/provider-sdk/src/registry.ts",
+      "packages/provider-sdk/src/manifest/manifest.ts",
+      "docs/providers/capability-matrix.md",
+    ],
+    command: node("scripts/gen-capability-matrix.mjs", "--check"),
+  },
   // The entry files that make a placeholder step live; other files that arrive earlier must not break it.
   { name: "build", globs: ["apps/api/src/main.ts"], command: pnpm("run", "build") },
   { name: "e2e", docker: true, globs: ["e2e/**/*.spec.ts"], command: pnpm("run", "e2e") },

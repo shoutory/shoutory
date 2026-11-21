@@ -20,6 +20,14 @@ audit:
   ignore:
     - GHSA-fc5q-39xc-vjpf
 
+# 2026-11-21: the Stryker mutation runner (a development tool; no commit runs it) pulls vulnerable versions of two
+# packages. `typed-rest-client` pins qs 6.15.1 exactly: GHSA-4mjr-xmp4-gh2g, GHSA-6pq8-jhm2-2vcw, GHSA-q8mj-m7cp-5q26,
+# GHSA-x5fp-wj9c-mxmx (fixed by 6.16.1). Stryker core takes minimatch 10.2.6: GHSA-g3hv-75wg-m249 (fixed in 11.0.1).
+# Remove each override when Stryker ships the fixed version.
+overrides:
+  "typed-rest-client>qs": 6.16.2
+  "@stryker-mutator/core>minimatch": 11.0.4
+
 # Packages allowed to run install scripts.
 allowBuilds:
   esbuild: false

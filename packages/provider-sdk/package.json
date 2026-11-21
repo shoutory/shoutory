@@ -1,0 +1,33 @@
+{
+  "name": "@shoutory/provider-sdk",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "exports": {
+    "./manifest": {
+      "source": "./src/manifest/manifest.ts",
+      "default": "./dist/manifest/manifest.js"
+    },
+    "./result": {
+      "source": "./src/result.ts",
+      "default": "./dist/result.js"
+    },
+    "./registry": {
+      "source": "./src/registry.ts",
+      "default": "./dist/registry.js"
+    },
+    "./sunset": {
+      "source": "./src/sunset.ts",
+      "default": "./dist/sunset.js"
+    },
+    "./conformance": {
+      "source": "./src/conformance/kit.ts",
+      "default": "./dist/conformance/kit.js"
+    }
+  },
+  "dependencies": {
+    "@shoutory/core": "workspace:*",
+    "zod": "4.6.7"
+  }
+}

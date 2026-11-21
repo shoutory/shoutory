@@ -1,0 +1,45 @@
+name: scheduled
+
+# Weekly jobs that never gate a change: mutation testing of the authorization and counting modules, and a probe of the
+# pinned provider API versions. Both only read the repository; neither holds a token beyond reading nor a secret.
+on:
+  schedule:
+    - cron: "19 5 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: scheduled-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  mutation:
+    name: mutation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions: { contents: read } # check out the repository
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version-file: .nvmrc, package-manager-cache: false }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec stryker run
+
+  version-probe:
+    name: version probe
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions: { contents: read } # check out the repository
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version-file: .nvmrc, package-manager-cache: false }
+      - run: pnpm install --frozen-lockfile
+      # The probe reads the built registry.
+      - run: pnpm exec tsc -b
+      - run: node scripts/probe-api-versions.mjs

@@ -427,3 +427,26 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
 - Advisories: none recorded at adoption (to be re-read at each upgrade).
 - Rejected: a hand-written rule set (the rules are infrastructure we do not reinvent) and a separate command-line
   scanner (it would not run inside the logged-in browser the specs already drive).
+
+## @stryker-mutator/core 10.1.1
+
+- Used for: the scheduled mutation run over the authorization and counting modules (a root development dependency; nothing of
+  it ships and no commit runs it). A survived mutant shows a test that cannot fail against a realistic defect.
+- Licence: Apache-2.0. Published 2026-10-23, more than 14 days before adoption. Transitive data licence: `caniuse-lite`
+  (CC-BY-4.0, browser-support data, reached through Babel and listed once Stryker joined) is on the licence allowlist.
+- Install scripts: none.
+- Advisories: `pnpm audit --audit-level=high` reported none at adoption. Two transitive packages are held at fixed versions
+  by overrides in `pnpm-workspace.yaml` (`qs` 6.16.2 under `typed-rest-client`, `minimatch` 11.0.4); each is removed when
+  Stryker ships the fixed version.
+- Rejected: running the suite once per mutant through a command (it cannot map tests to mutants, so a run takes hours); a
+  hosted mutation service (it would receive the source).
+
+## @stryker-mutator/vitest-runner 10.1.1
+
+- Used for: running the unit tests of the mutated modules for each mutant (a root development dependency; a peer of
+  `@stryker-mutator/core` at the same version and of `vitest`). It maps each mutant to the tests that cover it.
+- Licence: Apache-2.0. Published 2026-10-23, more than 14 days before adoption.
+- Install scripts: none.
+- Advisories: `pnpm audit --audit-level=high` reported none at adoption (to be re-read at each upgrade).
+- Rejected: the `command` runner (it reruns the whole suite per mutant); the TypeScript checker plugin (not needed: the run
+  uses vitest only).

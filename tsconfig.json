@@ -5,6 +5,8 @@
     { "path": "packages/core/tsconfig.test.json" },
     { "path": "packages/db" },
     { "path": "packages/db/tsconfig.test.json" },
+    { "path": "packages/provider-sdk" },
+    { "path": "packages/provider-sdk/tsconfig.test.json" },
     { "path": "apps/api" },
     { "path": "apps/api/tsconfig.test.json" },
     { "path": "apps/web" },

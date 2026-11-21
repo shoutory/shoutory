@@ -71,6 +71,8 @@ const PINS = {
   turbo: "2.11.10",
   knip: "6.44.1",
   "@playwright/test": "1.64.1",
+  "@stryker-mutator/core": "10.1.1",
+  "@stryker-mutator/vitest-runner": "10.1.1",
   "@types/node": "26.6.6",
   "@commitlint/cli": "21.2.4",
   "@commitlint/config-conventional": "21.2.4",
@@ -119,7 +121,7 @@ test("the AGPL text is the verbatim one", () => {
   );
 });
 
-for (const dir of ["apps/api", "packages/core", "packages/db", "packages/testkit"]) {
+for (const dir of ["apps/api", "packages/core", "packages/db", "packages/provider-sdk", "packages/testkit"]) {
   test(`${dir} is a manifest-only workspace named @shoutory/<directory>`, () => {
     const pkg = JSON.parse(read(`${dir}/package.json`));
     assert.equal(pkg.name, `@shoutory/${dir.split("/")[1]}`);

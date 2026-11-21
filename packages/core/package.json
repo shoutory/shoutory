@@ -17,6 +17,10 @@
       "source": "./src/config/env.ts",
       "default": "./dist/config/env.js"
     },
+    "./counting": {
+      "source": "./src/counting/count-text.ts",
+      "default": "./dist/counting/count-text.js"
+    },
     "./crypto": {
       "source": "./src/crypto/envelope.ts",
       "default": "./dist/crypto/envelope.js"

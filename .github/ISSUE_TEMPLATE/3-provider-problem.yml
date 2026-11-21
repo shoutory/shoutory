@@ -1,0 +1,52 @@
+name: Provider problem
+description: A network rejects, changes or breaks something Shoutory sends to it (a limit, an API change, a post that did not appear).
+labels: ["type:bug"]
+body:
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider
+      description: The network involved. A maintainer adds the provider label.
+      options: [Bluesky, Mastodon, Telegram, Discord]
+    validations: { required: true }
+  - type: dropdown
+    id: action
+    attributes:
+      label: What you were doing
+      options: [Publish, Edit, Delete, Connect or reconnect the account, Read results, Other]
+    validations: { required: true }
+  - type: textarea
+    id: happened
+    attributes:
+      label: What the provider did
+      description: The error shown in Shoutory, and what you see on the network itself (the post is missing, doubled or changed).
+    validations: { required: true }
+  - type: textarea
+    id: docs
+    attributes:
+      label: Provider documentation
+      description: A link to the provider page that describes the limit or change, if you found one.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The version shown in the admin screen, or the image tag.
+    validations: { required: true }
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment
+      options: [Cloud, Self-host]
+    validations: { required: true }
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      render: shell
+  - type: checkboxes
+    id: secrets
+    attributes:
+      label: Before you submit
+      options:
+        - label: I removed secrets and tokens from everything I pasted.
+          required: true
