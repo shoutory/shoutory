@@ -27,9 +27,11 @@ const VOLATILE: Readonly<Record<string, readonly string[]>> = {
 };
 
 // The server's own values that change from run to run, in the same shape every run: a time is shown at its length,
-// and a worker's id is as long and made of the same marks. The values are fixed in the answers the page reads.
+// a worker's id is as long and made of the same marks, and the version is the one the baselines were taken with. The
+// values are fixed in the answers the page reads.
 const FIXED_PAST = "2026-01-01T10:00:00.000Z";
 const FIXED_FUTURE = "2099-01-01T10:00:00.000Z";
+const FIXED_VERSION = "0.0.0";
 
 type Json = Record<string, unknown>;
 const rowsOf = (body: unknown): Json[] => {
@@ -61,6 +63,11 @@ export async function freezeVolatileValues(page: Page): Promise<void> {
       worker.seen_at = FIXED_PAST;
       worker.stale = false;
     }
+  });
+  // The running version moves with every release, so the baselines are always taken against this one.
+  await rewrite(/\/api\/v1\/admin\/system$/, (body) => {
+    const system = (body.data as Json | undefined) ?? body;
+    system.version = FIXED_VERSION;
   });
 }
 
