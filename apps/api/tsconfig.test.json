@@ -5,6 +5,7 @@
   "references": [
     { "path": "./tsconfig.json" },
     { "path": "../../packages/core" },
-    { "path": "../../packages/db" }
+    { "path": "../../packages/db" },
+    { "path": "../../packages/testkit" }
   ]
 }

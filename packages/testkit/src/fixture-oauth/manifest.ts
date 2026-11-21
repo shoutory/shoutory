@@ -10,5 +10,11 @@ export const fixtureOAuthManifest = {
   displayName: "Fixture OAuth Network",
   auth: { method: "oauth2_pkce" },
   scopes: ["post.write", "offline_access"],
-  refreshErrorMap: { invalid_grant: "revoked", temporarily_unavailable: "transient" },
+  capabilities: [...fixtureManifest.capabilities, "refresh"],
+  refreshErrorMap: {
+    invalid_grant: "revoked",
+    temporarily_unavailable: "transient",
+    slow_down: "rate_limited",
+    invalid_client: "config",
+  },
 } as const;

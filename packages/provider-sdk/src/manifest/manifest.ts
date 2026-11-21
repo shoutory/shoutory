@@ -33,6 +33,7 @@ const CAPABILITIES = [
   "first_comment",
   "edit",
   "delete",
+  "refresh",
 ] as const;
 
 const HOST_LABEL = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
@@ -95,7 +96,8 @@ const manifestShape = z.strictObject({
     delete: seconds.optional(),
   }),
   concurrency: z.int().positive().max(1000),
-  refreshErrorMap: z.record(name, z.enum(["revoked", "transient"])),
+  // The four classes of a refresh failure: only `revoked` disconnects a channel.
+  refreshErrorMap: z.record(name, z.enum(["transient", "rate_limited", "config", "revoked"])),
   absentAnswers: z.array(z.strictObject({ status: z.int().min(400).max(599) })).max(8),
   counting: countingRuleSchema,
   // Only an official API is ever used; any other value refuses the manifest.

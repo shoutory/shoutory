@@ -1,3 +1,4 @@
+import type { SealedSecret } from "@shoutory/core/crypto";
 import type { ProviderResult } from "./result.js";
 
 /**
@@ -17,6 +18,11 @@ export interface CommitInput {
   readonly mediaIds?: readonly string[];
 }
 
+/** What a token refresh sends: the refresh token in use, still sealed until the one call that puts it on the wire. */
+export interface RefreshInput {
+  readonly refreshToken: SealedSecret;
+}
+
 /** A post that already exists at the provider, found by its id or, where the provider allows it, by the key. */
 export interface RemotePost {
   readonly externalId?: string;
@@ -33,6 +39,6 @@ export interface ProviderAdapter {
   readBack(context: AdapterContext, post: RemotePost): Promise<ProviderResult>;
   delete(context: AdapterContext, post: RemotePost): Promise<ProviderResult>;
   edit?(context: AdapterContext, post: RemotePost, input: { readonly text: string }): Promise<ProviderResult>;
-  refresh?(context: AdapterContext): Promise<ProviderResult>;
+  refresh?(context: AdapterContext, input: RefreshInput): Promise<ProviderResult>;
   inspect(context: AdapterContext): Promise<ProviderResult>;
 }

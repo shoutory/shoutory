@@ -1,3 +1,5 @@
+import type { SealedSecret } from "@shoutory/core/crypto";
+
 /** What an attempt did at the provider: nothing, possibly something (unknown), or confirmed something. */
 export type Effect = "none" | "possible" | "confirmed";
 
@@ -10,9 +12,21 @@ export type ProviderErrorClass =
   | "permanent"
   | "unknown";
 
+/**
+ * The tokens a refresh obtained, as RFC 6749 section 5.1 answers them: an access token with its lifetime and, only when
+ * the provider rotated it, a new refresh token. They stay sealed (printing one gives `[redacted]`).
+ */
+export interface RefreshedCredential {
+  readonly accessToken: SealedSecret;
+  readonly refreshToken?: SealedSecret;
+  readonly expiresInSeconds: number;
+}
+
 /** Every adapter method answers with this and never throws a raw error; throwing is only for bugs. */
 export interface ProviderResult {
   readonly ok: boolean;
+  /** Present on a successful refresh only. */
+  readonly credential?: RefreshedCredential;
   readonly effect: Effect;
   readonly externalId?: string;
   readonly permalink?: string;

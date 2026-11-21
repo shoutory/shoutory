@@ -1,7 +1,10 @@
+import { refreshAnswerSchema } from "@shoutory/core/channels";
+import { SealedSecret } from "@shoutory/core/crypto";
 import type {
   AdapterContext,
   CommitInput,
   ProviderAdapter,
+  RefreshInput,
   RemotePost,
 } from "@shoutory/provider-sdk/adapter";
 import { errorResult, type ProviderResult } from "@shoutory/provider-sdk/result";
@@ -51,7 +54,12 @@ export interface FixtureAdapterOptions {
   readonly baseUrl: string;
   /** Replaces the failure mapper; a test passes a wrong one to see the fault matrix refuse it. */
   readonly mapFailure?: typeof mapFailure | undefined;
+  /** The OAuth client id of the fixture network; the adapter refreshes tokens (RFC 6749 section 6) only when it is set. */
+  readonly clientId?: string | undefined;
 }
+
+// The error answer of RFC 6749 section 5.2; the token answer is the bounded schema of core.
+const oauthError = z.object({ error: z.string() });
 
 const created = z.object({ id: z.string() });
 const failure = z.object({ error: z.object({ code: z.string() }) });
@@ -134,6 +142,54 @@ async function request(
   }
 }
 
+// One refresh-token grant at the token route. A refresh changes nothing at the network (effect none), so a failure is
+// never "possible": the class follows the answer, and the provider's own error code is kept for the manifest's map.
+async function refreshTokens(
+  options: FixtureAdapterOptions & { readonly clientId: string },
+  context: AdapterContext,
+  input: RefreshInput,
+): Promise<ProviderResult> {
+  try {
+    const response = await context.fetch(`${options.baseUrl}/token`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: input.refreshToken.expose(),
+        client_id: options.clientId,
+      }).toString(),
+    });
+    const json = textToJson(await response.text());
+    if (!response.ok) {
+      const retryAfter = response.headers.get("retry-after") ?? undefined;
+      const code = oauthError.safeParse(json).data?.error;
+      return (options.mapFailure ?? mapFailure)({
+        status: response.status,
+        code,
+        retryAfter,
+        now: context.now(),
+        write: false,
+      });
+    }
+    // A success answer that cannot be used may have spent a rotating token: the outcome is unknown, never a refusal.
+    const answer = refreshAnswerSchema.safeParse(json);
+    if (!answer.success) return errorResult({ effect: "possible", errorClass: "unknown" });
+    return {
+      ok: true,
+      effect: "none",
+      credential: {
+        accessToken: new SealedSecret(answer.data.access_token),
+        ...(answer.data.refresh_token === undefined
+          ? {}
+          : { refreshToken: new SealedSecret(answer.data.refresh_token) }),
+        expiresInSeconds: answer.data.expires_in,
+      },
+    };
+  } catch (error) {
+    return networkFailure(error, false);
+  }
+}
+
 export function createFixtureAdapter(options: FixtureAdapterOptions): ProviderAdapter {
   const call = (
     context: AdapterContext,
@@ -180,5 +236,11 @@ export function createFixtureAdapter(options: FixtureAdapterOptions): ProviderAd
     edit: async (context, post, input) =>
       withId(await call(context, "PATCH", target(post), { body: { text: input.text } }), "confirmed", true),
     inspect: async (context) => done(await call(context, "GET", "/v1/account")),
+    ...(options.clientId === undefined
+      ? {}
+      : {
+          refresh: (context: AdapterContext, input: RefreshInput) =>
+            refreshTokens({ ...options, clientId: options.clientId as string }, context, input),
+        }),
   };
 }

@@ -1,5 +1,5 @@
-import { createHmac } from "node:crypto";
 import { type Aad, FORMAT_VERSION, NIL_SCOPE, type SealedSecret, seal } from "@shoutory/core/crypto";
+import { pepperDigest } from "@shoutory/core/crypto/digest";
 import type { KeyProvider } from "@shoutory/core/keys";
 import { z } from "zod";
 import { TEMPLATE_NAMES, TEMPLATES } from "./templates.js";
@@ -38,9 +38,8 @@ export const emailLinkAad = (id: string, workspaceId: string | null, generation:
   generation,
 });
 
-// The prefix separates this digest from the other uses of the pepper.
-const digestOf = (link: string, pepper: SealedSecret): string =>
-  createHmac("sha256", Buffer.from(pepper.expose())).update(`email_link:${link}`).digest("hex");
+// The purpose separates this digest from the other uses of the pepper.
+const digestOf = (link: string, pepper: SealedSecret): string => pepperDigest(pepper, "email_link", link);
 
 /** What a mail is enqueued on: a pool, or the transaction of the change the mail follows. */
 export interface MailDb {

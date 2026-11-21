@@ -417,3 +417,38 @@ export const providerInstanceApps = app.table("provider_instance_apps", {
   clientId: text("client_id").notNull(),
   ...sealedSecret(),
 });
+
+// One salt per workspace wraps every credential's data key (crypto-shred); definer-only.
+export const workspaceKeySalts = app.table("workspace_key_salts", {
+  workspaceId: uuid("workspace_id")
+    .primaryKey()
+    .references(() => workspaces.id),
+  salt: bytea("salt").notNull(),
+  createdAt: stamp("created_at").notNull().default(sql`clock_timestamp()`),
+});
+
+// The sealed credential of a channel, its refresh lease and attempt marker; definer-only.
+export const channelCredentials = app.table("channel_credentials", {
+  id: id(),
+  workspaceId: uuid("workspace_id").notNull(),
+  channelId: uuid("channel_id").notNull(),
+  generation: integer("generation").notNull(),
+  kind: text("kind").notNull(),
+  formatVersion: integer("format_version").notNull(),
+  keyId: text("key_id").notNull(),
+  iv: bytea("iv").notNull(),
+  ciphertext: bytea("ciphertext").notNull(),
+  authTag: bytea("auth_tag").notNull(),
+  wrapIv: bytea("wrap_iv").notNull(),
+  wrapTag: bytea("wrap_tag").notNull(),
+  wrappedDek: bytea("wrapped_dek").notNull(),
+  accessExpiresAt: stamp("access_expires_at"),
+  refreshExpiresAt: stamp("refresh_expires_at"),
+  refreshTokenDigest: text("refresh_token_digest"),
+  state: text("state").notNull().default("active"),
+  refreshingUntil: stamp("refreshing_until"),
+  refreshOwner: text("refresh_owner"),
+  refreshFencing: integer("refresh_fencing").notNull().default(0),
+  refreshAttemptDigest: text("refresh_attempt_digest"),
+  refreshAttemptOutcome: text("refresh_attempt_outcome"),
+});

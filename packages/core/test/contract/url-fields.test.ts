@@ -95,7 +95,15 @@ function unregisteredSites(base: string): string[] {
     .filter((file) => !file.endsWith(".test.ts") && ZOD_URL.test(readFileSync(join(base, file), "utf8")));
   const sql = globSync("packages/db/migrations/*.sql", { cwd: base, exclude })
     .map((file) => file.replaceAll("\\", "/"))
-    .filter((file) => URL_COLUMN.test(readFileSync(join(base, file), "utf8").replace(/--[^\n]*/g, "")));
+    // Comments are not columns, and neither is the credential kind `webhook_url`, an enum value: only that literal is
+    // blanked, so any other `*_url` name, quoted or not, is still found.
+    .filter((file) =>
+      URL_COLUMN.test(
+        readFileSync(join(base, file), "utf8")
+          .replace(/--[^\n]*/g, "")
+          .replaceAll("'webhook_url'", "''"),
+      ),
+    );
   return [...api, ...sql];
 }
 

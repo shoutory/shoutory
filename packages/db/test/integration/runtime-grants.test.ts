@@ -48,6 +48,9 @@ const EXACT: Record<string, Record<string, string[]>> = {
   sync_cursors: { shoutory_app: READ },
   provider_apps: {},
   provider_instance_apps: {},
+  // 0014: sealed credentials and the workspace salts are template D; the credential definers are the only way in.
+  channel_credentials: {},
+  workspace_key_salts: {},
 };
 // "role table.column privilege": the column-level grants, and the only ones.
 const COLUMN_GRANTS = [

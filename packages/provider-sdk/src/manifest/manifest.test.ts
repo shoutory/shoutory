@@ -174,3 +174,28 @@ describe("manifestSchema", () => {
     expect(paths).toContain(path);
   });
 });
+
+// R518, R539 (11): a provider's refresh answers map to one of the four classes, and an adapter that refreshes
+// declares the `refresh` capability like the other optional actions.
+describe("manifestSchema: token refresh", () => {
+  it.each(["transient", "rate_limited", "config", "revoked"])(
+    "accepts the refresh error class %s",
+    (klass) => {
+      const manifest = fixtureManifest();
+      manifest.refreshErrorMap = { some_code: klass };
+      expect(manifestSchema.safeParse(manifest).success).toBe(true);
+    },
+  );
+
+  it("refuses a refresh error class outside the four", () => {
+    const manifest = fixtureManifest();
+    manifest.refreshErrorMap = { some_code: "disconnect_now" };
+    expect(manifestSchema.safeParse(manifest).success).toBe(false);
+  });
+
+  it("accepts the refresh capability", () => {
+    const manifest = fixtureManifest();
+    manifest.capabilities = [...(manifest.capabilities as string[]), "refresh"];
+    expect(manifestSchema.safeParse(manifest).success).toBe(true);
+  });
+});

@@ -123,6 +123,9 @@ interface Definer {
 const AUTH_APP_WORKER = ["shoutory_auth", "shoutory_app", "shoutory_worker"];
 const SEALED_LINK =
   "link_ciphertext bytea, link_iv bytea, link_auth_tag bytea, link_wrap_iv bytea, link_wrap_tag bytea, link_wrapped_dek bytea, link_key_id text, link_format_version integer";
+const APP_WORKER = ["shoutory_app", "shoutory_worker"];
+const SEALED_FIELDS =
+  "format_version integer, key_id text, iv bytea, ciphertext bytea, auth_tag bytea, wrap_iv bytea, wrap_tag bytea, wrapped_dek bytea";
 const DEFINERS: Definer[] = [
   { name: "bucket_take", args: "key text, scope text, cost integer", callers: AUTH_APP_WORKER },
   { name: "bucket_state", args: "key text, scope text", callers: AUTH_APP_WORKER },
@@ -272,6 +275,42 @@ const DEFINERS: Definer[] = [
     name: "channel_enable",
     args: "workspace_id uuid, channel_id uuid, request_id text, ip_hmac bytea",
     callers: ["shoutory_app"],
+  },
+  // 0014: the credential definers run for the app role (a user with channels.manage) and the worker (a job principal);
+  // the helper carries the one principal check (R537 (2), R539 (10)).
+  { name: "credential_caller", args: "workspace_id uuid", callers: [], helper: true },
+  { name: "workspace_salt_ensure", args: "workspace_id uuid, salt bytea", callers: APP_WORKER },
+  {
+    name: "channel_connect",
+    args: "workspace_id uuid, provider_id text, account_kind text, provider_account_id text, instance_host text, display_name text, handle text, avatar text, reconnect_channel_id uuid, request_id text, ip_hmac bytea",
+    callers: APP_WORKER,
+  },
+  {
+    name: "credential_put",
+    args: `workspace_id uuid, channel_id uuid, expected_generation integer, ${SEALED_FIELDS}, access_expires_at timestamp with time zone, refresh_expires_at timestamp with time zone, refresh_token_digest text, manifest_digest text, api_version text, sunset_at timestamp with time zone, capabilities jsonb, limits jsonb, request_id text, ip_hmac bytea`,
+    callers: APP_WORKER,
+  },
+  { name: "credential_open", args: "workspace_id uuid, channel_id uuid", callers: APP_WORKER },
+  {
+    name: "credential_refresh_begin",
+    args: "workspace_id uuid, channel_id uuid, lease_owner text, lease_seconds integer",
+    callers: APP_WORKER,
+  },
+  {
+    name: "credential_refresh_commit",
+    args: `workspace_id uuid, channel_id uuid, expected_digest text, expected_generation integer, expected_fencing integer, ${SEALED_FIELDS}, access_expires_at timestamp with time zone, refresh_expires_at timestamp with time zone, refresh_token_digest text`,
+    callers: APP_WORKER,
+  },
+  {
+    name: "credential_refresh_fail",
+    args: "workspace_id uuid, channel_id uuid, expected_digest text, expected_fencing integer, outcome text, state_reason text",
+    callers: APP_WORKER,
+  },
+  { name: "due_token_refreshes", args: "lim integer, margin_seconds integer", callers: ["shoutory_worker"] },
+  {
+    name: "channel_health_record",
+    args: "workspace_id uuid, channel_id uuid, health text, manifest_digest text, api_version text, sunset_at timestamp with time zone, capabilities jsonb, limits jsonb",
+    callers: APP_WORKER,
   },
 ];
 const TENANCY_TABLES = ["organizations", "organization_members", "workspaces", "workspace_members", "roles"];

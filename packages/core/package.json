@@ -13,6 +13,10 @@
       "source": "./src/authz/scope.ts",
       "default": "./dist/authz/scope.js"
     },
+    "./channels": {
+      "source": "./src/channels/credential.ts",
+      "default": "./dist/channels/credential.js"
+    },
     "./config": {
       "source": "./src/config/env.ts",
       "default": "./dist/config/env.js"
@@ -24,6 +28,10 @@
     "./crypto": {
       "source": "./src/crypto/envelope.ts",
       "default": "./dist/crypto/envelope.js"
+    },
+    "./crypto/digest": {
+      "source": "./src/crypto/digest.ts",
+      "default": "./dist/crypto/digest.js"
     },
     "./entitlements": {
       "source": "./src/entitlements/entitlements.ts",

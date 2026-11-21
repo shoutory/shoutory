@@ -4,7 +4,22 @@
   "private": true,
   "type": "module",
   "license": "AGPL-3.0-only",
+  "exports": {
+    "./fixture-oauth/manifest": {
+      "source": "./src/fixture-oauth/manifest.ts",
+      "default": "./dist/fixture-oauth/manifest.js"
+    },
+    "./fixture-oauth/simulator": {
+      "source": "./src/fixture-oauth/simulator.ts",
+      "default": "./dist/fixture-oauth/simulator.js"
+    },
+    "./fixture-provider/adapter": {
+      "source": "./src/fixture-provider/adapter.ts",
+      "default": "./dist/fixture-provider/adapter.js"
+    }
+  },
   "dependencies": {
+    "@shoutory/core": "workspace:*",
     "@shoutory/provider-sdk": "workspace:*",
     "zod": "4.6.7"
   },

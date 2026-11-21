@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   type Aad,
   CREDENTIAL_KINDS,
+  CREDENTIAL_SALT_POLICY,
   type CredentialKind,
   EnvelopeError,
   NIL_SCOPE,
@@ -34,11 +35,16 @@ const aad: Aad = {
 };
 const flip = (b: Buffer) => Buffer.from(b.map((v, i) => (i === 0 ? v ^ 1 : v)));
 const opens = (run: () => SealedSecret) => expect(run).toThrow(EnvelopeError);
+// A salted kind needs the workspace salt (32 bytes); an unsalted kind refuses one (R532 (6)).
+const SALT = Buffer.alloc(32, 7);
+const saltFor = (kind: CredentialKind): Buffer | undefined =>
+  CREDENTIAL_SALT_POLICY[kind] === "salted" ? SALT : undefined;
 
 describe("envelope round trip", () => {
   it.each(CREDENTIAL_KINDS)("seals and opens kind %s", (credentialKind) => {
     const a = { ...aad, credentialKind };
-    expect(open(seal(CANARY, a, ring), a, ring).expose()).toBe(CANARY);
+    const salt = saltFor(credentialKind);
+    expect(open(seal(CANARY, a, ring, salt), a, ring, salt).expose()).toBe(CANARY);
   });
   it("uses the nil scope for an instance secret", () => {
     const a = { ...aad, scopeId: NIL_SCOPE };
@@ -110,16 +116,56 @@ describe("envelope open refuses tampering", () => {
   });
 });
 
-describe("envelope open fails when any AAD field differs", () => {
+// Every kind of the enum, so a kind added later is covered by this table the day it joins it.
+describe.each(CREDENTIAL_KINDS)("envelope open fails when any AAD field of kind %s differs", (kind) => {
   // A kind outside the enum: open must fail at the payload AAD, not by pre-rejecting the kind.
-  const otherKind = "channel_token" as CredentialKind;
+  const otherKind = "oauth_flow" as CredentialKind;
+  const base: Aad = { ...aad, credentialKind: kind };
+  const salt = saltFor(kind);
   it.each([
-    ["formatVersion", { ...aad, formatVersion: 2 }],
-    ["scopeId", { ...aad, scopeId: NIL_SCOPE }],
-    ["ownerId", { ...aad, ownerId: NIL_SCOPE }],
-    ["credentialKind", { ...aad, credentialKind: otherKind }],
-    ["generation", { ...aad, generation: 2 }],
-  ])("a different %s", (_name, wrong) => opens(() => open(seal(CANARY, aad, ring), wrong, ring)));
+    ["formatVersion", { ...base, formatVersion: 2 }],
+    ["scopeId", { ...base, scopeId: NIL_SCOPE }],
+    ["ownerId", { ...base, ownerId: NIL_SCOPE }],
+    ["credentialKind", { ...base, credentialKind: otherKind }],
+    ["generation", { ...base, generation: 2 }],
+  ])("a different %s", (_name, wrong) =>
+    opens(() => open(seal(CANARY, base, ring, salt), wrong, ring, salt)),
+  );
+});
+
+// R532 (6): a salted kind wraps its DEK under a key derived from the KEK and the workspace salt, so deleting the salt
+// shreds the row; the salt must be 32 bytes (RFC 5869 section 3.1, HashLen) and an unsalted kind takes none.
+describe("the salt of a kind", () => {
+  const salted = CREDENTIAL_KINDS.filter((kind) => CREDENTIAL_SALT_POLICY[kind] === "salted");
+  const unsalted = CREDENTIAL_KINDS.filter((kind) => CREDENTIAL_SALT_POLICY[kind] === "unsalted");
+
+  it("channel_token is salted and email_link is not", () => {
+    expect([CREDENTIAL_SALT_POLICY.channel_token, CREDENTIAL_SALT_POLICY.email_link]).toEqual([
+      "salted",
+      "unsalted",
+    ]);
+  });
+
+  it.each(salted)("%s refuses to seal with a missing salt or one of 31 bytes", (credentialKind) => {
+    const a = { ...aad, credentialKind };
+    expect(() => seal(CANARY, a, ring)).toThrow(EnvelopeError);
+    expect(() => seal(CANARY, a, ring, Buffer.alloc(31, 7))).toThrow(EnvelopeError);
+  });
+
+  it.each(salted)("%s opens only with the salt it was sealed with", (credentialKind) => {
+    const a = { ...aad, credentialKind };
+    const stored = seal(CANARY, a, ring, SALT);
+    opens(() => open(stored, a, ring));
+    opens(() => open(stored, a, ring, Buffer.alloc(31, 7)));
+    opens(() => open(stored, a, ring, Buffer.alloc(32, 8)));
+    expect(open(stored, a, ring, Buffer.from(SALT)).expose()).toBe(CANARY);
+  });
+
+  it.each(unsalted)("%s refuses a salt on seal and on open", (credentialKind) => {
+    const a = { ...aad, credentialKind };
+    expect(() => seal(CANARY, a, ring, SALT)).toThrow(EnvelopeError);
+    opens(() => open(seal(CANARY, a, ring), a, ring, SALT));
+  });
 });
 
 describe("key rotation", () => {

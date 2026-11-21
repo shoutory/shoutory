@@ -24,7 +24,11 @@ export const fixtureManifest = {
   followUpRoles: ["thread_reply", "first_comment"],
   leaseSeconds: { prepare: 60, commit: 120, readBack: 60, edit: 120, delete: 60 },
   concurrency: 4,
-  refreshErrorMap: { grant_revoked: "revoked" },
+  refreshErrorMap: {
+    grant_revoked: "revoked",
+    slow_down: "rate_limited",
+    invalid_client: "config",
+  },
   absentAnswers: [{ status: 404 }],
   counting: { unit: "graphemes", urlWeight: 23 },
   apiAccess: "official",

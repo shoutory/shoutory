@@ -278,6 +278,10 @@ importers:
       zod:
         specifier: 4.6.7
         version: 4.6.7
+    devDependencies:
+      '@shoutory/testkit':
+        specifier: workspace:*
+        version: link:../../packages/testkit
 
   apps/web:
     dependencies:
@@ -394,6 +398,9 @@ importers:
 
   packages/testkit:
     dependencies:
+      '@shoutory/core':
+        specifier: workspace:*
+        version: link:../core
       '@shoutory/provider-sdk':
         specifier: workspace:*
         version: link:../provider-sdk

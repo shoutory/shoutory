@@ -1,5 +1,5 @@
-import { createHmac } from "node:crypto";
 import type { SealedSecret } from "@shoutory/core/crypto";
+import { pepperDigest } from "@shoutory/core/crypto/digest";
 import type { AppPool } from "@shoutory/db/pool";
 import { Refusal } from "../errors/refusal.js";
 
@@ -18,11 +18,6 @@ type Scope =
 
 // A successful sign-in refunds the whole account bucket: `bucket_take` accepts a cost down to minus the capacity.
 const LOGIN_ACCOUNT_CAPACITY = 100;
-
-/** The keyed digest a bucket key or a stored address is made of; the purpose keeps the uses of the pepper apart. */
-export function pepperDigest(pepper: SealedSecret, purpose: string, value: string): string {
-  return createHmac("sha256", Buffer.from(pepper.expose())).update(`${purpose}:${value}`).digest("hex");
-}
 
 /** The keyed digest of a mail address as the suppression list stores it: the address is lower-cased first (R323). */
 export const emailDigest = (pepper: SealedSecret, address: string): string =>

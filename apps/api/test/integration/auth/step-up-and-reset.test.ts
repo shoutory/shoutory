@@ -1,6 +1,6 @@
 import { SealedSecret } from "@shoutory/core/crypto";
+import { pepperDigest } from "@shoutory/core/crypto/digest";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { pepperDigest } from "../../../src/auth/throttle.js";
 import { type Fixture, Jar, ORIGIN, PASSWORD, PEPPER, startFixture, tokenOf, totpAt } from "./harness.js";
 
 let fx: Fixture;

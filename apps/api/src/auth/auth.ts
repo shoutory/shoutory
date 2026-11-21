@@ -1,5 +1,6 @@
 import { queueAfterTransactionHook } from "@better-auth/core/context";
 import type { SealedSecret } from "@shoutory/core/crypto";
+import { pepperDigest } from "@shoutory/core/crypto/digest";
 import type { KeyProvider } from "@shoutory/core/keys";
 import type { AppPool, AuthDb } from "@shoutory/db/pool";
 import { authAccount, authSession, authTwoFactor, authUser, authVerification } from "@shoutory/db/schema";
@@ -19,7 +20,7 @@ import { readSession } from "./session-check.js";
 import { digestSessionTokens } from "./session-token.js";
 import { signupAllowed } from "./signup-gate.js";
 import { createStepUp, type StepUp } from "./step-up.js";
-import { createThrottle, pepperDigest, type Throttle } from "./throttle.js";
+import { createThrottle, type Throttle } from "./throttle.js";
 import { secondFactorThrottle } from "./two-factor.js";
 
 /** The header our mount sets from the resolved client address; the library reads the session address only from it. */

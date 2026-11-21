@@ -1,9 +1,21 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { inspect } from "node:util";
-import type { KeyProvider } from "./keys.js";
+import { deriveKey, type KeyProvider } from "./keys.js";
 
-export const CREDENTIAL_KINDS = ["email_link"] as const;
+export const CREDENTIAL_KINDS = ["channel_token", "email_link"] as const;
 export type CredentialKind = (typeof CREDENTIAL_KINDS)[number];
+
+/**
+ * Whether a kind's DEK is wrapped under a key derived from the workspace salt (the credential kind table).
+ * Deleting the salt shreds every row of a salted kind; an unsalted kind takes no salt at all.
+ */
+export const CREDENTIAL_SALT_POLICY: Readonly<Record<CredentialKind, "salted" | "unsalted">> = {
+  channel_token: "salted",
+  email_link: "unsalted",
+};
+
+/** The salt length (HKDF-SHA256 HashLen, RFC 5869 section 3.1). */
+export const SALT_BYTES = 32;
 
 /** The all-zero UUID: the scope of an instance-wide secret. */
 export const NIL_SCOPE = "00000000-0000-0000-0000-000000000000";
@@ -102,8 +114,22 @@ function decrypt(key: Buffer, iv: Buffer, data: Buffer, tag: Buffer, aad: Buffer
   }
 }
 
-/** Seals under the active KEK: a random DEK encrypts the value and the KEK wraps the DEK. */
-export function seal(plaintext: string, aad: Aad, keys: KeyProvider): StoredSecret {
+// A salted kind needs a salt of exactly SALT_BYTES, an unsalted (or unknown) kind refuses one; the key that wraps the
+// DEK is the KEK itself or, for a salted kind, the subkey derived from the KEK and the salt.
+function wrapKeyOf(aad: Aad, kek: Buffer, salt: Uint8Array | undefined): Buffer {
+  const salted = CREDENTIAL_SALT_POLICY[aad.credentialKind] === "salted";
+  if (!salted) {
+    if (salt !== undefined) throw new EnvelopeError("this credential kind takes no salt");
+    return kek;
+  }
+  if (salt === undefined || salt.length !== SALT_BYTES) {
+    throw new EnvelopeError(`this credential kind needs a salt of ${SALT_BYTES} bytes`);
+  }
+  return deriveKey(kek, salt, aad.credentialKind, aad.formatVersion);
+}
+
+/** Seals under the active KEK: a random DEK encrypts the value and the KEK (or its salted subkey) wraps the DEK. */
+export function seal(plaintext: string, aad: Aad, keys: KeyProvider, salt?: Uint8Array): StoredSecret {
   if (aad.formatVersion !== FORMAT_VERSION) throw new EnvelopeError("unsupported format version");
   if (!CREDENTIAL_KINDS.includes(aad.credentialKind)) throw new EnvelopeError("unknown credential kind");
   if (!Number.isSafeInteger(aad.generation) || aad.generation < 0) {
@@ -113,7 +139,7 @@ export function seal(plaintext: string, aad: Aad, keys: KeyProvider): StoredSecr
   const keyId = keys.activeKeyId();
   const dek = randomBytes(DEK_BYTES);
   const payload = encrypt(dek, Buffer.from(plaintext, "utf8"), payloadAad(aad));
-  const wrap = encrypt(keys.getKey(keyId), dek, wrapAad(aad.formatVersion, keyId));
+  const wrap = encrypt(wrapKeyOf(aad, keys.getKey(keyId), salt), dek, wrapAad(aad.formatVersion, keyId));
   return {
     formatVersion: aad.formatVersion,
     keyId,
@@ -148,10 +174,10 @@ function checkShape(stored: StoredSecret, aad: Aad, keys: KeyProvider): void {
   if (!keys.has(stored.keyId)) throw new EnvelopeError("no key is loaded for the secret's key id");
 }
 
-/** Opens a stored secret; any wrong byte, key, key id, format version or AAD field raises `EnvelopeError`. */
-export function open(stored: StoredSecret, aad: Aad, keys: KeyProvider): SealedSecret {
+/** Opens a stored secret; any wrong byte, key, key id, salt, format version or AAD field raises `EnvelopeError`. */
+export function open(stored: StoredSecret, aad: Aad, keys: KeyProvider, salt?: Uint8Array): SealedSecret {
   checkShape(stored, aad, keys);
-  const wrapKey = keys.getKey(stored.keyId);
+  const wrapKey = wrapKeyOf(aad, keys.getKey(stored.keyId), salt);
   const wrapped = wrapAad(stored.formatVersion, stored.keyId);
   const dek = decrypt(wrapKey, stored.wrapIv, stored.wrappedDek, stored.wrapTag, wrapped);
   const plain = decrypt(dek, stored.iv, stored.ciphertext, stored.tag, payloadAad(aad));
