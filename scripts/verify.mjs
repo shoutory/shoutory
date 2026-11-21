@@ -3,7 +3,7 @@
 // ran nothing or was skipped unless the step is listed in .github/ci-placeholders.json.
 import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, globSync, readFileSync, rmSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, matchesGlob, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -95,6 +95,24 @@ const gitMessage = () =>
   process.env.PR_TITLE ||
   spawnSync("git", ["log", "-1", "--format=%B"], { cwd: root, encoding: "utf8" }).stdout;
 
+// What the image is built from (the workspaces its Dockerfile copies, the Dockerfile and the root files that fix the
+// install): a local run executes the image steps only when one of these changed.
+const IMAGE_INPUTS = [
+  "apps/api/**",
+  "apps/web/**",
+  "packages/core/**",
+  "packages/db/**",
+  "docker/**",
+  "package.json",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  ".nvmrc",
+  "tsconfig.json",
+  "tsconfig.base.json",
+  ".dockerignore",
+  "scripts/image-smoke.mjs",
+];
+
 export const STEPS = [
   {
     name: "typecheck",
@@ -166,8 +184,20 @@ export const STEPS = [
   },
   // The entry files that make a placeholder step live; other files that arrive earlier must not break it.
   { name: "build", globs: ["apps/api/src/main.ts"], command: pnpm("run", "build") },
-  { name: "e2e", docker: true, globs: ["e2e/**/*.spec.ts"], command: pnpm("run", "e2e") },
-  { name: "image-smoke", docker: true, globs: ["docker/Dockerfile*"], command: pnpm("run", "image-smoke") },
+  {
+    name: "e2e",
+    docker: true,
+    globs: ["e2e/**/*.spec.ts"],
+    watch: [...IMAGE_INPUTS, "e2e/**"],
+    command: pnpm("run", "e2e"),
+  },
+  {
+    name: "image-smoke",
+    docker: true,
+    globs: ["docker/Dockerfile*"],
+    watch: IMAGE_INPUTS,
+    command: pnpm("run", "image-smoke"),
+  },
   { name: "upgrade", globs: ["e2e/upgrade/**"], command: pnpm("run", "upgrade") },
   {
     name: "semgrep",
@@ -327,12 +357,58 @@ export function runSteps(
   return results.every(Boolean) ? 0 : 1;
 }
 
+// A change to the check command or the workflow can affect any step, so it selects them all.
+const CHECK_FILES = ["scripts/verify.mjs", ".github/workflows/ci.yml"];
+
+/**
+ * The steps a run executes. Every step runs on `--all`, on main or a tag, and when the change set is unknown; otherwise a
+ * step with a `watch` list runs only when a changed path matches it, and a step without one always runs.
+ */
+export function affectedSteps(steps, { changed, all = false, ref = process.env.GITHUB_REF } = {}) {
+  const full =
+    all ||
+    changed === undefined ||
+    ref === "refs/heads/main" ||
+    ref?.startsWith("refs/tags/") ||
+    changed.some((path) => CHECK_FILES.includes(path));
+  if (full) return steps;
+  return steps.filter(
+    (step) => !step.watch || changed.some((path) => step.watch.some((glob) => matchesGlob(path, glob))),
+  );
+}
+
+// The paths changed since this branch left origin/main, committed or not; undefined when git cannot say.
+function changedPaths() {
+  const git = (...args) => spawnSync("git", args, { cwd: root, encoding: "utf8" });
+  const base = git("merge-base", "origin/main", "HEAD");
+  if (base.status !== 0) return undefined;
+  // `--no-renames` lists a move as the old path and the new one, so leaving a watched folder still counts.
+  const diff = git("diff", "--name-only", "--no-renames", "-z", base.stdout.trim());
+  const added = git("ls-files", "--others", "--exclude-standard", "-z");
+  if (diff.status !== 0 || added.status !== 0) return undefined;
+  return pathsFromNul(diff.stdout, added.stdout);
+}
+
+/** Splits git's NUL-terminated path lists (`-z`), so a name with a space, a quote or a newline stays one path. */
+export function pathsFromNul(...outputs) {
+  return outputs.flatMap((output) => output.split("\0")).filter(Boolean);
+}
+
 function selectSteps(argv) {
   const at = argv.indexOf("--only");
-  if (at < 0) return STEPS;
-  const chosen = STEPS.filter((step) => step.name === argv[at + 1]);
-  if (chosen.length === 0)
-    throw new Error(`unknown step ${argv[at + 1]}; steps: ${STEPS.map((s) => s.name)}`);
+  if (at >= 0) {
+    const chosen = STEPS.filter((step) => step.name === argv[at + 1]);
+    if (chosen.length === 0)
+      throw new Error(`unknown step ${argv[at + 1]}; steps: ${STEPS.map((s) => s.name)}`);
+    return chosen;
+  }
+  const all = argv.includes("--all");
+  const changed = all ? undefined : changedPaths();
+  const chosen = affectedSteps(STEPS, { changed, all });
+  if (!all && changed === undefined && chosen === STEPS)
+    console.log("== origin/main is not known here: running every step");
+  const skipped = STEPS.filter((step) => !chosen.includes(step)).map((step) => step.name);
+  if (skipped.length > 0) console.log(`== skipped, no watched path changed: ${skipped.join(", ")}`);
   return chosen;
 }
 

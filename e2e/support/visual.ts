@@ -1,5 +1,12 @@
 import type { Locator, Page } from "@playwright/test";
 
+/**
+ * Where a visual cell's baseline lives: Playwright's own layout, with the part its default takes from the project's name
+ * kept as `-visual` for both language projects, so the committed pictures keep their paths whatever the projects are called.
+ */
+export const VISUAL_SNAPSHOT_PATH =
+  "{snapshotDir}/{testFileDir}/{testFileName}-snapshots/{arg}-visual{-snapshotSuffix}{ext}";
+
 /** Where the founder's top bar shows names the run made up. */
 const TOP_BAR = ['[data-testid="switcher-organization"]', '[data-testid="switcher-workspace"]'];
 const HEADING = '[data-testid="workspace-name"]';

@@ -28,8 +28,8 @@ test("the restore project exists only when SHOUTORY_E2E_RESTORE is true, follows
   );
   assert.match(
     config,
-    /projects: RESTORE_RUN[\s\S]*:\s*FULL,\s*\}\);/,
-    "the default projects are not one list",
+    /projects: RESTORE_RUN[\s\S]*:\s*shardOf\(FULL, process\.env\.SHOUTORY_E2E_SHARD\),\s*\}\);/,
+    "the default projects are not one list, cut to a shard only by the shard variable",
   );
 });
 

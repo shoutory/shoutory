@@ -136,6 +136,20 @@ test("the screenshot update input reaches Playwright only through env, and the a
   assert.deepEqual(job.permissions, { contents: "read" });
 });
 
+test("the e2e matrix lists exactly the shard names of the config, ci needs e2e and no run string holds an expression", () => {
+  const table = JSON.parse(readFileSync(join(root, "e2e/shards.json"), "utf8"));
+  const job = jobs.e2e;
+  assert.deepEqual([...job.strategy.matrix.shard].sort(), Object.keys(table).sort());
+  assert.equal(job.strategy["fail-fast"], false, "the shards finish on their own");
+  assert.ok(aggregate.needs.includes("e2e"));
+  for (const step of job.steps)
+    assert.doesNotMatch(step.run ?? "", /\$\{\{/, "an expression inside a run string");
+  const verify = job.steps.find((step) => step.run === "pnpm verify --only e2e");
+  assert.equal(verify.env.SHOUTORY_E2E_SHARD, "${{ matrix.shard }}");
+  const upload = job.steps.find((step) => (step.uses ?? "").startsWith("actions/upload-artifact@"));
+  assert.match(upload.with.name, /matrix\.shard/, "the shards would overwrite each other's baselines");
+});
+
 test("the package manager is set up before node and no job restores a package cache", () => {
   for (const [id, job] of Object.entries(jobs)) {
     const uses = job.steps.map((step) => step.uses ?? "");

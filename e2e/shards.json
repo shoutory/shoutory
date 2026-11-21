@@ -1,0 +1,6 @@
+{
+  "a11y": ["a11y"],
+  "visual-en": ["visual-en"],
+  "visual-ar": ["visual-ar"],
+  "rest": ["quality", "ux", "telemetry"]
+}
