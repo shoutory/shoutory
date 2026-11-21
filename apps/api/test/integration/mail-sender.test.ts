@@ -123,6 +123,31 @@ describe("the mail sender", () => {
   });
 });
 
+describe("STARTTLS for smtp: URLs (R493)", () => {
+  it.each(["smtp://", "SMTP://", "Smtp://"])(
+    "a %s URL to a server without STARTTLS is not delivered",
+    async (scheme) => {
+      await queue(PLAIN_LINK);
+      const plain = (sink.url.split("?")[0] as string).replace(/^smtp:\/\//i, scheme);
+      expect(await sender({ smtpUrl: new SealedSecret(plain) }).tick()).toBe(0);
+      expect(sink.messages).toHaveLength(0);
+    },
+  );
+
+  it("an smtp: URL to a server without STARTTLS is not delivered; with ?requireTLS=false it is", async () => {
+    const id = await queue(PLAIN_LINK);
+    const plain = sink.url.split("?")[0] as string;
+    expect(await sender({ smtpUrl: new SealedSecret(plain) }).tick()).toBe(0);
+    expect(sink.messages).toHaveLength(0);
+    await withAdminClient(env, db.name, (a) =>
+      a.query("UPDATE app.email_outbox SET next_attempt_at = now()"),
+    );
+    expect(await sender({ smtpUrl: new SealedSecret(`${plain}?requireTLS=false`) }).tick()).toBe(1);
+    expect(sink.messages).toHaveLength(1);
+    expect((await row(id)).state).toBe("sent");
+  });
+});
+
 const LEASE_MS = 5 * 60_000;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const until = async (done: () => boolean) => {

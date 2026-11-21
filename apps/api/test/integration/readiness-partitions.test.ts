@@ -9,7 +9,8 @@ import { testAuth } from "../support/auth.js";
 const env = readTestEnv();
 const REMOTE = { incoming: { socket: { remoteAddress: "192.0.2.1" } } };
 const ORIGIN = "https://app.example.test";
-const logger = createLogger({ secrets: [], stream: { write: () => undefined } });
+const lines: string[] = [];
+const logger = createLogger({ secrets: [], stream: { write: (line) => void lines.push(line) } });
 const keys = new EnvKeyProvider({
   SHOUTORY_ACTIVE_KEY_ID: "k1",
   SHOUTORY_KEK_K1: Buffer.alloc(32, 1).toString("base64"),
@@ -40,9 +41,10 @@ afterAll(async () => {
 });
 
 const ready = async () => {
+  lines.length = 0;
   const answer = await Promise.resolve(app.request("/readyz", {}, REMOTE));
-  const body = (await answer.json()) as { error?: { details?: { cause?: string } } };
-  return [answer.status, body.error?.details?.cause];
+  // The cause is in the log only (R494).
+  return [answer.status, /"cause":"([a-z_]+)"/.exec(lines.join("\n"))?.[1]];
 };
 const leaf = (name: string, from: string, to: string) =>
   owner.query(

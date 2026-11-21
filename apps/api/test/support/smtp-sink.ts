@@ -94,5 +94,5 @@ export async function startSmtpSink(): Promise<SmtpSink> {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   const port = typeof address === "object" && address ? address.port : 0;
-  return Object.assign(sink, { url: `smtp://127.0.0.1:${port}` });
+  return Object.assign(sink, { url: `smtp://127.0.0.1:${port}?requireTLS=false` });
 }

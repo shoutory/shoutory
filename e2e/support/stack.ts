@@ -42,7 +42,7 @@ function runEnvironment(image: string): NodeJS.ProcessEnv {
     SHOUTORY_POSTGRES_PASSWORD: secret(),
     SHOUTORY_PUBLIC_ORIGIN: APP_ORIGIN,
     SHOUTORY_MAIL_FROM: "Shoutory <noreply@e2e.test>",
-    SHOUTORY_SMTP_URL: "smtp://mail:1025",
+    SHOUTORY_SMTP_URL: "smtp://mail:1025?requireTLS=false",
     SHOUTORY_HMAC_PEPPER: secret(),
     SHOUTORY_SESSION_SECRET: secret(),
     SHOUTORY_ACTIVE_KEY_ID: "k1",

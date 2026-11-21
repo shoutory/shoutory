@@ -204,8 +204,11 @@ export function createMailSender(options: MailSenderOptions): MailSender {
     templates: options.templates ?? TEMPLATES,
     sendTimeoutMs,
     transport: () => {
+      const url = options.smtpUrl.expose();
+      // A plain smtp: URL must upgrade with STARTTLS; `?requireTLS=false` in the URL opts out (it wins over this).
       transport ??= createTransport({
-        url: options.smtpUrl.expose(),
+        url,
+        requireTLS: new URL(url).protocol === "smtp:",
         connectionTimeout: CONNECT_TIMEOUT_MS,
         greetingTimeout: CONNECT_TIMEOUT_MS,
         socketTimeout: SOCKET_TIMEOUT_MS,

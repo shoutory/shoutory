@@ -57,10 +57,10 @@ const appEnv = {
   SHOUTORY_SESSION_SECRET: secret(),
   SHOUTORY_ACTIVE_KEY_ID: "k1",
   SHOUTORY_KEK_K1: randomBytes(32).toString("base64"),
+  // The role `all` connects as these three; the owner URL goes to migrate alone.
   ...Object.fromEntries(
-    roles.map((role) => [`SHOUTORY_DATABASE_PASSWORD_${role.toUpperCase()}`, passwords[role]]),
+    ["app", "auth", "worker"].map((role) => [`SHOUTORY_DATABASE_URL_${role.toUpperCase()}`, url(role)]),
   ),
-  ...Object.fromEntries(roles.map((role) => [`SHOUTORY_DATABASE_URL_${role.toUpperCase()}`, url(role)])),
   OTEL_EXPORTER_OTLP_ENDPOINT: "http://telemetry.invalid:4318",
 };
 const envArgs = (values) => Object.entries(values).flatMap(([key, value]) => ["-e", `${key}=${value}`]);

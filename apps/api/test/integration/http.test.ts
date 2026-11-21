@@ -112,9 +112,8 @@ describe("readiness and health", () => {
       const down = await get(app, "/readyz");
       expect(down.status).toBe(503);
       expect(down.headers.get("retry-after")).toBe("5");
-      const body = (await down.json()) as { error: { code: string; details: { cause: string } } };
+      const body = (await down.json()) as { error: { code: string } };
       expect(body.error.code).toBe("service_unavailable");
-      expect(body.error.details.cause).toBe("database_unreachable");
       expect((await get(app, "/healthz")).status).toBe(200);
       await forwarder.start();
       expect((await get(app, "/readyz")).status).toBe(200);
@@ -132,8 +131,6 @@ describe("readiness and health", () => {
     const response = await get(app, "/readyz");
     expect(response.status).toBe(503);
     expect(response.headers.get("retry-after")).toBe("5");
-    const body = (await response.json()) as { error: { details: { cause: string } } };
-    expect(body.error.details.cause).toBe("migrations_missing");
   });
 });
 
@@ -161,24 +158,30 @@ describe("readiness and held key ids", () => {
   });
   afterAll(() => clone.drop());
 
-  it("/readyz answers 503 with Retry-After 5 and cause key_missing when a sealed row names a key with no loaded key, and 200 again once loaded", async () => {
-    const pools: ReturnType<typeof createAppPool>[] = [];
-    const appWith = (keys: EnvKeyProvider) => {
-      const pool = createAppPool(clone.url("app"), () => undefined);
-      pools.push(pool);
-      const auth = testAuth(pool, keys, logger, ORIGIN);
-      return createApp({ publicOrigin: ORIGIN, trustedProxies: [], pool, logger, keys, auth });
-    };
-    try {
-      const refused = await get(appWith(ring()), "/readyz");
-      expect(refused.status).toBe(503);
-      expect(refused.headers.get("retry-after")).toBe("5");
-      const body = (await refused.json()) as { error: { details: { cause: string } } };
-      expect(body.error.details.cause).toBe("key_missing");
-      expect((await get(appWith(ring("held")), "/readyz")).status).toBe(200);
-    } finally {
-      await Promise.all(pools.map((pool) => pool.end()));
-    }
+  const pools: ReturnType<typeof createAppPool>[] = [];
+  const appWith = (keys: EnvKeyProvider, log = logger) => {
+    const pool = createAppPool(clone.url("app"), () => undefined);
+    pools.push(pool);
+    const auth = testAuth(pool, keys, log, ORIGIN);
+    return createApp({ publicOrigin: ORIGIN, trustedProxies: [], pool, logger: log, keys, auth });
+  };
+  afterAll(() => Promise.all(pools.map((pool) => pool.end())));
+
+  it("/readyz answers 503 with Retry-After 5 when a sealed row names a key with no loaded key, and 200 again once loaded", async () => {
+    const refused = await get(appWith(ring()), "/readyz");
+    expect(refused.status).toBe(503);
+    expect(refused.headers.get("retry-after")).toBe("5");
+    expect((await get(appWith(ring("held")), "/readyz")).status).toBe(200);
+  });
+
+  it("/readyz answers a bare 503 with no cause in the body, and the log line carries the cause", async () => {
+    const lines: string[] = [];
+    const sink = { write: (line: string) => void lines.push(line) };
+    const refused = await get(appWith(ring(), createLogger({ secrets: [], stream: sink })), "/readyz");
+    expect(refused.status).toBe(503);
+    const body = (await refused.json()) as { error: { details?: unknown } };
+    expect(body.error.details).toBeUndefined();
+    expect(lines.join("\n")).toContain("key_missing");
   });
 });
 

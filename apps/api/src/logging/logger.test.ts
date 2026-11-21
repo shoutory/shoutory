@@ -1,6 +1,6 @@
 import { SealedSecret } from "@shoutory/core/crypto";
 import { describe, expect, it } from "vitest";
-import { createLogger, type Logger, logProviderAnswer, logRequest } from "./logger.js";
+import { createLogger, type Logger, logRequest } from "./logger.js";
 
 // Planted values are descriptive and low-entropy (AGENTS 4.13). The canary holds characters that every encoding changes.
 const CANARY = 'log-canary"v\\1/a b+c=d';
@@ -280,16 +280,5 @@ describe("a query error that echoes its parameters", () => {
     expect(lines[0]).not.toContain("not-registered-1");
     expect(lines[0]).toContain("DrizzleQueryError");
     expect(lines[0]).toContain("connection refused");
-  });
-});
-
-describe("a provider answer is logged as class and code only", () => {
-  it("logs the class and the code and never the body", () => {
-    const { log, lines } = capture([]);
-    logProviderAnswer(log, { class: "rate_limited", code: "429", body: "provider-body-detail-0001" });
-    expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain("rate_limited");
-    expect(lines[0]).toContain("429");
-    expect(lines[0]).not.toContain("provider-body-detail-0001");
   });
 });

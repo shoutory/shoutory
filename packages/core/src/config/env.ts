@@ -59,19 +59,30 @@ const databaseUrl = text
   .refine((v) => !isPostgresUrl(v) || passwordOf(v) !== null, "has a malformed percent-encoded password")
   .refine((v) => !isPostgresUrl(v) || notDefault(passwordOf(v) ?? ""), "carries a known example password");
 
-const rolePairs = (prefix: string, field: z.ZodType) =>
-  Object.fromEntries(ROLES.map((r) => [`${prefix}${r.toUpperCase()}`, field]));
+const roleVariable = (prefix: string, role: Role) => `${prefix}${role.toUpperCase()}`;
 
 const schema = z.object({
   SHOUTORY_HMAC_PEPPER: strong("the pepper"),
   SHOUTORY_SESSION_SECRET: strong("the session secret"),
   SHOUTORY_SMTP_URL: text.refine(isUrl(["smtp:", "smtps:"]), "must be an smtp:// or smtps:// URL"),
-  ...rolePairs("SHOUTORY_DATABASE_PASSWORD_", text.refine(notDefault, "is a known example value")),
-  ...rolePairs("SHOUTORY_DATABASE_URL_", databaseUrl),
 });
 
-/** The names of the secret variables, kept here so the logger's registered values come from the one list. */
-export const SECRET_VARIABLES: readonly string[] = Object.keys(schema.shape);
+/** The database roles each process role connects as; the owner and readonly URLs are never read by a server. */
+const URL_ROLES: Readonly<Record<"api" | "worker" | "all", readonly Role[]>> = {
+  api: ["app", "auth"],
+  worker: ["worker"],
+  all: ["app", "auth", "worker"],
+};
+
+/**
+ * The names of the secret variables, kept here so the logger's registered values come from the one list. It covers
+ * every database URL and password name, not only the ones this process needs: an operator may still set them.
+ */
+export const SECRET_VARIABLES: readonly string[] = [
+  ...Object.keys(schema.shape),
+  ...ROLES.map((r) => roleVariable("SHOUTORY_DATABASE_PASSWORD_", r)),
+  ...ROLES.map((r) => roleVariable("SHOUTORY_DATABASE_URL_", r)),
+];
 
 const MAX_PORT = 65535;
 const isOrigin = (value: string) => {
@@ -287,7 +298,15 @@ export interface Config {
   /** The release channel of this build: `stable` unless the image says `beta` or `nightly`. */
   releaseChannel: (typeof RELEASE_CHANNELS)[number];
   storage: StorageConfig;
-  databaseUrls: Readonly<Record<Role, SealedSecret>>;
+  /** Only the URLs of the roles this process role connects as (`URL_ROLES`); read one through `databaseUrlOf`. */
+  databaseUrls: Readonly<Partial<Record<Role, SealedSecret>>>;
+}
+
+/** The connection URL of a database role; a role the process was not configured for is a programming error. */
+export function databaseUrlOf(config: Config, role: keyof Config["databaseUrls"]): SealedSecret {
+  const url = config.databaseUrls[role];
+  if (url === undefined) throw new ConfigError(roleVariable("SHOUTORY_DATABASE_URL_", role), "is not set");
+  return url;
 }
 
 /** The key ring alone, from the key variables: the operator commands need no other setting. */
@@ -336,7 +355,10 @@ export function parseEnv(env: Env): Config {
   if (!parsed.success) throw refusal(parsed.error);
   const http = httpSchema.safeParse(env);
   if (!http.success) throw refusal(http.error);
-  const value = parsed.data as Record<string, string>;
+  const urlNames = URL_ROLES[http.data.SHOUTORY_ROLE].map((r) => roleVariable("SHOUTORY_DATABASE_URL_", r));
+  const urls = z.object(Object.fromEntries(urlNames.map((name) => [name, databaseUrl]))).safeParse(env);
+  if (!urls.success) throw refusal(urls.error);
+  const value: Record<string, string> = { ...parsed.data, ...urls.data };
   const secret = (name: string) => new SealedSecret(value[name] as string);
   return {
     role: http.data.SHOUTORY_ROLE,
@@ -355,8 +377,8 @@ export function parseEnv(env: Env): Config {
     releaseChannel: http.data.SHOUTORY_RELEASE_CHANNEL,
     storage: parseStorageEnv(env),
     databaseUrls: Object.fromEntries(
-      ROLES.map((r) => [r, secret(`SHOUTORY_DATABASE_URL_${r.toUpperCase()}`)]),
-    ) as Record<Role, SealedSecret>,
+      URL_ROLES[http.data.SHOUTORY_ROLE].map((r) => [r, secret(roleVariable("SHOUTORY_DATABASE_URL_", r))]),
+    ),
   };
 }
 

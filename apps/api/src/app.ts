@@ -116,7 +116,7 @@ export function createApp(options: AppOptions): App {
     const refusal = toRefusal(error);
     if (refusal.code === "internal_error" || refusal.code === "service_unavailable") {
       options.logger.error(
-        { requestId: c.get("requestId"), code: refusal.code, err: error },
+        { requestId: c.get("requestId"), code: refusal.code, details: refusal.details, err: error },
         "request failed",
       );
     }

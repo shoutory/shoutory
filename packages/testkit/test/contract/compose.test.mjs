@@ -68,5 +68,40 @@ test("compose takes every credential from the environment and refuses an unset o
   const entries = Object.values(services).flatMap((service) => Object.entries(service.environment ?? {}));
   const sensitive = entries.filter(([key]) => SENSITIVE.test(key));
   assert.ok(sensitive.length >= 6, "the superuser and the role passwords must be listed");
-  for (const [key, value] of sensitive) assert.match(String(value), /^\$\{[A-Z0-9_]+:\?[^}]+\}$/, key);
+  // The optional S3 settings are passed through unset (no value): the app refuses an empty one (R504).
+  const required = sensitive.filter(([key]) => !key.startsWith("SHOUTORY_S3_"));
+  for (const [key, value] of required) assert.match(String(value), /^\$\{[A-Z0-9_]+:\?[^}]+\}$/, key);
+});
+
+test("the app service receives no owner or readonly database URL and no database password", () => {
+  const keys = Object.keys(services.shoutory.environment);
+  assert.deepEqual(
+    keys.filter((key) => /DATABASE_URL_(OWNER|READONLY)|DATABASE_PASSWORD_/.test(key)),
+    [],
+  );
+});
+
+test("every README operator variable is in a compose service environment", () => {
+  const readme = readFileSync(join(root, "README.md"), "utf8");
+  const table = readme.slice(readme.indexOf("## Configuration"));
+  // The image sets these; the published port fixes the listen port and address, so compose does not pass them (R504).
+  const exempt = new Set([
+    "SHOUTORY_RELEASE_CHANNEL",
+    "SHOUTORY_WEB_ROOT",
+    "SHOUTORY_DATA_DIR",
+    "SHOUTORY_PORT",
+    "SHOUTORY_HOST",
+  ]);
+  const present = new Set(Object.values(services).flatMap((s) => Object.keys(s.environment ?? {})));
+  const missing = [];
+  for (const [, cell] of table.matchAll(/^\| (`[^|]+?`)\s+\|/gm)) {
+    const names = [...cell.matchAll(/`(SHOUTORY_[A-Z0-9_<>]+)`/g)].map((m) => m[1]);
+    const prefix = names[0]?.replace(/[A-Z]+$/, "") ?? "";
+    for (const m of cell.matchAll(/`_([A-Z]+)`/g)) names.push(`${prefix}${m[1]}`);
+    for (const name of names) {
+      const found = name === "SHOUTORY_KEK_<ID>" ? present.has("SHOUTORY_KEK_K1") : present.has(name);
+      if (!found && !exempt.has(name)) missing.push(name);
+    }
+  }
+  assert.deepEqual(missing, []);
 });

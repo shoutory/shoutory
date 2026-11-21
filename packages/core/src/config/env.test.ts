@@ -5,7 +5,7 @@ import { assertKeyIdsLoaded, EnvKeyProvider, KeyError } from "../crypto/keys.js"
 import { assertUtc, ConfigError, type Env, parseEnv, parseKeyRing, parseStorageEnv } from "./env.js";
 
 const b64 = (fill: number) => Buffer.alloc(32, fill).toString("base64");
-const ROLES = ["OWNER", "APP", "WORKER", "AUTH", "READONLY"] as const;
+const ROLES = ["APP", "WORKER", "AUTH"] as const;
 
 const valid: Record<string, string> = {
   SHOUTORY_ACTIVE_KEY_ID: "k1",
@@ -15,9 +15,7 @@ const valid: Record<string, string> = {
   SHOUTORY_SMTP_URL: "smtp://mailer-test:smtp-test-secret-1@mail.invalid:587",
   SHOUTORY_PUBLIC_ORIGIN: "https://app.example.test",
   SHOUTORY_MAIL_FROM: "noreply@mail.example.test",
-  ...Object.fromEntries(
-    ROLES.map((r) => [`SHOUTORY_DATABASE_PASSWORD_${r}`, `${r.toLowerCase()}-test-secret-1`]),
-  ),
+  // The role `all` (the default) connects as app, auth and worker; the owner and readonly URLs are not read.
   ...Object.fromEntries(
     ROLES.map((r) => [
       `SHOUTORY_DATABASE_URL_${r}`,
@@ -401,6 +399,34 @@ describe("start-up refusal of the library's own environment switches", () => {
 
   it("accepts an unrelated variable that only looks similar", () => {
     expect(refusedVariable(withValue("OAUTH_CLIENT", "x"))).toBeUndefined();
+  });
+});
+
+describe("database URLs per process role (R488)", () => {
+  const onlyUrls = (role: string, names: string[]): Env => {
+    const urls = Object.fromEntries(
+      names.map((r) => [`SHOUTORY_DATABASE_URL_${r}`, valid[`SHOUTORY_DATABASE_URL_${r}`]]),
+    );
+    const rest = Object.fromEntries(
+      Object.entries(valid).filter(([k]) => !k.startsWith("SHOUTORY_DATABASE_")),
+    );
+    return { ...rest, ...urls, SHOUTORY_ROLE: role } as Env;
+  };
+  it.each([
+    ["api", ["APP", "AUTH"]],
+    ["worker", ["WORKER"]],
+    ["all", ["APP", "AUTH", "WORKER"]],
+  ])("a %s process needs exactly its role URLs and holds no owner or readonly URL", (role, names) => {
+    expect(Object.keys(parseEnv(onlyUrls(role, names)).databaseUrls).sort()).toEqual(
+      names.map((n) => n.toLowerCase()).sort(),
+    );
+  });
+  it.each([
+    ["api", ["APP"], "SHOUTORY_DATABASE_URL_AUTH"],
+    ["worker", [], "SHOUTORY_DATABASE_URL_WORKER"],
+    ["all", ["APP", "AUTH"], "SHOUTORY_DATABASE_URL_WORKER"],
+  ])("a %s process with a missing URL is refused and names it", (role, names, missing) => {
+    expect(refusedVariable(onlyUrls(role, names))).toBe(missing);
   });
 });
 

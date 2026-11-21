@@ -43,14 +43,3 @@ export const ROLE_PERMISSIONS: Readonly<Record<WorkspaceRole, readonly Permissio
   approver: ["posts.view", "approval.decide", "library.view", "analytics.view"],
   viewer: ["posts.view", "library.view", "inbox.view", "analytics.view"],
 };
-
-export const ORGANIZATION_ROLES = ["owner", "admin", "member", "billing"] as const;
-export type OrganizationRole = (typeof ORGANIZATION_ROLES)[number];
-
-/** The workspace role an organization role acts as in every workspace of its organization; none for the rest. */
-export const ORGANIZATION_ROLE_ACTS_AS: Readonly<Record<OrganizationRole, WorkspaceRole | null>> = {
-  owner: "admin",
-  admin: "admin",
-  member: null,
-  billing: null,
-};

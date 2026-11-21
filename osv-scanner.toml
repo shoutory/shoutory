@@ -1,5 +1,0 @@
-# 2026-11-17: remove this entry when a patched picomatch is released; it expires on 2026-12-17.
-[[IgnoredVulns]]
-id = "GHSA-fc5q-39xc-vjpf"
-ignoreUntil =2026-12-17
-reason = "picomatch <= 4.0.7 reaches dev tooling only (vitest, vite, tinyglobby), its patterns come from repository config, and no patched release exists"

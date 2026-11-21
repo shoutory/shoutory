@@ -2,7 +2,7 @@ import { realpathSync } from "node:fs";
 import type { Server } from "node:http";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
-import { assertUtc, type Config, parseEnv } from "@shoutory/core/config";
+import { assertUtc, type Config, databaseUrlOf, parseEnv } from "@shoutory/core/config";
 import { assertKeyIdsLoaded } from "@shoutory/core/keys";
 import { createAppPool, createAuthDb } from "@shoutory/db/pool";
 import { assertMigrationsApplied, sealedKeyIds } from "@shoutory/db/startup";
@@ -47,10 +47,10 @@ function listen(
 }
 
 async function startServer(config: Config, logger: Logger): Promise<RunningServer> {
-  const pool = createAppPool(config.databaseUrls.app.expose(), (error) =>
+  const pool = createAppPool(databaseUrlOf(config, "app").expose(), (error) =>
     logger.error({ err: error }, "database pool error"),
   );
-  const authPool = createAppPool(config.databaseUrls.auth.expose(), (error) =>
+  const authPool = createAppPool(databaseUrlOf(config, "auth").expose(), (error) =>
     logger.error({ err: error }, "auth database pool error"),
   );
   try {
@@ -105,7 +105,7 @@ async function startWorkerRole(
   logger: Logger,
   role: "worker" | "all",
 ): Promise<{ close(): Promise<void> }> {
-  const url = config.databaseUrls.worker.expose();
+  const url = databaseUrlOf(config, "worker").expose();
   const pool = createAppPool(url, (error) => logger.error({ err: error }, "worker database pool error"));
   try {
     await assertMigrationsApplied(pool);

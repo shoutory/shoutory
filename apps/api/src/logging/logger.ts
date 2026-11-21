@@ -19,12 +19,6 @@ export interface Logger {
   child(bindings: object): Logger;
 }
 
-export interface ProviderAnswer {
-  readonly class: string;
-  readonly code: string;
-  readonly body: string;
-}
-
 export interface RequestLine {
   readonly method: string;
   readonly url: string;
@@ -79,11 +73,6 @@ export function createLogger(options: LoggerOptions): Logger {
     options.stream,
   );
   return wrap(logger, bindings);
-}
-
-/** A provider answer is logged as its class and code only; the body never reaches a log. */
-export function logProviderAnswer(logger: Logger, answer: ProviderAnswer): void {
-  logger.info({ answer: { class: answer.class, code: answer.code } }, "provider answer");
 }
 
 export function logRequest(logger: Logger, request: RequestLine): void {

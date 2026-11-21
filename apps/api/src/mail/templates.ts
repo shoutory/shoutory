@@ -35,7 +35,8 @@ export const TEMPLATES = {
     class: "transactional",
     vars: z.strictObject({}),
     subject: () => "Confirm your email address",
-    text: ({ link }) => `Open this link to confirm your email address:\n\n${link}\n\n${IGNORE}\n`,
+    text: ({ link }) =>
+      `An account was created with this email address. Open this link to confirm it:\n\n${link}\n\nIf you did not create an account, do not open the link.\n`,
   }),
   reset_password: template({
     class: "transactional",

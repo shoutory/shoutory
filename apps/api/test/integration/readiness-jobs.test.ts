@@ -9,7 +9,6 @@ import { testAuth } from "../support/auth.js";
 const env = readTestEnv();
 const REMOTE = { incoming: { socket: { remoteAddress: "192.0.2.1" } } };
 const ORIGIN = "https://app.example.test";
-const logger = createLogger({ secrets: [], stream: { write: () => undefined } });
 const keys = new EnvKeyProvider({
   SHOUTORY_ACTIVE_KEY_ID: "k1",
   SHOUTORY_KEK_K1: Buffer.alloc(32, 1).toString("base64"),
@@ -29,17 +28,19 @@ async function answer(plant: (fixture: Fixture) => Promise<void>): Promise<[numb
     await withAdminClient(env, db.name, (admin) =>
       plant({ owner: db.pool("owner"), worker: db.pool("worker"), admin }),
     );
+    const lines: string[] = [];
+    const logged = createLogger({ secrets: [], stream: { write: (line) => void lines.push(line) } });
     const app = createApp({
       publicOrigin: ORIGIN,
       trustedProxies: [],
       pool: appPool,
       keys,
-      logger,
-      auth: testAuth(appPool, keys, logger, ORIGIN),
+      logger: logged,
+      auth: testAuth(appPool, keys, logged, ORIGIN),
     });
     const response = await Promise.resolve(app.request("/readyz", {}, REMOTE));
-    const body = (await response.json()) as { error?: { details?: { cause?: string } } };
-    return [response.status, body.error?.details?.cause];
+    // The cause is in the log only (R494).
+    return [response.status, /"cause":"([a-z_]+)"/.exec(lines.join("\n"))?.[1]];
   } finally {
     await appPool.end();
     await db.drop();

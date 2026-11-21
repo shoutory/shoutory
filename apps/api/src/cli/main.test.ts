@@ -91,4 +91,16 @@ describe("collectSecrets", () => {
       ].sort(),
     );
   });
+
+  it.each(
+    ["OWNER", "APP", "WORKER", "AUTH", "READONLY"].flatMap((role) => [
+      [
+        `SHOUTORY_DATABASE_URL_${role}`,
+        `postgres://${role.toLowerCase()}:planted-db-${role}@db.example.test/shoutory`,
+      ],
+      [`SHOUTORY_DATABASE_PASSWORD_${role}`, `planted-role-password-${role}`],
+    ]),
+  )("collects %s so the logger never prints it", (name, value) => {
+    expect(collectSecrets({ [name as string]: value })).toContain(value);
+  });
 });

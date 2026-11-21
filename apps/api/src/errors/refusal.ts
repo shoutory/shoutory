@@ -105,5 +105,7 @@ export function errorResponse(c: Context<AppEnv>, refusal: Refusal): Response {
   if (status === 503) c.header("Retry-After", RETRY_AFTER_SECONDS);
   if (status === 429) c.header("Retry-After", String(refusal.retryAfterSeconds ?? RETRY_AFTER_SECONDS));
   const requestId = c.get("requestId");
-  return c.json({ error: { code: refusal.code, message, details: refusal.details, requestId } }, status);
+  // The public probe names no cause: a caller must not learn which dependency is down (the log carries it).
+  const details = c.req.path === "/readyz" ? undefined : refusal.details;
+  return c.json({ error: { code: refusal.code, message, details, requestId } }, status);
 }
