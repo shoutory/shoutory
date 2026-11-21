@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.0](https://github.com/shoutory/shoutory/compare/v0.1.0...v0.2.0) (2026-11-21)
+
+
+### Features
+
+* **provider-sdk:** send every outbound request through one guarded egress client ([7f820c7](https://github.com/shoutory/shoutory/commit/7f820c77ea960004d098208d87156de7ce665a23))
+* **testkit:** add the oauth fake and the fixture-oauth provider ([e34d4b2](https://github.com/shoutory/shoutory/commit/e34d4b210f9683b0627926d113fc5d6b7033afcd))
+
+
+### Bug Fixes
+
+* **e2e:** fix the shown version in the visual run so a release keeps its baselines ([4374d42](https://github.com/shoutory/shoutory/commit/4374d422a91532e814ce393cb3c2cf981aeb46b9))
+* **e2e:** keep every sharded project after the founder project ([278349a](https://github.com/shoutory/shoutory/commit/278349a6c08aaf45cba5b10d962a68c540a357d9))
+* **e2e:** let the fresh-code wait extend its test's timeout ([cf35b68](https://github.com/shoutory/shoutory/commit/cf35b6806e8f3564faff09a4229dde6b8e80f846))
+
 ## 0.1.0 (2026-11-21)
 
 
