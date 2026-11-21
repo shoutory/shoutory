@@ -1,20 +1,20 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Form } from "react-aria-components";
 import { z } from "zod";
 import { authCopy } from "../auth/auth-copy";
 import { SubmitButton, useAction } from "../auth/auth-frame";
 import { NewPasswordField, useNewPassword } from "../auth/new-password";
+import { useStepUp } from "../auth/step-up";
 import { type ApiError, request } from "../http/client";
 import { ErrorPanel } from "../ui/error-panel";
 import { TextField } from "../ui/text-field";
 import { StepHeading } from "./recovery-codes";
 
-const status = z.object({ status: z.boolean() });
 const changed = z.object({ user: z.object({ email: z.string() }) });
 
 // A password found in a breach is told apart from any other refusal by the reason the server gives.
-function FailedChange({ error, step }: { error: ApiError; step: "verify" | "change" }) {
+function FailedChange({ error }: { error: ApiError }) {
   if (error.details?.reason === "password_breached") {
     return (
       <ErrorPanel
@@ -27,28 +27,24 @@ function FailedChange({ error, step }: { error: ApiError; step: "verify" | "chan
       />
     );
   }
-  const words = authCopy(step === "verify" ? "step-up" : "reset", error);
-  return <ErrorPanel focusOnMount error={error} {...words} />;
+  // A wrong current password has its own words; any other refusal of the call is about the new password.
+  const screen = error.details?.reason === "current_password_wrong" ? "step-up" : "reset";
+  return <ErrorPanel focusOnMount error={error} {...authCopy(screen, error)} />;
 }
 
-/** The current password is checked first and then sent once more with the new one; neither is kept. */
+/** The current password goes with the new one; neither is kept. A stale identity check is asked for by X-04. */
 export function ChangePassword({ onChanged }: { onChanged: () => void }) {
   const { t } = useLingui();
+  const stepUp = useStepUp();
   const [current, setCurrent] = useState("");
   const next = useNewPassword();
   const [done, setDone] = useState(false);
-  const step = useRef<"verify" | "change">("verify");
   const change = useAction(
     async () => {
-      step.current = "verify";
-      await request(status, "/api/auth/verify-password", {
-        method: "POST",
-        body: { password: current },
-        envelope: false,
-      });
-      step.current = "change";
       const body = { currentPassword: current, newPassword: next.value };
-      await request(changed, "/api/auth/change-password", { method: "POST", body, envelope: false });
+      await stepUp(() =>
+        request(changed, "/api/auth/change-password", { method: "POST", body, envelope: false }),
+      );
       setCurrent("");
       next.clear();
       setDone(true);
@@ -98,7 +94,7 @@ export function ChangePassword({ onChanged }: { onChanged: () => void }) {
           </Trans>
         ) : null}
       </p>
-      {change.failure ? <FailedChange error={change.failure} step={step.current} /> : null}
+      {change.failure ? <FailedChange error={change.failure} /> : null}
     </Form>
   );
 }

@@ -24,7 +24,7 @@ test("the flags screen lists planted flags with owner, removal date and state, m
   await expect(expired.getByTestId("flag-expired")).toBeVisible();
   await expect(page.getByTestId(`override-${flags.expired.key}`)).toHaveAttribute("aria-disabled", "true");
 
-  // The founder signed in minutes ago, so the password check is still fresh: no prompt, the change goes through.
+  // The founder's last code was minutes ago, so the identity check is still fresh: no prompt, the change goes through.
   const key = flags.live.key;
   await page.getByTestId(`override-${key}`).click();
   await page.getByTestId(`override-${key}-on`).click();

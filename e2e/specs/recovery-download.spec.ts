@@ -18,7 +18,7 @@ async function download(page: Page): Promise<string> {
 test("the recovery codes download holds the codes, and its Blob URL is revoked at 40 seconds and on leaving", async ({
   page,
 }) => {
-  const { account } = await loadFounder();
+  const { account, secret } = await loadFounder();
   await page.addInitScript(() => {
     const seen: Blobs = { created: [], revoked: [] };
     (window as unknown as { __blobs: Blobs }).__blobs = seen;
@@ -34,7 +34,7 @@ test("the recovery codes download holds the codes, and its Blob URL is revoked a
       revoke(url);
     };
   });
-  const codes = await newRecoveryCodes(page, account.password);
+  const codes = await newRecoveryCodes(page, account.password, secret);
   // From here the page's timers are ours and time stands still until `fastForward` moves it: the revoke timer is the
   // one the download starts, and nothing else can fire it.
   const start = Date.now();

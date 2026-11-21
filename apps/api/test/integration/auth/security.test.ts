@@ -48,7 +48,7 @@ describe("the two-factor status", () => {
 });
 
 describe("changing the password", () => {
-  it("a wrong current password is a refusal with no reason, a breached new one says so", async () => {
+  it("a wrong current password says so by its reason, a breached new one by its own", async () => {
     const jar = new Jar(await fx.signedIn("change-refused-1@example.test"));
     const wrong = await post(
       "change-password",
@@ -59,7 +59,7 @@ describe("changing the password", () => {
     expect([wrong.status, wrongError.code, wrongError.details]).toEqual([
       400,
       "validation_failed",
-      undefined,
+      { reason: "current_password_wrong" },
     ]);
     fx.hibp.breached.add("breached-password-1234");
     const breached = await post(

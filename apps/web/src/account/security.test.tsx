@@ -56,9 +56,9 @@ async function changePassword(api: Parameters<typeof stubApi>[0] = {}, next = NE
   return { ...opened, stub };
 }
 
-// NFR-SEC-28..30: the current password is checked first, then used once more with the new one; nothing is kept.
+// NFR-SEC-28..30: the current password goes once with the new one (a stale identity check is X-04's); nothing is kept.
 describe("changing the password (security floor)", () => {
-  it("checks the current password, then changes it with only the two passwords, and keeps both out of URLs and storage", async () => {
+  it("changes it with only the two passwords, in one call, and keeps both out of URLs and storage", async () => {
     stubApi();
     const fields = await openApp(PATH);
     expect(field(fields.host, "currentPassword")?.getAttribute("autocomplete")).toBe("current-password");
@@ -72,8 +72,7 @@ describe("changing the password (security floor)", () => {
     const paths = stub.mock.calls
       .map(([path]) => path)
       .filter((path) => /verify-password|change-password/.test(path));
-    expect(paths).toEqual(["/api/auth/verify-password", "/api/auth/change-password"]);
-    expect(bodyOf(callsTo(stub, "verify-password")[0])).toEqual({ password: CURRENT });
+    expect(paths).toEqual(["/api/auth/change-password"]);
     expect(bodyOf(callsTo(stub, "change-password")[0])).toEqual({
       currentPassword: CURRENT,
       newPassword: NEXT,
@@ -105,7 +104,6 @@ describe("the password change answers", () => {
   });
 
   it.each([
-    ["a wrong current password", { verifyPassword: () => refusal("validation_failed", 400) }, /not right/i],
     [
       "a password found in a breach",
       {
@@ -115,11 +113,17 @@ describe("the password change answers", () => {
       /data breach/i,
     ],
     [
+      "a wrong current password",
+      // The server's answer: apps/api change-password adds the reason to the library's INVALID_PASSWORD.
+      { changePassword: () => refusal("validation_failed", 400, { reason: "current_password_wrong" }) },
+      /not right/i,
+    ],
+    [
       "a new password the server refuses",
       { changePassword: () => refusal("validation_failed", 400) },
       /not accepted/i,
     ],
-    ["too many attempts", { verifyPassword: () => refusal("too_many_requests", 429) }, /few minutes/i],
+    ["too many attempts", { changePassword: () => refusal("too_many_requests", 429) }, /few minutes/i],
   ])("%s has its own words", async (_name, api, words) => {
     const { host } = await changePassword(api);
     expect(host.querySelector('[role="alert"]')?.textContent).toMatch(words);
@@ -209,7 +213,7 @@ describe("the two-step verification block", () => {
   });
 });
 
-// F-TEAM-006, NFR-SEC-17: new codes are shown once, after the password was checked, and kept nowhere.
+// F-TEAM-006, NFR-SEC-17: new codes are asked for with the password, shown once and kept nowhere.
 describe("new recovery codes (security floor)", () => {
   async function regenerate() {
     const stub = stubApi({
@@ -225,12 +229,12 @@ describe("new recovery codes (security floor)", () => {
     return { ...opened, stub };
   }
 
-  it("checks the password, then asks for codes with it; they show once and are in no URL, storage or state", async () => {
+  it("asks for codes with the password in one call; they show once and are in no URL, storage or state", async () => {
     const { stub, host, router } = await regenerate();
     const paths = stub.mock.calls
       .map(([path]) => path)
       .filter((path) => /verify-password|generate-backup/.test(path));
-    expect(paths).toEqual(["/api/auth/verify-password", "/api/auth/two-factor/generate-backup-codes"]);
+    expect(paths).toEqual(["/api/auth/two-factor/generate-backup-codes"]);
     expect(bodyOf(callsTo(stub, "generate-backup-codes")[0])).toEqual({ password: CURRENT });
     expect(CODES.filter((code) => host.innerHTML.includes(code))).toEqual(CODES);
     const surfaces = JSON.stringify([

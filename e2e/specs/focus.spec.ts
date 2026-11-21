@@ -30,8 +30,8 @@ test("the palette, a dialog and a route change put focus where the screen says",
 test("new recovery codes take focus when they appear, and the security heading takes it back when saved", async ({
   page,
 }) => {
-  const { account } = await loadFounder();
-  await newRecoveryCodes(page, account.password);
+  const { account, secret } = await loadFounder();
+  await newRecoveryCodes(page, account.password, secret);
   await expect(page.getByTestId("recovery-codes").locator("h2")).toBeFocused();
   await page.getByTestId("recovery-saved").click();
   await expect(page.getByTestId("recovery-codes")).toHaveCount(0);

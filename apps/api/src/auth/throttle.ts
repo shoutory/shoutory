@@ -52,7 +52,8 @@ export interface Throttle {
   spendIp(scope: Scope, address: string): Promise<void>;
   /** Like `spend`, but answers whether the token was granted instead of refusing. */
   tryAccount(email: string): Promise<boolean>;
-  refundAccount(email: string): Promise<void>;
+  /** Refills the `login_account` bucket of an address, or of a user id (lowercase, as the ids are). */
+  refundAccount(subject: string): Promise<void>;
 }
 
 interface Taken {
@@ -81,8 +82,8 @@ export function createThrottle(pool: AppPool, pepper: SealedSecret): Throttle {
     async tryAccount(email) {
       return (await take("login_account", email.toLowerCase(), 1)).allowed;
     },
-    async refundAccount(email) {
-      await take("login_account", email.toLowerCase(), -LOGIN_ACCOUNT_CAPACITY);
+    async refundAccount(subject) {
+      await take("login_account", subject.toLowerCase(), -LOGIN_ACCOUNT_CAPACITY);
     },
   };
 }

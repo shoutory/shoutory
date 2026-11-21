@@ -168,6 +168,14 @@ has beaten within 90 s, or before the job queue is installed; these limits are d
 `pnpm build` also builds the web application (`apps/web`) into `apps/web/dist/client`; `pnpm --filter @shoutory/web exec vite`
 serves it for development.
 
+### Identity checks
+
+Sensitive actions (changing the password or the second factor, member changes, instance settings) ask for a fresh identity
+check, valid for ten minutes: the password, or a code of the authenticator app for an account with two-step verification on.
+A password check made later replaces the code check as the newest one, so such an account is asked for a code again. A
+recovery code signs in but records no identity check, so a person without the authenticator app signs in with a recovery
+code and cannot manage the second factor until they have a code of the app again.
+
 ### Mail
 
 A `worker` or `all` process sends the queued mail over `SHOUTORY_SMTP_URL` from `SHOUTORY_MAIL_FROM`. Marketing mail is a

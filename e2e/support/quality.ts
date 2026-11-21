@@ -9,6 +9,7 @@ import {
   newAccount,
   signIn,
 } from "./journey";
+import { waitForFreshCode } from "./restore";
 import {
   type Context,
   expectNoPolicyViolation,
@@ -19,6 +20,7 @@ import {
   type Theme,
 } from "./screens";
 import { plantedFlags, STATE_DIR } from "./stack";
+import { nextTotp } from "./totp";
 
 const SIGNED_OUT = { cookies: [], origins: [] };
 
@@ -90,28 +92,32 @@ export async function inPage<T>(
 }
 
 /**
- * Makes the signed-in person's password check fresh, as the dialog does, so a change that asks for one goes through
- * without it. The run is long enough for the check made at sign-in to have passed its ten minutes.
+ * Makes the founder's identity check fresh with a code of the authenticator, as the dialog does, so a change that asks
+ * for one goes through without it. The founder has the second factor on, so a password check would not count. The
+ * run is long enough for the check made at sign-in to have passed its ten minutes. The page must be on the app.
  */
-export async function refreshStepUp(page: Page, password: string): Promise<void> {
+export async function refreshStepUp(page: Page, secret: string): Promise<void> {
+  await waitForFreshCode();
+  const code = await nextTotp(secret);
   const status = await page.evaluate(async (value) => {
-    const answer = await fetch("/api/auth/verify-password", {
+    const answer = await fetch("/api/auth/two-factor/verify-totp", {
       method: "POST",
       // The app's own client sends this header on every call, and the server refuses a call without it.
       headers: { "content-type": "application/json", "X-Shoutory-Client": "web" },
-      body: JSON.stringify({ password: value }),
+      body: JSON.stringify({ code: value }),
     });
     return answer.status;
-  }, password);
-  if (status !== 200) throw new Error(`the password check answered ${status}`);
+  }, code);
+  if (status !== 200) throw new Error(`the code check answered ${status}`);
 }
 
 /**
- * New recovery codes for the signed-in person, as the security screen offers them; returns the codes shown. For the
- * founder this replaces the codes made at enrolment, which no other spec uses.
+ * New recovery codes for the founder, as the security screen offers them; returns the codes shown. This replaces the
+ * codes made at enrolment, which no other spec uses.
  */
-export async function newRecoveryCodes(page: Page, password: string): Promise<string[]> {
+export async function newRecoveryCodes(page: Page, password: string, secret: string): Promise<string[]> {
   await page.goto("/account/security");
+  await refreshStepUp(page, secret);
   await page.getByTestId("codes-new").click();
   await page.getByTestId("codes-password").fill(password);
   await page.getByTestId("codes-generate").click();

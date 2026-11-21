@@ -43,6 +43,9 @@ describe("the TOTP code is single use and the second factor is throttled", () =>
     expect(wrong.status).toBe(401);
     // The wrong guess did not spend the right code's bucket: the right code still signs in.
     expect((await verifyTotp(first.jar, code)).status).toBe(200);
+    // A second-factor sign-in on an account that already had the factor revokes no other session.
+    const here = await fx.request("/api/auth/get-session", { headers: enrolled.jar.header });
+    expect(here.status).toBe(200);
     const second = await fx.challenged(email);
     const replay = await verifyTotp(second.jar, code);
     expect([replay.status, await codeOf(replay)]).toEqual([429, "too_many_requests"]);
@@ -209,7 +212,7 @@ describe("the enrolment answers carry the secret once and nothing else does", ()
 
 // What the setup page may tell the user: which sessions survive the two calls of an enrolment.
 describe("an enrolment and its first code", () => {
-  it("enabling signs out the other devices, and the first code keeps this device signed in", async () => {
+  it("activating the second factor ends a session made during enrolment; enabling signs out the other devices and the first code keeps this device signed in", async () => {
     const email = "setup-sessions-1@example.test";
     const jar = new Jar(await fx.signedIn(email));
     const signIn = async () =>
@@ -245,10 +248,10 @@ describe("an enrolment and its first code", () => {
       afterEnable: { sessions: 1, here: true, other: false },
       verifyStatus: 200,
       newCookie: true,
-      sessions: 2,
+      sessions: 1,
       oldCookieAlive: false,
       thisDeviceAlive: true,
-      openedBetweenAlive: true,
+      openedBetweenAlive: false,
     });
   }, 30_000);
 });

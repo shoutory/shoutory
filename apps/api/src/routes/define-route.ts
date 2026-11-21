@@ -25,8 +25,8 @@ type Policy = (typeof POLICIES)[number];
 /** What a `session` or `step_up` route needs from the authentication service. */
 export interface RouteAuth {
   readonly resolveSession: SessionResolver;
-  /** Whether the session proved its identity again in the last ten minutes. */
-  readonly hasStepUp: (session: AuthSession) => Promise<boolean>;
+  /** Refuses with `step_up_required` unless the session proved its identity again in the last ten minutes. */
+  readonly requireStepUp: (session: AuthSession) => Promise<void>;
 }
 
 /**
@@ -131,9 +131,7 @@ async function authenticate(auth: RouteAuth, c: Context<AppEnv>, policy: Policy)
   const found = await auth.resolveSession(c.req.raw.headers);
   if (!found) throw new Refusal("unauthenticated", "no valid session");
   c.set("session", found.session);
-  if (policy === "step_up" && !(await auth.hasStepUp(found.session))) {
-    throw new Refusal("step_up_required", "no authentication in the last ten minutes");
-  }
+  if (policy === "step_up") await auth.requireStepUp(found.session);
   return found.cookies;
 }
 

@@ -326,6 +326,10 @@ msgid "auth.copy.lock.meaning"
 msgstr "Repeated wrong passwords lock sign-in for a while. Try again in a few minutes."
 
 #. js-lingui-explicit-id
+msgid "auth.copy.lock_code.meaning"
+msgstr "Repeated wrong codes lock this for a while. Try again in a few minutes."
+
+#. js-lingui-explicit-id
 msgid "auth.copy.sign_in_failed.what"
 msgstr "We could not sign you in"
 
@@ -348,6 +352,14 @@ msgstr "Confirm your password"
 #. js-lingui-explicit-id
 msgid "auth.step_up.intro"
 msgstr "This action needs your password again."
+
+#. js-lingui-explicit-id
+msgid "auth.step_up.title_code"
+msgstr "Enter your authentication code"
+
+#. js-lingui-explicit-id
+msgid "auth.step_up.intro_code"
+msgstr "This action needs a code from your authenticator app."
 
 #. js-lingui-explicit-id
 msgid "auth.step_up.password"

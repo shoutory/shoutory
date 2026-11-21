@@ -4,14 +4,17 @@ import { audit, type Ctx, forward, type Handler, pass, respond, sessionAfter, te
 import { AUTH_BASE } from "./paths.js";
 import { revokeOtherSessions } from "./sessions.js";
 
-/** Every check of the session holder's password spends the account's login bucket and refunds it on success. */
+/**
+ * Every check of the session holder's password spends a login bucket keyed by the user id and refunds it on success.
+ * The sign-in bucket is keyed by the address, so an anonymous caller emptying it cannot refuse a signed-in user.
+ */
 const guarded =
   (inner: Handler): Handler =>
   async (ctx) => {
-    const email = ctx.c.get("session").email.toLowerCase();
-    await ctx.auth.throttle.spend("login_account", email);
+    const { userId } = ctx.c.get("session");
+    await ctx.auth.throttle.spend("login_account", userId);
     const answer = await inner(ctx);
-    await ctx.auth.throttle.refundAccount(email);
+    await ctx.auth.throttle.refundAccount(userId);
     return answer;
   };
 
@@ -52,9 +55,15 @@ async function auditSecondFactor(
 const secondFactorCode =
   (method: "totp" | "backup_code"): Handler =>
   async (ctx: Ctx) => {
-    const hadSession = (await ctx.auth.resolveSession(ctx.c.req.raw.headers)) !== null;
+    const before = (await ctx.auth.resolveSession(ctx.c.req.raw.headers))?.session ?? null;
+    const hadSession = before !== null;
     const { data, cookies } = await forward(ctx);
     const session = await sessionAfter(ctx, cookies);
+    // The first code activates the second factor and swaps the session: every other one, one opened while the
+    // secret was being set up included, ends with the old one (a privilege change renews the sessions).
+    if (session && method === "totp" && before && !before.twoFactorEnabled) {
+      await revokeOtherSessions(ctx.auth, session);
+    }
     if (session) await auditSecondFactor(ctx, session.userId, method, hadSession);
     if (session && method === "totp") await ctx.auth.stepUp.record(session, "totp");
     if (session && liveSessionCookie(cookies)) await ctx.auth.claimOwner(session.userId);
@@ -87,6 +96,9 @@ const resetPassword: Handler = async (ctx) => {
   const outcome = await ctx.auth.passwords.screen(text(ctx, "newPassword"));
   const answer = await pass(ctx);
   await ctx.auth.passwords.settle(token.value, outcome);
+  // A completed recovery unlocks the address, as the sign-in bucket's lockout would otherwise outlast it.
+  const user = await context.internalAdapter.findUserById(token.value);
+  if (user) await ctx.auth.throttle.refundAccount(user.email);
   return answer;
 };
 

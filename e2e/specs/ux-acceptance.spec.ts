@@ -47,12 +47,12 @@ test("the loading status stays quiet for 300 ms, then says loading, and offers a
 test("a flag switch shows busy and keeps its value until the server answers, and switching back undoes it", async ({
   page,
 }) => {
-  const { account } = await loadFounder();
+  const { secret } = await loadFounder();
   const key = plantedFlags().defaultOn.key;
   const row = page.getByTestId(`flag-${key}`);
   const select = page.getByTestId(`override-${key}`);
   await page.goto("/admin/flags");
-  await refreshStepUp(page, account.password);
+  await refreshStepUp(page, secret);
   const { held, release } = gate();
   await page.route(`**/api/v1/admin/flags/${key}/override`, async (route) => {
     await held;

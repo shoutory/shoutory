@@ -12,13 +12,21 @@ const WRONG_CREDENTIAL_CODES: ReadonlySet<string> = new Set([
 // The library's answers for a mailed link it rejects: unknown, used or expired.
 const BAD_LINK_CODES: ReadonlySet<string> = new Set(["INVALID_TOKEN", "TOKEN_EXPIRED", "USER_NOT_FOUND"]);
 
+function refusalFromBadRequest(code: string | undefined, message: string): Refusal {
+  if (code !== undefined && BAD_LINK_CODES.has(code)) return new Refusal("link_unusable", message);
+  // A password that is not the stored one (change-password's current password among them): the reason lets a screen
+  // tell it from a new password the policy refuses, which has none.
+  if (code === "INVALID_PASSWORD") {
+    return new Refusal("validation_failed", message, { details: { reason: "current_password_wrong" } });
+  }
+  return new Refusal("validation_failed", message);
+}
+
 /** The one table that turns a library answer (status and error code) into our envelope's code. */
 export function refusalFromAnswer(status: number, code: string | undefined): Refusal {
   const message = `auth answered ${status}${code ? ` ${code}` : ""}`;
-  if (status === 400 && code !== undefined && BAD_LINK_CODES.has(code)) {
-    return new Refusal("link_unusable", message);
-  }
-  if (status === 400 || status === 422) return new Refusal("validation_failed", message);
+  if (status === 400) return refusalFromBadRequest(code, message);
+  if (status === 422) return new Refusal("validation_failed", message);
   if (status === 401) {
     const wrong = code !== undefined && WRONG_CREDENTIAL_CODES.has(code);
     return new Refusal(wrong ? "invalid_credentials" : "unauthenticated", message);

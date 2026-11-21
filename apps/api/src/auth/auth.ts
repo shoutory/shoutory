@@ -230,7 +230,7 @@ export function createAuth(options: AuthOptions): AuthService {
     stepUp,
     passwords: createPasswordGuard(options),
     resolveSession: (headers) => readSession(library, headers),
-    hasStepUp: (session) => stepUp.has(session),
+    requireStepUp: (session) => stepUp.require(session),
     claimOwner: effects.claimOwner,
     signupGate: async (email) => {
       const answer = await options.pool.query("SELECT app.signup_gate($1) AS open", [email]);

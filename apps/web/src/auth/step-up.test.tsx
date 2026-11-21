@@ -165,3 +165,89 @@ describe("the step-up dialog when the password is not confirmed", () => {
     expect(calls(stub, "/api/v1/a")).toHaveLength(1);
   });
 });
+
+// X-04 code mode: an account with the second factor on is refused with `details.method: "totp"` and asked for a code.
+const CODE = "123456";
+const codeField = () => document.querySelector<HTMLInputElement>('[role="dialog"] input[name="code"]');
+const submit = async (value: string) => {
+  type(codeField() as HTMLInputElement, value);
+  click(byText(document.body, '[role="dialog"] button', "Confirm"));
+  await settle();
+};
+
+// The server's answers to a code that is not right: 401 `invalid_credentials` for a well-formed wrong one, 400
+// `validation_failed` for one that is not six digits (the `code` schema in apps/api auth/paths.ts).
+const ANSWERS: Record<string, () => Response> = {
+  "000000": () => refusal("invalid_credentials", 401),
+  "12345": () => refusal("validation_failed", 400),
+};
+
+function setupCode(other: () => Response | undefined = () => undefined) {
+  let verified = false;
+  const stub = vi.fn((path: string, init?: RequestInit) => {
+    const url = new URL(path, "http://same-origin.invalid").pathname;
+    if (url === "/api/auth/two-factor/verify-totp") {
+      const sent = JSON.parse(String(init?.body)).code as string;
+      verified ||= sent === CODE;
+      const answer = sent === CODE ? json({ user: { email: "a@example.test" } }) : ANSWERS[sent]?.();
+      return Promise.resolve(answer ?? other() ?? refusal("invalid_credentials", 401));
+    }
+    return Promise.resolve(
+      verified ? json({ data: { ok: true } }) : refusal("step_up_required", 403, { method: "totp" }),
+    );
+  });
+  vi.stubGlobal("fetch", stub);
+  return stub;
+}
+
+describe("the step-up dialog for an account with the second factor on", () => {
+  it("asks for a code, shows the 4-part error for a wrong one, then replays each call once for the right one", async () => {
+    const stub = setupCode();
+    const { host } = await open();
+    click(byText(host, "button", "Run both"));
+    await settle();
+    expect(dialogs()).toHaveLength(1);
+    expect(passwordField()).toBeNull();
+    expect(codeField()?.autocomplete).toBe("one-time-code");
+    expect([codeField()?.maxLength, codeField()?.inputMode]).toEqual([6, "numeric"]);
+    await submit("000000");
+    expect(dialogs()).toHaveLength(1);
+    expect(dialogs()[0]?.textContent).toMatch(/code is not right/i);
+    expect(calls(stub, "/api/v1/a")).toHaveLength(1);
+    await submit(CODE);
+    expect(calls(stub, "verify-password")).toHaveLength(0);
+    expect([calls(stub, "/api/v1/a").length, calls(stub, "/api/v1/b").length]).toEqual([2, 2]);
+    expect(host.querySelector("output")?.textContent).toBe("ok,ok");
+    expect(dialogs()).toHaveLength(0);
+  });
+});
+
+describe("the step-up dialog's code mode when the code is not accepted", () => {
+  it.each([
+    ["a wrong code", "000000"],
+    ["a code that is not six digits", "12345"],
+  ])("%s shows the wrong-code words, never the password's", async (_name, sent) => {
+    setupCode();
+    const { host } = await open();
+    click(byText(host, "button", "Run both"));
+    await settle();
+    await submit(sent);
+    const text = dialogs()[0]?.textContent ?? "";
+    expect(text).toMatch(/code is not right/i);
+    expect(text).not.toMatch(/password/i);
+  });
+
+  it.each([
+    ["a server error", () => refusal("internal_error", 500), /could not check the code/i],
+    ["too many attempts", () => refusal("too_many_requests", 429), /few minutes/i],
+  ])("%s names the code, never the password", async (_name, answer, words) => {
+    setupCode(answer);
+    const { host } = await open();
+    click(byText(host, "button", "Run both"));
+    await settle();
+    await submit("999999");
+    const text = dialogs()[0]?.textContent ?? "";
+    expect(text).toMatch(words);
+    expect(text).not.toMatch(/password/i);
+  });
+});

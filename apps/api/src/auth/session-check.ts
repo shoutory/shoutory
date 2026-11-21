@@ -8,6 +8,8 @@ export interface AuthSession {
   readonly name: string;
   readonly email: string;
   readonly emailVerified: boolean;
+  /** Read fresh with the session (the library's cookie cache is off), so a change shows at once. */
+  readonly twoFactorEnabled: boolean;
   readonly expiresAt: Date;
 }
 
@@ -39,6 +41,7 @@ export async function readSession(
         name: user.name,
         email: user.email,
         emailVerified: user.emailVerified,
+        twoFactorEnabled: user.twoFactorEnabled === true,
         expiresAt: session.expiresAt,
       },
       cookies: sessionCookies(found.headers),

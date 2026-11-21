@@ -2,7 +2,7 @@ import { Trans } from "@lingui/react/macro";
 import type { ReactNode } from "react";
 import type { ApiError } from "../http/client";
 
-export type Screen = "sign-in" | "challenge" | "step-up" | "sign-up" | "reset" | "link";
+export type Screen = "sign-in" | "challenge" | "step-up" | "step-up-code" | "sign-up" | "reset" | "link";
 interface Words {
   what: ReactNode;
   meaning: ReactNode;
@@ -18,6 +18,13 @@ const UNAVAILABLE: Words = {
   what: <Trans id="auth.copy.unavailable.what">Shoutory is not reachable right now</Trans>,
   meaning: <Trans id="auth.copy.unavailable.meaning">Nothing was changed. Try again in a moment.</Trans>,
 };
+const WRONG_CODE: Words = {
+  what: <Trans id="auth.copy.wrong_code.what">That code is not right</Trans>,
+  meaning: (
+    <Trans id="auth.copy.wrong_code.meaning">Check the code in your authenticator app and try again.</Trans>
+  ),
+};
+
 const EXPIRED: Words = {
   what: <Trans id="auth.copy.expired.what">Your sign-in expired</Trans>,
   meaning: <Trans id="auth.copy.expired.meaning">Start again from the sign-in page.</Trans>,
@@ -52,16 +59,23 @@ const BY_CODE: Record<Screen, Record<string, Words>> = {
     },
   },
   challenge: {
-    invalid_credentials: {
-      what: <Trans id="auth.copy.wrong_code.what">That code is not right</Trans>,
+    invalid_credentials: WRONG_CODE,
+    unauthenticated: EXPIRED,
+    validation_failed: EXPIRED,
+  },
+  // The step-up dialog's code mode: a well-formed wrong code is 401 `invalid_credentials`, one that is not six digits
+  // is 400 `validation_failed`; both are a code that is not right.
+  "step-up-code": {
+    invalid_credentials: WRONG_CODE,
+    validation_failed: WRONG_CODE,
+    too_many_requests: {
+      what: TOO_MANY.what,
       meaning: (
-        <Trans id="auth.copy.wrong_code.meaning">
-          Check the code in your authenticator app and try again.
+        <Trans id="auth.copy.lock_code.meaning">
+          Repeated wrong codes lock this for a while. Try again in a few minutes.
         </Trans>
       ),
     },
-    unauthenticated: EXPIRED,
-    validation_failed: EXPIRED,
   },
   "step-up": {
     validation_failed: {
@@ -102,6 +116,10 @@ const GENERIC: Record<Screen, Words> = {
   },
   "step-up": {
     what: <Trans id="auth.copy.password_failed.what">We could not confirm your password</Trans>,
+    meaning: <Trans id="auth.copy.failed.meaning">Nothing was changed. Try again.</Trans>,
+  },
+  "step-up-code": {
+    what: <Trans id="auth.copy.code_failed.what">We could not check the code</Trans>,
     meaning: <Trans id="auth.copy.failed.meaning">Nothing was changed. Try again.</Trans>,
   },
 };

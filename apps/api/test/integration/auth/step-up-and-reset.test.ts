@@ -17,6 +17,10 @@ afterEach(() => {
 
 const NEW_PASSWORD = "another-password-5678";
 const codeOf = async (answer: Response) => ((await answer.json()) as { error: { code: string } }).error.code;
+const refusalOf = async (answer: Response) => {
+  const { error } = (await answer.json()) as { error: { code: string; details?: Record<string, string> } };
+  return { code: error.code, details: error.details };
+};
 const post = (path: string, body: object, jar?: Jar) =>
   fx.request(`/api/auth/${path}`, { body, ...(jar ? { headers: jar.header } : {}) });
 const methods = (email: string) =>
@@ -47,7 +51,10 @@ describe("step-up", () => {
     expect((await post("two-factor/enable", { password: PASSWORD }, jar)).status).toBe(200);
     await ageStepUps(email, "11 minutes");
     const stale = await post("two-factor/enable", { password: PASSWORD }, jar);
-    expect([stale.status, await codeOf(stale)]).toEqual([403, "step_up_required"]);
+    expect([stale.status, await refusalOf(stale)]).toEqual([
+      403,
+      { code: "step_up_required", details: { method: "password" } },
+    ]);
     expect((await post("verify-password", { password: PASSWORD }, jar)).status).toBe(200);
     expect(await methods(email)).toEqual(["password", "password"]);
     expect((await post("two-factor/enable", { password: PASSWORD }, jar)).status).toBe(200);
@@ -56,26 +63,52 @@ describe("step-up", () => {
   });
 });
 
-describe("a session holder's password checks spend the account's login bucket", () => {
-  const key = (email: string) => pepperDigest(new SealedSecret(PEPPER), "login_account", email);
-  const tokens = (email: string) =>
-    fx.admin(
-      async (client) =>
-        (
-          await client.query(
-            "SELECT tokens FROM app.rate_buckets WHERE scope = 'login_account' AND key = $1",
-            [key(email)],
-          )
-        ).rows[0]?.tokens as number | undefined,
-    );
-  const setTokens = (email: string, value: number) =>
-    fx.admin((client) =>
-      client.query(
-        `INSERT INTO app.rate_buckets (scope, key, tokens) VALUES ('login_account', $1, $2)
-         ON CONFLICT (scope, key) DO UPDATE SET tokens = $2, refilled_at = clock_timestamp()`,
-        [key(email), value],
-      ),
-    );
+// The `login_account` bucket of a subject: an address for sign-in, a user id for a signed-in user's checks.
+const key = (subject: string) => pepperDigest(new SealedSecret(PEPPER), "login_account", subject);
+const idOf = (email: string) =>
+  fx.admin(
+    async (client) =>
+      (await client.query('SELECT id FROM auth."user" WHERE email = $1', [email])).rows[0].id as string,
+  );
+const tokens = (subject: string) =>
+  fx.admin(
+    async (client) =>
+      (
+        await client.query("SELECT tokens FROM app.rate_buckets WHERE scope = 'login_account' AND key = $1", [
+          key(subject),
+        ])
+      ).rows[0]?.tokens as number | undefined,
+  );
+const setTokens = (subject: string, value: number) =>
+  fx.admin((client) =>
+    client.query(
+      `INSERT INTO app.rate_buckets (scope, key, tokens) VALUES ('login_account', $1, $2)
+       ON CONFLICT (scope, key) DO UPDATE SET tokens = $2, refilled_at = clock_timestamp()`,
+      [key(subject), value],
+    ),
+  );
+
+describe("a session holder's password checks spend the user's login bucket", () => {
+  it("an emptied anonymous login_account bucket does not refuse the user's verify-password", async () => {
+    const email = "session-bucket-anon@example.test";
+    const jar = new Jar(await fx.signedIn(email));
+    await setTokens(email, 0);
+    expect((await post("verify-password", { password: PASSWORD }, jar)).status).toBe(200);
+  });
+
+  it("a completed password reset refills the address's bucket", async () => {
+    const email = "session-bucket-reset@example.test";
+    const neighbour = "session-bucket-neighbour@example.test";
+    await fx.signedIn(email);
+    await setTokens(email, 5);
+    await setTokens(neighbour, 7);
+    await post("request-password-reset", { email });
+    const token = tokenOf((await fx.mails(email))[0]);
+    expect((await post("reset-password", { token, newPassword: NEW_PASSWORD })).status).toBe(200);
+    // Only the reset address is refilled.
+    expect(Math.round((await tokens(neighbour)) ?? 0)).toBe(7);
+    expect(Math.round((await tokens(email)) ?? 0)).toBe(100);
+  });
 
   it.each([
     ["verify-password", (password: string) => ({ password })],
@@ -86,16 +119,17 @@ describe("a session holder's password checks spend the account's login bucket", 
     async (path, body) => {
       const email = `session-bucket-${path.replace("/", "-")}@example.test`;
       const jar = new Jar(await fx.signedIn(email));
-      await setTokens(email, 5);
+      const id = await idOf(email);
+      await setTokens(id, 5);
       expect((await post(path, body("wrong-password-1"), jar)).status).toBe(400);
-      expect(Math.round((await tokens(email)) ?? 0)).toBe(4);
-      await setTokens(email, 0);
+      expect(Math.round((await tokens(id)) ?? 0)).toBe(4);
+      await setTokens(id, 0);
       const refused = await post(path, body(PASSWORD), jar);
       expect([refused.status, await codeOf(refused)]).toEqual([429, "too_many_requests"]);
       expect(Number(refused.headers.get("retry-after"))).toBeGreaterThan(0);
-      await setTokens(email, 5);
+      await setTokens(id, 5);
       expect((await post(path, body(PASSWORD), jar)).status).toBe(200);
-      expect(Math.round((await tokens(email)) ?? 0)).toBe(100);
+      expect(Math.round((await tokens(id)) ?? 0)).toBe(100);
     },
   );
 });

@@ -5,6 +5,7 @@ import { Link } from "react-router";
 import { z } from "zod";
 import { authCopy } from "../auth/auth-copy";
 import { SubmitButton, useAction } from "../auth/auth-frame";
+import { useStepUp } from "../auth/step-up";
 import { request } from "../http/client";
 import { formatNumber, type Locale } from "../i18n/i18n";
 import { Banner } from "../ui/banner";
@@ -20,12 +21,12 @@ const state = z.discriminatedUnion("enabled", [
   z.object({ enabled: z.literal(true), recovery_codes_left: z.number() }),
   z.object({ enabled: z.literal(false), recovery_codes_left: z.null() }),
 ]);
-const checked = z.object({ status: z.boolean() });
 const generated = z.object({ backupCodes: z.array(z.string()) });
 
-// The password is checked first and sent once more with the request for new codes; it is emptied after each step.
+// The password goes with the request for new codes and is emptied after it; a stale identity check is asked for by X-04.
 function NewCodesForm({ onCodes }: { onCodes: (codes: string[]) => void }) {
   const { t } = useLingui();
+  const stepUp = useStepUp();
   const [password, setPassword] = useState("");
   // The form appears on a press of "New recovery codes": the password field takes focus.
   const form = useRef<HTMLFormElement>(null);
@@ -33,12 +34,13 @@ function NewCodesForm({ onCodes }: { onCodes: (codes: string[]) => void }) {
   const generate = useAction(
     async () => {
       const body = { password };
-      await request(checked, "/api/auth/verify-password", { method: "POST", body, envelope: false });
-      const answer = await request(generated, "/api/auth/two-factor/generate-backup-codes", {
-        method: "POST",
-        body,
-        envelope: false,
-      });
+      const answer = await stepUp(() =>
+        request(generated, "/api/auth/two-factor/generate-backup-codes", {
+          method: "POST",
+          body,
+          envelope: false,
+        }),
+      );
       setPassword("");
       onCodes(answer.backupCodes);
     },

@@ -324,6 +324,10 @@ msgid "auth.copy.lock.meaning"
 msgstr "تكرار إدخال كلمة مرور خاطئة يوقف تسجيل الدخول لفترة. حاول مرة أخرى بعد قليل."
 
 #. js-lingui-explicit-id
+msgid "auth.copy.lock_code.meaning"
+msgstr "تكرار إدخال رمز خاطئ يوقف هذا الإجراء لفترة. حاول مرة أخرى بعد قليل."
+
+#. js-lingui-explicit-id
 msgid "auth.copy.sign_in_failed.what"
 msgstr "تعذّر تسجيل دخولك"
 
@@ -346,6 +350,14 @@ msgstr "أكّد كلمة المرور"
 #. js-lingui-explicit-id
 msgid "auth.step_up.intro"
 msgstr "يحتاج هذا الإجراء إلى كلمة المرور مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "auth.step_up.title_code"
+msgstr "أدخل رمز التحقق"
+
+#. js-lingui-explicit-id
+msgid "auth.step_up.intro_code"
+msgstr "يحتاج هذا الإجراء إلى رمز من تطبيق المصادقة."
 
 #. js-lingui-explicit-id
 msgid "auth.step_up.password"

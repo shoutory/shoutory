@@ -73,9 +73,7 @@ export async function asAdminWrite<T>(
   run: (tx: TenantTx) => Promise<T>,
 ): Promise<T> {
   await asAdmin(inUserTx, async () => undefined);
-  if (!(await auth.hasStepUp(c.get("session")))) {
-    throw new Refusal("step_up_required", "no authentication in the last ten minutes");
-  }
+  await auth.requireStepUp(c.get("session"));
   return asAdmin(inUserTx, run);
 }
 
