@@ -305,6 +305,10 @@ describe("defineRoute access", () => {
       "a change with no permission",
       { policy: "session", access: { workspace: "workspace_id" }, params, method: "patch" },
     ],
+    [
+      "a split access with no permission",
+      { policy: "session", access: { workspace: "workspace_id", split: true }, params },
+    ],
   ])("refuses %s at registration", (_name, extra) => {
     const { app } = build();
     expect(() =>

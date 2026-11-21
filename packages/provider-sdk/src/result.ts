@@ -27,6 +27,8 @@ export interface ProviderResult {
   readonly ok: boolean;
   /** Present on a successful refresh only. */
   readonly credential?: RefreshedCredential;
+  /** Present on a successful channel read: what the provider's answer says of the channel (`ok` when absent). */
+  readonly health?: "ok" | "degraded";
   readonly effect: Effect;
   readonly externalId?: string;
   readonly permalink?: string;

@@ -36,7 +36,7 @@ const REFRESH_MARGIN_MS = 5 * 60_000;
 /** The provider behind a channel: its adapter and the manifest's map of refresh error codes to classes. */
 interface ChannelProvider {
   readonly adapter: ProviderAdapter;
-  readonly refreshErrorMap: Readonly<Record<string, RefreshClass>>;
+  readonly manifest: { readonly refreshErrorMap: Readonly<Record<string, RefreshClass>> };
 }
 
 export interface CredentialServiceDeps {
@@ -88,7 +88,7 @@ type RefreshOutcome =
   | { readonly kind: "needs_reconnect"; readonly reason: string };
 
 /** A channel with no usable credential (none stored, or its salt was deleted). */
-class CredentialError extends Error {
+export class CredentialError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "CredentialError";
@@ -167,7 +167,13 @@ const callOf = (definer: string, params: unknown[]): [string, unknown[]] => [
   params,
 ];
 
-class CredentialService {
+/** An egress client that gives every provider call its deadline (below the lease, R537 (9)). */
+export const deadlineFetch =
+  (egress: typeof fetch, timeoutMs = PROVIDER_TIMEOUT_MS): typeof fetch =>
+  (input, init) =>
+    egress(input, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+
+export class CredentialService {
   readonly #deps: CredentialServiceDeps;
 
   constructor(deps: CredentialServiceDeps) {
@@ -332,7 +338,10 @@ class CredentialService {
     provider: ChannelProvider,
   ): Promise<RefreshOutcome> {
     // An answer that was ok but unusable may have spent a rotating token: it is unknown, like a cut-off one.
-    const klass = refreshClassOf(result.ok ? { errorClass: "unknown" } : result, provider.refreshErrorMap);
+    const klass = refreshClassOf(
+      result.ok ? { errorClass: "unknown" } : result,
+      provider.manifest.refreshErrorMap,
+    );
     const earlier =
       lease.prior_attempt_outcome === "unknown" && lease.prior_attempt_digest === lease.refresh_token_digest;
     const outcome = refreshFailureOutcome(klass, earlier);
@@ -374,12 +383,6 @@ class CredentialService {
     );
   }
 
-  #timedFetch: typeof fetch = (input, init) =>
-    this.#deps.fetch(input, {
-      ...init,
-      signal: AbortSignal.timeout(this.#deps.providerTimeoutMs ?? PROVIDER_TIMEOUT_MS),
-    });
-
   /** One refresh of a channel's token: lease, provider call, commit or failure, each in its own transaction. */
   async refresh(workspaceId: string, channelId: string): Promise<RefreshOutcome> {
     const first = await this.#openRow(workspaceId, channelId);
@@ -402,7 +405,7 @@ class CredentialService {
     const current = this.#tokenOf(row, workspaceId, channelId);
     const result = await refreshCall.call(
       provider.adapter,
-      { fetch: this.#timedFetch, now: this.#deps.now },
+      { fetch: deadlineFetch(this.#deps.fetch, this.#deps.providerTimeoutMs), now: this.#deps.now },
       { refreshToken: new SealedSecret(current.refresh_token ?? "") },
     );
     return (

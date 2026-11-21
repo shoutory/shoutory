@@ -79,7 +79,11 @@ export function fixtureRoutes(posts: Map<string, StoredPost>): Readonly<Record<s
   return {
     [ROUTES.commit]: create,
     "POST /v1/validate": () => ({ status: 200, body: {} }),
-    "GET /v1/account": () => ({ status: 200, body: { id: "account-1" } }),
+    // Like a real network, the account read wants the access token.
+    "GET /v1/account": (request) =>
+      request.headers.authorization?.startsWith("Bearer ")
+        ? { status: 200, body: { id: "account-1" } }
+        : errorReply(401, "unauthorized"),
     [ROUTES.readBack]: (request) => {
       const post = existing(request.params.id);
       return post

@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { inspect } from "node:util";
 import { SealedSecret } from "@shoutory/core/crypto";
 import type { TenantCtx } from "@shoutory/db/context";
@@ -8,14 +8,14 @@ import { createFixtureAdapter } from "@shoutory/testkit/fixture-provider/adapter
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createCredentialService } from "../../src/channels/credentials.js";
 import { createLogger } from "../../src/logging/logger.js";
+import { leaks } from "../support/canary.js";
+import { FAKE_CLIENT as CLIENT, mintTokens } from "../support/oauth-fake.js";
 import { seedOrganization, seedWorkspace, signedUser } from "../support/tenancy.js";
 import { type Fixture, keys, PEPPER, startFixture } from "./auth/harness.js";
 
 // Security floor of the credential service (R537, R538, R539), on the fixture-oauth fake: the lease, the attempt marker,
 // the compare-and-set, the class of each failure and what it does to the channel, and that no token leaves the sealed
 // store. Every provider answer is real HTTP to the fake on loopback; leases are never waited for.
-const CLIENT = "client-1";
-const REDIRECT = "http://127.0.0.1:9/callback";
 let fx: Fixture;
 let sim: Awaited<ReturnType<typeof startFixtureOAuthSimulator>>;
 let workspace: string;
@@ -33,7 +33,7 @@ const service = (egress: typeof fetch = fetch) =>
     providers: {
       fixture_oauth: {
         adapter: createFixtureAdapter({ baseUrl: sim.url, clientId: CLIENT }),
-        refreshErrorMap: fixtureOAuthManifest.refreshErrorMap,
+        manifest: { refreshErrorMap: fixtureOAuthManifest.refreshErrorMap },
       },
     },
   });
@@ -43,35 +43,7 @@ const principal = (): TenantCtx => ({
   workspaceIds: [workspace],
 });
 
-interface Minted {
-  access_token: string;
-  refresh_token: string;
-}
-async function mint(): Promise<Minted> {
-  const verifier = randomBytes(32).toString("base64url");
-  const query = new URLSearchParams({
-    response_type: "code",
-    client_id: CLIENT,
-    redirect_uri: REDIRECT,
-    state: "state-1",
-    code_challenge: createHash("sha256").update(verifier).digest("base64url"),
-    code_challenge_method: "S256",
-  });
-  const approved = await fetch(`${sim.url}/authorize?${query}`, { redirect: "manual" });
-  const code = new URL(approved.headers.get("location") ?? "").searchParams.get("code") ?? "";
-  const answer = await fetch(`${sim.url}/token`, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      code,
-      code_verifier: verifier,
-      client_id: CLIENT,
-      redirect_uri: REDIRECT,
-    }),
-  });
-  return (await answer.json()) as Minted;
-}
+const mint = () => mintTokens(sim.url);
 
 /** A connected channel whose stored tokens are `tokens` (a minted pair unless the test says otherwise). */
 async function connected(tokens?: {
@@ -323,20 +295,6 @@ describe("an attempt that may have spent the token", () => {
 
 // AGENTS 4.2: the tokens that went through connect and refresh are in no text column, no row dump, no log line, no
 // result dump, in the raw, percent-encoded, hex, base64, base64url and JSON-escaped forms.
-const FORMS: [string, (secret: string) => string][] = [
-  ["raw", (s) => s],
-  ["percent-encoded", (s) => encodeURIComponent(s)],
-  ["hex", (s) => Buffer.from(s).toString("hex")],
-  ["base64", (s) => Buffer.from(s).toString("base64")],
-  ["base64url", (s) => Buffer.from(s).toString("base64url")],
-  ["JSON-escaped", (s) => JSON.stringify(s).slice(1, -1)],
-];
-const leaks = (haystack: string, secrets: string[]) =>
-  secrets.flatMap((secret) =>
-    FORMS.filter(([, form]) => haystack.includes(form(secret))).map(
-      ([name]) => `${name} ${secret.slice(0, 6)}`,
-    ),
-  );
 // Every row of every table of both schemas, as the text a dump would hold.
 const databaseDump = () =>
   fx.admin(async (c) => {

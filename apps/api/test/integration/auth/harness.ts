@@ -8,7 +8,7 @@ import { cloneTemplate, readTestEnv, type TestDatabase, withAdminClient } from "
 import type { EgressRequest, EgressResponse } from "@shoutory/provider-sdk/egress";
 import { EgressError } from "@shoutory/provider-sdk/egress/errors";
 import { inject } from "vitest";
-import { createApp } from "../../../src/app.js";
+import { type AppOptions, createApp } from "../../../src/app.js";
 import { type AuthService, createAuth } from "../../../src/auth/auth.js";
 import { createLogger } from "../../../src/logging/logger.js";
 import { emailLinkAad } from "../../../src/mail/enqueue.js";
@@ -256,6 +256,8 @@ export interface FixtureOptions {
   readonly storage?: StorageDriver;
   /** The plan limits of the app; absent, the app answers the core self-host value. */
   readonly entitlements?: Entitlements;
+  /** The providers and egress client of the channel check; absent, the app has no check route. */
+  readonly channels?: AppOptions["channels"];
 }
 
 const mailsOf =
@@ -341,6 +343,7 @@ function buildOn({ logger, hibp, authPool, appPool, options }: Parts, libraryPoo
   const clock = options.now ? { now: options.now } : {};
   const storage = options.storage ? { storage: options.storage } : {};
   const limits = options.entitlements ? { entitlements: options.entitlements } : {};
+  const channels = options.channels ? { channels: options.channels } : {};
   const app = createApp({
     publicOrigin: ORIGIN,
     trustedProxies: [],
@@ -351,6 +354,7 @@ function buildOn({ logger, hibp, authPool, appPool, options }: Parts, libraryPoo
     ...clock,
     ...storage,
     ...limits,
+    ...channels,
   });
   return { app, auth };
 }

@@ -23,6 +23,11 @@ export interface RefreshInput {
   readonly refreshToken: SealedSecret;
 }
 
+/** What a channel health read sends: the access token in use, still sealed until the one call that puts it on the wire. */
+export interface InspectInput {
+  readonly accessToken: SealedSecret;
+}
+
 /** A post that already exists at the provider, found by its id or, where the provider allows it, by the key. */
 export interface RemotePost {
   readonly externalId?: string;
@@ -40,5 +45,5 @@ export interface ProviderAdapter {
   delete(context: AdapterContext, post: RemotePost): Promise<ProviderResult>;
   edit?(context: AdapterContext, post: RemotePost, input: { readonly text: string }): Promise<ProviderResult>;
   refresh?(context: AdapterContext, input: RefreshInput): Promise<ProviderResult>;
-  inspect(context: AdapterContext): Promise<ProviderResult>;
+  inspect(context: AdapterContext, input: InspectInput): Promise<ProviderResult>;
 }

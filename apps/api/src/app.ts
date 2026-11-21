@@ -1,5 +1,6 @@
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { OpenAPIHono } from "@hono/zod-openapi";
+import type { SealedSecret } from "@shoutory/core/crypto";
 import { type Entitlements, entitlements as selfHost } from "@shoutory/core/entitlements";
 import type { KeyProvider } from "@shoutory/core/keys";
 import type { StorageDriver } from "@shoutory/core/storage";
@@ -8,6 +9,8 @@ import type { MiddlewareHandler } from "hono";
 import { secureHeaders } from "hono/secure-headers";
 import type { AuthService } from "./auth/auth.js";
 import { registerAuthRoutes } from "./auth/mount.js";
+import { createCredentialService } from "./channels/credentials.js";
+import { createHealthChecker, type HealthProvider } from "./channels/health.js";
 import { errorResponse, Refusal, toRefusal } from "./errors/refusal.js";
 import { registerHealth } from "./health/health.js";
 import { type Logger, logRequest } from "./logging/logger.js";
@@ -18,7 +21,7 @@ import { registerQueue } from "./routes/admin/queue.js";
 import { registerStorageCheck } from "./routes/admin/storage-check.js";
 import { registerSystem } from "./routes/admin/system.js";
 import { registerAudit } from "./routes/audit/audit.js";
-import { registerChannels } from "./routes/channels/channels.js";
+import { type ChannelCheck, registerChannels } from "./routes/channels/channels.js";
 import { type App, type AppEnv, initRoutes } from "./routes/define-route.js";
 import { registerInstance } from "./routes/instance.js";
 import { registerInvitations } from "./routes/invitations/invitations.js";
@@ -53,6 +56,34 @@ export interface AppOptions {
   readonly mail?: MailSettings;
   /** The plan limits of a workspace; the self-host answer (nothing is limited) when absent. */
   readonly entitlements?: Entitlements;
+  /**
+   * The providers a channel can be read through, the egress client and the pepper of the refresh digests; the channel
+   * check route exists only when it is given.
+   */
+  readonly channels?: {
+    readonly providers: Readonly<Record<string, HealthProvider>>;
+    readonly fetch: typeof fetch;
+    readonly pepper: SealedSecret;
+  };
+}
+
+// The check route's service: the credential service reads and refreshes the sealed token as a job principal of the
+// workspace, the checker reads the provider with it.
+function channelChecker(options: AppOptions): ChannelCheck | undefined {
+  const { channels } = options;
+  if (!channels) return undefined;
+  const now = () => new Date();
+  const { providers, pepper } = channels;
+  const credentials = createCredentialService({
+    pool: options.pool,
+    keys: options.keys,
+    pepper,
+    fetch: channels.fetch,
+    now,
+    logger: options.logger,
+    providers,
+  });
+  return { checker: createHealthChecker({ credentials, fetch: channels.fetch, now }), providers };
 }
 
 const SELF = ["'self'"];
@@ -127,7 +158,7 @@ export function createApp(options: AppOptions): App {
   registerAuthRoutes(app, options.auth);
   registerOrganizations(app, options.auth);
   registerWorkspaces(app, options.auth);
-  registerChannels(app, options.auth.ipHmac);
+  registerChannels(app, options.auth.ipHmac, channelChecker(options));
   registerEntitlements(app, options.entitlements ?? selfHost);
   registerInvitations(app, options.auth);
   registerMembers(app, options.auth.ipHmac);

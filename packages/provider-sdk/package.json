@@ -25,6 +25,10 @@
       "source": "./src/manifest/manifest.ts",
       "default": "./dist/manifest/manifest.js"
     },
+    "./snapshot": {
+      "source": "./src/snapshot.ts",
+      "default": "./dist/snapshot.js"
+    },
     "./result": {
       "source": "./src/result.ts",
       "default": "./dist/result.js"

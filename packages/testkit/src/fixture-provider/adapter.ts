@@ -3,6 +3,7 @@ import { SealedSecret } from "@shoutory/core/crypto";
 import type {
   AdapterContext,
   CommitInput,
+  InspectInput,
   ProviderAdapter,
   RefreshInput,
   RemotePost,
@@ -115,7 +116,7 @@ async function request(
   context: AdapterContext,
   method: string,
   path: string,
-  send: { readonly body?: unknown; readonly key?: string } = {},
+  send: { readonly body?: unknown; readonly key?: string; readonly token?: SealedSecret } = {},
 ): Promise<Answer> {
   const write = method !== "GET";
   try {
@@ -124,6 +125,7 @@ async function request(
       headers: {
         ...(send.body === undefined ? {} : { "content-type": "application/json" }),
         ...(send.key === undefined ? {} : { "idempotency-key": send.key }),
+        ...(send.token === undefined ? {} : { authorization: `Bearer ${send.token.expose()}` }),
       },
       ...(send.body === undefined ? {} : { body: JSON.stringify(send.body) }),
     });
@@ -190,6 +192,21 @@ async function refreshTokens(
   }
 }
 
+// The read of a channel: the account route with the access token. A success that is not an account may be a garbled
+// answer, so what it says of the channel is unknown.
+async function inspectAccount(
+  options: FixtureAdapterOptions,
+  context: AdapterContext,
+  input: InspectInput,
+): Promise<ProviderResult> {
+  const answer = await request(options, context, "GET", "/v1/account", { token: input.accessToken });
+  if (!answer.ok) return answer.result;
+  const isAccount = typeof answer.json === "object" && answer.json !== null && !Array.isArray(answer.json);
+  return isAccount
+    ? { ok: true, effect: "none", health: "ok" }
+    : errorResult({ effect: "none", errorClass: "unknown" });
+}
+
 export function createFixtureAdapter(options: FixtureAdapterOptions): ProviderAdapter {
   const call = (
     context: AdapterContext,
@@ -235,7 +252,7 @@ export function createFixtureAdapter(options: FixtureAdapterOptions): ProviderAd
     },
     edit: async (context, post, input) =>
       withId(await call(context, "PATCH", target(post), { body: { text: input.text } }), "confirmed", true),
-    inspect: async (context) => done(await call(context, "GET", "/v1/account")),
+    inspect: (context, input) => inspectAccount(options, context, input),
     ...(options.clientId === undefined
       ? {}
       : {

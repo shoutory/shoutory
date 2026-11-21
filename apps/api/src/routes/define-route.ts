@@ -34,7 +34,17 @@ export interface RouteAuth {
  * access names the path parameter that holds the workspace id and the permission the caller needs there (none: any
  * member). The handler never sees a workspace id that did not come through this declaration.
  */
-export type Access = "none" | "user" | { readonly workspace: string; readonly permission?: Permission };
+export type Access =
+  | "none"
+  | "user"
+  | { readonly workspace: string; readonly permission?: Permission; readonly split?: true };
+
+/**
+ * What a `split` workspace route calls instead of holding one transaction: each call is its own short scoped
+ * transaction (read, or write), authorized like the single one, so the handler may call outside the database between
+ * them (AGENTS 3.7). A denial of the scope is an answer, and the callback does not run.
+ */
+type Scoped = <T>(write: boolean, run: (tx: TenantTx, scope: AuthorizedScope) => Promise<T>) => Promise<T>;
 
 export interface RegisteredRoute {
   readonly method: string;
@@ -63,9 +73,15 @@ interface Input<B, Q, P, A extends Access> {
   readonly clientAddress: string;
   readonly c: Context<AppEnv>;
   /** The transaction the scope narrowed; absent on a `none` or `user` route. */
-  readonly tx: A extends "none" | "user" ? undefined : TenantTx;
-  /** The proof of the workspace the route reached; present only on a workspace access. */
-  readonly scope: A extends { workspace: string } ? AuthorizedScope : undefined;
+  readonly tx: A extends "none" | "user" | { split: true } ? undefined : TenantTx;
+  /** The proof of the workspace the route reached; present only on a workspace access that holds one transaction. */
+  readonly scope: A extends { split: true }
+    ? undefined
+    : A extends { workspace: string }
+      ? AuthorizedScope
+      : undefined;
+  /** The short scoped transactions of a `split` workspace access; absent on every other access. */
+  readonly scoped: A extends { split: true } ? Scoped : undefined;
   /** The one way a `user` route reaches a definer; absent on every other access. */
   readonly inUserTx: A extends "user" ? InUserTx : undefined;
 }
@@ -196,6 +212,7 @@ function accessProblem(
   if (!Object.hasOwn(shape, access.workspace))
     return `the workspace parameter ${access.workspace} is not in params`;
   if (access.permission === undefined) {
+    if (access.split) return "a split access picks read or write per call, so it needs a permission";
     return method === "get" ? undefined : "a workspace access that changes data needs a permission";
   }
   return PERMISSIONS.includes(access.permission) ? undefined : "unknown permission";
@@ -218,7 +235,7 @@ const userTx =
     }
   };
 
-type Base = Omit<Input<unknown, Shape, unknown, Access>, "tx" | "scope" | "inUserTx">;
+type Base = Omit<Input<unknown, Shape, unknown, Access>, "tx" | "scope" | "scoped" | "inUserTx">;
 
 function scopeRequest(
   access: { readonly workspace: string; readonly permission?: Permission },
@@ -248,12 +265,22 @@ async function runScoped(
     const inUserTx = access === "user" ? userTx(state.pool, session.userId) : undefined;
     return spec.handler({ ...base, tx: undefined, scope: undefined, inUserTx } as never);
   }
-  const request = scopeRequest(access, base.params as Record<string, unknown> | undefined, spec.method);
-  const outcome = await withScope(state.pool, session.userId, request, (tx, scope) =>
+  const params = base.params as Record<string, unknown> | undefined;
+  const entered = async <T>(
+    method: string,
+    run: (tx: TenantTx, scope: AuthorizedScope) => Promise<T>,
+  ): Promise<T> => {
+    const outcome = await withScope(state.pool, session.userId, scopeRequest(access, params, method), run);
+    if (!outcome.ok) throw new Refusal(DENIALS[outcome.denial], `scope denied: ${outcome.denial}`);
+    return outcome.value;
+  };
+  if (access.split) {
+    const scoped: Scoped = (write, run) => entered(write ? "post" : "get", run);
+    return spec.handler({ ...base, tx: undefined, scope: undefined, scoped, inUserTx: undefined } as never);
+  }
+  return entered(spec.method, (tx, scope) =>
     Promise.resolve(spec.handler({ ...base, tx, scope, inUserTx: undefined } as never)),
   );
-  if (!outcome.ok) throw new Refusal(DENIALS[outcome.denial], `scope denied: ${outcome.denial}`);
-  return outcome.value;
 }
 
 /**

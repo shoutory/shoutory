@@ -1,5 +1,6 @@
 import type { TenantTx } from "@shoutory/db/context";
 import { z } from "zod";
+import type { HealthChecker, HealthProvider } from "../../channels/health.js";
 import { Refusal } from "../../errors/refusal.js";
 import { nameOf } from "../../names.js";
 import { type App, defineRoute } from "../define-route.js";
@@ -108,8 +109,75 @@ function registerMoves(app: App, ipHmac: IpHmac): void {
   }
 }
 
-export function registerChannels(app: App, ipHmac: IpHmac): void {
+// A second check of the same channel within a minute is refused (R532 (13)); the time is read from the database clock.
+const COOLDOWN_SECONDS = 60;
+const STATE = `SELECT provider_id, connection_state,
+  extract(epoch FROM clock_timestamp() - health_checked_at)::float8 AS since
+  FROM app.channels WHERE workspace_id = $1 AND id = $2`;
+
+// "Check now": short transactions around one provider read, none open while the provider answers (AGENTS 3.7). A check
+// of a channel that is not connected, or too soon after the last, is refused before the provider is called.
+function registerCheck(app: App, { checker, providers }: ChannelCheck): void {
+  defineRoute(app, {
+    method: "post",
+    path: "/api/v1/workspaces/{workspace_id}/channels/{channel_id}/check",
+    policy: "session",
+    access: { workspace: "workspace_id", permission: "channels.manage", split: true },
+    params: channelParams,
+    handler: async ({ scoped, params }) => {
+      const found = await scoped(false, async (tx, scope) => {
+        const row = (
+          await tx.query<{ provider_id: string; connection_state: string; since: number | null }>(STATE, [
+            scope.workspaceId,
+            params.channel_id,
+          ])
+        ).rows[0];
+        if (!row) throw new Refusal("not_found", "channel row not visible");
+        return { ...row, workspaceId: scope.workspaceId };
+      });
+      if (found.connection_state !== "connected") {
+        throw new Refusal("conflict", "the channel is not connected", {
+          details: { reason: "not_connected" },
+        });
+      }
+      if (found.since !== null && found.since < COOLDOWN_SECONDS) {
+        const retryAfterSeconds = Math.max(1, Math.ceil(COOLDOWN_SECONDS - found.since));
+        throw new Refusal("too_many_requests", "the channel was checked a moment ago", { retryAfterSeconds });
+      }
+      // Own keys only: a provider id read from the row is never looked up on the prototype.
+      const provider = Object.hasOwn(providers, found.provider_id) ? providers[found.provider_id] : undefined;
+      if (!provider) {
+        throw new Refusal("conflict", "no adapter for the provider", {
+          details: { reason: "provider_unavailable" },
+        });
+      }
+      const { health, snapshot } = await checker.observe(found.workspaceId, params.channel_id, provider);
+      await scoped(true, (tx, scope) =>
+        tx.query("SELECT app.channel_health_record($1, $2, $3, $4, $5, $6, $7, $8)", [
+          scope.workspaceId,
+          params.channel_id,
+          health,
+          snapshot.manifestDigest,
+          snapshot.apiVersion,
+          snapshot.sunsetAt,
+          JSON.stringify(snapshot.capabilities),
+          JSON.stringify(snapshot.limits),
+        ]),
+      );
+      return scoped(false, (tx, scope) => read(tx, scope.workspaceId, params.channel_id));
+    },
+  });
+}
+
+/** What the check route needs: the checker and the providers a channel's `provider_id` can name. */
+export interface ChannelCheck {
+  readonly checker: HealthChecker;
+  readonly providers: Readonly<Record<string, HealthProvider>>;
+}
+
+export function registerChannels(app: App, ipHmac: IpHmac, check?: ChannelCheck): void {
   registerReads(app);
   registerRename(app);
   registerMoves(app, ipHmac);
+  if (check) registerCheck(app, check);
 }

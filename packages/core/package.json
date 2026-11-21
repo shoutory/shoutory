@@ -17,6 +17,10 @@
       "source": "./src/channels/credential.ts",
       "default": "./dist/channels/credential.js"
     },
+    "./channels/health": {
+      "source": "./src/channels/health.ts",
+      "default": "./dist/channels/health.js"
+    },
     "./config": {
       "source": "./src/config/env.ts",
       "default": "./dist/config/env.js"
