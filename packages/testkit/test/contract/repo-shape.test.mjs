@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, globSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -118,6 +118,38 @@ test("the AGPL text is the verbatim one", () => {
   assert.equal(
     createHash("sha256").update(bytes).digest("hex"),
     "e0eedba615d5cd1b986afb6c5b3a4b1ae33713e7e9dc74d19daec5e3221f9d2e",
+  );
+});
+
+test("the test kit is not part of the image", () => {
+  // Every stage after the build stage ends up in the image; the build stage may name anything.
+  const runtime = read("docker/Dockerfile")
+    .split(/^FROM .* AS build$/m)[1]
+    .split(/^FROM /m)
+    .slice(1)
+    .join("\n");
+  assert.ok(
+    runtime.includes("COPY --from=build"),
+    "the Dockerfile has no runtime stage after the build stage",
+  );
+  assert.doesNotMatch(runtime, /testkit/);
+  // Copying the whole packages folder would carry the test kit in without naming it.
+  assert.doesNotMatch(runtime, /^COPY\s+--from=\S+\s+\/app\/packages\/?\s/m);
+  const api = JSON.parse(read("apps/api/package.json"));
+  const named = ["dependencies", "optionalDependencies", "peerDependencies"].flatMap((field) =>
+    Object.keys(api[field] ?? {}),
+  );
+  assert.deepEqual(
+    named.filter((name) => name.includes("testkit")),
+    [],
+  );
+  const sources = globSync("apps/api/src/**/*.ts", { cwd: root }).filter(
+    (file) => !file.endsWith(".test.ts"),
+  );
+  assert.ok(sources.length > 0, "no apps/api source files were found");
+  assert.deepEqual(
+    sources.filter((file) => /testkit/.test(read(file))),
+    [],
   );
 });
 

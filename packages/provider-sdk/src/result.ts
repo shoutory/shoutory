@@ -34,7 +34,7 @@ const SAFE_CODE = /^[A-Za-z0-9_.:-]{1,64}$/;
 // An error that may have taken effect can only be unknown or retried after a read-back; a confirmed effect is not an error.
 const CLASSES_AFTER_POSSIBLE_EFFECT: readonly ProviderErrorClass[] = ["unknown", "retryable_after_send"];
 
-const MAX_RETRY_DELAY_MS = 86_400_000;
+export const MAX_RETRY_DELAY_MS = 86_400_000;
 
 // A delay outside a whole number of milliseconds up to a day is dropped, so the ledger uses its own back-off.
 function isUsableDelay(value: number | undefined): value is number {

@@ -5,6 +5,10 @@
   "type": "module",
   "license": "AGPL-3.0-only",
   "exports": {
+    "./adapter": {
+      "source": "./src/adapter.ts",
+      "default": "./dist/adapter.js"
+    },
     "./manifest": {
       "source": "./src/manifest/manifest.ts",
       "default": "./dist/manifest/manifest.js"
@@ -24,6 +28,10 @@
     "./conformance": {
       "source": "./src/conformance/kit.ts",
       "default": "./dist/conformance/kit.js"
+    },
+    "./conformance/fault-matrix": {
+      "source": "./src/conformance/fault-matrix.ts",
+      "default": "./dist/conformance/fault-matrix.js"
     }
   },
   "dependencies": {

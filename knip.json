@@ -7,7 +7,7 @@
     },
     "packages/testkit": {
       "entry": ["test/*/*.test.mjs", "scripts/*.mjs"],
-      "project": ["test/**"]
+      "project": ["src/**", "test/**"]
     },
     "apps/web": {
       "entry": ["src/theme/bootstrap.js", "scripts/*.mjs"],

@@ -14,7 +14,7 @@ export interface ConformanceRow {
 }
 
 // Error bodies that carry something shaped like an id, a link or a created object.
-const PLANTED = "planted-id-1";
+export const PLANTED = "planted-id-1";
 const ERROR_BODIES: readonly unknown[] = [
   { id: PLANTED, error: "duplicate" },
   { data: { id: PLANTED } },
@@ -28,7 +28,7 @@ const STATUSES = [400, 409, 429, 500] as const;
 const EFFECTS: readonly Effect[] = ["none", "possible"];
 
 // What is wrong with an error result, or undefined: an id, a success, or a class that its effect cannot have.
-function problemWith(result: ProviderResult): string | undefined {
+export function problemWith(result: ProviderResult): string | undefined {
   const leaked =
     result.externalId !== undefined ||
     result.permalink !== undefined ||
