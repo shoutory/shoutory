@@ -1,60 +1,44 @@
 import { createHash } from "node:crypto";
 import { withTenant } from "@shoutory/db/context";
 import type { AppPool } from "@shoutory/db/pool";
+import type { EgressRequest, EgressResponse } from "@shoutory/provider-sdk/egress";
+import { EgressError } from "@shoutory/provider-sdk/egress/errors";
 import { Refusal } from "../errors/refusal.js";
 import type { Logger } from "../logging/logger.js";
 
 // The fixed host of the k-anonymity range API: only the first five hex digits of the SHA-1 leave the process.
-// It joins the operator egress exceptions when `egressFetch` exists; until then the `fetch` is a parameter.
-const RANGE_URL = "https://api.pwnedpasswords.com/range/";
+// The request policy of the composition root lists this host, so a redirect to any other host is refused.
+export const RANGE_HOST = "api.pwnedpasswords.com";
+const RANGE_URL = `https://${RANGE_HOST}/range/`;
 const TIMEOUT_MS = 2_000;
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 
 /** `unavailable`: the service did not answer in time or well; the password is accepted and checked again later. */
 type Outcome = "clean" | "breached" | "unavailable";
 
-async function readCapped(response: Response): Promise<string | undefined> {
-  const reader = response.body?.getReader();
-  if (!reader) return undefined;
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
-    size += chunk.value.byteLength;
-    if (size > MAX_RESPONSE_BYTES) {
-      await reader.cancel();
-      return undefined;
-    }
-    chunks.push(chunk.value);
-  }
-  return Buffer.concat(chunks).toString("utf8");
-}
-
-const isUnreachable = (error: unknown): boolean =>
-  error instanceof TypeError ||
-  (error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError"));
-
 /** Looks the password up in the range of its hash prefix. Padding lines (count 0) never count as a hit. */
-async function checkBreached(fetchRange: typeof fetch, password: string): Promise<Outcome> {
+async function checkBreached(
+  fetchRange: (request: EgressRequest) => Promise<EgressResponse>,
+  password: string,
+): Promise<Outcome> {
   const hash = createHash("sha1").update(password).digest("hex").toUpperCase();
-  try {
-    const response = await fetchRange(`${RANGE_URL}${hash.slice(0, 5)}`, {
-      headers: { "Add-Padding": "true" },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-      redirect: "error",
-    });
-    const body = response.ok ? await readCapped(response) : undefined;
-    if (body === undefined) return "unavailable";
-    // A range answer is padded, so it always holds lines; a body with none is not one (an error page, an empty body).
-    const lines = body.split("\n").map((line) => line.trim().split(":"));
-    if (!lines.some(([found, count]) => /^[0-9A-F]{35}$/i.test(found ?? "") && /^\d+$/.test(count ?? ""))) {
-      return "unavailable";
-    }
-    const suffix = hash.slice(5);
-    return lines.some(([found, count]) => found === suffix && Number(count) > 0) ? "breached" : "clean";
-  } catch (error) {
-    if (isUnreachable(error)) return "unavailable";
-    throw error;
+  const response = await fetchRange({
+    url: `${RANGE_URL}${hash.slice(0, 5)}`,
+    headers: { "Add-Padding": "true" },
+    timeoutMs: TIMEOUT_MS,
+    maxBytes: MAX_RESPONSE_BYTES,
+  });
+  if (response.status < 200 || response.status >= 300) return "unavailable";
+  // A range answer is padded, so it always holds lines; a body with none is not one (an error page, an empty body).
+  const lines = Buffer.from(response.body)
+    .toString("utf8")
+    .split("\n")
+    .map((line) => line.trim().split(":"));
+  if (!lines.some(([found, count]) => /^[0-9A-F]{35}$/i.test(found ?? "") && /^\d+$/.test(count ?? ""))) {
+    return "unavailable";
   }
+  const suffix = hash.slice(5);
+  return lines.some(([found, count]) => found === suffix && Number(count) > 0) ? "breached" : "clean";
 }
 
 export interface PasswordGuard {
@@ -67,7 +51,8 @@ export interface PasswordGuard {
 }
 
 interface GuardDeps {
-  readonly fetch: typeof fetch;
+  /** The egress client with its policy bound (`main.ts`); every refusal or failure it throws is an `EgressError`. */
+  readonly fetch: (request: EgressRequest) => Promise<EgressResponse>;
   /** The `shoutory_auth` pool: it may call `password_recheck_set`. */
   readonly pool: AppPool;
   /** The `shoutory_app` pool: a user reads their own mark under template U. */
@@ -83,9 +68,18 @@ export function createPasswordGuard({ fetch: fetchRange, pool, appPool, logger }
       due,
     ]);
   const check = async (password: string): Promise<Outcome> => {
-    const outcome = await checkBreached(fetchRange, password);
-    if (outcome === "unavailable") logger.warn({}, "the breached-password check is unavailable");
-    return outcome;
+    const unavailable = (fields: object) => {
+      logger.warn(fields, "the breached-password check is unavailable");
+      return "unavailable" as const;
+    };
+    try {
+      const outcome = await checkBreached(fetchRange, password);
+      return outcome === "unavailable" ? unavailable({}) : outcome;
+    } catch (error) {
+      // The class and the host only: an egress error never carries the URL, and the URL holds the hash prefix.
+      if (error instanceof EgressError) return unavailable({ egressClass: error.class, host: error.host });
+      throw error;
+    }
   };
   return {
     async screen(password) {

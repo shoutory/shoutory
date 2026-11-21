@@ -36,7 +36,11 @@ test("the runtime stage is distroless and non-root, runs in UTC and takes the ch
   assert.match(runtime, /^ENV SHOUTORY_RELEASE_CHANNEL=\$\{SHOUTORY_RELEASE_CHANNEL\}$/m);
   assert.match(runtime, /^ENV SHOUTORY_WEB_ROOT=\/app\/apps\/web\/dist\/client$/m);
   assert.match(runtime, /^VOLUME \/data$/m);
-  assert.match(runtime, /^ENTRYPOINT \["\/nodejs\/bin\/node", "\/app\/apps\/api\/dist\/main\.js"\]$/m);
+  // The telemetry preload runs before the server module, so the ESM hook is in place when `node:http` loads.
+  assert.match(
+    runtime,
+    /^ENTRYPOINT \["\/nodejs\/bin\/node", "--import", "\/app\/apps\/api\/dist\/telemetry\/preload\.js", "\/app\/apps\/api\/dist\/main\.js"\]$/m,
+  );
   assert.doesNotMatch(runtime, /^RUN /m, "a distroless runtime has no shell to run anything");
 });
 

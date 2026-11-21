@@ -6,15 +6,18 @@ import { assertUtc, type Config, databaseUrlOf, parseEnv } from "@shoutory/core/
 import { assertKeyIdsLoaded } from "@shoutory/core/keys";
 import { createAppPool, createAuthDb } from "@shoutory/db/pool";
 import { assertMigrationsApplied, sealedKeyIds } from "@shoutory/db/startup";
+import { type EgressRequest, egressFetch } from "@shoutory/provider-sdk/egress";
+import { createOperatorPolicy } from "@shoutory/provider-sdk/egress/policy";
 import { createApp } from "./app.js";
 import { createAuth } from "./auth/auth.js";
+import { RANGE_HOST } from "./auth/hibp.js";
 import { type CliIo, collectSecrets, run } from "./cli/main.js";
 import { startWorker } from "./jobs/worker.js";
 import { createLogger, type Logger } from "./logging/logger.js";
 import { createScrubber } from "./logging/scrub.js";
 import { closeServer, closeTogether, drain, firstOnly } from "./shutdown.js";
 import { createStorageDriver } from "./storage/driver.js";
-import { startTelemetry } from "./telemetry/telemetry.js";
+import { telemetry, telemetryFailure } from "./telemetry/preload.js";
 
 export interface RunningServer {
   readonly port: number;
@@ -29,13 +32,13 @@ export type Started =
 const EXIT_FAILED = 1;
 
 function listen(
-  fetch: (request: Request, env: unknown) => Response | Promise<Response>,
+  handler: (request: Request, env: unknown) => Response | Promise<Response>,
   port: number,
   host: string | undefined,
 ) {
   return new Promise<RunningServer>((done, fail) => {
     // No host means the Node default (all interfaces).
-    const server = serve({ fetch, port, ...(host ? { hostname: host } : {}) }, (info) => {
+    const server = serve({ fetch: handler, port, ...(host ? { hostname: host } : {}) }, (info) => {
       server.off("error", fail);
       done({
         port: info.port,
@@ -44,6 +47,13 @@ function listen(
     });
     server.once("error", fail);
   });
+}
+
+/** The one operator network policy, built from instance configuration, bound to the breach-check host. */
+function boundEgress(config: Config) {
+  const operator = createOperatorPolicy({ allowCidrs: config.egressAllowCidrs });
+  const request = { kind: "provider", egressHosts: [RANGE_HOST] } as const;
+  return (req: EgressRequest) => egressFetch(req, { request, operator });
 }
 
 async function startServer(config: Config, logger: Logger): Promise<RunningServer> {
@@ -66,7 +76,7 @@ async function startServer(config: Config, logger: Logger): Promise<RunningServe
       db: createAuthDb(authPool),
       pool: authPool,
       appPool: pool,
-      fetch,
+      fetch: boundEgress(config),
       logger,
     });
     // The library starts asynchronously; a bad configuration refuses the start here, not on the first request.
@@ -158,11 +168,11 @@ async function startRole(config: Config, logger: Logger): Promise<Started> {
   }
 }
 
-/** Start order: UTC, configuration, telemetry, logger, migration check, listen. Any refusal happens before listen. */
+/** Start order: telemetry (the preload, before this module), UTC, configuration, logger, migration check, listen. */
 async function start(env: NodeJS.ProcessEnv, io: CliIo): Promise<Started> {
+  if (telemetryFailure) throw telemetryFailure;
   assertUtc(env);
   const config = parseEnv(env);
-  const telemetry = await startTelemetry(env);
   const logger = createLogger({
     secrets: collectSecrets(env),
     stream: { write: (line) => io.stdout(line.trimEnd()) },

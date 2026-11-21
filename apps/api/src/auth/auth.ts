@@ -3,6 +3,7 @@ import type { SealedSecret } from "@shoutory/core/crypto";
 import type { KeyProvider } from "@shoutory/core/keys";
 import type { AppPool, AuthDb } from "@shoutory/db/pool";
 import { authAccount, authSession, authTwoFactor, authUser, authVerification } from "@shoutory/db/schema";
+import type { EgressRequest, EgressResponse } from "@shoutory/provider-sdk/egress";
 import type { BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { betterAuth } from "better-auth/minimal";
@@ -49,8 +50,8 @@ export interface AuthOptions {
   readonly pool: AppPool;
   /** The pool of the `shoutory_app` role: a user's own re-check mark is read through it (template U). */
   readonly appPool: AppPool;
-  /** The breached-password range lookup; until the outbound-request policy exists it is the process's own `fetch`. */
-  readonly fetch: typeof fetch;
+  /** The breached-password range lookup: the egress client with its policy bound. */
+  readonly fetch: (request: EgressRequest) => Promise<EgressResponse>;
   readonly logger: Logger;
 }
 

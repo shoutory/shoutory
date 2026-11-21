@@ -5,6 +5,8 @@ import { EnvKeyProvider } from "@shoutory/core/keys";
 import type { StorageDriver } from "@shoutory/core/storage";
 import { createAppPool, createAuthDb } from "@shoutory/db/pool";
 import { cloneTemplate, readTestEnv, type TestDatabase, withAdminClient } from "@shoutory/db/testing";
+import type { EgressRequest, EgressResponse } from "@shoutory/provider-sdk/egress";
+import { EgressError } from "@shoutory/provider-sdk/egress/errors";
 import { inject } from "vitest";
 import { createApp } from "../../../src/app.js";
 import { type AuthService, createAuth } from "../../../src/auth/auth.js";
@@ -88,7 +90,7 @@ export interface HibpFake {
   down: boolean;
   /** When set, the whole answer body, whatever the range asked for. */
   body: string | undefined;
-  readonly fetch: typeof fetch;
+  readonly fetch: (request: EgressRequest) => Promise<EgressResponse>;
 }
 
 export function createHibpFake(): HibpFake {
@@ -97,16 +99,21 @@ export function createHibpFake(): HibpFake {
     urls: [],
     down: false,
     body: undefined,
-    fetch: async (input) => {
-      fake.urls.push(String(input));
-      if (fake.down) throw new TypeError("fetch failed");
-      if (fake.body !== undefined) return new Response(fake.body);
-      const prefix = new URL(String(input)).pathname.split("/").pop() ?? "";
+    fetch: async ({ url }) => {
+      fake.urls.push(url);
+      if (fake.down) throw new EgressError({ class: "connect", host: new URL(url).hostname });
+      const answer = (text: string): EgressResponse => ({
+        status: 200,
+        headers: {},
+        body: new TextEncoder().encode(text),
+      });
+      if (fake.body !== undefined) return answer(fake.body);
+      const prefix = new URL(url).pathname.split("/").pop() ?? "";
       const lines = [...fake.breached]
         .map((password) => createHash("sha1").update(password.normalize("NFKC")).digest("hex").toUpperCase())
         .filter((hash) => hash.startsWith(prefix.toUpperCase()))
         .map((hash) => `${hash.slice(5)}:3`);
-      return new Response([...lines, "0000000000000000000000000000000000A:0"].join("\r\n"));
+      return answer([...lines, "0000000000000000000000000000000000A:0"].join("\r\n"));
     },
   };
   return fake;

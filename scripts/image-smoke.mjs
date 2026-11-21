@@ -61,8 +61,9 @@ const appEnv = {
   ...Object.fromEntries(
     ["app", "auth", "worker"].map((role) => [`SHOUTORY_DATABASE_URL_${role.toUpperCase()}`, url(role)]),
   ),
-  OTEL_EXPORTER_OTLP_ENDPOINT: "http://telemetry.invalid:4318",
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://telemetry:4318",
 };
+const QUERY_CANARY = "span-query-canary-1";
 const envArgs = (values) => Object.entries(values).flatMap(([key, value]) => ["-e", `${key}=${value}`]);
 
 function build() {
@@ -131,6 +132,20 @@ function startDatabase() {
   ]);
 }
 
+// A collector that prints every OTLP request body as one line; the image's own Node runs it, so nothing is pulled.
+function startCollector() {
+  step("start a collector the app exports its spans to");
+  const script = `require("node:http").createServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => { body += chunk; });
+    req.on("end", () => { console.log(body.replace(/\\s+/g, " ")); res.end("{}"); });
+  }).listen(4318);`;
+  docker([
+    ...["run", "-d", "--name", `${id}-collector`, "--network", NETWORK, "--network-alias", "telemetry"],
+    ...["--read-only", "--entrypoint", NODE, IMAGE, "-e", script],
+  ]);
+}
+
 async function waitFor(label, attempts, check) {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     if (check()) return;
@@ -183,6 +198,43 @@ async function startApp() {
   );
 }
 
+function probeWithQuery() {
+  step("one request with a query string, for the incoming-request span");
+  const probe = `fetch('http://127.0.0.1:3000/readyz?probe=${QUERY_CANARY}').then(()=>process.exit(0),()=>process.exit(1))`;
+  docker(["exec", `${id}-app`, NODE, "-e", probe]);
+}
+
+// The spans the collector received (shutdown flushed them), as [kind, attributes] pairs; kind 2 is a server span.
+function receivedSpans() {
+  const lines = docker(["logs", `${id}-collector`])
+    .stdout.split("\n")
+    .filter((line) => line.startsWith("{"));
+  return lines.flatMap((line) =>
+    JSON.parse(line).resourceSpans.flatMap((resource) =>
+      resource.scopeSpans.flatMap((scope) =>
+        scope.spans.map((span) => ({
+          kind: span.kind,
+          attributes: Object.fromEntries(
+            span.attributes.map(({ key, value }) => [key, value.stringValue ?? String(value.intValue ?? "")]),
+          ),
+        })),
+      ),
+    ),
+  );
+}
+
+function checkSpans() {
+  step("the incoming request is one server span, and the query string never reaches the collector");
+  const spans = receivedSpans();
+  const everything = JSON.stringify(spans);
+  expect(!everything.includes(QUERY_CANARY), "the query string reached the collector");
+  const withQuery = spans.filter((span) => span.kind === 2 && span.attributes["url.query"] !== undefined);
+  expect(
+    withQuery.length === 1 && withQuery[0].attributes["url.query"] === "[Redacted]",
+    `expected one server span with the query redacted, found ${withQuery.length} of ${spans.length} spans`,
+  );
+}
+
 function stop() {
   step(`SIGTERM stops the idle container with exit 0 within ${DRAIN_SECONDS} s`);
   const started = Date.now();
@@ -196,7 +248,7 @@ function stop() {
 }
 
 function cleanUp() {
-  for (const name of [`${id}-app`, `${id}-migrate`, `${id}-pg`])
+  for (const name of [`${id}-app`, `${id}-collector`, `${id}-migrate`, `${id}-pg`])
     docker(["rm", "-fv", name], { allowFailure: true });
   docker(["network", "rm", NETWORK], { allowFailure: true });
   docker(["volume", "rm", "-f", `${id}-data`], { allowFailure: true });
@@ -219,10 +271,13 @@ try {
   inspect();
   shipped();
   startDatabase();
+  startCollector();
   await migrate();
   writeData();
   await startApp();
+  probeWithQuery();
   stop();
+  checkSpans();
   console.log("image-smoke: pass");
 } catch (error) {
   console.error(`image-smoke: FAIL: ${error instanceof SmokeFailure ? error.message : error}`);

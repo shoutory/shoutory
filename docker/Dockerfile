@@ -37,6 +37,9 @@ COPY --from=build /app/packages/db/package.json /app/packages/db/package.json
 COPY --from=build /app/packages/db/dist /app/packages/db/dist
 COPY --from=build /app/packages/db/migrations /app/packages/db/migrations
 COPY --from=build /app/packages/db/node_modules /app/packages/db/node_modules
+COPY --from=build /app/packages/provider-sdk/package.json /app/packages/provider-sdk/package.json
+COPY --from=build /app/packages/provider-sdk/dist /app/packages/provider-sdk/dist
+COPY --from=build /app/packages/provider-sdk/node_modules /app/packages/provider-sdk/node_modules
 COPY --from=build /data /data
 
 # The debug image, for support only (a release builds it with `--target debug`): the same files on the distroless
@@ -54,7 +57,7 @@ ENV SHOUTORY_WEB_ROOT=/app/apps/web/dist/client
 ENV NODE_ENV=production
 USER nonroot
 VOLUME /data
-ENTRYPOINT ["/nodejs/bin/node", "/app/apps/api/dist/main.js"]
+ENTRYPOINT ["/nodejs/bin/node", "--import", "/app/apps/api/dist/telemetry/preload.js", "/app/apps/api/dist/main.js"]
 
 # Distroless Node 26.13.0 on Debian 13, the nonroot variant, built from its source commit of 2026-11-02 (the image config
 # carries no date). Index digest read 2026-11-20.
@@ -69,4 +72,4 @@ ENV SHOUTORY_WEB_ROOT=/app/apps/web/dist/client
 ENV NODE_ENV=production
 USER nonroot
 VOLUME /data
-ENTRYPOINT ["/nodejs/bin/node", "/app/apps/api/dist/main.js"]
+ENTRYPOINT ["/nodejs/bin/node", "--import", "/app/apps/api/dist/telemetry/preload.js", "/app/apps/api/dist/main.js"]

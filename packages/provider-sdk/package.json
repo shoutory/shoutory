@@ -5,6 +5,18 @@
   "type": "module",
   "license": "AGPL-3.0-only",
   "exports": {
+    "./egress": {
+      "source": "./src/egress/client.ts",
+      "default": "./dist/egress/client.js"
+    },
+    "./egress/errors": {
+      "source": "./src/egress/errors.ts",
+      "default": "./dist/egress/errors.js"
+    },
+    "./egress/policy": {
+      "source": "./src/egress/policy.ts",
+      "default": "./dist/egress/policy.js"
+    },
     "./adapter": {
       "source": "./src/adapter.ts",
       "default": "./dist/adapter.js"

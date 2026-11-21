@@ -236,6 +236,13 @@ describe("a credential in a URL path or query is redacted in request logs", () =
       url: `/callback?${param}=query-value-0001`,
       secret: "query-value-0001",
     })),
+    // The query is dropped whole: a parameter that is not on the credential list can still carry a token.
+    { name: "an unlisted query parameter", url: "/search?q=query-canary-0001", secret: "query-canary-0001" },
+    {
+      name: "an unlisted query parameter on an absolute URL",
+      url: "http://127.0.0.1:3000/readyz?probe=query-canary-0001",
+      secret: "query-canary-0001",
+    },
     {
       name: "URL userinfo",
       url: "https://mailer:userinfo-value-0001@example.test/hooks",

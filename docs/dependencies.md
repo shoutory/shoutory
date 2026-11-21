@@ -86,6 +86,14 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
   postinstall that only checks a version; it is not allowed to run (`pnpm-workspace.yaml`).
 - Rejected: the gRPC and protobuf exporters (more dependencies for the same job).
 
+## @opentelemetry/instrumentation 0.300.0
+
+- Used for: its `hook.mjs`, which the telemetry preload registers so the HTTP instrumentation can patch `node:http` in an
+  ES-module build (the base package of the instrumentations above; it brings `import-in-the-middle` 3.5.3).
+- Licence: Apache-2.0. Published 2026-10-20, more than 14 days before adoption, on the same release train as
+  `instrumentation-http` 0.300.0.
+- Rejected: a hand-written loader hook (infrastructure we do not reinvent).
+
 ## @opentelemetry/instrumentation-http 0.300.0
 
 - Used for: spans for incoming and outgoing Node `http` requests.

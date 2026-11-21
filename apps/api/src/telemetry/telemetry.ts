@@ -1,5 +1,6 @@
 import type { Context } from "@opentelemetry/api";
 import type { ReadableSpan, Span, SpanExporter, SpanProcessor } from "@opentelemetry/sdk-trace";
+import { ConfigError } from "@shoutory/core/config";
 import { redactUrl } from "../logging/redact-url.js";
 
 const ENDPOINT = "OTEL_EXPORTER_OTLP_ENDPOINT";
@@ -61,7 +62,7 @@ export async function createSpanProcessor(exporter: SpanExporter): Promise<SpanP
 /** The OTLP traces URL of an operator endpoint: http or https only, the path `v1/traces` appended. */
 export function tracesUrl(endpoint: string): string {
   if (!URL.canParse(endpoint) || !/^https?:$/.test(new URL(endpoint).protocol)) {
-    throw new Error(`${ENDPOINT} must be an http or https URL`);
+    throw new ConfigError(ENDPOINT, `${ENDPOINT} must be an http or https URL`);
   }
   const url = new URL(endpoint);
   url.search = "";

@@ -8,7 +8,7 @@ import {
   type TestDatabase,
   withAdminClient,
 } from "@shoutory/db/testing";
-import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, inject, it, vi } from "vitest";
 import { main, type Started } from "../../src/main.js";
 
 const testEnv = readTestEnv();
@@ -118,6 +118,24 @@ describe("process entry refusals", () => {
       expect(printed).not.toContain(PEPPER);
     },
   );
+
+  // An endpoint can carry userinfo or a token: the refusal names the setting and prints none of the value. The telemetry
+  // module runs when `main` is first imported, so the env is stubbed and the modules are reset before a fresh import.
+  it("main refuses a bad telemetry endpoint with exit code 1, names it and prints no part of its value", async () => {
+    vi.stubEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://user:endpoint-canary-0001@");
+    vi.resetModules();
+    try {
+      const { main: fresh } = await import("../../src/main.js");
+      const sink = io();
+      const started = await fresh([], envFor(migrated, {}), sink.io);
+      expect(refusal(started)).toBe(1);
+      expect(sink.err.join("\n")).toContain("OTEL_EXPORTER_OTLP_ENDPOINT");
+      expect(sink.err.join("\n")).not.toContain("endpoint-canary-0001");
+    } finally {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
+  });
 
   it("main refuses a missing migration before listening and names it", async () => {
     const sink = io();

@@ -102,6 +102,7 @@ const IMAGE_INPUTS = [
   "apps/web/**",
   "packages/core/**",
   "packages/db/**",
+  "packages/provider-sdk/**",
   "docker/**",
   "package.json",
   "pnpm-lock.yaml",

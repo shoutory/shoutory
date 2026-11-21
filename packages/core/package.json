@@ -41,6 +41,10 @@
       "source": "./src/net/address.ts",
       "default": "./dist/net/address.js"
     },
+    "./net/url-fields": {
+      "source": "./src/net/url-fields.ts",
+      "default": "./dist/net/url-fields.js"
+    },
     "./password-limits": {
       "source": "./src/password/limits.ts",
       "default": "./dist/password/limits.js"
