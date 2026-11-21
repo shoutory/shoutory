@@ -78,6 +78,27 @@ test("every test runs in exactly one shard, and journey and founder in all", () 
   }
 });
 
+test("in every shard each project after the founder project depends on it, directly or through others", () => {
+  const table = JSON.parse(readFileSync(join(root, "e2e/shards.json"), "utf8"));
+  for (const shard of Object.keys(table)) {
+    const answer = listed(shard);
+    assert.equal(answer.run.status, 0, `${shard}: ${answer.run.stderr}`);
+    // The report carries each project's dependencies in config.filteredProjects[].dependencies.
+    const projects = new Map(
+      answer.report.config.filteredProjects.map((project) => [project.name, project.dependencies]),
+    );
+    const reaches = (name, seen = new Set()) => {
+      if (seen.has(name)) return false;
+      seen.add(name);
+      return (projects.get(name) ?? []).some((next) => next === "founder" || reaches(next, seen));
+    };
+    for (const name of projects.keys()) {
+      if (EVERY_SHARD.includes(name)) continue;
+      assert.ok(reaches(name), `${shard}: the ${name} project does not run after the founder project`);
+    }
+  }
+});
+
 test("a shard stops after ten failed tests on CI, and a local run has no limit", () => {
   assert.equal(listed("rest", true).report.config.maxFailures, 10);
   assert.equal(listed("rest", false).report.config.maxFailures, 0);

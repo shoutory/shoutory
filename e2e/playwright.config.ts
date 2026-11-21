@@ -106,11 +106,14 @@ function shardOf(projects: typeof FULL, shard: string | undefined): typeof FULL 
   const names = new Set([JOURNEY.name, "founder", ...chosen]);
   return projects
     .filter((project) => names.has(project.name))
-    .map((project) =>
-      "dependencies" in project
-        ? { ...project, dependencies: project.dependencies.filter((name) => names.has(name)) }
-        : project,
-    );
+    .map((project) => {
+      if (!("dependencies" in project)) return project;
+      const kept = project.dependencies.filter((name) => names.has(name));
+      // A project that lost a dependency still runs after the founder project, whose specs make the state it needs.
+      const dependencies =
+        kept.length < project.dependencies.length ? [...new Set([...kept, "founder"])] : kept;
+      return { ...project, dependencies };
+    });
 }
 
 // Specs live in e2e/specs, helpers in e2e/support, data and simulators in e2e/fixtures. One stack serves the whole run
