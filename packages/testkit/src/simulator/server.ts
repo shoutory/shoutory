@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import type { AddressInfo } from "node:net";
+import { listenLoopback } from "@shoutory/provider-sdk/loopback";
 import { createFaultQueue, type Fault, type FaultQueue } from "./faults.js";
 
 interface SimRequest {
@@ -168,8 +168,7 @@ export async function startSimulator(routes: Routes): Promise<Simulator> {
   const server = createServer((request, response) => {
     handle(state, request, response).catch(() => response.socket?.destroy());
   });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const { port } = server.address() as AddressInfo;
+  const port = await listenLoopback(server);
   return {
     url: `http://127.0.0.1:${port}`,
     faults: state.faults,

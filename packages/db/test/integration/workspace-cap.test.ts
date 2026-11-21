@@ -19,7 +19,8 @@ const OTHER = randomUUID();
 let db: TestDatabase;
 const rows = (sql: string, params?: unknown[]) =>
   withAdminClient(env, db.name, async (a) => (await a.query(sql, params)).rows);
-const CREATE = "SELECT app.workspace_create($1::uuid, 'cap', $2, 'UTC', NULL, NULL)";
+const CREATE =
+  "SELECT app.workspace_create($1::uuid, 'cap', $2, 'UTC', NULL, NULL, encode(sha256(convert_to(gen_random_uuid()::text, 'UTF8')), 'hex'))";
 const slug = () => `cap-${randomUUID().slice(0, 8)}`;
 
 // One statement seeds the workspaces and their Owners, so the commit-time Owner guard is satisfied.

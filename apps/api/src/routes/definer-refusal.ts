@@ -13,6 +13,8 @@ const DEFINERS = [
   "invitation_accept",
   "member_role_set",
   "member_remove",
+  "channel_disable",
+  "channel_enable",
   "feature_flag_override_set",
   "instance_setting_set",
   "instance_settings_read",
@@ -31,6 +33,7 @@ const DEFINER_STATES: Readonly<Record<string, ErrorCode>> = {
   SH403: "forbidden",
   SH409: "conflict",
   SH410: "invitation_unusable",
+  SH429: "too_many_requests",
 };
 
 // The reason codes a definer puts after its name (`invitation_accept: expired`); any other text is never sent on.
@@ -67,8 +70,18 @@ function detailsOf(state: string, message: string, detail: unknown): Record<stri
   return expires === undefined ? { reason } : { reason, expires_at: expires };
 }
 
-// Only the invitation and member definers raise the SH states; the same state under another definer's name is a defect.
-const SH_DEFINERS = /^(invitation|member)_/;
+// Only the invitation, member, channel and creation definers raise the SH states; the same state under another
+// definer's name is a defect.
+const SH_DEFINERS = /^(invitation|member|channel)_|^(workspace|organization)_create:/;
+// SH429 is the creation limit alone.
+const LIMIT_DEFINERS = /^(workspace|organization)_create:/;
+
+// A creation definer's SH429 puts "retry after N seconds" in DETAIL; anything else gives the default Retry-After.
+const RETRY_AFTER = /^retry after (\d{1,9}) seconds$/;
+const retryAfterOf = (state: string, detail: unknown): number | undefined => {
+  const found = state === "SH429" && typeof detail === "string" ? RETRY_AFTER.exec(detail) : null;
+  return found ? Number(found[1]) : undefined;
+};
 
 /** The refusal a definer's own error answers with, or nothing when the error is not one of its refusals. */
 export function definerRefusal(error: unknown): Refusal | undefined {
@@ -76,6 +89,12 @@ export function definerRefusal(error: unknown): Refusal | undefined {
   const code = typeof state === "string" && isDefinerMessage(message) ? DEFINER_STATES[state] : undefined;
   if (!code || typeof state !== "string" || typeof message !== "string") return undefined;
   if (state.startsWith("SH") && !SH_DEFINERS.test(message)) return undefined;
+  if (state === "SH429" && !LIMIT_DEFINERS.test(message)) return undefined;
   const details = detailsOf(state, message, detail);
-  return new Refusal(code, `definer refused: ${state}`, { cause: error, ...(details ? { details } : {}) });
+  const retryAfterSeconds = retryAfterOf(state, detail);
+  return new Refusal(code, `definer refused: ${state}`, {
+    cause: error,
+    ...(details ? { details } : {}),
+    ...(retryAfterSeconds === undefined ? {} : { retryAfterSeconds }),
+  });
 }

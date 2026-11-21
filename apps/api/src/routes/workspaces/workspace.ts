@@ -1,5 +1,6 @@
 import type { TenantTx } from "@shoutory/db/context";
 import { z } from "zod";
+import type { AuthService } from "../../auth/auth.js";
 import { Refusal } from "../../errors/refusal.js";
 import { type App, defineRoute, type InUserTx } from "../define-route.js";
 import { nameSchema, pageAnswer, pageQuery } from "../input.js";
@@ -83,19 +84,23 @@ function attemptOf(base: string, attempt: number): string {
   return base.slice(0, 63 - suffix.length).replace(/-+$/, "") + suffix;
 }
 
-type Audit = { requestId: string; ipHmac: Buffer };
+type Audit = { requestId: string; ipHmac: Buffer; bucketKey: string };
 
 // One attempt is its own transaction: a clash aborts it, and the next try starts clean.
 const insertWorkspace = (inUserTx: InUserTx, body: z.infer<typeof create>, slugValue: string, audit: Audit) =>
   inUserTx(async (tx) => {
-    const made = await tx.query<{ id: string }>("SELECT app.workspace_create($1, $2, $3, $4, $5, $6) AS id", [
-      body.organization_id,
-      body.name,
-      slugValue,
-      body.default_tz,
-      audit.requestId,
-      audit.ipHmac,
-    ]);
+    const made = await tx.query<{ id: string }>(
+      "SELECT app.workspace_create($1, $2, $3, $4, $5, $6, $7) AS id",
+      [
+        body.organization_id,
+        body.name,
+        slugValue,
+        body.default_tz,
+        audit.requestId,
+        audit.ipHmac,
+        audit.bucketKey,
+      ],
+    );
     const newId = made.rows[0]?.id;
     if (!newId) throw new Error("workspace_create returned no id");
     return newId;
@@ -129,7 +134,7 @@ async function createWorkspace(inUserTx: InUserTx, body: z.infer<typeof create>,
   throw new Refusal("conflict", "slug already used in the organization", { cause: clash });
 }
 
-export function registerWorkspaces(app: App, ipHmac: (address: string) => Buffer): void {
+export function registerWorkspaces(app: App, auth: Pick<AuthService, "ipHmac" | "bucketKey">): void {
   defineRoute(app, {
     method: "get",
     path: "/api/v1/workspaces",
@@ -155,7 +160,11 @@ export function registerWorkspaces(app: App, ipHmac: (address: string) => Buffer
     status: 201,
     body: create,
     handler: ({ c, body, clientAddress, inUserTx }) =>
-      createWorkspace(inUserTx, body, { requestId: c.get("requestId"), ipHmac: ipHmac(clientAddress) }),
+      createWorkspace(inUserTx, body, {
+        requestId: c.get("requestId"),
+        ipHmac: auth.ipHmac(clientAddress),
+        bucketKey: auth.bucketKey("tenant_create", c.get("session").userId),
+      }),
   });
   defineRoute(app, {
     method: "get",

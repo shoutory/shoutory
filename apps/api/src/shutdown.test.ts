@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import type { AddressInfo } from "node:net";
+import { listenLoopback } from "@shoutory/provider-sdk/loopback";
 import { afterEach, describe, expect, it } from "vitest";
 import { closeServer, closeTogether, drain, firstOnly } from "./shutdown.js";
 
@@ -19,8 +19,7 @@ async function listen(handler: (request: IncomingMessage, response: ServerRespon
     handler(request, response);
   });
   servers.push(server);
-  await new Promise<void>((ready) => server.listen(0, "127.0.0.1", ready));
-  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
+  const url = `http://127.0.0.1:${await listenLoopback(server)}/`;
   // The process's own close: the server stops accepting and waits for the requests in flight.
   return { url, arrived, close: () => closeServer(server) };
 }

@@ -162,6 +162,63 @@ REGISTRY["app.audit_logs"] = {
   seed: [auditRow(WA, OA, "01"), auditRow(WB, OB, "02")],
   insertForB: () => auditRow(WB, OB, "03"),
 };
+// Migration 0013: the channel tables are template W.
+const CA = randomUUID();
+const CB = randomUUID();
+const channelRow = (id: string, workspace: string, account: string) =>
+  `INSERT INTO app.channels (id, workspace_id, provider_id, account_kind, provider_account_id, display_name)
+   VALUES ('${id}', '${workspace}', 'fixture-oauth', 'profile', '${account}', 'matrix channel')`;
+REGISTRY["app.channels"] = {
+  key: "workspace_id",
+  a: WA,
+  b: WB,
+  seed: [channelRow(CA, WA, "acct-a"), channelRow(CB, WB, "acct-b")],
+  insertForB: () => channelRow(randomUUID(), WB, "acct-new"),
+  // The app role writes only the nickname column; the planted grants let the policies alone be tried. The snapshot and
+  // cursor rows of a channel go with it (ON DELETE CASCADE), so deleting A's channels works.
+  write: {
+    update: "UPDATE app.channels SET nickname = nickname",
+    insertOwn: () => channelRow(randomUUID(), WA, "acct-own"),
+    insertWs: WA,
+    changeWs: WA,
+    changeKey: WA,
+  },
+};
+const snapshotRow = (channel: string, workspace: string, epoch: number) =>
+  `INSERT INTO app.channel_capability_snapshots
+     (workspace_id, channel_id, epoch, manifest_digest, api_version, capabilities, limits, observed_at)
+   VALUES ('${workspace}', '${channel}', ${epoch}, 'digest-${epoch}', 'v1', '{}', '{}', now())`;
+REGISTRY["app.channel_capability_snapshots"] = {
+  key: "workspace_id",
+  a: WA,
+  b: WB,
+  seed: [snapshotRow(CA, WA, 1), snapshotRow(CB, WB, 1)],
+  insertForB: () => snapshotRow(CB, WB, 2),
+  write: {
+    update: "UPDATE app.channel_capability_snapshots SET api_version = api_version",
+    insertOwn: () => snapshotRow(CA, WA, 2),
+    insertWs: WA,
+    changeWs: WA,
+    changeKey: WA,
+  },
+};
+const cursorRow = (channel: string, workspace: string, stream: string) =>
+  `INSERT INTO app.sync_cursors (workspace_id, channel_id, stream, cursor, synced_at, next_sync_at)
+   VALUES ('${workspace}', '${channel}', '${stream}', 'c-1', now(), now())`;
+REGISTRY["app.sync_cursors"] = {
+  key: "workspace_id",
+  a: WA,
+  b: WB,
+  seed: [cursorRow(CA, WA, "comments"), cursorRow(CB, WB, "comments")],
+  insertForB: () => cursorRow(CB, WB, "mentions"),
+  write: {
+    update: "UPDATE app.sync_cursors SET cursor = cursor",
+    insertOwn: () => cursorRow(CA, WA, "mentions"),
+    insertWs: WA,
+    changeWs: WA,
+    changeKey: WA,
+  },
+};
 const TABLES = Object.keys(REGISTRY);
 const WRITABLE = TABLES.filter((table) => REGISTRY[table]?.write);
 
@@ -228,6 +285,9 @@ async function seed(admin: Client): Promise<void> {
     "app.workspace_members",
     "app.invitations",
     "app.audit_logs",
+    "app.channels",
+    "app.channel_capability_snapshots",
+    "app.sync_cursors",
   ];
   for (const table of order) for (const sql of REGISTRY[table]?.seed ?? []) await admin.query(sql);
   const viewer = await admin.query("SELECT id FROM app.roles WHERE workspace_id IS NULL AND key = 'viewer'");

@@ -106,6 +106,26 @@ export async function addOrganizationMember(
   );
 }
 
+/** Plants one channel row in any state; connect definers do not exist yet, so the superuser writes it. */
+export async function seedChannel(
+  fx: Fixture,
+  workspaceId: string,
+  state = "connected",
+  displayName = unique("channel"),
+): Promise<string> {
+  const found = await fx.admin((client) =>
+    client.query(
+      `INSERT INTO app.channels (workspace_id, provider_id, account_kind, provider_account_id, display_name,
+         connection_state, state_reason)
+       VALUES ($1, 'fixture-oauth', 'profile', $2::text, $2::text, $3::text,
+         CASE WHEN $3::text = 'disabled' THEN 'admin_disabled' END)
+       RETURNING id`,
+      [workspaceId, displayName, state],
+    ),
+  );
+  return found.rows[0].id;
+}
+
 export async function workspaceRow(fx: Fixture, id: string): Promise<Record<string, unknown>> {
   const found = await fx.admin((client) =>
     client.query("SELECT name, slug, colour, default_tz FROM app.workspaces WHERE id = $1", [id]),

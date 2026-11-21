@@ -1,6 +1,11 @@
 import type { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
-import { cloneTemplate, readTestEnv, type TestDatabase } from "../../src/testing/template.js";
+import {
+  cloneTemplate,
+  readTestEnv,
+  type TestDatabase,
+  withAdminClient,
+} from "../../src/testing/template.js";
 
 const env = readTestEnv();
 
@@ -170,7 +175,8 @@ const DEFINERS: Definer[] = [
   {
     name: "audit_insert",
     args: "action text, resource_kind text, resource_id text, request_id text, ip_hmac bytea, metadata jsonb",
-    callers: ["shoutory_app", "shoutory_worker"],
+    // No code calls it from the worker; a later slice that needs it grants it with its own test (R532 (2)).
+    callers: ["shoutory_app"],
   },
   {
     name: "audit_insert_instance",
@@ -188,12 +194,12 @@ const DEFINERS: Definer[] = [
   { name: "my_organizations", args: "lim integer, after uuid", callers: ["shoutory_app"] },
   {
     name: "workspace_create",
-    args: "organization_id uuid, name text, slug text, tz text, request_id text, ip_hmac bytea",
+    args: "organization_id uuid, name text, slug text, tz text, request_id text, ip_hmac bytea, bucket_key text",
     callers: ["shoutory_app"],
   },
   {
     name: "organization_create",
-    args: "name text, type text, request_id text, ip_hmac bytea",
+    args: "name text, type text, request_id text, ip_hmac bytea, bucket_key text",
     callers: ["shoutory_app"],
   },
   { name: "member_directory", args: "workspace_id uuid, lim integer, after uuid", callers: ["shoutory_app"] },
@@ -256,6 +262,17 @@ const DEFINERS: Definer[] = [
   { name: "outbox_lag", args: "", callers: ["shoutory_app"] },
   { name: "worker_status", args: "", callers: ["shoutory_app"] },
   { name: "job_lag", args: "", callers: ["shoutory_app"] },
+  // 0013
+  {
+    name: "channel_disable",
+    args: "workspace_id uuid, channel_id uuid, request_id text, ip_hmac bytea",
+    callers: ["shoutory_app"],
+  },
+  {
+    name: "channel_enable",
+    args: "workspace_id uuid, channel_id uuid, request_id text, ip_hmac bytea",
+    callers: ["shoutory_app"],
+  },
 ];
 const TENANCY_TABLES = ["organizations", "organization_members", "workspaces", "workspace_members", "roles"];
 const RUNTIME_AND_OWNER_ROLES = [
@@ -391,5 +408,52 @@ describe("row security catalog: tables and roles", () => {
   it.each(RUNTIME_AND_OWNER_ROLES)("%s does not bypass row security", async (role) => {
     const found = await owner().query("SELECT rolbypassrls FROM pg_roles WHERE rolname = $1", [role]);
     expect(found.rows).toEqual([{ rolbypassrls: false }]);
+  });
+});
+
+// R499, R532 (1): a leaf read by name never passes through the parent's policies (PostgreSQL ddl-inherit), so each
+// leaf has row security enabled and forced and, with no policy of its own, denies a direct read to every role. The
+// leaves of 0008 and the one `ensure_partitions` makes are both covered; the parent's own path must keep working.
+describe("row security catalog: audit_logs leaves", () => {
+  let db: TestDatabase;
+  beforeAll(async () => {
+    db = await cloneTemplate(env, inject("shoutoryTemplate"));
+    await db.pool("worker").query("SELECT app.ensure_partitions()");
+  });
+  afterAll(() => db.drop());
+
+  it("every audit_logs leaf has row security enabled and forced and no policy, 0008 leaves and a new one", async () => {
+    const found = await db.pool("owner").query(
+      `SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+              (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+       FROM pg_inherits i JOIN pg_class c ON c.oid = i.inhrelid
+       WHERE i.inhparent = 'app.audit_logs'::regclass ORDER BY c.relname`,
+    );
+    expect(found.rows.length).toBeGreaterThanOrEqual(4);
+    expect(found.rows.filter((row) => !row.relrowsecurity || !row.relforcerowsecurity)).toEqual([]);
+    expect(found.rows.filter((row) => row.policies > 0)).toEqual([]);
+  });
+
+  // The owner of the leaf is the definer role: with FORCE it reads a leaf by name through no policy and sees nothing,
+  // while the parent's purpose policy still shows the row it holds. Without FORCE the owner would see it.
+  it("the definer role reads 1 row through the parent and 0 rows from the leaf by name", async () => {
+    const counts = await withAdminClient(env, db.name, async (admin) => {
+      await admin.query(
+        `INSERT INTO app.audit_logs (id, at, actor_kind, actor_ref, action, resource_kind, resource_id,
+           request_id, metadata, prev_hash, hash)
+         VALUES (gen_random_uuid(), now(), 'user', 'leaf-test', 'post.created', 'post', 'leaf-1', 'req-leaf', '{}',
+           decode(repeat('00', 32), 'hex'), decode(repeat('0a', 32), 'hex'))`,
+      );
+      const leaf = (await admin.query("SELECT tableoid::regclass::text AS name FROM app.audit_logs LIMIT 1"))
+        .rows[0].name as string;
+      await admin.query("BEGIN");
+      await admin.query("SET LOCAL ROLE shoutory_definer");
+      await admin.query("SELECT set_config('app.job_purpose', 'audit_chain_check', true)");
+      const viaParent = await admin.query("SELECT count(*)::int AS n FROM app.audit_logs");
+      const viaLeaf = await admin.query(`SELECT count(*)::int AS n FROM ${leaf}`);
+      await admin.query("ROLLBACK");
+      return { parent: viaParent.rows[0].n, leaf: viaLeaf.rows[0].n };
+    });
+    expect(counts).toEqual({ parent: 1, leaf: 0 });
   });
 });

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { egressFetch } from "../../src/egress/client.js";
 import { EgressError } from "../../src/egress/errors.js";
 import { createOperatorPolicy } from "../../src/egress/policy.js";
+import { listenLoopback } from "../../src/loopback.js";
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => void;
 let server: Server;
@@ -22,8 +23,7 @@ beforeEach(async () => {
     servedOn.push(socket.localAddress ?? "");
   });
   // Listening on every IPv4 address lets a test prove that no connection reached 127.0.0.2.
-  await new Promise<void>((resolve) => server.listen(0, "0.0.0.0", resolve));
-  port = (server.address() as AddressInfo).port;
+  port = await listenLoopback(server, "0.0.0.0");
 });
 afterEach(async () => {
   server.closeAllConnections();

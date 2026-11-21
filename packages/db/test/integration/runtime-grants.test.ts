@@ -41,6 +41,13 @@ const EXACT: Record<string, Record<string, string[]>> = {
   roles: { shoutory_app: READ },
   audit_logs: { shoutory_app: READ },
   audit_heads: {},
+  // 0013: channel rows change only through the channel definers (and a nickname column grant below); the two app
+  // tables are template I and no runtime role holds anything on them.
+  channels: { shoutory_app: READ },
+  channel_capability_snapshots: { shoutory_app: READ },
+  sync_cursors: { shoutory_app: READ },
+  provider_apps: {},
+  provider_instance_apps: {},
 };
 // "role table.column privilege": the column-level grants, and the only ones.
 const COLUMN_GRANTS = [
@@ -48,6 +55,9 @@ const COLUMN_GRANTS = [
   "shoutory_app workspaces.slug UPDATE",
   "shoutory_app workspaces.colour UPDATE",
   "shoutory_app workspaces.default_tz UPDATE",
+  // R533 (D): a channel's nickname is the one column the app role writes; connection_state and state_reason have
+  // no runtime UPDATE grant, so a state can only come from a definer that checks the move.
+  "shoutory_app channels.nickname UPDATE",
   // The digest of an invitation is the one column the app role never reads.
   ...[
     "id",

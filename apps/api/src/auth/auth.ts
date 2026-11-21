@@ -74,6 +74,8 @@ export interface AuthService extends RouteAuth {
   notifySignupClosed(email: string): Promise<void>;
   /** The keyed digest of a client address that the audit log stores, never the address itself. */
   ipHmac(clientAddress: string): Buffer;
+  /** The keyed digest of a rate-limit subject (64 hex digits), as `bucket_take` and the creation definers take it. */
+  bucketKey(scope: string, subject: string): string;
   /**
    * Writes one instance-chain row for a person's sign-in or step-up. A failed write answers 503: an identity proof is
    * never granted without its record.
@@ -244,6 +246,7 @@ export function createAuth(options: AuthOptions): AuthService {
         link: `${options.publicOrigin}/auth/sign-in`,
       }),
     ipHmac,
+    bucketKey: (scope, subject) => pepperDigest(options.pepper, scope, subject),
     audit: async ({ action, userId, method, requestId, clientAddress }) => {
       try {
         await options.pool.query("SELECT app.audit_insert_instance($1, 'user', $2, $3, $4, $5)", [

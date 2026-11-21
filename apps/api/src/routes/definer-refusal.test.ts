@@ -24,6 +24,22 @@ describe("definerRefusal", () => {
     expect([refusal?.code, refusal?.details]).toEqual([code, details]);
   });
 
+  // R533 (A): the creation bucket's refusal is a 429 whose Retry-After is the seconds the definer put in DETAIL.
+  it.each([
+    ["workspace_create", "retry after 42 seconds", 42],
+    ["organization_create", "retry after 3600 seconds", 3600],
+  ])("SH429 from %s maps to too_many_requests with %s", (name, detail, seconds) => {
+    const refusal = definerRefusal(raised("SH429", `${name}: rate_limited`, detail));
+    expect([refusal?.code, refusal?.retryAfterSeconds]).toEqual(["too_many_requests", seconds]);
+  });
+
+  it.each([
+    ["SH429", "member_remove: rate_limited", "retry after 5 seconds"],
+    ["SH429", "workspace_create: rate_limited", "retry after soon"],
+  ])("%s %s with DETAIL %j is not a refusal with a valid retry time", (state, message, detail) => {
+    expect(definerRefusal(raised(state, message, detail))?.retryAfterSeconds).toBeUndefined();
+  });
+
   it.each([
     ["SH403", "some_other_function: email_mismatch"],
     ["23505", "invitation_create: duplicate"],

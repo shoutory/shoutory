@@ -330,3 +330,90 @@ export const auditHeads = app.table("audit_heads", {
   day: date("day").notNull(),
   headHash: bytea("head_hash").notNull(),
 });
+
+// Channels: a connected account of a workspace. Rows come from connect definers; the app role writes the nickname only.
+export const channels = app.table("channels", {
+  id: id(),
+  workspaceId: uuid("workspace_id")
+    .notNull()
+    .references(() => workspaces.id),
+  providerId: text("provider_id").notNull(),
+  accountKind: text("account_kind").notNull(),
+  providerAccountId: text("provider_account_id").notNull(),
+  instanceHost: text("instance_host"),
+  displayName: text("display_name").notNull(),
+  handle: text("handle"),
+  nickname: text("nickname"),
+  avatar: text("avatar"),
+  connectionState: text("connection_state").notNull().default("needs_reconnect"),
+  stateReason: text("state_reason"),
+  health: text("health"),
+  healthCheckedAt: stamp("health_checked_at"),
+  disconnectedAt: stamp("disconnected_at"),
+  reconnectDeadline: stamp("reconnect_deadline"),
+  tokenExpiresAt: stamp("token_expires_at"),
+  lastReauthNotice: stamp("last_reauth_notice"),
+  capabilityEpoch: integer("capability_epoch").notNull().default(0),
+});
+
+export const channelCapabilitySnapshots = app.table(
+  "channel_capability_snapshots",
+  {
+    workspaceId: uuid("workspace_id").notNull(),
+    channelId: uuid("channel_id").notNull(),
+    epoch: integer("epoch").notNull(),
+    manifestDigest: text("manifest_digest").notNull(),
+    apiVersion: text("api_version").notNull(),
+    sunsetAt: stamp("sunset_at"),
+    capabilities: jsonb("capabilities").notNull(),
+    limits: jsonb("limits").notNull(),
+    observedAt: stamp("observed_at").notNull().default(sql`clock_timestamp()`),
+  },
+  (table) => [primaryKey({ columns: [table.workspaceId, table.channelId, table.epoch] })],
+);
+
+export const syncCursors = app.table(
+  "sync_cursors",
+  {
+    workspaceId: uuid("workspace_id").notNull(),
+    channelId: uuid("channel_id").notNull(),
+    stream: text("stream").notNull(),
+    cursor: text("cursor").notNull(),
+    syncedAt: stamp("synced_at"),
+    nextSyncAt: stamp("next_sync_at"),
+    errorCount: integer("error_count").notNull().default(0),
+  },
+  (table) => [primaryKey({ columns: [table.workspaceId, table.channelId, table.stream] })],
+);
+
+// The platform's OAuth applications, instance-level and definer-only; the client secret is stored sealed.
+const sealedSecret = () => ({
+  secretCiphertext: bytea("secret_ciphertext").notNull(),
+  secretIv: bytea("secret_iv").notNull(),
+  secretAuthTag: bytea("secret_auth_tag").notNull(),
+  secretWrapIv: bytea("secret_wrap_iv").notNull(),
+  secretWrapTag: bytea("secret_wrap_tag").notNull(),
+  secretWrappedDek: bytea("secret_wrapped_dek").notNull(),
+  secretKeyId: text("secret_key_id").notNull(),
+  secretFormatVersion: integer("secret_format_version").notNull(),
+  secretGeneration: integer("secret_generation").notNull(),
+});
+
+export const providerApps = app.table("provider_apps", {
+  id: id(),
+  providerId: text("provider_id").notNull(),
+  environment: text("environment").notNull(),
+  clientId: text("client_id").notNull(),
+  redirectUri: text("redirect_uri").notNull(),
+  appToken: text("app_token"),
+  active: boolean("active").notNull().default(true),
+  ...sealedSecret(),
+});
+
+export const providerInstanceApps = app.table("provider_instance_apps", {
+  id: id(),
+  providerId: text("provider_id").notNull(),
+  instanceHost: text("instance_host").notNull(),
+  clientId: text("client_id").notNull(),
+  ...sealedSecret(),
+});

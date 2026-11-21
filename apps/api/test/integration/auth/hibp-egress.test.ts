@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { createServer, type Server } from "node:http";
-import type { AddressInfo } from "node:net";
 import { type EgressRequest, egressFetch } from "@shoutory/provider-sdk/egress";
 import { createOperatorPolicy } from "@shoutory/provider-sdk/egress/policy";
+import { listenLoopback } from "@shoutory/provider-sdk/loopback";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createPasswordGuard } from "../../../src/auth/hibp.js";
 
@@ -23,8 +23,7 @@ beforeAll(async () => {
     const lines = hit.startsWith(prefix) ? [`${hit.slice(5)}:7`] : [];
     res.end([...lines, "0000000000000000000000000000000000A:0"].join("\r\n"));
   });
-  await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
-  port = (server.address() as AddressInfo).port;
+  port = await listenLoopback(server);
 });
 afterAll(() => new Promise<void>((done) => server.close(() => done())));
 

@@ -37,6 +37,10 @@
       "source": "./src/sunset.ts",
       "default": "./dist/sunset.js"
     },
+    "./loopback": {
+      "source": "./src/loopback.ts",
+      "default": "./dist/loopback.js"
+    },
     "./conformance": {
       "source": "./src/conformance/kit.ts",
       "default": "./dist/conformance/kit.js"

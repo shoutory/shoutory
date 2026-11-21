@@ -2,6 +2,7 @@ import { connect, createServer, type Server, type Socket } from "node:net";
 import { EnvKeyProvider } from "@shoutory/core/keys";
 import { createAppPool } from "@shoutory/db/pool";
 import { cloneTemplate, readTestEnv, type TestDatabase, withAdminClient } from "@shoutory/db/testing";
+import { listenLoopback } from "@shoutory/provider-sdk/loopback";
 import { afterAll, beforeAll, describe, expect, inject, it, vi } from "vitest";
 import { createApp } from "../../src/app.js";
 import { createLogger } from "../../src/logging/logger.js";
@@ -43,8 +44,7 @@ class Forwarder {
 
 async function freePort(): Promise<number> {
   const probe = createServer();
-  await new Promise((resolve) => probe.listen(0, "127.0.0.1", () => resolve(undefined)));
-  const port = (probe.address() as { port: number }).port;
+  const port = await listenLoopback(probe);
   await new Promise((resolve) => probe.close(resolve));
   return port;
 }

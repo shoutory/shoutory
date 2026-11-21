@@ -115,6 +115,9 @@ async function seedOwnerOfWorkspace(
   );
 }
 
+// A creation call spends a tenant_create token; a fresh key per call keeps these tests off each other's bucket.
+const FRESH_KEY = "encode(sha256(convert_to(gen_random_uuid()::text, 'UTF8')), 'hex')";
+
 /** One call of each 0009 definer, for a user who owns the organization and its workspace. */
 const accessCalls = (organization: string, workspace: string): [string, string, unknown[]][] => [
   ["resolve_workspace_access", "SELECT * FROM app.resolve_workspace_access()", []],
@@ -123,10 +126,10 @@ const accessCalls = (organization: string, workspace: string): [string, string, 
   ["member_directory", "SELECT * FROM app.member_directory($1::uuid, 10, NULL)", [workspace]],
   [
     "workspace_create",
-    "SELECT app.workspace_create($1::uuid, 'n', $2::text, 'UTC', NULL, NULL)",
+    `SELECT app.workspace_create($1::uuid, 'n', $2::text, 'UTC', NULL, NULL, ${FRESH_KEY})`,
     [organization, "b-slug"],
   ],
-  ["organization_create", "SELECT app.organization_create('n', 'team', NULL, NULL)", []],
+  ["organization_create", `SELECT app.organization_create('n', 'team', NULL, NULL, ${FRESH_KEY})`, []],
 ];
 
 // The 0009 definers, as a signed-in user. member_directory and my_workspaces call resolve_workspace_access inside,

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { seedOrganization, signedUser } from "../support/tenancy.js";
 import { type Fixture, startFixture } from "./auth/harness.js";
 
@@ -17,6 +17,11 @@ beforeAll(async () => {
   orgId = await seedOrganization(fx, user.id);
 });
 afterAll(() => fx.close());
+// The tests here create more workspaces for one user than the daily creation limit admits; the limit has its own
+// test (tenant-create-throttle), so each test starts with the bucket full.
+beforeEach(() =>
+  fx.admin((client) => client.query("DELETE FROM app.rate_buckets WHERE scope = 'tenant_create'")),
+);
 
 const WORKSPACES = "/api/v1/workspaces";
 const create = (body: Record<string, unknown>) =>

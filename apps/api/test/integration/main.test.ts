@@ -8,6 +8,7 @@ import {
   type TestDatabase,
   withAdminClient,
 } from "@shoutory/db/testing";
+import { listenLoopback } from "@shoutory/provider-sdk/loopback";
 import { afterAll, beforeAll, describe, expect, inject, it, vi } from "vitest";
 import { main, type Started } from "../../src/main.js";
 
@@ -18,8 +19,7 @@ const PEPPER = "pepper-for-main-tests-0123456789ab";
 
 async function freePort(): Promise<number> {
   const probe = createServer();
-  await new Promise((resolve) => probe.listen(0, "127.0.0.1", () => resolve(undefined)));
-  const port = (probe.address() as { port: number }).port;
+  const port = await listenLoopback(probe);
   await new Promise((resolve) => probe.close(resolve));
   return port;
 }

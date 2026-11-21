@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { AuthService } from "../../auth/auth.js";
 import { type App, defineRoute } from "../define-route.js";
 import { nameSchema, pageAnswer, pageQuery } from "../input.js";
 
@@ -7,7 +8,7 @@ import { nameSchema, pageAnswer, pageQuery } from "../input.js";
 
 const create = z.strictObject({ name: nameSchema, type: z.enum(["agency", "team", "personal"]) });
 
-export function registerOrganizations(app: App, ipHmac: (address: string) => Buffer): void {
+export function registerOrganizations(app: App, auth: Pick<AuthService, "ipHmac" | "bucketKey">): void {
   defineRoute(app, {
     method: "get",
     path: "/api/v1/organizations",
@@ -34,12 +35,16 @@ export function registerOrganizations(app: App, ipHmac: (address: string) => Buf
     body: create,
     handler: ({ c, body, clientAddress, inUserTx }) =>
       inUserTx(async (tx) => {
-        const made = await tx.query<{ id: string }>("SELECT app.organization_create($1, $2, $3, $4) AS id", [
-          body.name,
-          body.type,
-          c.get("requestId"),
-          ipHmac(clientAddress),
-        ]);
+        const made = await tx.query<{ id: string }>(
+          "SELECT app.organization_create($1, $2, $3, $4, $5) AS id",
+          [
+            body.name,
+            body.type,
+            c.get("requestId"),
+            auth.ipHmac(clientAddress),
+            auth.bucketKey("tenant_create", c.get("session").userId),
+          ],
+        );
         const id = made.rows[0]?.id;
         if (!id) throw new Error("organization_create returned no id");
         // The row is not readable here (no organization context yet); the definer derives the slug from the id, and

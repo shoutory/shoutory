@@ -155,12 +155,18 @@ async function seedAccess(admin: Client): Promise<void> {
   );
 }
 
+// A creation call spends a tenant_create token; a fresh key per call keeps these tests off each other's bucket.
+const FRESH_KEY = "encode(sha256(convert_to(gen_random_uuid()::text, 'UTF8')), 'hex')";
 const CALLS: [string, string, unknown[]][] = [
   ["resolve_workspace_access", "SELECT * FROM app.resolve_workspace_access()", []],
   ["my_workspaces", "SELECT * FROM app.my_workspaces(10, NULL)", []],
   ["my_organizations", "SELECT * FROM app.my_organizations(10, NULL)", []],
-  ["workspace_create", "SELECT app.workspace_create($1::uuid, 'n', 'slug-x', 'UTC', NULL, NULL)", [OA]],
-  ["organization_create", "SELECT app.organization_create('n', 'team', NULL, NULL)", []],
+  [
+    "workspace_create",
+    `SELECT app.workspace_create($1::uuid, 'n', 'slug-x', 'UTC', NULL, NULL, ${FRESH_KEY})`,
+    [OA],
+  ],
+  ["organization_create", `SELECT app.organization_create('n', 'team', NULL, NULL, ${FRESH_KEY})`, []],
   ["member_directory", "SELECT * FROM app.member_directory($1::uuid, 10, NULL)", [WA1]],
 ];
 const NOT_A_USER: [string, TenantCtx][] = [
@@ -408,9 +414,8 @@ const seedOwned = (user: string, tag: string, n: number) => (admin: Client) =>
     )
     .then(() => undefined);
 
-const CREATE_ORGANIZATION = "SELECT app.organization_create('new-org', 'team', 'req-1', NULL) AS id";
-const CREATE_WORKSPACE =
-  "SELECT app.workspace_create($1::uuid, 'new-ws', $2::text, 'Europe/Paris', 'req-2', NULL) AS id";
+const CREATE_ORGANIZATION = `SELECT app.organization_create('new-org', 'team', 'req-1', NULL, ${FRESH_KEY}) AS id`;
+const CREATE_WORKSPACE = `SELECT app.workspace_create($1::uuid, 'new-ws', $2::text, 'Europe/Paris', 'req-2', NULL, ${FRESH_KEY}) AS id`;
 
 describe("organization_create (R192, R194, R195, R176)", () => {
   const UC = randomUUID();

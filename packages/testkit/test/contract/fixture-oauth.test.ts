@@ -1,4 +1,6 @@
 import { createHash, generateKeyPairSync, randomBytes, sign } from "node:crypto";
+import { createServer, type Server } from "node:http";
+import { isFetchBlockedPort, listenLoopback } from "@shoutory/provider-sdk/loopback";
 import { manifestSchema } from "@shoutory/provider-sdk/manifest";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { fixtureOAuthManifest } from "../../src/fixture-oauth/manifest.js";
@@ -490,4 +492,31 @@ describe("the oauth fake's error answers", () => {
     const seen = `${await answer.text()}\n${JSON.stringify(Object.fromEntries(answer.headers))}`;
     expect(seen).not.toContain(PLANTED);
   });
+});
+
+// A simulator that fetch cannot reach is a defect of the test host, not a flake: the loopback listener hands back a
+// port the Fetch Standard allows, however the operating system assigned the first one. The first draw is forced onto
+// a blocked port (the real server binds it), then the listener must release it and take another.
+describe("the loopback listener", () => {
+  it.each([6000, 6665, 10080])(
+    "never returns the Fetch-blocked port %i, and releases it",
+    async (blocked) => {
+      const server = createServer();
+      const listen = server.listen.bind(server) as (port: number, host: string, done: () => void) => Server;
+      let drawn = 0;
+      server.listen = ((_port: number, host: string, done: () => void) =>
+        listen(drawn++ === 0 ? blocked : 0, host, done)) as typeof server.listen;
+      const port = await listenLoopback(server);
+      try {
+        expect(port).not.toBe(blocked);
+        expect(isFetchBlockedPort(port)).toBe(false);
+        expect(drawn).toBeGreaterThanOrEqual(2);
+        const taken = createServer();
+        await new Promise<void>((done) => taken.listen(blocked, "127.0.0.1", done));
+        await new Promise<void>((done) => taken.close(() => done()));
+      } finally {
+        await new Promise<void>((done) => server.close(() => done()));
+      }
+    },
+  );
 });
