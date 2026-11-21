@@ -362,6 +362,10 @@ msgid "auth.step_up.intro_code"
 msgstr "This action needs a code from your authenticator app."
 
 #. js-lingui-explicit-id
+msgid "auth.step_up.intro_recovery"
+msgstr "This action needs one of your recovery codes. Each code works once."
+
+#. js-lingui-explicit-id
 msgid "auth.step_up.password"
 msgstr "Password"
 

@@ -54,6 +54,8 @@ export interface AuthOptions {
   /** The breached-password range lookup: the egress client with its policy bound. */
   readonly fetch: (request: EgressRequest) => Promise<EgressResponse>;
   readonly logger: Logger;
+  /** The clock of the 30-day session cap, in milliseconds; the system clock when absent (AGENTS 3.10). */
+  readonly now?: () => number;
 }
 
 export type BetterAuthInstance = ReturnType<typeof createLibrary>;
@@ -75,6 +77,8 @@ export interface AuthService extends RouteAuth {
   notifySignupClosed(email: string): Promise<void>;
   /** The keyed digest of a client address that the audit log stores, never the address itself. */
   ipHmac(clientAddress: string): Buffer;
+  /** The clock of the 30-day session cap, in milliseconds. */
+  now(): number;
   /** The keyed digest of a rate-limit subject (64 hex digits), as `bucket_take` and the creation definers take it. */
   bucketKey(scope: string, subject: string): string;
   /**
@@ -224,6 +228,7 @@ export function createAuth(options: AuthOptions): AuthService {
   const throttle = createThrottle(options.pool, options.pepper);
   const library = createLibrary(options, effects, throttle);
   const stepUp = createStepUp(options.pool);
+  const now = options.now ?? Date.now;
   // Its own purpose keeps this digest apart from the `session_ip` one.
   const ipHmac = (address: string) => Buffer.from(pepperDigest(options.pepper, "audit_ip", address), "hex");
   return {
@@ -233,7 +238,7 @@ export function createAuth(options: AuthOptions): AuthService {
     mail: deps,
     stepUp,
     passwords: createPasswordGuard(options),
-    resolveSession: (headers) => readSession(library, headers),
+    resolveSession: (headers) => readSession(library, headers, now),
     requireStepUp: (session) => stepUp.require(session),
     claimOwner: effects.claimOwner,
     signupGate: async (email) => {
@@ -247,6 +252,7 @@ export function createAuth(options: AuthOptions): AuthService {
         link: `${options.publicOrigin}/auth/sign-in`,
       }),
     ipHmac,
+    now,
     bucketKey: (scope, subject) => pepperDigest(options.pepper, scope, subject),
     audit: async ({ action, userId, method, requestId, clientAddress }) => {
       try {

@@ -78,3 +78,33 @@ describe("sign-in and step-up audit rows", () => {
     ]);
   });
 });
+
+describe("a backup code from a live session", () => {
+  it("is no longer enough after 11 minutes, and a password check does not reopen the routes", async () => {
+    const email = "audit-rows-4@example.test";
+    const enrolled = await fx.enrolled(email);
+    const gated = () =>
+      fx.request("/api/auth/two-factor/get-totp-uri", {
+        body: { password: PASSWORD },
+        headers: enrolled.jar.header,
+      });
+    const backup = await fx.request("/api/auth/two-factor/verify-backup-code", {
+      body: { code: enrolled.backupCodes[0] },
+      headers: enrolled.jar.header,
+    });
+    expect(backup.status).toBe(200);
+    await fx.admin((client) =>
+      client.query(
+        `UPDATE app.session_step_ups SET at = at - interval '11 minutes'
+         WHERE user_id = (SELECT id FROM auth."user" WHERE email = $1)`,
+        [email],
+      ),
+    );
+    expect((await gated()).status).toBe(403);
+    await fx.request("/api/auth/verify-password", {
+      body: { password: PASSWORD },
+      headers: enrolled.jar.header,
+    });
+    expect((await gated()).status).toBe(403);
+  }, 30_000);
+});

@@ -28,8 +28,8 @@ const verifyPassword = (password: string) =>
   request(verified, "/api/auth/verify-password", { method: "POST", body: { password }, envelope: false });
 // With a live session this route only records a new step-up; the answer carries the user.
 const codeVerified = z.object({ user: z.object({ email: z.string() }) });
-const verifyCode = (code: string) =>
-  request(codeVerified, "/api/auth/two-factor/verify-totp", {
+const verifyCode = (code: string, recovery: boolean) =>
+  request(codeVerified, `/api/auth/two-factor/${recovery ? "verify-backup-code" : "verify-totp"}`, {
     method: "POST",
     body: { code: code.trim() },
     envelope: false,
@@ -57,22 +57,76 @@ const StepUpTitle = ({ method }: { method: Method }) =>
     <Trans id="auth.step_up.title">Confirm your password</Trans>
   );
 
-function StepUpForm({
-  method,
+/** What the person types, by what the server asked for: the password, a TOTP code, or a recovery code (no length cap). */
+type Proof = "password" | "code" | "recovery";
+const proofOf = (method: Method, recovery: boolean): Proof =>
+  method === "password" ? "password" : recovery ? "recovery" : "code";
+
+function StepUpIntro({ proof }: { proof: Proof }) {
+  if (proof === "password") {
+    return <Trans id="auth.step_up.intro">This action needs your password again.</Trans>;
+  }
+  if (proof === "recovery") {
+    return (
+      <Trans id="auth.step_up.intro_recovery">
+        This action needs one of your recovery codes. Each code works once.
+      </Trans>
+    );
+  }
+  return <Trans id="auth.step_up.intro_code">This action needs a code from your authenticator app.</Trans>;
+}
+
+function StepUpField({
+  proof,
   value,
   onValue,
-  check,
-  onCancel,
 }: {
-  method: Method;
+  proof: Proof;
   value: string;
   onValue: (value: string) => void;
-  check: ReturnType<typeof useAction>;
-  onCancel: () => void;
 }) {
   const { t } = useLingui();
+  const fields = {
+    password: {
+      label: t({ id: "auth.step_up.password", message: "Password" }),
+      name: "password",
+      testId: "stepup-password",
+      type: "password" as const,
+      autoComplete: "current-password",
+    },
+    code: {
+      label: t({ id: "auth.mfa.code_label", message: "Authentication code" }),
+      name: "code",
+      testId: "stepup-code",
+      autoComplete: "one-time-code",
+      inputMode: "numeric" as const,
+      maxLength: 6,
+    },
+    recovery: {
+      label: t({ id: "auth.mfa.recovery_label", message: "Recovery code" }),
+      name: "code",
+      testId: "stepup-code",
+      autoComplete: "one-time-code",
+      inputMode: "text" as const,
+    },
+  };
+  return <TextField {...fields[proof]} isRequired value={value} onChange={onValue} />;
+}
+
+interface FormProps {
+  method: Method;
+  recovery: boolean;
+  value: string;
+  onValue: (value: string) => void;
+  onToggleRecovery: () => void;
+  check: ReturnType<typeof useAction>;
+  onCancel: () => void;
+}
+
+function StepUpForm({ method, recovery, value, onValue, onToggleRecovery, check, onCancel }: FormProps) {
   const failure = check.failure;
   const code = method === "totp";
+  const proof = proofOf(method, recovery);
   return (
     <Form
       onSubmit={(event) => {
@@ -82,27 +136,20 @@ function StepUpForm({
       className="flex flex-col gap-5"
     >
       <p>
-        {code ? (
-          <Trans id="auth.step_up.intro_code">This action needs a code from your authenticator app.</Trans>
-        ) : (
-          <Trans id="auth.step_up.intro">This action needs your password again.</Trans>
-        )}
+        <StepUpIntro proof={proof} />
       </p>
-      <TextField
-        label={
-          code
-            ? t({ id: "auth.mfa.code_label", message: "Authentication code" })
-            : t({ id: "auth.step_up.password", message: "Password" })
-        }
-        name={code ? "code" : "password"}
-        testId={code ? "stepup-code" : "stepup-password"}
-        {...(code
-          ? { autoComplete: "one-time-code", inputMode: "numeric" as const, maxLength: 6 }
-          : { type: "password", autoComplete: "current-password" })}
-        isRequired
-        value={value}
-        onChange={onValue}
-      />
+      <StepUpField proof={proof} value={value} onValue={onValue} />
+      {code ? (
+        <div>
+          <Button aria-disabled={check.pending} onPress={onToggleRecovery}>
+            {recovery ? (
+              <Trans id="auth.mfa.use_code">Use an authenticator code</Trans>
+            ) : (
+              <Trans id="auth.mfa.use_recovery">Use a recovery code</Trans>
+            )}
+          </Button>
+        </div>
+      ) : null}
       {failure ? (
         <ErrorPanel focusOnMount error={failure} {...authCopy(code ? "step-up-code" : "step-up", failure)} />
       ) : null}
@@ -119,24 +166,41 @@ function StepUpForm({
   );
 }
 
+function StepUpDialog({ open, form }: { open: boolean; form: FormProps }) {
+  return (
+    <Dialog
+      title={<StepUpTitle method={form.method} />}
+      isOpen={open}
+      onOpenChange={(next) => !next && !form.check.pending && form.onCancel()}
+    >
+      <StepUpForm {...form} />
+    </Dialog>
+  );
+}
+
 /**
  * X-04: one dialog serves every call that needs a recent identity check, however many are refused together. A call
  * is replayed once after the check; a second refusal, a cancel and a failed check return the original refusal and
- * retry nothing. A 401 `unauthenticated` while checking means the session is over: sign-in.
+ * retry nothing. A 401 `unauthenticated` while checking means the session is over: sign-in, and signing in again
+ * brings the person back to where they were (checked by safeReturnTo at the end). Every end of the dialog empties it
+ * (`clear`): no password or code and no old error stay for the next time it opens.
  */
 export function StepUpProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const [method, setMethod] = useState<Method>("password");
+  const [recovery, setRecovery] = useState(false);
   const [value, setValue] = useState("");
   const asking = useRef<Promise<boolean> | null>(null);
   const answer = useRef<(confirmed: boolean) => void>(() => undefined);
-
-  // Every end of the dialog empties it: no password or code and no old error stay for the next time it opens.
-  function finish(confirmed: boolean) {
+  function clear(next: boolean) {
     setValue("");
+    setRecovery(next);
     check.reset();
+  }
+  function finish(confirmed: boolean) {
+    clear(false);
     setOpen(false);
     asking.current = null;
     answer.current(confirmed);
@@ -149,39 +213,34 @@ export function StepUpProvider({ children }: { children: ReactNode }) {
     });
     return asking.current;
   };
-
   const check = useAction(
     async () => {
-      await (method === "totp" ? verifyCode(value) : verifyPassword(value));
+      await (method === "totp" ? verifyCode(value, recovery) : verifyPassword(value));
       finish(true);
     },
     (error) => {
       setValue("");
       if (error.state !== "session_expired") return;
       finish(false);
-      // Signing in again brings the person back to where they were (checked by safeReturnTo at the end).
       void navigate(`/sign-in?return-to=${encodeURIComponent(location.pathname + location.search)}`);
     },
   );
-
   const stepUp: StepUp = (call) => replayOnce(call, confirm);
-
   return (
     <StepUpContext.Provider value={stepUp}>
       {children}
-      <Dialog
-        title={<StepUpTitle method={method} />}
-        isOpen={open}
-        onOpenChange={(next) => !next && !check.pending && finish(false)}
-      >
-        <StepUpForm
-          method={method}
-          value={value}
-          onValue={setValue}
-          check={check}
-          onCancel={() => finish(false)}
-        />
-      </Dialog>
+      <StepUpDialog
+        open={open}
+        form={{
+          method,
+          recovery,
+          value,
+          onValue: setValue,
+          onToggleRecovery: () => clear(!recovery),
+          check,
+          onCancel: () => finish(false),
+        }}
+      />
     </StepUpContext.Provider>
   );
 }

@@ -222,6 +222,43 @@ describe("the step-up dialog for an account with the second factor on", () => {
   });
 });
 
+// R512 (Q4): a person who lost the device offers a recovery code in the same dialog; it goes to the backup-code route
+// instead of the TOTP one and the refused calls are replayed once, as for a TOTP code.
+describe("the step-up dialog's recovery code", () => {
+  it("posts a recovery code to verify-backup-code and replays each call once", async () => {
+    const RECOVERY = "abcd-efgh-1234";
+    let verified = false;
+    const stub = vi.fn((path: string, init?: RequestInit) => {
+      const url = new URL(path, "http://same-origin.invalid").pathname;
+      if (url === "/api/auth/two-factor/verify-backup-code") {
+        verified = JSON.parse(String(init?.body)).code === RECOVERY;
+        return Promise.resolve(
+          verified ? json({ user: { email: "a@example.test" } }) : refusal("invalid_credentials", 401),
+        );
+      }
+      return Promise.resolve(
+        verified ? json({ data: { ok: true } }) : refusal("step_up_required", 403, { method: "totp" }),
+      );
+    });
+    vi.stubGlobal("fetch", stub);
+    const { host } = await open();
+    click(byText(host, "button", "Run both"));
+    await settle();
+    click(byText(document.body, '[role="dialog"] button', "Use a recovery code"));
+    await settle();
+    // A recovery code is longer than six characters: the field takes it whole.
+    expect(codeField()?.maxLength).not.toBe(6);
+    await submit(RECOVERY);
+    const [, init] = calls(stub, "verify-backup-code")[0] ?? [];
+    expect(calls(stub, "verify-backup-code")).toHaveLength(1);
+    expect(JSON.parse(String(init?.body))).toEqual({ code: RECOVERY });
+    expect(calls(stub, "verify-totp")).toHaveLength(0);
+    expect([calls(stub, "/api/v1/a").length, calls(stub, "/api/v1/b").length]).toEqual([2, 2]);
+    expect(host.querySelector("output")?.textContent).toBe("ok,ok");
+    expect(dialogs()).toHaveLength(0);
+  });
+});
+
 describe("the step-up dialog's code mode when the code is not accepted", () => {
   it.each([
     ["a wrong code", "000000"],

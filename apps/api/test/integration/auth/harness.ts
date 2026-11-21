@@ -250,7 +250,7 @@ export interface FixtureOptions {
   readonly secrets?: readonly string[];
   /** Sign-up is open to anyone unless a test says `false`: the first verified user closes it by becoming the owner. */
   readonly signupOpen?: boolean;
-  /** The clock of the app's in-process caches. */
+  /** The clock of the app's in-process caches and of the 30-day session cap, in milliseconds. */
   readonly now?: () => number;
   /** The storage driver of the app; absent, the app has no storage routes. */
   readonly storage?: StorageDriver;
@@ -329,7 +329,10 @@ interface Parts {
 
 /** One app and its authentication service, with the library running on `libraryPool`. */
 function buildOn({ logger, hibp, authPool, appPool, options }: Parts, libraryPool: Parts["authPool"]) {
+  // The same clock serves the app's caches and the session cap (R545 Q2); absent, both read the system clock.
+  const authClock = options.now ? { now: options.now } : {};
   const auth = createAuth({
+    ...authClock,
     publicOrigin: ORIGIN,
     secret: SECRET,
     pepper: options.pepper ?? new SealedSecret(PEPPER),

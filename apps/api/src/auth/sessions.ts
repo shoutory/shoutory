@@ -1,5 +1,5 @@
 import type { AuthService } from "./auth.js";
-import type { AuthSession } from "./session-check.js";
+import { type AuthSession, SESSION_CAP_MS } from "./session-check.js";
 
 export interface SessionListItem {
   readonly id: string;
@@ -54,6 +54,8 @@ export async function listSessions(auth: AuthService, current: AuthSession): Pro
     where: [
       { field: "userId", value: current.userId },
       { field: "expiresAt", value: new Date(), operator: "gt" },
+      // A session at or over the 30-day cap is already gone to the API: the list does not show it.
+      { field: "createdAt", value: new Date(auth.now() - SESSION_CAP_MS), operator: "gt" },
     ],
     sortBy: { field: "createdAt", direction: "desc" },
     limit: LIST_LIMIT,

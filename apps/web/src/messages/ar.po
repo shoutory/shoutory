@@ -360,6 +360,10 @@ msgid "auth.step_up.intro_code"
 msgstr "يحتاج هذا الإجراء إلى رمز من تطبيق المصادقة."
 
 #. js-lingui-explicit-id
+msgid "auth.step_up.intro_recovery"
+msgstr "يحتاج هذا الإجراء إلى أحد رموز الاسترداد. يعمل كل رمز مرة واحدة."
+
+#. js-lingui-explicit-id
 msgid "auth.step_up.password"
 msgstr "كلمة المرور"
 

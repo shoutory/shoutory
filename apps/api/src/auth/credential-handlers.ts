@@ -35,23 +35,12 @@ const secondFactorChange = guarded(async (ctx) => {
 });
 
 /**
- * A code is a sign-in when the request holds no live session, and then it completes the challenge; with a live session
- * the library lets that session win over a leftover challenge cookie, so a TOTP code only proves identity again.
+ * A code of the second factor. With no live session it is a sign-in: it completes the challenge and claims the owner
+ * place. With a live session the library lets that session win over a leftover challenge cookie, so the code (a TOTP
+ * or a backup code) only proves identity again. Either way the audit row comes first, then the step-up record: a
+ * backup-code sign-in records `backup_code` as a TOTP sign-in records `totp`, so a person without the device can still
+ * step up.
  */
-async function auditSecondFactor(
-  ctx: Ctx,
-  userId: string,
-  method: "totp" | "backup_code",
-  hadSession: boolean,
-): Promise<void> {
-  if (!hadSession) {
-    await audit(ctx, "auth.sign_in", userId, method);
-  } else if (method === "totp") {
-    await audit(ctx, "auth.step_up", userId, "totp");
-  }
-}
-
-/** A code of the second factor: completing a sign-in claims the owner place; a TOTP code proves identity again. */
 const secondFactorCode =
   (method: "totp" | "backup_code"): Handler =>
   async (ctx: Ctx) => {
@@ -64,8 +53,10 @@ const secondFactorCode =
     if (session && method === "totp" && before && !before.twoFactorEnabled) {
       await revokeOtherSessions(ctx.auth, session);
     }
-    if (session) await auditSecondFactor(ctx, session.userId, method, hadSession);
-    if (session && method === "totp") await ctx.auth.stepUp.record(session, "totp");
+    if (session) {
+      await audit(ctx, hadSession ? "auth.step_up" : "auth.sign_in", session.userId, method);
+      await ctx.auth.stepUp.record(session, method);
+    }
     if (session && liveSessionCookie(cookies)) await ctx.auth.claimOwner(session.userId);
     return respond(ctx.c, data, cookies);
   };
