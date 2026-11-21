@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
+import { test } from "@playwright/test";
 import { FOUNDER_STATE } from "./journey";
 import { APP_ORIGIN, composeInStack, STATE_DIR } from "./stack";
 
@@ -140,12 +141,16 @@ export function secretsCheck(ring: "saved" | "without-the-saved-id"): Ran {
 /**
  * The server accepts each code once (the `used` map in totp.ts only knows the codes of its own process), and the first
  * journey's second code is the next step's, so the last step the server saw can be one ahead of that journey's clock.
- * A code is fresh once two whole steps have passed since the journey saved its session.
+ * A code is fresh once two whole steps have passed since the journey saved its session. The wait is a protocol fact, so
+ * it extends the running test's timeout by the time it sleeps (it must be called inside a test).
  */
 export async function waitForFreshCode(): Promise<void> {
   const savedAt = statSync(FOUNDER_STATE).mtimeMs;
   const fresh = (Math.floor(savedAt / STEP_MS) + 2) * STEP_MS;
-  if (fresh > Date.now()) await sleep(fresh - Date.now());
+  const waitMs = fresh - Date.now();
+  if (waitMs <= 0) return;
+  test.info().setTimeout(test.info().timeout + waitMs);
+  await sleep(waitMs);
 }
 
 /** Starts the whole stack again on the restored database and waits until the app is ready. */
