@@ -51,6 +51,9 @@ const EXACT: Record<string, Record<string, string[]>> = {
   // 0014: sealed credentials and the workspace salts are template D; the credential definers are the only way in.
   channel_credentials: {},
   workspace_key_salts: {},
+  // 0015: the connect state is template W with no runtime grant at all (R546); only its definers reach it.
+  oauth_flows: {},
+  connect_challenges: {},
 };
 // "role table.column privilege": the column-level grants, and the only ones.
 const COLUMN_GRANTS = [

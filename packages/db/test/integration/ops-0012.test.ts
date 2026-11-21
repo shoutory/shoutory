@@ -80,6 +80,8 @@ const RETAINED = [
   ["auth.verification", "auth.verification"],
   ["app.session_step_ups", "app.session_step_ups"],
   ["app.invitations", "app.invitations"],
+  ["app.oauth_flows", "app.oauth_flows"],
+  ["app.connect_challenges", "app.connect_challenges"],
   ["app.rate_buckets", "app.rate_buckets"],
   ["app.worker_heartbeats", "app.worker_heartbeats"],
   ["auth.user", "auth.user_unverified"],

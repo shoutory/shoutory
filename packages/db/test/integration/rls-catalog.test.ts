@@ -312,6 +312,23 @@ const DEFINERS: Definer[] = [
     args: "workspace_id uuid, channel_id uuid, health text, manifest_digest text, api_version text, sunset_at timestamp with time zone, capabilities jsonb, limits jsonb",
     callers: APP_WORKER,
   },
+  // 0015: the connect state is written and taken by a signed-in user only, so the app role alone may call them.
+  {
+    name: "oauth_flow_put",
+    args: `workspace_id uuid, provider_id text, state_hash bytea, channel_id uuid, instance_host text, ${SEALED_FIELDS}, request_uri text`,
+    callers: ["shoutory_app"],
+  },
+  {
+    name: "oauth_flow_take",
+    args: "state_digest bytea, want_provider text, want_host text, request_id text, ip_hmac bytea",
+    callers: ["shoutory_app"],
+  },
+  // A job principal (the Telegram poller) or an Admin user takes a connect word, like the credential definers.
+  {
+    name: "connect_challenge_take",
+    args: "workspace_id uuid, provider_id text, code_hash bytea",
+    callers: APP_WORKER,
+  },
 ];
 const TENANCY_TABLES = ["organizations", "organization_members", "workspaces", "workspace_members", "roles"];
 const RUNTIME_AND_OWNER_ROLES = [

@@ -452,3 +452,35 @@ export const channelCredentials = app.table("channel_credentials", {
   refreshAttemptDigest: text("refresh_attempt_digest"),
   refreshAttemptOutcome: text("refresh_attempt_outcome"),
 });
+
+// An OAuth connect in progress: the state digest and one sealed object (verifier and optional DPoP key); definer-only.
+export const oauthFlows = app.table("oauth_flows", {
+  id: id(),
+  workspaceId: uuid("workspace_id").notNull(),
+  userId: uuid("user_id").notNull(),
+  channelId: uuid("channel_id"),
+  instanceHost: text("instance_host"),
+  providerId: text("provider_id").notNull(),
+  stateHash: bytea("state_hash").notNull(),
+  formatVersion: integer("format_version").notNull(),
+  keyId: text("key_id").notNull(),
+  iv: bytea("iv").notNull(),
+  ciphertext: bytea("ciphertext").notNull(),
+  authTag: bytea("auth_tag").notNull(),
+  wrapIv: bytea("wrap_iv").notNull(),
+  wrapTag: bytea("wrap_tag").notNull(),
+  wrappedDek: bytea("wrapped_dek").notNull(),
+  requestUri: text("request_uri"),
+  expiresAt: stamp("expires_at").notNull(),
+  consumedAt: stamp("consumed_at"),
+});
+
+// A chat connect word: the digest of what the chat sends, single use; definer-only.
+export const connectChallenges = app.table("connect_challenges", {
+  id: id(),
+  workspaceId: uuid("workspace_id").notNull(),
+  providerId: text("provider_id").notNull(),
+  codeHash: bytea("code_hash").notNull(),
+  expiresAt: stamp("expires_at").notNull(),
+  consumedAt: stamp("consumed_at"),
+});
