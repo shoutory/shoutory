@@ -29,6 +29,7 @@ import { registerInstance } from "./routes/instance.js";
 import { registerInvitations } from "./routes/invitations/invitations.js";
 import { registerMembers } from "./routes/members/members.js";
 import { registerOrganizations } from "./routes/organizations/organization.js";
+import { registerProviders } from "./routes/providers/providers.js";
 import { registerUnsubscribe } from "./routes/unsubscribe.js";
 import { registerEntitlements } from "./routes/workspaces/entitlements.js";
 import { registerWorkspaces } from "./routes/workspaces/workspace.js";
@@ -175,7 +176,10 @@ export function createApp(options: AppOptions): App {
   registerWorkspaces(app, options.auth);
   const channelRoutes = channelServices(options);
   registerChannels(app, options.auth.ipHmac, channelRoutes?.check);
-  if (channelRoutes) registerConnect(app, options.auth, channelRoutes.connect);
+  if (channelRoutes) {
+    registerConnect(app, options.auth, channelRoutes.connect);
+    registerProviders(app, channelRoutes.check.providers);
+  }
   registerEntitlements(app, options.entitlements ?? selfHost);
   registerInvitations(app, options.auth);
   registerMembers(app, options.auth.ipHmac);

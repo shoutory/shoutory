@@ -61,10 +61,16 @@ function registerStart(app: App, auth: AuthService, connect: ConnectService): vo
   });
 }
 
+// The exact keys of each outcome: `workspace` only when the flow was taken, and always the flow's own, never a value of
+// the callback's query.
 const paramsOf = (outcome: ConnectOutcome): Record<string, string> => {
-  if (outcome.kind === "connected") return { channel: outcome.channelId };
-  if (outcome.kind === "provider_error") return { reason: "provider_error", message: outcome.message };
-  return { reason: outcome.kind };
+  const workspace = outcome.workspaceId === undefined ? {} : { workspace: outcome.workspaceId };
+  if (outcome.kind === "connected") return { channel: outcome.channelId, ...workspace };
+  if (outcome.kind === "provider_error")
+    return { reason: outcome.kind, message: outcome.message, ...workspace };
+  if (outcome.kind === "wrong_account")
+    return { reason: outcome.kind, channel: outcome.channelId, ...workspace };
+  return { reason: outcome.kind, ...workspace };
 };
 
 // The answer of every callback: a 302 that is never cached, with the wait when a bucket refused.

@@ -112,15 +112,16 @@ export async function seedChannel(
   workspaceId: string,
   state = "connected",
   displayName = unique("channel"),
+  providerId = "fixture-oauth",
 ): Promise<string> {
   const found = await fx.admin((client) =>
     client.query(
       `INSERT INTO app.channels (workspace_id, provider_id, account_kind, provider_account_id, display_name,
          connection_state, state_reason)
-       VALUES ($1, 'fixture-oauth', 'profile', $2::text, $2::text, $3::text,
+       VALUES ($1, $4::text, 'profile', $2::text, $2::text, $3::text,
          CASE WHEN $3::text = 'disabled' THEN 'admin_disabled' END)
        RETURNING id`,
-      [workspaceId, displayName, state],
+      [workspaceId, displayName, state, providerId],
     ),
   );
   return found.rows[0].id;

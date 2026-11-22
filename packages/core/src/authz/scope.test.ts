@@ -36,6 +36,19 @@ describe("mintScope", () => {
     expect(mintScope(resolved, PRINCIPAL, target, "posts.view").kind).toBe("not_found");
   });
 
+  it.each(["owner", "admin", "editor", "approver", "viewer", "custom-role"])(
+    "a granted scope of a %s carries that role's permission set, and an unknown role holds none",
+    async (roleKey) => {
+      const { mintScope } = await load();
+      const { ROLE_PERMISSIONS } = await import("./matrix.js");
+      const result = mintScope(rows(roleKey), PRINCIPAL, WORKSPACE);
+      if (result.kind !== "granted") throw new Error("expected a grant");
+      const known = Object.hasOwn(ROLE_PERMISSIONS, roleKey);
+      const expected = known ? ROLE_PERMISSIONS[roleKey as keyof typeof ROLE_PERMISSIONS] : [];
+      expect([...result.scope.permissions].sort()).toEqual([...expected].sort());
+    },
+  );
+
   it("a granted scope names the workspace and its organization taken from the resolved row", async () => {
     const { mintScope } = await load();
     const result = mintScope(rows("editor"), PRINCIPAL, WORKSPACE, "posts.edit");

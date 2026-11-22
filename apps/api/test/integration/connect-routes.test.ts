@@ -17,8 +17,9 @@ import { type Fixture, keys, ORIGIN, PEPPER, startFixture } from "./auth/harness
 // and answered as a 302 to one fixed web path with an enumerated reason; start and callback are rate-limited per user.
 // The provider is the `fixture_oauth` network on loopback: real HTTP, its call log is the counter of exchanges.
 // The contract the tests pin: start answers `{ data: { authorize_url } }`; the callback answers 302 to
-// `/connect/result?channel=<id>` or `?reason=<start_again|refused|provider_error|failed|sign_in|rate_limited|unavailable>`
-// (with `message` for a provider error); the sealed flow object is `{"code_verifier"}` under AAD kind `oauth_flow`,
+// `/connect/result?channel=<id>&workspace=<id>` or `?reason=<start_again|refused|provider_error|failed|wrong_account|
+// sign_in|rate_limited|unavailable>` (with `message` for a provider error, `channel` for a wrong account, and
+// `workspace` whenever the callback's flow was taken); the sealed flow object is `{"code_verifier"}` under AAD kind `oauth_flow`,
 // scope the workspace, owner the flow id, generation 1.
 type User = { id: string; cookie: string };
 const FIRST = "fixture_oauth";
@@ -133,6 +134,8 @@ function outcomeOf(answer: Response) {
     reason: get("reason"),
     channel: get("channel"),
     message: get("message"),
+    workspace: get("workspace"),
+    keys: [...new Set(location.searchParams.keys())].sort(),
   };
 }
 const q = <T>(sql: string, params: unknown[] = []) =>
@@ -463,6 +466,111 @@ describe("the callback's own checks", () => {
   }, 60_000);
 });
 
+// A flow the callback takes, with the redirect's own query changed.
+const taken = async (change: (query: URLSearchParams) => void): Promise<Run> => {
+  const flow = await begin(admin);
+  change(flow.redirect);
+  return { who: admin, params: flow.redirect };
+};
+const providerError = async (): Promise<Run> => {
+  const flow = await begin(admin);
+  return { who: admin, params: new URLSearchParams({ error: "access_denied", state: flow.state }) };
+};
+
+// The screens read the redirect as it is: `workspace` is there whenever the callback's flow was taken and only then, and it
+// is the flow's own workspace, never a value of the callback's query.
+describe("the callback redirect carries exactly the keys of its outcome", () => {
+  let mine = "";
+  beforeAll(async () => {
+    mine = await ownWorkspace();
+  }, 60_000);
+  it.each<[string, () => Promise<Run>, string[], string | null]>([
+    [
+      "connected",
+      async () => ({
+        who: admin,
+        params: await approved(await authorizeUrl(await startAs(admin, {}, mine))),
+      }),
+      ["channel", "workspace"],
+      "mine",
+    ],
+    ["provider_error", providerError, ["message", "reason", "workspace"], "workspace"],
+    ["failed (no code)", () => taken((query) => query.delete("code")), ["reason", "workspace"], "workspace"],
+    [
+      "refused (another issuer)",
+      () => taken((query) => query.set("iss", "http://evil.example")),
+      ["reason", "workspace"],
+      "workspace",
+    ],
+    [
+      "a refused take (unknown state)",
+      async () => ({ who: admin, params: unknownState() }),
+      ["reason"],
+      null,
+    ],
+    [
+      "start_again (a spent flow)",
+      async () => {
+        const flow = await begin(admin);
+        await callbackAs(admin, flow.redirect);
+        return { who: admin, params: flow.redirect };
+      },
+      ["reason"],
+      null,
+    ],
+    ["sign_in (no session)", async () => ({ who: undefined, params: unknownState() }), ["reason"], null],
+  ])(
+    "%s",
+    async (_name, scenario, keys, from) => {
+      const run = await scenario();
+      const seen = outcomeOf(await callbackAs(run.who, run.params));
+      expect(seen.keys).toEqual(keys);
+      expect(seen.workspace).toBe(from === "workspace" ? workspace : from === "mine" ? mine : null);
+    },
+    60_000,
+  );
+});
+
+describe("the callback redirect names the flow's own workspace and channel", () => {
+  it("the workspace is the one the flow was started in, and a workspace or channel in the callback's query never reaches the redirect", async () => {
+    const forged = { workspace: randomUUID(), channel: randomUUID() };
+    const started = await approved(await authorizeUrl(await startAs(admin, {}, other)));
+    for (const [key, value] of Object.entries(forged)) started.set(key, value);
+    const seen = outcomeOf(await callbackAs(admin, started));
+    expect(seen).toMatchObject({ workspace: other, keys: ["channel", "workspace"] });
+    expect(seen.channel).not.toBe(forged.channel);
+    expect(await countOf("channels", other)).toBeGreaterThan(0);
+  }, 60_000);
+
+  it("a reconnect that returns another account ends as wrong_account with the channel and the workspace, and stores nothing", async () => {
+    const mine = await ownWorkspace();
+    const [target] = await q<{ id: string }>(
+      `INSERT INTO app.channels (workspace_id, provider_id, account_kind, provider_account_id, display_name,
+         connection_state)
+       VALUES ($1, $2, 'profile', $3, 'reconnect target', 'needs_reconnect') RETURNING id`,
+      [mine, FIRST, randomUUID()],
+    );
+    const started = await startAs(admin, { channel_id: target?.id }, mine);
+    expect(started.status).toBe(200);
+    const redirect = await approved(await authorizeUrl(started));
+    const before = await stored(mine);
+    const seen = outcomeOf(await callbackAs(admin, redirect));
+    expect(seen).toMatchObject({
+      status: 302,
+      path: "/connect/result",
+      reason: "wrong_account",
+      channel: target?.id,
+      workspace: mine,
+    });
+    expect(seen.keys).toEqual(["channel", "reason", "workspace"]);
+    expect(await stored(mine)).toEqual(before);
+    const state = "SELECT connection_state FROM app.channels WHERE id = $1";
+    expect((await q<{ connection_state: string }>(state, [target?.id]))[0]?.connection_state).toBe(
+      "needs_reconnect",
+    );
+  }, 60_000);
+});
+
 describe("a successful connect", () => {
   it("ends with one channel row, its first sealed credential and a stored health check time", async () => {
     const mine = await ownWorkspace();
@@ -552,7 +660,7 @@ describe("the per-user buckets of start and callback", () => {
       expect(outcomeOf(await rawCallbackAs(first, unknownState())).reason).toBe("refused");
     }
     const limited = await rawCallbackAs(first, unknownState());
-    expect(outcomeOf(limited)).toMatchObject({ status: 302, reason: "rate_limited" });
+    expect(outcomeOf(limited)).toMatchObject({ status: 302, reason: "rate_limited", keys: ["reason"] });
     expect(Number(limited.headers.get("retry-after"))).toBeGreaterThan(0);
     expect(outcomeOf(await rawCallbackAs(second, unknownState())).reason).toBe("refused");
   }, 120_000);

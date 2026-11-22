@@ -82,10 +82,15 @@ export interface FinishInput {
 }
 
 /** What a callback came to: a stored channel, a flow that must be started again, or a refusal. */
-export type ConnectOutcome =
+type Outcome =
   | { readonly kind: "connected"; readonly channelId: string }
   | { readonly kind: "start_again" | "refused" | "failed" }
-  | { readonly kind: "provider_error"; readonly message: string };
+  | { readonly kind: "provider_error"; readonly message: string }
+  /** A reconnect whose sign-in returned another account than the channel's: the channel it was for. */
+  | { readonly kind: "wrong_account"; readonly channelId: string };
+
+/** An outcome names the flow's workspace whenever the callback's flow was taken, and never otherwise. */
+export type ConnectOutcome = Outcome & { readonly workspaceId?: string };
 
 const bytes = z.instanceof(Buffer);
 const flowRowSchema = z.object({
@@ -178,6 +183,18 @@ export class ConnectService {
     const principal = { principalKind: "user", principalId: input.userId } as const;
     const taken = await this.#take(principal, input);
     if ("kind" in taken) return taken;
+    // The workspace is the flow's own, so it is named only once the take resolved a flow.
+    const outcome = await this.#complete(principal, taken, { provider, connect, input });
+    return { ...outcome, workspaceId: taken.workspace_id };
+  }
+
+  // Everything after the take: a provider's own error, the issuer check, the grant and the stored channel.
+  async #complete(
+    principal: TenantCtx,
+    taken: FlowRow,
+    step: { provider: HealthProvider; connect: ConnectAdapter; input: FinishInput },
+  ): Promise<Outcome> {
+    const { provider, connect, input } = step;
     const { query } = input;
     if (query.error !== undefined) {
       return { kind: "provider_error", message: providerErrorText(query.error_description ?? query.error) };
@@ -198,7 +215,7 @@ export class ConnectService {
   }
 
   // One structured line per failed connect: the provider, the step and the error class, never a value of the flow.
-  #failed(providerId: string, step: string, errorClass: string): ConnectOutcome {
+  #failed(providerId: string, step: string, errorClass: string): Outcome {
     this.#deps.logger.warn({ event: "connect_failed", providerId, step, errorClass }, "connect failed");
     return { kind: "failed" };
   }
@@ -270,7 +287,7 @@ export class ConnectService {
     principal: TenantCtx,
     flow: FlowRow,
     step: { provider: HealthProvider; input: FinishInput; granted: Granted },
-  ): Promise<ConnectOutcome> {
+  ): Promise<Outcome> {
     const { accessToken, refreshToken, expiresInSeconds } = step.granted.credential;
     const now = this.#deps.now();
     try {
@@ -294,8 +311,13 @@ export class ConnectService {
       await this.#recordHealthOnce(principal, flow.workspace_id, channelId, step.provider);
       return { kind: "connected", channelId };
     } catch (error) {
-      // The account is not the channel's (SH409): refused, nothing was stored.
-      if (definerRefusal(error)?.code === "conflict") return { kind: "refused" };
+      // The account is not the channel's (SH409, nothing was stored): for a reconnect the person is told which channel
+      // it was; a first connect has no channel to name.
+      if (definerRefusal(error)?.code === "conflict") {
+        return flow.channel_id === null
+          ? { kind: "refused" }
+          : { kind: "wrong_account", channelId: flow.channel_id };
+      }
       throw error;
     }
   }

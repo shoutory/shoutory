@@ -35,8 +35,9 @@ export function pageAnswer(
   rows: Array<Record<string, unknown>>,
   limit: number,
   cursorField = "id",
+  extraMeta: Record<string, unknown> = {},
 ): Response {
   const last = rows[rows.length - 1];
   const next = rows.length === limit && last ? String(last[cursorField]) : null;
-  return c.json({ data: rows, meta: { next_cursor: next } }, 200);
+  return c.json({ data: rows, meta: { ...extraMeta, next_cursor: next } }, 200);
 }

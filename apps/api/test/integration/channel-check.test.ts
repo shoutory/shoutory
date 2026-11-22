@@ -181,6 +181,8 @@ describe("the answer of a check", () => {
     };
     expect(Object.keys(body.data).sort()).toEqual(Object.keys(shown.data).sort());
     expect(body.data).toMatchObject({ id: channelId, health: "ok", connection_state: "connected" });
+    // The actions are an allowed field of every channel answer; their value is the actions table's to test.
+    expect(Object.keys(body.data)).toContain("actions");
     expect(body.data.health_checked_at).toEqual(expect.any(String));
     // AGENTS 4.2: neither token is in the body or in any log line of the app, in any of the six spellings.
     expect(leaks(`${text}\n${fx.logged.join("\n")}`, [access, ...(refresh ? [refresh] : [])])).toEqual([]);

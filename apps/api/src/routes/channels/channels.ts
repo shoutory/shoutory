@@ -1,3 +1,5 @@
+import type { AuthorizedScope } from "@shoutory/core/authz/scope";
+import { CONNECTION_STATES, type ConnectionState } from "@shoutory/core/channels/state";
 import type { TenantTx } from "@shoutory/db/context";
 import { z } from "zod";
 import type { HealthChecker, HealthProvider } from "../../channels/health.js";
@@ -21,18 +23,62 @@ const rename = z.strictObject({ nickname: nameOf(200).nullable() });
 const ANSWER = `id, provider_id, account_kind, display_name, handle, nickname, avatar, connection_state, state_reason,
   health, health_checked_at, token_expires_at, reconnect_deadline, capability_epoch`;
 
-async function read(tx: TenantTx, workspaceId: string, channelId: string) {
+// What the caller may do, said by the server so a screen never derives it: `connect` for the list, `reconnect` and
+// `check` for a row. All three need channels.manage and a provider the app holds; `reconnect` also needs a provider with
+// a connect side (start refuses one without), and `check` a connected channel. A disabled channel offers none.
+const ACTION = z.enum(["connect", "reconnect", "check"]);
+type Action = z.infer<typeof ACTION>;
+const connectionState = z.enum(CONNECTION_STATES);
+const RECONNECTABLE: ReadonlySet<ConnectionState> = new Set([
+  "needs_reconnect",
+  "disconnected",
+  "revoked_by_provider",
+]);
+
+interface Viewer {
+  readonly canManage: boolean;
+  /** The provider registry and the check wiring; absent when the app has neither. */
+  readonly check: ChannelCheck | undefined;
+}
+
+const viewerOf = (scope: AuthorizedScope, check: ChannelCheck | undefined): Viewer => ({
+  canManage: scope.permissions.has("channels.manage"),
+  check,
+});
+
+// Own keys only: a provider id read from a row is never looked up on the prototype.
+function registered(check: ChannelCheck | undefined, providerId: string): HealthProvider | undefined {
+  return check && Object.hasOwn(check.providers, providerId) ? check.providers[providerId] : undefined;
+}
+
+const actionRow = z.object({ provider_id: z.string(), connection_state: connectionState });
+
+function actionsOf(row: Record<string, unknown>, viewer: Viewer): Action[] {
+  const { provider_id: providerId, connection_state: state } = actionRow.parse(row);
+  const provider = registered(viewer.check, providerId);
+  if (!viewer.canManage || !provider) return [];
+  if (state === "connected") return [ACTION.enum.check];
+  return RECONNECTABLE.has(state) && provider.adapter.connect ? [ACTION.enum.reconnect] : [];
+}
+
+const pageActionsOf = ({ canManage, check }: Viewer): Action[] =>
+  canManage && Object.values(check?.providers ?? {}).some(({ adapter }) => adapter.connect !== undefined)
+    ? [ACTION.enum.connect]
+    : [];
+
+async function read(tx: TenantTx, scope: AuthorizedScope, channelId: string, check?: ChannelCheck) {
   const found = await tx.query(`SELECT ${ANSWER} FROM app.channels WHERE workspace_id = $1 AND id = $2`, [
-    workspaceId,
+    scope.workspaceId,
     channelId,
   ]);
-  if (!found.rows[0]) throw new Refusal("not_found", "channel row not visible");
-  return found.rows[0];
+  const row = found.rows[0];
+  if (!row) throw new Refusal("not_found", "channel row not visible");
+  return { ...row, actions: actionsOf(row, viewerOf(scope, check)) };
 }
 
 type IpHmac = (address: string) => Buffer;
 
-function registerReads(app: App): void {
+function registerReads(app: App, check?: ChannelCheck): void {
   defineRoute(app, {
     method: "get",
     path: "/api/v1/workspaces/{workspace_id}/channels",
@@ -46,7 +92,9 @@ function registerReads(app: App): void {
          ORDER BY id LIMIT $3`,
         [scope.workspaceId, query.cursor ?? null, query.limit],
       );
-      return pageAnswer(c, found.rows, query.limit);
+      const viewer = viewerOf(scope, check);
+      const rows = found.rows.map((row) => ({ ...row, actions: actionsOf(row, viewer) }));
+      return pageAnswer(c, rows, query.limit, "id", { actions: pageActionsOf(viewer) });
     },
   });
   defineRoute(app, {
@@ -55,11 +103,11 @@ function registerReads(app: App): void {
     policy: "session",
     access: { workspace: "workspace_id", permission: "channels.view" },
     params: channelParams,
-    handler: ({ tx, scope, params }) => read(tx, scope.workspaceId, params.channel_id),
+    handler: ({ tx, scope, params }) => read(tx, scope, params.channel_id, check),
   });
 }
 
-function registerRename(app: App): void {
+function registerRename(app: App, check?: ChannelCheck): void {
   defineRoute(app, {
     method: "patch",
     path: "/api/v1/workspaces/{workspace_id}/channels/{channel_id}",
@@ -73,7 +121,7 @@ function registerRename(app: App): void {
         [scope.workspaceId, params.channel_id, body.nickname],
       );
       if (!found.rows[0]) throw new Refusal("not_found", "channel row not updated");
-      return read(tx, scope.workspaceId, params.channel_id);
+      return read(tx, scope, params.channel_id, check);
     },
   });
 }
@@ -84,7 +132,7 @@ const MOVES = {
   enable: "SELECT app.channel_enable($1, $2, $3, $4)",
 } as const;
 
-function registerMoves(app: App, ipHmac: IpHmac): void {
+function registerMoves(app: App, ipHmac: IpHmac, check?: ChannelCheck): void {
   for (const move of ["disable", "enable"] as const) {
     defineRoute(app, {
       method: "post",
@@ -103,7 +151,7 @@ function registerMoves(app: App, ipHmac: IpHmac): void {
         } catch (error) {
           throw definerRefusal(error) ?? error;
         }
-        return read(tx, scope.workspaceId, params.channel_id);
+        return read(tx, scope, params.channel_id, check);
       },
     });
   }
@@ -164,7 +212,7 @@ function registerCheck(app: App, { checker, providers }: ChannelCheck): void {
           JSON.stringify(snapshot.limits),
         ]),
       );
-      return scoped(false, (tx, scope) => read(tx, scope.workspaceId, params.channel_id));
+      return scoped(false, (tx, scope) => read(tx, scope, params.channel_id, { checker, providers }));
     },
   });
 }
@@ -176,8 +224,8 @@ export interface ChannelCheck {
 }
 
 export function registerChannels(app: App, ipHmac: IpHmac, check?: ChannelCheck): void {
-  registerReads(app);
-  registerRename(app);
-  registerMoves(app, ipHmac);
+  registerReads(app, check);
+  registerRename(app, check);
+  registerMoves(app, ipHmac, check);
   if (check) registerCheck(app, check);
 }

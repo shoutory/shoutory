@@ -26,6 +26,7 @@ const SEATS = ["owner", "admin", "editor", "approver", "viewer"] as const;
 const MISSING = "019a0000-0000-7000-8000-000000000000";
 const ALLOWLIST = [
   "account_kind",
+  "actions",
   "avatar",
   "capability_epoch",
   "connection_state",
@@ -117,11 +118,15 @@ describe("what the channel list and detail answer", () => {
     const foreign = await seedChannel(fx, other);
     const body = (await (await call(user("admin"), "GET", base(ws))).json()) as {
       data: Array<Record<string, unknown>>;
+      meta: Record<string, unknown>;
     };
     const ids = body.data.map((row) => row.id);
     expect(ids).toContain(mine);
     expect(ids).not.toContain(foreign);
     for (const row of body.data) expect(Object.keys(row).sort()).toEqual(ALLOWLIST);
+    // This app has no provider registry and no check wiring: no row has an action and the list offers no connect.
+    for (const row of body.data) expect(row.actions).toEqual([]);
+    expect(body.meta.actions).toEqual([]);
     const detail = (await (await call(user("admin"), "GET", `${base(ws)}/${mine}`)).json()) as {
       data: Record<string, unknown>;
     };

@@ -10,6 +10,8 @@ export interface AuthorizedScope {
   readonly principalId: string;
   readonly workspaceId: string;
   readonly organizationId: string;
+  /** What the caller's role holds in this workspace; a role the matrix does not know holds none. */
+  readonly permissions: ReadonlySet<Permission>;
 }
 
 /** One row of `resolve_workspace_access()`: a workspace the caller reaches and the role it holds there. */
@@ -24,9 +26,9 @@ export type MintResult =
   | { readonly kind: "not_found" }
   | { readonly kind: "forbidden" };
 
-function holds(roleKey: string, permission: Permission): boolean {
-  if (!Object.hasOwn(ROLE_PERMISSIONS, roleKey)) return false;
-  return ROLE_PERMISSIONS[roleKey as WorkspaceRole].includes(permission);
+function permissionsOf(roleKey: string): ReadonlySet<Permission> {
+  if (!Object.hasOwn(ROLE_PERMISSIONS, roleKey)) return new Set();
+  return new Set(ROLE_PERMISSIONS[roleKey as WorkspaceRole]);
 }
 
 /**
@@ -42,11 +44,13 @@ export function mintScope(
 ): MintResult {
   const row = rows.find((candidate) => candidate.workspace_id === target);
   if (!row) return { kind: "not_found" };
-  if (permission !== undefined && !holds(row.role_key, permission)) return { kind: "forbidden" };
+  const permissions = permissionsOf(row.role_key);
+  if (permission !== undefined && !permissions.has(permission)) return { kind: "forbidden" };
   const scope = {
     principalId,
     workspaceId: row.workspace_id,
     organizationId: row.organization_id,
+    permissions,
   } as AuthorizedScope;
   return { kind: "granted", scope };
 }
