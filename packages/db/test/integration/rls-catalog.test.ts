@@ -372,6 +372,26 @@ const DEFINERS: Definer[] = [
   // 0019: the two trigger functions of the ledger. They run for whoever writes an operation, and no role calls them.
   { name: "ledger_guard", args: "", callers: [] },
   { name: "ledger_settled_guard", args: "", callers: [] },
+  // 0020 (R590, R591): the writers of the ledger. The insert has no runtime caller (admission and the resolutions call it
+  // as the definer role); the fenced move is the worker's; the helper stores evidence inside its callers' purposes.
+  {
+    name: "ledger_add_evidence",
+    args: "workspace_id uuid, operation_id uuid, part integer, kind text, level text, outcome_kind text, refs jsonb",
+    callers: [],
+    helper: true,
+  },
+  {
+    name: "record_evidence",
+    args: "workspace_id uuid, operation_id uuid, kind text, level text, outcome_kind text, refs jsonb",
+    callers: ["shoutory_worker"],
+  },
+  { name: "operation_cancel", args: "workspace_id uuid, operation_id uuid", callers: ["shoutory_app"] },
+  { name: "operation_insert", args: "workspace_id uuid, fields jsonb, actor text", callers: [] },
+  {
+    name: "operation_transition",
+    args: "workspace_id uuid, operation_id uuid, token bigint, from_state text, to_state text, actor text, changes jsonb",
+    callers: ["shoutory_worker"],
+  },
   // 0018 (R574, R575): the post writers, for a signed-in Editor or above through the app role only, and the internal
   // helper that rebuilds the variants and media from a draft (no runtime role runs it).
   {

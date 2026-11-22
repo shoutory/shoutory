@@ -684,13 +684,13 @@ describe("the purge of expired ledger rows", () => {
 });
 
 // What the definer role may touch of the ledger and of the tables the guards read, and the purposes it acts under
-// (the two guards, the garbage collection of media, the purge of expired rows). Nothing else, and no write here: the
-// definers that write the ledger arrive with their own migration.
+// (the two guards, the garbage collection of media, the purge of expired rows, and the ledger writers of 0020). Nothing
+// else: attempts, resolutions and reservations are written by the definers of later migrations.
 const GRANTS: Record<string, string[]> = {
-  operations: ["SELECT"],
+  operations: ["INSERT", "SELECT"],
   operation_media: ["SELECT"],
   operation_attempts: ["DELETE", "SELECT"],
-  operation_evidence: [],
+  operation_evidence: ["INSERT"],
   operation_resolutions: [],
   usage_reservations: ["DELETE", "SELECT"],
   ledger_transitions: ["SELECT"],
@@ -701,10 +701,27 @@ const POLICIES = [
   "media_gc_candidates_select on post_media",
   "ledger_guard_select on ledger_transitions",
   "ledger_guard_select on post_variants",
+  "operation_cancel_insert on outbox",
+  "operation_cancel_select on operations",
+  "operation_cancel_select on post_variants",
+  "operation_cancel_update on operations",
+  "operation_insert_insert on operations",
+  "operation_transition_select on ledger_transitions",
+  "operation_transition_select on operations",
+  "operation_transition_update on operations",
+  "operation_transition_insert on operation_evidence",
+  "operation_transition_insert on outbox",
+  "operation_transition_select on channels",
+  "operation_transition_update on channels",
+  "record_evidence_insert on operation_evidence",
+  "record_evidence_insert on outbox",
+  "record_evidence_select on operations",
+  "record_evidence_update on operations",
   "purge_expired_delete on operation_attempts",
   "purge_expired_delete on usage_reservations",
   "purge_expired_select on operation_attempts",
   "purge_expired_select on operations",
+  "purge_expired_select on outbox",
   "purge_expired_select on usage_reservations",
 ];
 
@@ -728,9 +745,10 @@ describe("the definer role on the ledger", () => {
     const policies = await rows(
       `SELECT p.polname || ' on ' || c.relname AS policy FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid
        WHERE c.relnamespace = 'app'::regnamespace
-         AND (p.polname LIKE 'ledger_guard\\_%' OR p.polname LIKE 'media_gc_candidates\\_%' OR p.polname LIKE 'purge_expired\\_%')
+         AND (p.polname LIKE 'ledger_guard\\_%' OR p.polname LIKE 'media_gc_candidates\\_%' OR p.polname LIKE 'purge_expired\\_%'
+           OR p.polname LIKE 'operation\\_%' OR p.polname LIKE 'record\\_evidence\\_%')
          AND c.relname = ANY ($1)`,
-      [[...Object.keys(GRANTS), "post_variants", "post_media"]],
+      [[...Object.keys(GRANTS), "post_variants", "post_media", "outbox", "channels"]],
     );
     expect(policies.map((row) => row.policy as string).sort()).toEqual([...POLICIES].sort());
   });
