@@ -357,6 +357,79 @@ REGISTRY["app.idempotency_keys"] = {
     changeKey: WA,
   },
 };
+// Migration 0019: the ledger tables with a select policy are template W (operations, operation_media) and A (attempts,
+// evidence, resolutions); the reservations and the transition table have no select policy and are not tenant tables
+// here. The app role only reads them; the planted grants try the policies. A second operation of A is a terminal
+// `missed` one, which holds no target slot.
+const OPA = randomUUID();
+const OPB = randomUUID();
+const opRow = (id: string, workspace: string, variant: string, channel: string, state: string) =>
+  `INSERT INTO app.operations (id, workspace_id, variant_id, channel_id, provider_id, queue, kind, state, last_actor,
+     due_at, lateness_deadline, idempotency_marker, requested_by)
+   VALUES ('${id}', '${workspace}', '${variant}', '${channel}', 'fixture-oauth', 'publish.fixture-oauth', 'publish',
+     '${state}', 'S', now(), now() + interval '2 hours', 'matrix-${id}', '${UA}')`;
+REGISTRY["app.operations"] = {
+  key: "workspace_id",
+  a: WA,
+  b: WB,
+  seed: [opRow(OPA, WA, VA, CA, "pending"), opRow(OPB, WB, VB, CB, "pending")],
+  insertForB: () => opRow(randomUUID(), WB, VB, CB, "missed"),
+  write: {
+    update: "UPDATE app.operations SET effect = effect",
+    insertOwn: () => opRow(randomUUID(), WA, VA, CA, "missed"),
+    insertWs: WA,
+    changeWs: WA,
+    changeKey: WA,
+  },
+};
+const opMediaRow = (operation: string, media: string, workspace: string, position: number) =>
+  `INSERT INTO app.operation_media (workspace_id, operation_id, position, media_id, derivative_sha256)
+   VALUES ('${workspace}', '${operation}', ${position}, '${media}', decode(repeat('ab', 32), 'hex'))`;
+REGISTRY["app.operation_media"] = {
+  key: "workspace_id",
+  a: WA,
+  b: WB,
+  seed: [opMediaRow(OPA, MA, WA, 0), opMediaRow(OPB, MB, WB, 0)],
+  insertForB: () => opMediaRow(OPB, MB, WB, 1),
+  write: {
+    update: "UPDATE app.operation_media SET pull_url_expires_at = pull_url_expires_at",
+    insertOwn: () => opMediaRow(OPA, MA, WA, 1),
+    insertWs: WA,
+    changeWs: WA,
+    changeKey: WA,
+  },
+};
+const attemptRow = (operation: string, workspace: string, number: number) =>
+  `INSERT INTO app.operation_attempts (workspace_id, operation_id, attempt_no, step, fencing_token, effect)
+   VALUES ('${workspace}', '${operation}', ${number}, 'commit', 0, 'none')`;
+REGISTRY["app.operation_attempts"] = {
+  key: "workspace_id",
+  a: WA,
+  b: WB,
+  seed: [attemptRow(OPA, WA, 1), attemptRow(OPB, WB, 1)],
+  insertForB: () => attemptRow(OPB, WB, 2),
+};
+const evidenceRow = (operation: string, workspace: string) =>
+  `INSERT INTO app.operation_evidence (workspace_id, operation_id, kind, level, source)
+   VALUES ('${workspace}', '${operation}', 'accepted', 'receipt', 'matrix')`;
+REGISTRY["app.operation_evidence"] = {
+  key: "workspace_id",
+  a: WA,
+  b: WB,
+  seed: [evidenceRow(OPA, WA), evidenceRow(OPB, WB)],
+  insertForB: () => evidenceRow(OPB, WB),
+};
+const resolutionRow = (operation: string, workspace: string) =>
+  `INSERT INTO app.operation_resolutions (workspace_id, operation_id, kind, actor)
+   VALUES ('${workspace}', '${operation}', 'dismiss', '${UA}')`;
+REGISTRY["app.operation_resolutions"] = {
+  key: "workspace_id",
+  a: WA,
+  b: WB,
+  seed: [resolutionRow(OPA, WA), resolutionRow(OPB, WB)],
+  insertForB: () => resolutionRow(OPB, WB),
+};
+const LEDGER_PARENTS = new Set(["app.channels", "app.posts", "app.post_variants", "app.media_assets"]);
 const TABLES = Object.keys(REGISTRY);
 const WRITABLE = TABLES.filter((table) => REGISTRY[table]?.write);
 
@@ -395,13 +468,15 @@ const HOSTILE: [string, Settings | undefined][] = [
   ],
 ];
 
-async function inTransaction(pool: Pool, settings: Settings, sql: string) {
+/** Runs `before` (when given) and then `sql` in one rolled-back transaction under the settings; answers for `sql`. */
+async function inTransaction(pool: Pool, settings: Settings, sql: string, before?: string) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     for (const [name, value] of Object.entries(settings)) {
       await client.query("SELECT set_config($1, $2, true)", [name, value]);
     }
+    if (before) await client.query(before);
     return await client.query(sql);
   } finally {
     await client.query("ROLLBACK");
@@ -434,6 +509,11 @@ async function seed(admin: Client): Promise<void> {
     "app.post_variants",
     "app.post_media",
     "app.idempotency_keys",
+    "app.operations",
+    "app.operation_media",
+    "app.operation_attempts",
+    "app.operation_evidence",
+    "app.operation_resolutions",
   ];
   for (const table of order) for (const sql of REGISTRY[table]?.seed ?? []) await admin.query(sql);
   const viewer = await admin.query("SELECT id FROM app.roles WHERE workspace_id IS NULL AND key = 'viewer'");
@@ -545,7 +625,11 @@ describe("planted write grants: A changes its own rows", () => {
     const entry = REGISTRY[table] as Entry;
     const write = entry.write as NonNullable<Entry["write"]>;
     const sql = `DELETE FROM ${table} WHERE ${entry.key} = '${write.changeKey}'`;
-    expect((await inTransaction(plantedApp(), writingTo(write.changeWs), sql)).rowCount).toBe(1);
+    // A variant, a channel or a medium with an operation cannot be deleted: the operations of the workspace go first.
+    const before = LEDGER_PARENTS.has(table)
+      ? `DELETE FROM app.operations WHERE workspace_id = '${write.changeWs}'`
+      : undefined;
+    expect((await inTransaction(plantedApp(), writingTo(write.changeWs), sql, before)).rowCount).toBe(1);
   });
 });
 

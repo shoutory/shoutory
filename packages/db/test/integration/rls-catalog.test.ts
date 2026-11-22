@@ -369,6 +369,9 @@ const DEFINERS: Definer[] = [
   },
   { name: "media_object_removed", args: "workspace_id uuid, asset_id uuid", callers: ["shoutory_worker"] },
   { name: "media_gc_candidates", args: "lim integer", callers: ["shoutory_worker"] },
+  // 0019: the two trigger functions of the ledger. They run for whoever writes an operation, and no role calls them.
+  { name: "ledger_guard", args: "", callers: [] },
+  { name: "ledger_settled_guard", args: "", callers: [] },
   // 0018 (R574, R575): the post writers, for a signed-in Editor or above through the app role only, and the internal
   // helper that rebuilds the variants and media from a draft (no runtime role runs it).
   {

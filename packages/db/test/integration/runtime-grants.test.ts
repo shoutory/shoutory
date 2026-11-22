@@ -65,6 +65,15 @@ const EXACT: Record<string, Record<string, string[]>> = {
   post_variants: { shoutory_app: READ, shoutory_worker: READ },
   post_media: { shoutory_app: READ, shoutory_worker: READ },
   idempotency_keys: {},
+  // 0019: the ledger tables are read-only to the runtime roles (only the ledger definers write them); the reservations
+  // and the transition table have no runtime grant at all.
+  operations: { shoutory_app: READ, shoutory_worker: READ },
+  operation_media: { shoutory_app: READ, shoutory_worker: READ },
+  operation_attempts: { shoutory_app: READ, shoutory_worker: READ },
+  operation_evidence: { shoutory_app: READ, shoutory_worker: READ },
+  operation_resolutions: { shoutory_app: READ, shoutory_worker: READ },
+  usage_reservations: {},
+  ledger_transitions: {},
 };
 // "role table.column privilege": the column-level grants, and the only ones.
 const COLUMN_GRANTS = [

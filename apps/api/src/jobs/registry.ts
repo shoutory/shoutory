@@ -26,6 +26,8 @@ export const RETENTION_CLASSES = [
   "app.connect_challenges",
   "app.media_uploads",
   "app.idempotency_keys",
+  "app.operation_attempts",
+  "app.usage_reservations",
   "app.rate_buckets",
   "app.worker_heartbeats",
   "auth.user_unverified",

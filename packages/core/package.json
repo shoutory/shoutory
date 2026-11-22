@@ -65,6 +65,10 @@
       "source": "./src/errors/codes.ts",
       "default": "./dist/errors/codes.js"
     },
+    "./ledger": {
+      "source": "./src/ledger/transitions.ts",
+      "default": "./dist/ledger/transitions.js"
+    },
     "./net": {
       "source": "./src/net/address.ts",
       "default": "./dist/net/address.js"
