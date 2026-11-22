@@ -42,9 +42,6 @@ export interface ErrorPage {
 export const EXEMPT: Readonly<Record<string, string>> = {
   admin: "the admin frame; its index only redirects to the flags screen",
   "auth/sign-in": "a redirect to the sign-in screen, for the link in a mailed message",
-  "w/:ws/channels": "the channels hub; its screen and baselines come with the connect journey",
-  "connect/result":
-    "the page a provider's sign-in returns to, with one outcome per address; its browser checks come with the connect journey",
 };
 
 // The mailed-link part the pages accept in shape: they open and consume nothing, so any 43 base64url characters show
@@ -82,6 +79,77 @@ const founder = (
   scrollRegions: readonly string[] = [],
 ): Screen => ({ id, pattern, audience: "founder", open: visit(path), scrollRegions });
 
+// The image registers no channel routes (the app is built with no provider), so the channels hub is shown from fixed
+// answers: three channels worth a picture, with fixed check times and the zone the page names them in. The columns of a
+// channel are read from the route that writes them, so a column added there is a field here.
+const CHANNEL_CARDS = [
+  {
+    id: "0190a000-0000-7000-8000-0000000001a1",
+    display_name: "Acme Page",
+    handle: "@acme_page",
+    connection_state: "connected",
+    health: "ok",
+    health_checked_at: "2026-11-22T10:00:00.000Z",
+    actions: ["check"],
+  },
+  {
+    id: "0190a000-0000-7000-8000-0000000001a2",
+    display_name: "Acme Shop",
+    handle: "@acme_shop",
+    connection_state: "needs_reconnect",
+    reconnect_deadline: "2026-12-01T00:00:00.000Z",
+    actions: ["reconnect"],
+  },
+  {
+    id: "0190a000-0000-7000-8000-0000000001a3",
+    display_name: "Acme Blog",
+    handle: null,
+    connection_state: "disconnected",
+    actions: ["reconnect"],
+  },
+];
+
+function channelColumns(): string[] {
+  const source = readFileSync(
+    new URL("../../apps/api/src/routes/channels/channels.ts", import.meta.url),
+    "utf8",
+  );
+  const found = /const ANSWER = `([^`]+)`/.exec(source);
+  if (!found?.[1]) throw new Error("the columns of a channel answer were not found in the channels route");
+  return found[1].split(",").map((column) => column.trim());
+}
+
+async function fulfilHub(page: Page, workspace: string): Promise<void> {
+  const columns = channelColumns();
+  const rows = CHANNEL_CARDS.map((card) => ({
+    ...Object.fromEntries(columns.map((column) => [column, null])),
+    provider_id: "example_network",
+    account_kind: "profile",
+    capability_epoch: 0,
+    ...card,
+  }));
+  const reply = (body: unknown) => ({ contentType: "application/json", body: JSON.stringify(body) });
+  await page.addInitScript(() => localStorage.setItem("shoutory.zone", "UTC"));
+  await page.route(`**/api/v1/workspaces/${workspace}/channels`, (route) =>
+    route.fulfill(reply({ data: rows, meta: { next_cursor: null, actions: [] } })),
+  );
+  await page.route(`**/api/v1/workspaces/${workspace}/providers`, (route) =>
+    route.fulfill(
+      reply({
+        data: [
+          {
+            id: "example_network",
+            display_name: "Example Network",
+            lifecycle: "ga",
+            auth_kind: "oauth2_pkce",
+            connectable: true,
+          },
+        ],
+      }),
+    ),
+  );
+}
+
 export const SCREENS: readonly Screen[] = [
   signedOut("sign-in", "/sign-in"),
   // The challenge screen is open only after a password step; the spec makes that step before it opens this.
@@ -103,6 +171,17 @@ export const SCREENS: readonly Screen[] = [
     "members-scroll",
     "invitations-scroll",
   ]),
+  {
+    id: "channels",
+    pattern: "/w/:ws/channels",
+    audience: "founder",
+    open: async (page, context) => {
+      await fulfilHub(page, context.workspace);
+      await visit((c) => `/w/${c.workspace}/channels`)(page, context);
+    },
+  },
+  // The outcome that needs no channel read, so the screen is the same on every run.
+  founder("connect-result", "/connect/result", () => "/connect/result?reason=rate_limited"),
   founder("clients", "/o/:org/clients", (c) => `/o/${c.organization}/clients`, ["clients-scroll"]),
   founder("billing", "/o/:org/billing", (c) => `/o/${c.organization}/billing`),
   founder("flags", "/admin/flags", () => "/admin/flags", ["flags-scroll"]),
