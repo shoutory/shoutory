@@ -1,5 +1,5 @@
 import { PgBoss } from "pg-boss";
-import { JOB_QUEUES } from "./registry.js";
+import { JOB_QUEUES, PROVIDER_QUEUE_OPTIONS } from "./registry.js";
 
 // This file imports no workspace package: the test setup that installs the template database loads it outside the
 // `source` resolve condition, where a workspace import would need a built `dist`.
@@ -18,10 +18,11 @@ const INSTALL_POOL_MAX = 2;
 const CONNECT_TIMEOUT_MS = 5_000;
 
 /**
- * Installs or upgrades the queue library's schema as the owner role, creates every registry queue (not partitioned,
- * no retries: the ledger decides retries) and applies the runtime grants. Nothing supervises or schedules here.
+ * Installs or upgrades the queue library's schema as the owner role, creates every registry queue and the given provider
+ * queues (not partitioned, no retries: the ledger decides retries) and applies the runtime grants. Nothing supervises or
+ * schedules here.
  */
-export async function installJobs(ownerUrl: string): Promise<void> {
+export async function installJobs(ownerUrl: string, providerQueues: readonly string[] = []): Promise<void> {
   const failures: Error[] = [];
   const boss = new PgBoss({
     connectionString: ownerUrl,
@@ -37,6 +38,7 @@ export async function installJobs(ownerUrl: string): Promise<void> {
   await boss.start();
   try {
     for (const name of Object.keys(JOB_QUEUES)) await boss.createQueue(name, { retryLimit: 0 });
+    for (const name of providerQueues) await boss.createQueue(name, PROVIDER_QUEUE_OPTIONS);
     await boss.getDb().executeSql(GRANTS);
   } finally {
     await boss.stop({ graceful: true });

@@ -69,6 +69,10 @@
       "source": "./src/ledger/transitions.ts",
       "default": "./dist/ledger/transitions.js"
     },
+    "./ledger/client": {
+      "source": "./src/ledger/client.ts",
+      "default": "./dist/ledger/client.js"
+    },
     "./net": {
       "source": "./src/net/address.ts",
       "default": "./dist/net/address.js"

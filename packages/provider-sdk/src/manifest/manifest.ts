@@ -1,9 +1,13 @@
 import { countingRuleSchema } from "@shoutory/core/counting";
+import { BUCKET_KEY_NAMES } from "@shoutory/core/ledger/client";
 import { z } from "zod";
 
 const date = z.iso.date();
 const httpsUrl = z.url({ protocol: /^https$/ });
 const seconds = z.int().positive().max(31_536_000);
+// What the ledger's definers accept: a lease, a call timeout and a bucket window never exceed these, so a manifest that
+// parses can always be claimed, heartbeaten and rate limited.
+const leaseSeconds = z.int().positive().max(3_600);
 const name = z.string().min(1).max(64);
 
 // A provider limit is a fact about the provider, so it names where it was read and when (never a bare number).
@@ -77,9 +81,9 @@ const manifestShape = z.strictObject({
       z.strictObject({
         name,
         scope: z.enum(["account", "chat", "webhook", "instance", "app"]),
-        key: name,
-        max: z.int().positive(),
-        windowSeconds: seconds,
+        key: z.enum(BUCKET_KEY_NAMES),
+        max: z.int().positive().max(10_000),
+        windowSeconds: z.int().positive().max(86_400),
       }),
     )
     .max(32),
@@ -92,12 +96,17 @@ const manifestShape = z.strictObject({
     .optional(),
   followUpRoles: z.array(z.enum(["thread_reply", "first_comment"])).max(2),
   leaseSeconds: z.strictObject({
-    prepare: seconds,
-    commit: seconds,
-    readBack: seconds,
-    edit: seconds.optional(),
-    delete: seconds.optional(),
+    prepare: leaseSeconds,
+    commit: leaseSeconds,
+    readBack: leaseSeconds,
+    edit: leaseSeconds.optional(),
+    delete: leaseSeconds.optional(),
   }),
+  // The worker's call timeout, the longest wait it accepts for a provider's Retry-After before it pauses the operation,
+  // and how early (seconds) admission may take a target before its time.
+  callTimeoutSeconds: z.int().positive().max(3_600),
+  retryAfterMaxSeconds: z.int().positive().max(86_400),
+  dispatchMarginSeconds: z.int().nonnegative().max(3_600),
   concurrency: z.int().positive().max(1000),
   // The four classes of a refresh failure: only `revoked` disconnects a channel.
   refreshErrorMap: z.record(name, z.enum(["transient", "rate_limited", "config", "revoked"])),

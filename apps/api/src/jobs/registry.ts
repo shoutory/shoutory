@@ -10,6 +10,9 @@ export const JOB_QUEUES = {
 } as const;
 export type JobQueue = keyof typeof JOB_QUEUES;
 
+/** A provider queue holds at most one waiting wake-up (policy short) and never retries: the ledger row is the truth. */
+export const PROVIDER_QUEUE_OPTIONS = { retryLimit: 0, policy: "short" } as const;
+
 /** The retention classes that drop partitions: their purge takes the maintenance lock, a window class's does not. */
 export const PARTITION_CLASSES = ["audit_logs", "outbox"] as const;
 

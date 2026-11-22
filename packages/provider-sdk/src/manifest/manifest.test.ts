@@ -40,6 +40,58 @@ const REFUSALS: [string, Mutate, string][] = [
     "rateLimits.0.scope",
   ],
   [
+    "a rateLimits key outside the channel columns the worker can read",
+    (m) => {
+      first(m, "rateLimits").key = "region";
+    },
+    "rateLimits.0.key",
+  ],
+  [
+    "a rateLimits max above what the bucket accepts",
+    (m) => {
+      first(m, "rateLimits").max = 10_001;
+    },
+    "rateLimits.0.max",
+  ],
+  [
+    "a rateLimits window above a day",
+    (m) => {
+      first(m, "rateLimits").windowSeconds = 86_401;
+    },
+    "rateLimits.0.windowSeconds",
+  ],
+  [
+    "a lease above an hour",
+    (m) => {
+      at(m, "leaseSeconds").commit = 3_601;
+    },
+    "leaseSeconds.commit",
+  ],
+  ["a missing call timeout", (m) => delete m.callTimeoutSeconds, "callTimeoutSeconds"],
+  [
+    "a call timeout above an hour",
+    (m) => {
+      m.callTimeoutSeconds = 3_601;
+    },
+    "callTimeoutSeconds",
+  ],
+  ["a missing retry-after maximum", (m) => delete m.retryAfterMaxSeconds, "retryAfterMaxSeconds"],
+  [
+    "a retry-after maximum above a day",
+    (m) => {
+      m.retryAfterMaxSeconds = 86_401;
+    },
+    "retryAfterMaxSeconds",
+  ],
+  ["a missing dispatch margin", (m) => delete m.dispatchMarginSeconds, "dispatchMarginSeconds"],
+  [
+    "a dispatch margin above an hour",
+    (m) => {
+      m.dispatchMarginSeconds = 3_601;
+    },
+    "dispatchMarginSeconds",
+  ],
+  [
     "apiAccess other than official",
     (m) => {
       m.apiAccess = "scraping";
