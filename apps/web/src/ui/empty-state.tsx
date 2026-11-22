@@ -7,7 +7,7 @@ interface Props {
   title: ReactNode;
   children?: ReactNode;
   /** The one primary action of the first-use kind. */
-  action?: { label: string; onPress: () => void };
+  action?: { label: string; onPress: () => void; testId?: string };
   /** The Clear filters action of the filtered-out kind. */
   onClearFilters?: () => void;
 }
@@ -22,7 +22,9 @@ export function EmptyState(props: Props) {
       <h2 className="font-heading text-xl">{props.title}</h2>
       {props.children ? <p className="text-text-muted">{props.children}</p> : null}
       {props.kind === "first-use" && props.action ? (
-        <Button onPress={props.action.onPress}>{props.action.label}</Button>
+        <Button data-testid={props.action.testId} onPress={props.action.onPress}>
+          {props.action.label}
+        </Button>
       ) : null}
       {props.kind === "filtered-out" && props.onClearFilters ? (
         <Button onPress={props.onClearFilters}>

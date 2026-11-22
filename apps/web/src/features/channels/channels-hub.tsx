@@ -20,6 +20,8 @@ import { DirText } from "../../ui/dir-text";
 import { EmptyState } from "../../ui/empty-state";
 import { ErrorPanel } from "../../ui/error-panel";
 import { LocalizedDateTime } from "../../ui/localized";
+import { Reconnect } from "./connect-start";
+import { ConnectWizard } from "./connect-wizard";
 
 // H-01: the paged list of a workspace's channels. The list is this page's own state (it pages by cursor and replaces
 // one row at a time); only `next_cursor` of the answer's `meta` is read.
@@ -40,7 +42,8 @@ const channelSchema = z.object({
 type Channel = z.infer<typeof channelSchema>;
 const pageSchema = z.object({
   data: z.array(channelSchema),
-  meta: z.object({ next_cursor: z.uuid().nullable() }),
+  // `actions` of the page: only `connect` is read, and only from the server, never derived (BG-5).
+  meta: z.object({ next_cursor: z.uuid().nullable(), actions: z.array(z.string()) }),
 });
 type Page = z.infer<typeof pageSchema>;
 
@@ -51,6 +54,8 @@ interface Ready {
   more: "idle" | "busy" | "failed";
   /** The card that takes focus: the first one a last page appended, because Show more is gone. */
   focusId: string | null;
+  /** The server offers the person to connect a channel here (`meta.actions` holds `connect`). */
+  canConnect: boolean;
 }
 type ListState = { status: "loading" } | { status: "failed"; error: ApiError } | Ready;
 
@@ -64,6 +69,7 @@ const firstPage = (page: Page): Ready => ({
   next: page.meta.next_cursor,
   more: "idle",
   focusId: null,
+  canConnect: page.meta.actions.includes("connect"),
 });
 
 // The next page adds only channels not listed yet, whatever the server repeats.
@@ -81,7 +87,7 @@ function appended(now: Ready, page: Page): Ready {
 }
 
 // The session ended while the page was open: sign in, then come back to this address.
-function useSignIn() {
+export function useSignIn() {
   const navigate = useNavigate();
   const { pathname, search } = useLocation();
   return () => void navigate(`/sign-in?return-to=${encodeURIComponent(pathname + search)}`);
@@ -451,6 +457,9 @@ function Card({ row, context, focus }: { row: Channel; context: CardContext; foc
         <Names row={row} context={context} nameId={nameId} />
         <Status row={row} context={context} />
         <CheckNow row={row} context={context} nameId={nameId} focusCard={() => ref.current?.focus()} />
+        {row.actions.includes("reconnect") ? (
+          <Reconnect ws={context.ws} providerId={row.provider_id} channelId={row.id} nameId={nameId} />
+        ) : null}
       </div>
     </li>
   );
@@ -480,10 +489,27 @@ function ShowMore({ state, loadMore }: { state: Ready; loadMore: () => void }) {
   );
 }
 
-function Loaded({ state, context, loadMore }: { state: Ready; context: CardContext; loadMore: () => void }) {
+interface LoadedProps {
+  state: Ready;
+  context: CardContext;
+  loadMore: () => void;
+  onAdd: () => void;
+}
+
+function Loaded({ state, context, loadMore, onAdd }: LoadedProps) {
+  const { t } = useLingui();
   if (state.rows.length === 0) {
+    const add = {
+      label: t({ id: "channels.hub.add", message: "Add channel" }),
+      onPress: onAdd,
+      testId: "hub-add-empty",
+    };
     return (
-      <EmptyState kind="first-use" title={<Trans id="channels.hub.empty.title">No channels yet</Trans>}>
+      <EmptyState
+        kind="first-use"
+        title={<Trans id="channels.hub.empty.title">No channels yet</Trans>}
+        {...(state.canConnect ? { action: add } : {})}
+      >
         <Trans id="channels.hub.empty.meaning">
           Channels you connect to this workspace will appear here.
         </Trans>
@@ -502,11 +528,25 @@ function Loaded({ state, context, loadMore }: { state: Ready; context: CardConte
   );
 }
 
+// The "Add channel" dialog: closing it gives focus back to the button, also where a press did not focus it first.
+function useAddDialog() {
+  const [adding, setAdding] = useState(false);
+  const addRef = useRef<HTMLButtonElement>(null);
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (wasOpen.current && !adding) addRef.current?.focus();
+    wasOpen.current = adding;
+  }, [adding]);
+  return { adding, setAdding, addRef };
+}
+
 // Keyed by the workspace (see the page), so a change of workspace starts from nothing: no row, page, notice or answer
 // of the old one can reach the new one.
 function ChannelsHub({ ws }: { ws: string }) {
   const { state, loadMore, retry, replaceRow, dropRow } = useChannelList(ws);
   const [removed, setRemoved] = useState(false);
+  const { adding, setAdding, addRef } = useAddDialog();
+  const canConnect = state.status === "ready" && state.canConnect;
   const context = {
     names: useProviderNames(ws),
     words: useWords(),
@@ -524,9 +564,17 @@ function ChannelsHub({ ws }: { ws: string }) {
   };
   return (
     <div data-testid="hub-state" data-state={stateName(state)} className="flex flex-col gap-5">
-      <h1 data-testid="hub-heading" className="font-heading text-2xl">
-        <Trans id="channels.hub.title">Channels</Trans>
-      </h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 data-testid="hub-heading" className="font-heading text-2xl">
+          <Trans id="channels.hub.title">Channels</Trans>
+        </h1>
+        {canConnect ? (
+          <Button ref={addRef} data-testid="hub-add" onPress={() => setAdding(true)}>
+            <Trans id="channels.hub.add">Add channel</Trans>
+          </Button>
+        ) : null}
+      </div>
+      {canConnect ? <ConnectWizard ws={ws} isOpen={adding} onOpenChange={setAdding} /> : null}
       {removed ? (
         <p data-testid="hub-notice" data-reason="not_found" role="status">
           {CHECK_WORDS.not_found}
@@ -538,7 +586,9 @@ function ChannelsHub({ ws }: { ws: string }) {
         </div>
       ) : null}
       {state.status === "failed" ? <Failed error={state.error} retry={tryAgain} /> : null}
-      {state.status === "ready" ? <Loaded state={state} context={context} loadMore={loadMore} /> : null}
+      {state.status === "ready" ? (
+        <Loaded state={state} context={context} loadMore={loadMore} onAdd={() => setAdding(true)} />
+      ) : null}
     </div>
   );
 }

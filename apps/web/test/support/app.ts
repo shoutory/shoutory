@@ -114,7 +114,12 @@ export interface Api {
   providers?: Answer;
   /** "Check now" on any channel of any workspace. */
   check?: Answer;
+  /** "Start the connection" of any provider in any workspace; the answer carries the authorize URL. */
+  connectStart?: Answer;
 }
+
+/** The address the start answers by default: where a browser would be sent. */
+export const START_URL = "https://provider.example.test/authorize?state=flow-state-1";
 
 /** Workspace and channel ids in the form the server writes (lower-case UUIDs); the older fixtures use `w1`. */
 export const CONNECT_WS = "0190a000-0000-7000-8000-0000000000c1";
@@ -162,9 +167,12 @@ export const PROVIDERS = [
   },
 ];
 
-/** One page of the channel list as the server answers it: `meta.actions` is there too, and unread by the hub. */
-export const channelPage = (rows: unknown[], nextCursor: string | null = null) =>
-  json({ data: rows, meta: { next_cursor: nextCursor, actions: ["connect"] } });
+/** One page of the channel list as the server answers it; `actions` is the page-level `meta.actions`. */
+export const channelPage = (
+  rows: unknown[],
+  nextCursor: string | null = null,
+  actions: string[] = ["connect"],
+) => json({ data: rows, meta: { next_cursor: nextCursor, actions } });
 
 // The hub's calls: the list (with its query), the providers and "Check now", for any workspace and channel id.
 function hubAnswers(api: Api, url: URL, method: string): Answer | undefined {
@@ -176,6 +184,9 @@ function hubAnswers(api: Api, url: URL, method: string): Answer | undefined {
   if (method === "GET" && rest === "providers") return api.providers ?? (() => json({ data: PROVIDERS }));
   if (method === "POST" && /^channels\/[^/]+\/check$/.test(rest)) {
     return api.check ?? (() => json({ data: channelRow({ health_checked_at: "2026-11-22T11:00:00.000Z" }) }));
+  }
+  if (method === "POST" && /^connect\/[^/]+\/start$/.test(rest)) {
+    return api.connectStart ?? (() => json({ data: { authorize_url: START_URL } }));
   }
   return undefined;
 }

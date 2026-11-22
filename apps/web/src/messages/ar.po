@@ -1902,3 +1902,75 @@ msgstr "حُذفت هذه القناة، ولم تعد في القائمة."
 #. js-lingui-explicit-id
 msgid "channels.hub.check.failed"
 msgstr "تعذّر علينا فحص هذه القناة. لم يتغيّر شيء. حاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "channels.hub.add"
+msgstr "إضافة قناة"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.reconnect"
+msgstr "إعادة الربط"
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.title"
+msgstr "ربط قناة"
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.intro"
+msgstr "اختر المكان الذي تنشر فيه."
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.loading"
+msgstr "جارٍ تحميل المنصات"
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.failed.what"
+msgstr "تعذّر علينا تحميل المنصات"
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.failed.meaning"
+msgstr "لم يتغيّر شيء. حاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.empty.what"
+msgstr "لا توجد منصة يمكن ربطها بعد"
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.empty.meaning"
+msgstr "اطلب من مسؤول تثبيت Shoutory هذا إعداد منصة."
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.beta"
+msgstr "تجريبية"
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.tile"
+msgstr "ستنتقل إلى <0>{provider}</0> لتسمح لـ Shoutory بالنشر وقراءة هذا الحساب. نحن لا نرى كلمة مرورك أبداً."
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.continue"
+msgstr "المتابعة إلى <0>{provider}</0>"
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.busy"
+msgstr "جارٍ فتح <0>{provider}</0>"
+
+#. js-lingui-explicit-id
+msgid "connect.start.forbidden"
+msgstr "لا يمكنك ربط قنوات في مساحة العمل هذه. اطلب ذلك من مالك مساحة العمل هذه أو مديرها."
+
+#. js-lingui-explicit-id
+msgid "connect.start.not_found"
+msgstr "هذه المنصة أو القناة لم تعد متاحة هنا. أغلق هذه النافذة وافتح القنوات من جديد."
+
+#. js-lingui-explicit-id
+msgid "connect.start.rate_limited"
+msgstr "محاولات ربط كثيرة. انتظر بضع دقائق ثم ابدأ من جديد."
+
+#. js-lingui-explicit-id
+msgid "connect.start.unavailable"
+msgstr "تعذّر علينا بدء الربط. لم يتغيّر شيء. حاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "connect.start.server"
+msgstr "حدث خطأ من جهتنا. لم يتغيّر شيء. حاول لاحقاً."

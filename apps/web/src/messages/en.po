@@ -1904,3 +1904,75 @@ msgstr "This channel was removed. It is no longer in the list."
 #. js-lingui-explicit-id
 msgid "channels.hub.check.failed"
 msgstr "We could not check this channel. Nothing was changed. Try again."
+
+#. js-lingui-explicit-id
+msgid "channels.hub.add"
+msgstr "Add channel"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.reconnect"
+msgstr "Reconnect"
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.title"
+msgstr "Connect a channel"
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.intro"
+msgstr "Pick where you publish."
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.loading"
+msgstr "Loading the platforms"
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.failed.what"
+msgstr "We could not load the platforms"
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.failed.meaning"
+msgstr "Nothing was changed. Try again."
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.empty.what"
+msgstr "No platform can be connected yet"
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.empty.meaning"
+msgstr "Ask the person who runs this Shoutory install to set one up."
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.beta"
+msgstr "Beta"
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.tile"
+msgstr "You will go to <0>{provider}</0> to allow Shoutory to publish and read this account. We never see your password."
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.continue"
+msgstr "Continue to <0>{provider}</0>"
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.busy"
+msgstr "Opening <0>{provider}</0>"
+
+#. js-lingui-explicit-id
+msgid "connect.start.forbidden"
+msgstr "You cannot connect channels in this workspace. Ask an owner or admin of this workspace."
+
+#. js-lingui-explicit-id
+msgid "connect.start.not_found"
+msgstr "This platform or channel is no longer available here. Close this and open the channels again."
+
+#. js-lingui-explicit-id
+msgid "connect.start.rate_limited"
+msgstr "Too many connection attempts. Wait a few minutes, then start again."
+
+#. js-lingui-explicit-id
+msgid "connect.start.unavailable"
+msgstr "We could not start the connection. Nothing was changed. Try again."
+
+#. js-lingui-explicit-id
+msgid "connect.start.server"
+msgstr "Something went wrong on our side. Nothing was changed. Try again later."
