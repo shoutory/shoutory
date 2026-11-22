@@ -49,6 +49,23 @@ describe("ErrorPanel", () => {
     }
   });
 
+  it.each([
+    ["without an error, no request id", undefined],
+    ["with an error, the request id beside it", new ApiError("internal_error", 500, "req-42")],
+  ])("shows a detail node in the one Details %s", (_name, error) => {
+    const host = mount(
+      <ErrorPanel
+        what="We could not connect"
+        meaning="Nothing was changed."
+        detail={<span data-testid="detail">the provider said so</span>}
+        {...(error ? { error } : {})}
+      />,
+    );
+    expect(host.querySelectorAll("details")).toHaveLength(1);
+    expect(host.querySelector("details [data-testid='detail']")?.textContent).toBe("the provider said so");
+    expect(host.querySelector("details")?.textContent?.includes("req-42")).toBe(error !== undefined);
+  });
+
   it("copies the request id with its own button", () => {
     const writeText = vi.fn(() => Promise.resolve());
     vi.stubGlobal("navigator", { clipboard: { writeText }, languages: ["en"] });

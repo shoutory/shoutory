@@ -1654,3 +1654,147 @@ msgstr "لم تُطبَّق بعد: هذا التثبيت متأخر عن إصد
 #. js-lingui-explicit-id
 msgid "admin.releases.updates"
 msgstr "لا يُفحص وجود تحديثات: لا يجري هذا التثبيت أي اتصال خارجي بحثًا عن إصدار جديد."
+
+#. js-lingui-explicit-id
+msgid "connect.result.title"
+msgstr "نتيجة الربط"
+
+#. js-lingui-explicit-id
+msgid "connect.result.pending.headline"
+msgstr "جارٍ إكمال الربط"
+
+#. js-lingui-explicit-id
+msgid "connect.result.pending.meaning"
+msgstr "نتحقق من القناة لدى الخادم."
+
+#. js-lingui-explicit-id
+msgid "connect.result.connected.headline"
+msgstr "تم ربط <0>{name}</0>"
+
+#. js-lingui-explicit-id
+msgid "connect.result.connected.meaning"
+msgstr "يمكنك الآن جدولة المنشورات على هذه القناة."
+
+#. js-lingui-explicit-id
+msgid "connect.result.channel_state.headline"
+msgstr "<0>{name}</0> غير جاهزة"
+
+#. js-lingui-explicit-id
+msgid "connect.result.channel_state.meaning"
+msgstr "حالة القناة: {word}."
+
+#. js-lingui-explicit-id
+msgid "connect.result.unconfirmed.headline"
+msgstr "تعذّر علينا تأكيد هذا الربط"
+
+#. js-lingui-explicit-id
+msgid "connect.result.unconfirmed.meaning"
+msgstr "افتح قنواتك لترى هل أُضيفت."
+
+#. js-lingui-explicit-id
+msgid "connect.result.start_again.headline"
+msgstr "استغرق تسجيل الدخول وقتاً طويلاً أو استُعمل من قبل"
+
+#. js-lingui-explicit-id
+msgid "connect.result.start_again.meaning"
+msgstr "لم يُحفظ شيء. ابدأ الربط من جديد من صفحة القنوات."
+
+#. js-lingui-explicit-id
+msgid "connect.result.refused.headline"
+msgstr "لم يُسمح بهذا الربط"
+
+#. js-lingui-explicit-id
+msgid "connect.result.refused.meaning"
+msgstr "لم يُحفظ شيء. ابدأ من جديد من صفحة القنوات."
+
+#. js-lingui-explicit-id
+msgid "connect.result.provider_error.headline"
+msgstr "أوقفت المنصة عملية الربط"
+
+#. js-lingui-explicit-id
+msgid "connect.result.provider_error.meaning"
+msgstr "لم يُحفظ شيء. كلماتها مذكورة أدناه."
+
+#. js-lingui-explicit-id
+msgid "connect.result.provider_message_label"
+msgstr "ما قالته المنصة"
+
+#. js-lingui-explicit-id
+msgid "connect.result.failed.headline"
+msgstr "تعذّر إكمال الربط"
+
+#. js-lingui-explicit-id
+msgid "connect.result.failed.meaning"
+msgstr "لم يُحفظ شيء. حاول مرة أخرى بعد بضع دقائق."
+
+#. js-lingui-explicit-id
+msgid "connect.result.sign_in.headline"
+msgstr "سجّل الدخول للإكمال"
+
+#. js-lingui-explicit-id
+msgid "connect.result.sign_in.meaning"
+msgstr "انتهت جلستك أثناء الربط. سجّل الدخول وابدأ من جديد."
+
+#. js-lingui-explicit-id
+msgid "connect.result.rate_limited.headline"
+msgstr "محاولات ربط كثيرة"
+
+#. js-lingui-explicit-id
+msgid "connect.result.rate_limited.meaning"
+msgstr "انتظر بضع دقائق ثم ابدأ من جديد."
+
+#. js-lingui-explicit-id
+msgid "connect.result.unavailable.headline"
+msgstr "الربط غير متاح الآن"
+
+#. js-lingui-explicit-id
+msgid "connect.result.unavailable.meaning"
+msgstr "لم يُحفظ شيء. حاول لاحقاً."
+
+#. js-lingui-explicit-id
+msgid "connect.result.wrong_account.headline"
+msgstr "هذا حساب مختلف"
+
+#. js-lingui-explicit-id
+msgid "connect.result.wrong_account.meaning"
+msgstr "القناة مربوطة بـ <0>{handle}</0>. كانت المنشورات ستذهب إلى حساب آخر. سجّل الدخول بذلك الحساب وحاول مجدداً."
+
+#. js-lingui-explicit-id
+msgid "connect.result.wrong_account.meaning_no_handle"
+msgstr "كانت المنشورات ستذهب إلى حساب آخر. سجّل الدخول بحساب القناة وحاول مجدداً."
+
+#. js-lingui-explicit-id
+msgid "connect.result.generic.headline"
+msgstr "تعذّرت علينا قراءة هذه النتيجة"
+
+#. js-lingui-explicit-id
+msgid "connect.result.generic.meaning"
+msgstr "افتح قنواتك لترى حالتها."
+
+#. js-lingui-explicit-id
+msgid "connect.result.state.needs_reconnect"
+msgstr "يحتاج إلى إعادة ربط"
+
+#. js-lingui-explicit-id
+msgid "connect.result.state.disconnected"
+msgstr "غير متصل"
+
+#. js-lingui-explicit-id
+msgid "connect.result.state.revoked_by_provider"
+msgstr "سُحب الإذن"
+
+#. js-lingui-explicit-id
+msgid "connect.result.state.disabled"
+msgstr "متوقفة"
+
+#. js-lingui-explicit-id
+msgid "connect.result.state.unknown"
+msgstr "غير معروفة"
+
+#. js-lingui-explicit-id
+msgid "connect.result.link.channels"
+msgstr "العودة إلى القنوات"
+
+#. js-lingui-explicit-id
+msgid "connect.result.link.home"
+msgstr "الذهاب إلى الصفحة الرئيسية"

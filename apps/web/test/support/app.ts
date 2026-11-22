@@ -106,6 +106,43 @@ export interface Api {
   mailCheck?: Answer;
   mailTest?: Answer;
   adminSystem?: Answer;
+  /** The one-channel read of any workspace and any channel id (the connect result page reads it). */
+  channel?: Answer;
+}
+
+/** Workspace and channel ids in the form the server writes (lower-case UUIDs); the older fixtures use `w1`. */
+export const CONNECT_WS = "0190a000-0000-7000-8000-0000000000c1";
+export const CONNECT_CHANNEL = "0190a000-0000-7000-8000-0000000000d1";
+/** A workspace list whose one entry has a UUID id: what the connect result page matches its `workspace` against. */
+export const uuidWorkspaces = () =>
+  pageOf([
+    { id: CONNECT_WS, organization_id: "o1", name: "Acme Connect", slug: "acme-connect", role: "owner" },
+  ]);
+
+/** A channel as the one-channel read answers it (the server's allowlist); `change` overrides fields. */
+export const channelRow = (change: Record<string, unknown> = {}) => ({
+  id: CONNECT_CHANNEL,
+  provider_id: "fixture_oauth",
+  account_kind: "profile",
+  display_name: "Acme Page",
+  handle: "@acme_page",
+  nickname: null,
+  avatar: null,
+  connection_state: "connected",
+  state_reason: null,
+  health: "ok",
+  health_checked_at: "2026-11-22T10:00:00.000Z",
+  token_expires_at: null,
+  reconnect_deadline: null,
+  capability_epoch: 0,
+  actions: ["check"],
+  ...change,
+});
+
+// The one-channel read: any workspace id and any channel id in the path.
+function channelAnswers(api: Api, pathname: string, method: string): Answer | undefined {
+  const matches = /^\/api\/v1\/workspaces\/[^/]+\/channels\/[^/]+$/.test(pathname);
+  return matches && method === "GET" ? (api.channel ?? (() => json({ data: channelRow() }))) : undefined;
 }
 
 /** The queue health of the instance: a running worker, a silent one, and the lag of the outbox and the job queue. */
@@ -371,6 +408,7 @@ export function stubApi(api: Api = {}) {
       answers[`${pathname}:${method}`] ??
       answers[pathname] ??
       membersAnswers(api, pathname, method) ??
+      channelAnswers(api, pathname, method) ??
       adminAnswers(api, pathname, method);
     return Promise.resolve(answer ? answer() : refusal("not_found", 404));
   });

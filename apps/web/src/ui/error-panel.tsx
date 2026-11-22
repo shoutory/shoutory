@@ -33,12 +33,16 @@ export function ErrorPanel({
   what,
   meaning,
   error,
+  detail,
   onRetry,
   focusOnMount = false,
 }: {
   what: ReactNode;
   meaning: ReactNode;
-  error: ApiError;
+  /** The failed call: its request id goes into Details, and its class decides whether Retry is offered. */
+  error?: ApiError;
+  /** A node for Details of its own (a provider's words, labelled by the caller), beside the request id if any. */
+  detail?: ReactNode;
   onRetry?: () => void;
   /** A failed submit moves focus here, so the user is told what failed (WI-F07). */
   focusOnMount?: boolean;
@@ -54,25 +58,28 @@ export function ErrorPanel({
       role="alert"
       className="flex flex-col gap-3 rounded-md border-s-4 border-danger bg-danger-bg px-5 py-4"
     >
-      <p className="text-md font-medium">{what}</p>
+      <div className="text-md font-medium">{what}</div>
       <p className="text-sm">{meaning}</p>
-      {onRetry && isRetryable(error) ? (
+      {onRetry && error && isRetryable(error) ? (
         <div>
           <Button onPress={onRetry}>
             <Trans id="system.error.retry">Retry</Trans>
           </Button>
         </div>
       ) : null}
-      {error.requestId ? (
+      {detail || error?.requestId ? (
         <details>
           <summary>
             <Trans id="system.error.details">Details</Trans>
           </summary>
-          <div className="flex flex-wrap items-center gap-3 pt-3">
-            <Trans id="system.error.reference">Reference</Trans>{" "}
-            <DirText dir="ltr">{error.requestId}</DirText>
-            <CopyReference id={error.requestId} />
-          </div>
+          {detail}
+          {error?.requestId ? (
+            <div className="flex flex-wrap items-center gap-3 pt-3">
+              <Trans id="system.error.reference">Reference</Trans>{" "}
+              <DirText dir="ltr">{error.requestId}</DirText>
+              <CopyReference id={error.requestId} />
+            </div>
+          ) : null}
         </details>
       ) : null}
     </div>

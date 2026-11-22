@@ -16,7 +16,7 @@ export function useLoad<T>(schema: ZodType<T>, path: string, stamp = 0) {
   const [state, setState] = useState<Loaded<T>>({ status: "loading" });
   const [version, setVersion] = useState(0);
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   useEffect(() => {
     let current = true;
     void version;
@@ -28,7 +28,7 @@ export function useLoad<T>(schema: ZodType<T>, path: string, stamp = 0) {
         if (!current) return;
         // The session ended while the page was open: sign in, then come back to this page.
         if (error.state === "session_expired") {
-          void navigate(`/sign-in?return-to=${encodeURIComponent(pathname)}`);
+          void navigate(`/sign-in?return-to=${encodeURIComponent(pathname + search)}`);
         } else {
           setState({ status: "failed", error });
         }
@@ -37,7 +37,7 @@ export function useLoad<T>(schema: ZodType<T>, path: string, stamp = 0) {
     return () => {
       current = false;
     };
-  }, [schema, path, version, stamp, navigate, pathname]);
+  }, [schema, path, version, stamp, navigate, pathname, search]);
   return {
     state,
     replace: (data: T) => setState({ status: "done", data }),

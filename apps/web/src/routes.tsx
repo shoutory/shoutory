@@ -22,6 +22,7 @@ import { StepUpProvider } from "./auth/step-up";
 import { TwoFactorSetupPage } from "./auth/two-factor-setup";
 import { VerifyPage } from "./auth/verify";
 import { BillingPage } from "./billing/billing";
+import { ConnectResultPage } from "./features/channels/connect-result";
 import { ApiError } from "./http/client";
 import { ClientsPage } from "./org/clients";
 import { type PageHandle, usePageTitleAndFocus } from "./page-title";
@@ -60,6 +61,7 @@ const TITLES = {
   sessionExpired: msg({ id: "system.session_expired.title", message: "Your session has ended" }),
   notFound: msg({ id: "system.not_found.title", message: "Page not found" }),
   workspace: msg({ id: "shell.workspace.title", message: "Workspace" }),
+  connectResult: msg({ id: "connect.result.title", message: "Connection result" }),
   clients: msg({ id: "org.clients.title", message: "Clients" }),
   general: msg({ id: "settings.general.title", message: "General" }),
   billing: msg({ id: "billing.title", message: "Billing" }),
@@ -208,6 +210,11 @@ export const routes: RouteObject[] = [
                 path: "account/security/two-factor",
                 handle: handle(TITLES.twoFactorSetup),
                 element: <TwoFactorSetupPage />,
+              },
+              {
+                path: "connect/result",
+                handle: handle(TITLES.connectResult),
+                element: <ConnectResultPage />,
               },
               {
                 path: "w/:ws",

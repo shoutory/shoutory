@@ -42,6 +42,8 @@ export interface ErrorPage {
 export const EXEMPT: Readonly<Record<string, string>> = {
   admin: "the admin frame; its index only redirects to the flags screen",
   "auth/sign-in": "a redirect to the sign-in screen, for the link in a mailed message",
+  "connect/result":
+    "the page a provider's sign-in returns to, with one outcome per address; its browser checks come with the connect journey",
 };
 
 // The mailed-link part the pages accept in shape: they open and consume nothing, so any 43 base64url characters show

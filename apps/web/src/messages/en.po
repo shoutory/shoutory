@@ -1656,3 +1656,147 @@ msgstr "Not applied yet: this instance is behind its build ({applied} of {shippe
 #. js-lingui-explicit-id
 msgid "admin.releases.updates"
 msgstr "Updates are not checked: this installation makes no outbound call to look for a new release."
+
+#. js-lingui-explicit-id
+msgid "connect.result.title"
+msgstr "Connection result"
+
+#. js-lingui-explicit-id
+msgid "connect.result.pending.headline"
+msgstr "Finishing the connection"
+
+#. js-lingui-explicit-id
+msgid "connect.result.pending.meaning"
+msgstr "Checking the channel with the server."
+
+#. js-lingui-explicit-id
+msgid "connect.result.connected.headline"
+msgstr "<0>{name}</0> is connected"
+
+#. js-lingui-explicit-id
+msgid "connect.result.connected.meaning"
+msgstr "You can now schedule posts to this channel."
+
+#. js-lingui-explicit-id
+msgid "connect.result.channel_state.headline"
+msgstr "<0>{name}</0> is not ready"
+
+#. js-lingui-explicit-id
+msgid "connect.result.channel_state.meaning"
+msgstr "The channel reads as: {word}."
+
+#. js-lingui-explicit-id
+msgid "connect.result.unconfirmed.headline"
+msgstr "We could not confirm this connection"
+
+#. js-lingui-explicit-id
+msgid "connect.result.unconfirmed.meaning"
+msgstr "Open your channels to see whether it was added."
+
+#. js-lingui-explicit-id
+msgid "connect.result.start_again.headline"
+msgstr "This sign-in took too long or was already used"
+
+#. js-lingui-explicit-id
+msgid "connect.result.start_again.meaning"
+msgstr "Nothing was saved. Start the connection again from your channels."
+
+#. js-lingui-explicit-id
+msgid "connect.result.refused.headline"
+msgstr "This connection was not allowed"
+
+#. js-lingui-explicit-id
+msgid "connect.result.refused.meaning"
+msgstr "Nothing was saved. Start again from your channels."
+
+#. js-lingui-explicit-id
+msgid "connect.result.provider_error.headline"
+msgstr "The platform stopped the connection"
+
+#. js-lingui-explicit-id
+msgid "connect.result.provider_error.meaning"
+msgstr "Nothing was saved. Its own words are below."
+
+#. js-lingui-explicit-id
+msgid "connect.result.provider_message_label"
+msgstr "What the platform said"
+
+#. js-lingui-explicit-id
+msgid "connect.result.failed.headline"
+msgstr "The connection could not be finished"
+
+#. js-lingui-explicit-id
+msgid "connect.result.failed.meaning"
+msgstr "Nothing was saved. Try again in a few minutes."
+
+#. js-lingui-explicit-id
+msgid "connect.result.sign_in.headline"
+msgstr "Sign in to finish"
+
+#. js-lingui-explicit-id
+msgid "connect.result.sign_in.meaning"
+msgstr "Your session ended during the connection. Sign in and start again."
+
+#. js-lingui-explicit-id
+msgid "connect.result.rate_limited.headline"
+msgstr "Too many connection attempts"
+
+#. js-lingui-explicit-id
+msgid "connect.result.rate_limited.meaning"
+msgstr "Wait a few minutes, then start again."
+
+#. js-lingui-explicit-id
+msgid "connect.result.unavailable.headline"
+msgstr "Connecting is not available right now"
+
+#. js-lingui-explicit-id
+msgid "connect.result.unavailable.meaning"
+msgstr "Nothing was saved. Try again later."
+
+#. js-lingui-explicit-id
+msgid "connect.result.wrong_account.headline"
+msgstr "This is a different account"
+
+#. js-lingui-explicit-id
+msgid "connect.result.wrong_account.meaning"
+msgstr "<0>{handle}</0> is connected here. Posts would go to another account. Sign in with that account and try again."
+
+#. js-lingui-explicit-id
+msgid "connect.result.wrong_account.meaning_no_handle"
+msgstr "Posts would go to another account. Sign in with the channel's account and try again."
+
+#. js-lingui-explicit-id
+msgid "connect.result.generic.headline"
+msgstr "We could not read this result"
+
+#. js-lingui-explicit-id
+msgid "connect.result.generic.meaning"
+msgstr "Open your channels to see their state."
+
+#. js-lingui-explicit-id
+msgid "connect.result.state.needs_reconnect"
+msgstr "Reconnect needed"
+
+#. js-lingui-explicit-id
+msgid "connect.result.state.disconnected"
+msgstr "Disconnected"
+
+#. js-lingui-explicit-id
+msgid "connect.result.state.revoked_by_provider"
+msgstr "Access removed"
+
+#. js-lingui-explicit-id
+msgid "connect.result.state.disabled"
+msgstr "Turned off"
+
+#. js-lingui-explicit-id
+msgid "connect.result.state.unknown"
+msgstr "Unknown"
+
+#. js-lingui-explicit-id
+msgid "connect.result.link.channels"
+msgstr "Back to channels"
+
+#. js-lingui-explicit-id
+msgid "connect.result.link.home"
+msgstr "Go to home"
