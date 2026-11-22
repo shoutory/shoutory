@@ -22,6 +22,7 @@ import { StepUpProvider } from "./auth/step-up";
 import { TwoFactorSetupPage } from "./auth/two-factor-setup";
 import { VerifyPage } from "./auth/verify";
 import { BillingPage } from "./billing/billing";
+import { ChannelsHubPage } from "./features/channels/channels-hub";
 import { ConnectResultPage } from "./features/channels/connect-result";
 import { ApiError } from "./http/client";
 import { ClientsPage } from "./org/clients";
@@ -61,6 +62,7 @@ const TITLES = {
   sessionExpired: msg({ id: "system.session_expired.title", message: "Your session has ended" }),
   notFound: msg({ id: "system.not_found.title", message: "Page not found" }),
   workspace: msg({ id: "shell.workspace.title", message: "Workspace" }),
+  channels: msg({ id: "channels.hub.title", message: "Channels" }),
   connectResult: msg({ id: "connect.result.title", message: "Connection result" }),
   clients: msg({ id: "org.clients.title", message: "Clients" }),
   general: msg({ id: "settings.general.title", message: "General" }),
@@ -210,6 +212,11 @@ export const routes: RouteObject[] = [
                 path: "account/security/two-factor",
                 handle: handle(TITLES.twoFactorSetup),
                 element: <TwoFactorSetupPage />,
+              },
+              {
+                path: "w/:ws/channels",
+                handle: titled(TITLES.channels, (shell, params) => isUnknownWorkspace(shell, params.ws)),
+                element: <ChannelsHubPage />,
               },
               {
                 path: "connect/result",

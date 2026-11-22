@@ -1798,3 +1798,107 @@ msgstr "العودة إلى القنوات"
 #. js-lingui-explicit-id
 msgid "connect.result.link.home"
 msgstr "الذهاب إلى الصفحة الرئيسية"
+
+#. js-lingui-explicit-id
+msgid "shell.nav.channels"
+msgstr "القنوات"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.title"
+msgstr "القنوات"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.loading"
+msgstr "جارٍ تحميل قنواتك"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.empty.title"
+msgstr "لا توجد قنوات بعد"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.empty.meaning"
+msgstr "ستظهر هنا القنوات التي تربطها بمساحة العمل هذه."
+
+#. js-lingui-explicit-id
+msgid "channels.hub.failed.what"
+msgstr "تعذّر علينا تحميل قنواتك"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.failed.meaning"
+msgstr "لم يتغيّر شيء. حاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "channels.hub.retry"
+msgstr "حاول مرة أخرى"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.forbidden.what"
+msgstr "لا يمكنك رؤية قنوات مساحة العمل هذه"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.forbidden.meaning"
+msgstr "دورك لا يشمل القنوات. اطلب ذلك من مالك مساحة العمل هذه أو مديرها."
+
+#. js-lingui-explicit-id
+msgid "channels.hub.more"
+msgstr "عرض المزيد"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.more_failed"
+msgstr "تعذّر علينا تحميل مزيد من القنوات. القنوات أعلاه ما زالت صحيحة. حاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "channels.hub.state.connected"
+msgstr "متصلة"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.health.ok"
+msgstr "سليمة"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.health.degraded"
+msgstr "بطيئة أو محدودة"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.health.failing"
+msgstr "متعطّلة"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.health.unknown"
+msgstr "لم تُفحص بعد"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.checked"
+msgstr "فُحصت <0/>"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.deadline"
+msgstr "أعد الربط قبل <0/>"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.check"
+msgstr "افحص الآن"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.check.not_connected"
+msgstr "هذه القناة لم تعد متصلة. تعرض بطاقتها الآن حالتها الحالية."
+
+#. js-lingui-explicit-id
+msgid "channels.hub.check.provider_unavailable"
+msgstr "المنصة لا تستجيب الآن. لم يتغيّر شيء. حاول لاحقاً."
+
+#. js-lingui-explicit-id
+msgid "channels.hub.check.rate_limited"
+msgstr "فحوص كثيرة. انتظر بضع دقائق ثم افحص مجدداً."
+
+#. js-lingui-explicit-id
+msgid "channels.hub.check.forbidden"
+msgstr "لا يمكنك فحص هذه القناة. اطلب ذلك من مالك مساحة العمل هذه أو مديرها."
+
+#. js-lingui-explicit-id
+msgid "channels.hub.check.not_found"
+msgstr "حُذفت هذه القناة، ولم تعد في القائمة."
+
+#. js-lingui-explicit-id
+msgid "channels.hub.check.failed"
+msgstr "تعذّر علينا فحص هذه القناة. لم يتغيّر شيء. حاول مرة أخرى."

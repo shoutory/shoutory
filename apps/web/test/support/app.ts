@@ -108,6 +108,12 @@ export interface Api {
   adminSystem?: Answer;
   /** The one-channel read of any workspace and any channel id (the connect result page reads it). */
   channel?: Answer;
+  /** The channel list of any workspace; it gets the query and the workspace id, so a test can answer by either. */
+  channelList?: (query: URLSearchParams, workspace: string) => Response | Promise<Response>;
+  /** The providers read of any workspace. */
+  providers?: Answer;
+  /** "Check now" on any channel of any workspace. */
+  check?: Answer;
 }
 
 /** Workspace and channel ids in the form the server writes (lower-case UUIDs); the older fixtures use `w1`. */
@@ -143,6 +149,35 @@ export const channelRow = (change: Record<string, unknown> = {}) => ({
 function channelAnswers(api: Api, pathname: string, method: string): Answer | undefined {
   const matches = /^\/api\/v1\/workspaces\/[^/]+\/channels\/[^/]+$/.test(pathname);
   return matches && method === "GET" ? (api.channel ?? (() => json({ data: channelRow() }))) : undefined;
+}
+
+/** The providers a workspace can connect, as the providers route answers them. */
+export const PROVIDERS = [
+  {
+    id: "fixture_oauth",
+    display_name: "Fixture Network",
+    lifecycle: "ga",
+    auth_kind: "oauth2_pkce",
+    connectable: true,
+  },
+];
+
+/** One page of the channel list as the server answers it: `meta.actions` is there too, and unread by the hub. */
+export const channelPage = (rows: unknown[], nextCursor: string | null = null) =>
+  json({ data: rows, meta: { next_cursor: nextCursor, actions: ["connect"] } });
+
+// The hub's calls: the list (with its query), the providers and "Check now", for any workspace and channel id.
+function hubAnswers(api: Api, url: URL, method: string): Answer | undefined {
+  const [, workspace = "", rest = ""] = /^\/api\/v1\/workspaces\/([^/]+)\/(.*)$/.exec(url.pathname) ?? [];
+  if (workspace === "") return undefined;
+  if (method === "GET" && rest === "channels") {
+    return () => (api.channelList ?? (() => channelPage([channelRow()])))(url.searchParams, workspace);
+  }
+  if (method === "GET" && rest === "providers") return api.providers ?? (() => json({ data: PROVIDERS }));
+  if (method === "POST" && /^channels\/[^/]+\/check$/.test(rest)) {
+    return api.check ?? (() => json({ data: channelRow({ health_checked_at: "2026-11-22T11:00:00.000Z" }) }));
+  }
+  return undefined;
 }
 
 /** The queue health of the instance: a running worker, a silent one, and the lag of the outbox and the job queue. */
@@ -401,7 +436,8 @@ export function stubApi(api: Api = {}) {
     ...securityAnswers(api),
   };
   const stub = vi.fn((path: string, init?: RequestInit) => {
-    const pathname = new URL(path, "http://same-origin.invalid").pathname;
+    const url = new URL(path, "http://same-origin.invalid");
+    const { pathname } = url;
     // A create call to a path that also lists (organizations, workspaces) has its own `<path>:POST` answer.
     const method = init?.method ?? "GET";
     const answer =
@@ -409,6 +445,7 @@ export function stubApi(api: Api = {}) {
       answers[pathname] ??
       membersAnswers(api, pathname, method) ??
       channelAnswers(api, pathname, method) ??
+      hubAnswers(api, url, method) ??
       adminAnswers(api, pathname, method);
     return Promise.resolve(answer ? answer() : refusal("not_found", 404));
   });

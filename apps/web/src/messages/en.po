@@ -1800,3 +1800,107 @@ msgstr "Back to channels"
 #. js-lingui-explicit-id
 msgid "connect.result.link.home"
 msgstr "Go to home"
+
+#. js-lingui-explicit-id
+msgid "shell.nav.channels"
+msgstr "Channels"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.title"
+msgstr "Channels"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.loading"
+msgstr "Loading your channels"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.empty.title"
+msgstr "No channels yet"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.empty.meaning"
+msgstr "Channels you connect to this workspace will appear here."
+
+#. js-lingui-explicit-id
+msgid "channels.hub.failed.what"
+msgstr "We could not load your channels"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.failed.meaning"
+msgstr "Nothing was changed. Try again."
+
+#. js-lingui-explicit-id
+msgid "channels.hub.retry"
+msgstr "Try again"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.forbidden.what"
+msgstr "You cannot see this workspace's channels"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.forbidden.meaning"
+msgstr "Your role does not include channels. Ask an owner or admin of this workspace."
+
+#. js-lingui-explicit-id
+msgid "channels.hub.more"
+msgstr "Show more"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.more_failed"
+msgstr "We could not load more channels. The ones above are still current. Try again."
+
+#. js-lingui-explicit-id
+msgid "channels.hub.state.connected"
+msgstr "Connected"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.health.ok"
+msgstr "Healthy"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.health.degraded"
+msgstr "Slow or limited"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.health.failing"
+msgstr "Failing"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.health.unknown"
+msgstr "Not checked yet"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.checked"
+msgstr "Checked <0/>"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.deadline"
+msgstr "Reconnect by <0/>"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.check"
+msgstr "Check now"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.check.not_connected"
+msgstr "This channel is no longer connected. Its card now shows its current state."
+
+#. js-lingui-explicit-id
+msgid "channels.hub.check.provider_unavailable"
+msgstr "The platform is not answering right now. Nothing was changed. Try again later."
+
+#. js-lingui-explicit-id
+msgid "channels.hub.check.rate_limited"
+msgstr "Too many checks. Wait a few minutes, then check again."
+
+#. js-lingui-explicit-id
+msgid "channels.hub.check.forbidden"
+msgstr "You cannot check this channel. Ask an owner or admin of this workspace."
+
+#. js-lingui-explicit-id
+msgid "channels.hub.check.not_found"
+msgstr "This channel was removed. It is no longer in the list."
+
+#. js-lingui-explicit-id
+msgid "channels.hub.check.failed"
+msgstr "We could not check this channel. Nothing was changed. Try again."
