@@ -369,6 +369,41 @@ const DEFINERS: Definer[] = [
   },
   { name: "media_object_removed", args: "workspace_id uuid, asset_id uuid", callers: ["shoutory_worker"] },
   { name: "media_gc_candidates", args: "lim integer", callers: ["shoutory_worker"] },
+  // 0018 (R574, R575): the post writers, for a signed-in Editor or above through the app role only, and the internal
+  // helper that rebuilds the variants and media from a draft (no runtime role runs it).
+  {
+    name: "post_apply_draft",
+    args: "workspace_id uuid, post_id uuid, draft jsonb",
+    callers: [],
+    helper: true,
+  },
+  // The helper the autosave, save and restore definers share: lock, compare, version, draft and pointer move.
+  {
+    name: "post_write_version",
+    args: "workspace_id uuid, post_id uuid, expected_version uuid, snapshot jsonb, snapshot_hash bytea, kind text",
+    callers: [],
+    helper: true,
+  },
+  {
+    name: "post_create",
+    args: "workspace_id uuid, snapshot jsonb, snapshot_hash bytea",
+    callers: ["shoutory_app"],
+  },
+  {
+    name: "post_autosave",
+    args: "workspace_id uuid, post_id uuid, expected_version uuid, snapshot jsonb, snapshot_hash bytea",
+    callers: ["shoutory_app"],
+  },
+  {
+    name: "post_save",
+    args: "workspace_id uuid, post_id uuid, expected_version uuid, snapshot jsonb, snapshot_hash bytea",
+    callers: ["shoutory_app"],
+  },
+  {
+    name: "post_restore",
+    args: "workspace_id uuid, post_id uuid, expected_version uuid, source_version uuid",
+    callers: ["shoutory_app"],
+  },
 ];
 const TENANCY_TABLES = ["organizations", "organization_members", "workspaces", "workspace_members", "roles"];
 const RUNTIME_AND_OWNER_ROLES = [

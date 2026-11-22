@@ -272,6 +272,91 @@ REGISTRY["app.media_uploads"] = {
     changeKey: WA,
   },
 };
+// Migration 0018: the content tables are template W (posts, variants, media, idempotency keys) and A (versions); the app
+// role only reads them and the planted grants try the policies.
+const PA = randomUUID();
+const PB = randomUUID();
+const postRow = (id: string, workspace: string) =>
+  `INSERT INTO app.posts (id, workspace_id, author_kind, author_id) VALUES ('${id}', '${workspace}', 'user', '${UA}')`;
+REGISTRY["app.posts"] = {
+  key: "workspace_id",
+  a: WA,
+  b: WB,
+  seed: [postRow(PA, WA), postRow(PB, WB)],
+  insertForB: () => postRow(randomUUID(), WB),
+  write: {
+    update: "UPDATE app.posts SET status = status",
+    insertOwn: () => postRow(randomUUID(), WA),
+    insertWs: WA,
+    changeWs: WA,
+    changeKey: WA,
+  },
+};
+const versionRow = (post: string, workspace: string, number: number) =>
+  `INSERT INTO app.post_versions (workspace_id, post_id, version_no, kind, snapshot, snapshot_hash, created_by)
+   VALUES ('${workspace}', '${post}', ${number}, 'save', '{"draft":{"variants":[]}}', decode(repeat('00', 32), 'hex'),
+     '${UA}')`;
+REGISTRY["app.post_versions"] = {
+  key: "workspace_id",
+  a: WA,
+  b: WB,
+  seed: [versionRow(PA, WA, 1), versionRow(PB, WB, 1)],
+  insertForB: () => versionRow(PB, WB, 2),
+};
+const VA = randomUUID();
+const VB = randomUUID();
+const variantRow = (id: string, post: string, channel: string, workspace: string, locale: string | null) =>
+  `INSERT INTO app.post_variants (id, workspace_id, post_id, channel_id, locale)
+   VALUES ('${id}', '${workspace}', '${post}', '${channel}', ${locale === null ? "NULL" : `'${locale}'`})`;
+REGISTRY["app.post_variants"] = {
+  key: "workspace_id",
+  a: WA,
+  b: WB,
+  seed: [variantRow(VA, PA, CA, WA, null), variantRow(VB, PB, CB, WB, null)],
+  insertForB: () => variantRow(randomUUID(), PB, CB, WB, "ar"),
+  write: {
+    update: "UPDATE app.post_variants SET text = text",
+    insertOwn: () => variantRow(randomUUID(), PA, CA, WA, "fr"),
+    insertWs: WA,
+    changeWs: WA,
+    changeKey: WA,
+  },
+};
+const postMediaRow = (variant: string, media: string, workspace: string, position: number) =>
+  `INSERT INTO app.post_media (workspace_id, variant_id, position, media_id)
+   VALUES ('${workspace}', '${variant}', ${position}, '${media}')`;
+REGISTRY["app.post_media"] = {
+  key: "workspace_id",
+  a: WA,
+  b: WB,
+  seed: [postMediaRow(VA, MA, WA, 0), postMediaRow(VB, MB, WB, 0)],
+  insertForB: () => postMediaRow(VB, MB, WB, 1),
+  write: {
+    update: "UPDATE app.post_media SET alt_text = alt_text",
+    insertOwn: () => postMediaRow(VA, MA, WA, 1),
+    insertWs: WA,
+    changeWs: WA,
+    changeKey: WA,
+  },
+};
+const keyRow = (workspace: string) =>
+  `INSERT INTO app.idempotency_keys (workspace_id, principal_kind, principal_id, key, request_hash, expires_at)
+   VALUES ('${workspace}', 'user', '${UA}', 'matrix-${randomUUID()}', decode(repeat('01', 32), 'hex'),
+     now() + interval '1 day')`;
+REGISTRY["app.idempotency_keys"] = {
+  key: "workspace_id",
+  a: WA,
+  b: WB,
+  seed: [keyRow(WA), keyRow(WB)],
+  insertForB: () => keyRow(WB),
+  write: {
+    update: "UPDATE app.idempotency_keys SET state = state",
+    insertOwn: () => keyRow(WA),
+    insertWs: WA,
+    changeWs: WA,
+    changeKey: WA,
+  },
+};
 const TABLES = Object.keys(REGISTRY);
 const WRITABLE = TABLES.filter((table) => REGISTRY[table]?.write);
 
@@ -344,6 +429,11 @@ async function seed(admin: Client): Promise<void> {
     "app.media_assets",
     "app.media_derivatives",
     "app.media_uploads",
+    "app.posts",
+    "app.post_versions",
+    "app.post_variants",
+    "app.post_media",
+    "app.idempotency_keys",
   ];
   for (const table of order) for (const sql of REGISTRY[table]?.seed ?? []) await admin.query(sql);
   const viewer = await admin.query("SELECT id FROM app.roles WHERE workspace_id IS NULL AND key = 'viewer'");
@@ -357,6 +447,9 @@ beforeAll(async () => {
     const db = await cloneTemplate(env, inject("shoutoryTemplate"));
     await withAdminClient(env, db.name, async (admin) => {
       await seed(admin);
+      // The idempotency keys carry no runtime grant (runtime-grants.test.ts); the matrix plants the read so its
+      // policies are the thing under test.
+      await admin.query("GRANT SELECT ON app.idempotency_keys TO shoutory_app");
       if (withGrants)
         await admin.query(`GRANT INSERT, UPDATE, DELETE ON ${TABLES.join(", ")} TO shoutory_app`);
     });

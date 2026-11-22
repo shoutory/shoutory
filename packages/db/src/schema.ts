@@ -10,6 +10,7 @@ import {
   jsonb,
   pgSchema,
   primaryKey,
+  smallint,
   text,
   timestamp,
   uuid,
@@ -535,3 +536,97 @@ export const mediaDerivatives = app.table("media_derivatives", {
   byteSize: bigint("byte_size", { mode: "number" }),
   error: text("error"),
 });
+
+// A post; its text lives in the variants and `currentVersionId` is its ETag. Written only by the post definers.
+export const posts = app.table("posts", {
+  id: id(),
+  workspaceId: uuid("workspace_id").notNull(),
+  authorKind: text("author_kind").notNull(),
+  authorId: uuid("author_id").notNull(),
+  origin: text("origin").notNull().default("ui"),
+  status: text("status").notNull().default("draft"),
+  targetsTotal: integer("targets_total").notNull().default(0),
+  targetsPublished: integer("targets_published").notNull().default(0),
+  targetsPublishedNotLive: integer("targets_published_not_live").notNull().default(0),
+  currentVersionId: uuid("current_version_id"),
+  firstDueAt: stamp("first_due_at"),
+  publishedAt: stamp("published_at"),
+  deletedAt: stamp("deleted_at"),
+  createdAt: stamp("created_at").notNull().default(sql`clock_timestamp()`),
+  updatedAt: stamp("updated_at").notNull().default(sql`clock_timestamp()`),
+});
+
+// One saved state of a post; inserted once, never changed. The snapshot holds the draft the variants are rebuilt from.
+export const postVersions = app.table("post_versions", {
+  id: id(),
+  workspaceId: uuid("workspace_id").notNull(),
+  postId: uuid("post_id").notNull(),
+  versionNo: integer("version_no").notNull(),
+  kind: text("kind").notNull(),
+  snapshot: jsonb("snapshot").notNull(),
+  snapshotHash: bytea("snapshot_hash").notNull(),
+  createdBy: uuid("created_by").notNull(),
+  createdAt: stamp("created_at").notNull().default(sql`clock_timestamp()`),
+});
+
+// The wall-clock time of a due date, without a zone: the zone is `due_tz`.
+const localStamp = customType<{ data: string }>({ dataType: () => "timestamp without time zone" });
+
+// A post's content for one channel and locale; its id is the publish target.
+export const postVariants = app.table("post_variants", {
+  id: id(),
+  workspaceId: uuid("workspace_id").notNull(),
+  postId: uuid("post_id").notNull(),
+  channelId: uuid("channel_id").notNull(),
+  locale: text("locale"),
+  postType: text("post_type").notNull().default("text"),
+  text: text("text").notNull().default(""),
+  parts: jsonb("parts").notNull().default(sql`'[]'`),
+  settings: jsonb("settings").notNull().default(sql`'{}'`),
+  scheduleState: text("schedule_state").notNull().default("draft"),
+  localDue: localStamp("local_due"),
+  dueTz: text("due_tz"),
+  dueAt: stamp("due_at"),
+  frozenVersionId: uuid("frozen_version_id"),
+  presence: text("presence").notNull().default("present"),
+  externalId: text("external_id"),
+  permalink: text("permalink"),
+  publishedAt: stamp("published_at"),
+  createdAt: stamp("created_at").notNull().default(sql`clock_timestamp()`),
+  updatedAt: stamp("updated_at").notNull().default(sql`clock_timestamp()`),
+});
+
+// The media of a variant in order.
+export const postMedia = app.table(
+  "post_media",
+  {
+    workspaceId: uuid("workspace_id").notNull(),
+    variantId: uuid("variant_id").notNull(),
+    position: smallint("position").notNull(),
+    mediaId: uuid("media_id").notNull(),
+    altText: text("alt_text"),
+    crop: jsonb("crop"),
+  },
+  (table) => [primaryKey({ columns: [table.workspaceId, table.variantId, table.position] })],
+);
+
+// The keys of the public API; no definer reads them before the API exists.
+export const idempotencyKeys = app.table(
+  "idempotency_keys",
+  {
+    workspaceId: uuid("workspace_id").notNull(),
+    principalKind: text("principal_kind").notNull(),
+    principalId: uuid("principal_id").notNull(),
+    key: text("key").notNull(),
+    requestHash: bytea("request_hash").notNull(),
+    state: text("state").notNull().default("in_flight"),
+    inFlightUntil: stamp("in_flight_until").notNull().default(sql`clock_timestamp() + interval '60 seconds'`),
+    responseStatus: integer("response_status"),
+    responseBody: jsonb("response_body"),
+    resourceIds: jsonb("resource_ids"),
+    expiresAt: stamp("expires_at").notNull().default(sql`clock_timestamp() + interval '24 hours'`),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.principalKind, table.principalId, table.key] }),
+  ],
+);

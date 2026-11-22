@@ -58,6 +58,13 @@ const EXACT: Record<string, Record<string, string[]>> = {
   media_assets: { shoutory_app: READ, shoutory_worker: READ },
   media_uploads: { shoutory_app: READ, shoutory_worker: READ },
   media_derivatives: { shoutory_app: READ, shoutory_worker: READ },
+  // 0018: the content tables are read-only to the runtime roles (only the post definers write them); the idempotency
+  // keys have no runtime grant at all and no definer yet.
+  posts: { shoutory_app: READ, shoutory_worker: READ },
+  post_versions: { shoutory_app: READ, shoutory_worker: READ },
+  post_variants: { shoutory_app: READ, shoutory_worker: READ },
+  post_media: { shoutory_app: READ, shoutory_worker: READ },
+  idempotency_keys: {},
 };
 // "role table.column privilege": the column-level grants, and the only ones.
 const COLUMN_GRANTS = [
