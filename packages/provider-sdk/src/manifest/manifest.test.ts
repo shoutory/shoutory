@@ -152,6 +152,14 @@ const REFUSALS: [string, Mutate, string][] = [
       "displayName",
     ],
   ),
+  // A default is merged into the settings a post stores, and those hold whole numbers only.
+  ...[1.5, 2 ** 53].map((value): [string, Mutate, string] => [
+    `a setting default of ${value}`,
+    (m) => {
+      m.providerDefault = { max_length: value };
+    },
+    "providerDefault.max_length",
+  ]),
   ["an edit capability without an edit lease", (m) => delete at(m, "leaseSeconds").edit, "leaseSeconds.edit"],
   [
     "a delete capability without a delete lease",

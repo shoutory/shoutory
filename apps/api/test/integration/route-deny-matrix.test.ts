@@ -188,6 +188,27 @@ describe("user routes", () => {
   );
 });
 
+const POSTS = "/api/v1/workspaces/:workspace_id/posts";
+const WANTED: [string, string, string][] = [
+  ["POST", POSTS, "posts.edit"],
+  ["GET", `${POSTS}/:post_id`, "posts.view"],
+  ["PATCH", `${POSTS}/:post_id`, "posts.edit"],
+  ["POST", `${POSTS}/:post_id/save`, "posts.edit"],
+  ["GET", `${POSTS}/:post_id/versions`, "posts.view"],
+  ["POST", `${POSTS}/:post_id/versions/:version_id/restore`, "posts.edit"],
+];
+
+describe("posts route table", () => {
+  it("the six posts routes declare posts.view for reads and posts.edit for writes", () => {
+    const routes = registeredRoutes(fx.app);
+    for (const [method, path, permission] of WANTED) {
+      const found = routes.find((r) => r.method === method && r.path === path);
+      expect(found?.access, `${method} ${path}`).toEqual({ workspace: "workspace_id", permission });
+      expect(found?.policy).toBe("session");
+    }
+  });
+});
+
 describe("route table", () => {
   it("the workspace routes declare their access", () => {
     const routes = registeredRoutes(fx.app);

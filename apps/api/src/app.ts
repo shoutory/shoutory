@@ -29,6 +29,7 @@ import { registerInstance } from "./routes/instance.js";
 import { registerInvitations } from "./routes/invitations/invitations.js";
 import { registerMembers } from "./routes/members/members.js";
 import { registerOrganizations } from "./routes/organizations/organization.js";
+import { registerPosts } from "./routes/posts/posts.js";
 import { registerProviders } from "./routes/providers/providers.js";
 import { registerUnsubscribe } from "./routes/unsubscribe.js";
 import { registerEntitlements } from "./routes/workspaces/entitlements.js";
@@ -176,6 +177,7 @@ export function createApp(options: AppOptions): App {
   registerWorkspaces(app, options.auth);
   const channelRoutes = channelServices(options);
   registerChannels(app, options.auth.ipHmac, channelRoutes?.check);
+  registerPosts(app, channelRoutes?.check.providers ?? {}, () => new Date(options.now?.() ?? Date.now()));
   if (channelRoutes) {
     registerConnect(app, options.auth, channelRoutes.connect);
     registerProviders(app, channelRoutes.check.providers);

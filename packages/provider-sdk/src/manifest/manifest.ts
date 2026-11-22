@@ -86,7 +86,10 @@ const manifestShape = z.strictObject({
   actionWindows: z.strictObject({ edit: seconds.optional(), delete: seconds.optional() }),
   egressHosts: z.array(z.string().max(253).refine(isEgressHost, "not a host name")).min(1).max(32),
   sunset: date.optional(),
-  providerDefault: z.record(name, z.union([z.string().max(256), z.number(), z.boolean()])).optional(),
+  // Whole numbers only: a default is merged into the settings a post stores, and those hold safe integers alone.
+  providerDefault: z
+    .record(name, z.union([z.string().max(256), z.number().refine(Number.isSafeInteger), z.boolean()]))
+    .optional(),
   followUpRoles: z.array(z.enum(["thread_reply", "first_comment"])).max(2),
   leaseSeconds: z.strictObject({
     prepare: seconds,

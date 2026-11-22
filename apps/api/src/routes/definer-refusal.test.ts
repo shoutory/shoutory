@@ -15,6 +15,8 @@ describe("definerRefusal", () => {
     ["SH403", "member_role_set: rank too low", undefined, "forbidden", undefined],
     ["SH409", "member_remove: last_owner", undefined, "conflict", { reason: "last_owner" }],
     ["42501", "invitation_revoke: refused", undefined, "not_found", undefined],
+    ["42501", "post: refused", undefined, "not_found", undefined],
+    ["42501", "media: refused", undefined, "not_found", undefined],
     ["SH410", `${ACCEPT}: used`, DETAIL, UNUSABLE, { reason: "used" }],
     // The expiry only, and never the inviter's name.
     ["SH410", `${ACCEPT}: expired`, DETAIL, UNUSABLE, { reason: "expired", expires_at: EXPIRES }],

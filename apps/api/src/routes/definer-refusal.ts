@@ -20,6 +20,9 @@ const DEFINERS = [
   "feature_flag_override_set",
   "instance_setting_set",
   "instance_settings_read",
+  // The post definers, and the principal check they share with the media definers (`media: refused`).
+  "post",
+  "media",
 ];
 const isDefinerMessage = (message: unknown): message is string =>
   typeof message === "string" &&

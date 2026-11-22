@@ -16,6 +16,9 @@ const PUBLIC: Record<ErrorCode, { status: ContentfulStatusCode; message: string 
   email_not_verified: { status: 403, message: "The email address is not verified." },
   forbidden: { status: 403, message: "The request is not allowed." },
   conflict: { status: 409, message: "The request conflicts with the current state." },
+  precondition_failed: { status: 412, message: "The resource has changed since it was read." },
+  precondition_required: { status: 428, message: "This request must say which version it is based on." },
+  unprocessable_content: { status: 422, message: "The content could not be accepted." },
   limit_reached: { status: 409, message: "A limit has been reached." },
   invitation_unusable: { status: 410, message: "The invitation can no longer be used." },
   link_unusable: { status: 400, message: "The link can no longer be used." },
@@ -27,17 +30,29 @@ const PUBLIC: Record<ErrorCode, { status: ContentfulStatusCode; message: string 
 };
 const RETRY_AFTER_SECONDS = "5";
 
+/** A setting a draft names that the channel does not accept: where it is and why, never its value. */
+interface SettingIssue {
+  readonly variant: number;
+  readonly key: string;
+  readonly reason: "undeclared" | "type";
+}
+/** Fixed strings, the list of setting issues a refused draft carries and whether that list was cut. */
+export type RefusalDetails = Readonly<Record<string, string | boolean | readonly SettingIssue[]>>;
+
 interface RefusalOptions extends ErrorOptions {
-  /** Fixed, non-user values only: they are sent to the client. */
-  readonly details?: Readonly<Record<string, string>>;
+  /** Fixed values and the caller's own setting names only: they are sent to the client. */
+  readonly details?: RefusalDetails;
+  /** The `ETag` the answer carries (a 412 names the version the resource is at now), already quoted. */
+  readonly etag?: string;
   /** Seconds the client waits before retrying; sent as `Retry-After` on a 429 (the bucket's answer). */
   readonly retryAfterSeconds?: number;
 }
 
 /** A typed refusal: the one way a handler or middleware answers with an error. */
 export class Refusal extends Error {
-  readonly details: Readonly<Record<string, string>> | undefined;
+  readonly details: RefusalDetails | undefined;
   readonly retryAfterSeconds: number | undefined;
+  readonly etag: string | undefined;
   constructor(
     readonly code: ErrorCode,
     message: string,
@@ -47,6 +62,7 @@ export class Refusal extends Error {
     this.name = "Refusal";
     this.details = options.details;
     this.retryAfterSeconds = options.retryAfterSeconds;
+    this.etag = options.etag;
   }
 }
 
@@ -104,6 +120,7 @@ export function errorResponse(c: Context<AppEnv>, refusal: Refusal): Response {
   const { status, message } = PUBLIC[refusal.code];
   if (status === 503) c.header("Retry-After", RETRY_AFTER_SECONDS);
   if (status === 429) c.header("Retry-After", String(refusal.retryAfterSeconds ?? RETRY_AFTER_SECONDS));
+  if (refusal.etag !== undefined) c.header("ETag", refusal.etag);
   const requestId = c.get("requestId");
   // The public probe names no cause: a caller must not learn which dependency is down (the log carries it).
   const details = c.req.path === "/readyz" ? undefined : refusal.details;
