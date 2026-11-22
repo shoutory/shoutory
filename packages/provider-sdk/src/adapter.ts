@@ -28,6 +28,40 @@ export interface InspectInput {
   readonly accessToken: SealedSecret;
 }
 
+/** What the authorization URL of a connect is built from; `redirectUri` already carries any instance host. */
+export interface AuthorizeInput {
+  readonly state: string;
+  readonly codeChallenge: string;
+  readonly redirectUri: string;
+  readonly instanceHost?: string;
+}
+
+/** What the code exchange sends: the code and the verifier, still sealed until the one call that puts it on the wire. */
+export interface ExchangeInput {
+  readonly code: string;
+  readonly codeVerifier: SealedSecret;
+  readonly redirectUri: string;
+  readonly instanceHost?: string;
+}
+
+/** What the identity read sends: the new access token, still sealed. */
+export interface IdentityInput {
+  readonly accessToken: SealedSecret;
+  readonly instanceHost?: string;
+}
+
+/**
+ * The connect side of an OAuth provider. `authorize` builds the URL only (no network); `exchangeCode` answers with the
+ * tokens as `credential`, and `identity` with the account as `identity`. `issuer` is the one a callback must carry
+ * (RFC 9207), a fact of the adapter's construction.
+ */
+export interface ConnectAdapter {
+  readonly issuer?: string;
+  authorize(input: AuthorizeInput): string;
+  exchangeCode(context: AdapterContext, input: ExchangeInput): Promise<ProviderResult>;
+  identity(context: AdapterContext, input: IdentityInput): Promise<ProviderResult>;
+}
+
 /** A post that already exists at the provider, found by its id or, where the provider allows it, by the key. */
 export interface RemotePost {
   readonly externalId?: string;
@@ -46,4 +80,5 @@ export interface ProviderAdapter {
   edit?(context: AdapterContext, post: RemotePost, input: { readonly text: string }): Promise<ProviderResult>;
   refresh?(context: AdapterContext, input: RefreshInput): Promise<ProviderResult>;
   inspect(context: AdapterContext, input: InspectInput): Promise<ProviderResult>;
+  connect?: ConnectAdapter;
 }

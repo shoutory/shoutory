@@ -9,6 +9,7 @@ import type { MiddlewareHandler } from "hono";
 import { secureHeaders } from "hono/secure-headers";
 import type { AuthService } from "./auth/auth.js";
 import { registerAuthRoutes } from "./auth/mount.js";
+import { type ConnectService, createConnectService } from "./channels/connect.js";
 import { createCredentialService } from "./channels/credentials.js";
 import { createHealthChecker, type HealthProvider } from "./channels/health.js";
 import { errorResponse, Refusal, toRefusal } from "./errors/refusal.js";
@@ -22,6 +23,7 @@ import { registerStorageCheck } from "./routes/admin/storage-check.js";
 import { registerSystem } from "./routes/admin/system.js";
 import { registerAudit } from "./routes/audit/audit.js";
 import { type ChannelCheck, registerChannels } from "./routes/channels/channels.js";
+import { registerConnect } from "./routes/connect/connect.js";
 import { type App, type AppEnv, initRoutes } from "./routes/define-route.js";
 import { registerInstance } from "./routes/instance.js";
 import { registerInvitations } from "./routes/invitations/invitations.js";
@@ -67,9 +69,10 @@ export interface AppOptions {
   };
 }
 
-// The check route's service: the credential service reads and refreshes the sealed token as a job principal of the
-// workspace, the checker reads the provider with it.
-function channelChecker(options: AppOptions): ChannelCheck | undefined {
+// The services of the channel routes, only when the app is given its providers: the credential service reads and
+// refreshes the sealed token as a job principal of the workspace, the checker reads the provider with it, and the connect
+// service stores a new channel through both.
+function channelServices(options: AppOptions): { check: ChannelCheck; connect: ConnectService } | undefined {
   const { channels } = options;
   if (!channels) return undefined;
   const now = () => new Date();
@@ -83,7 +86,19 @@ function channelChecker(options: AppOptions): ChannelCheck | undefined {
     logger: options.logger,
     providers,
   });
-  return { checker: createHealthChecker({ credentials, fetch: channels.fetch, now }), providers };
+  const checker = createHealthChecker({ credentials, fetch: channels.fetch, now });
+  const connect = createConnectService({
+    pool: options.pool,
+    keys: options.keys,
+    fetch: channels.fetch,
+    now,
+    publicOrigin: options.publicOrigin,
+    providers,
+    credentials,
+    checker,
+    logger: options.logger,
+  });
+  return { check: { checker, providers }, connect };
 }
 
 const SELF = ["'self'"];
@@ -158,7 +173,9 @@ export function createApp(options: AppOptions): App {
   registerAuthRoutes(app, options.auth);
   registerOrganizations(app, options.auth);
   registerWorkspaces(app, options.auth);
-  registerChannels(app, options.auth.ipHmac, channelChecker(options));
+  const channelRoutes = channelServices(options);
+  registerChannels(app, options.auth.ipHmac, channelRoutes?.check);
+  if (channelRoutes) registerConnect(app, options.auth, channelRoutes.connect);
   registerEntitlements(app, options.entitlements ?? selfHost);
   registerInvitations(app, options.auth);
   registerMembers(app, options.auth.ipHmac);

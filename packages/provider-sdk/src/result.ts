@@ -22,11 +22,22 @@ export interface RefreshedCredential {
   readonly expiresInSeconds: number;
 }
 
+/** The account a connect reached, as the provider names it. */
+export interface AccountIdentity {
+  readonly providerAccountId: string;
+  readonly accountKind: string;
+  readonly displayName: string;
+  readonly handle?: string;
+  readonly avatar?: string;
+}
+
 /** Every adapter method answers with this and never throws a raw error; throwing is only for bugs. */
 export interface ProviderResult {
   readonly ok: boolean;
-  /** Present on a successful refresh only. */
+  /** Present on a successful refresh or code exchange only. */
   readonly credential?: RefreshedCredential;
+  /** Present on a successful identity read only. */
+  readonly identity?: AccountIdentity;
   /** Present on a successful channel read: what the provider's answer says of the channel (`ok` when absent). */
   readonly health?: "ok" | "degraded";
   readonly effect: Effect;

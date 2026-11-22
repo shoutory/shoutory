@@ -76,14 +76,17 @@ export function fixtureRoutes(posts: Map<string, StoredPost>): Readonly<Record<s
   };
 
   const existing = (id: string | undefined) => (id === undefined ? undefined : posts.get(id));
+  const account: Handler = (request) =>
+    request.headers.authorization?.startsWith("Bearer ")
+      ? { status: 200, body: { id: "account-1" } }
+      : errorReply(401, "unauthorized");
   return {
     [ROUTES.commit]: create,
     "POST /v1/validate": () => ({ status: 200, body: {} }),
-    // Like a real network, the account read wants the access token.
-    "GET /v1/account": (request) =>
-      request.headers.authorization?.startsWith("Bearer ")
-        ? { status: 200, body: { id: "account-1" } }
-        : errorReply(401, "unauthorized"),
+    // Like a real network, the account read wants the access token. `/v1/me` names the account a token belongs to (the
+    // connect reads it once); `/v1/account` is the health read, so a fault armed on one never lands on the other.
+    "GET /v1/account": account,
+    "GET /v1/me": account,
     [ROUTES.readBack]: (request) => {
       const post = existing(request.params.id);
       return post

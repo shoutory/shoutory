@@ -3,6 +3,7 @@ import { SealedSecret } from "@shoutory/core/crypto";
 import type {
   AdapterContext,
   CommitInput,
+  ConnectAdapter,
   InspectInput,
   ProviderAdapter,
   RefreshInput,
@@ -57,6 +58,8 @@ export interface FixtureAdapterOptions {
   readonly mapFailure?: typeof mapFailure | undefined;
   /** The OAuth client id of the fixture network; the adapter refreshes tokens (RFC 6749 section 6) only when it is set. */
   readonly clientId?: string | undefined;
+  /** The issuer a connect callback must carry (RFC 9207); a connect with none expected accepts any. */
+  readonly issuer?: string | undefined;
 }
 
 // The error answer of RFC 6749 section 5.2; the token answer is the bounded schema of core.
@@ -144,22 +147,19 @@ async function request(
   }
 }
 
-// One refresh-token grant at the token route. A refresh changes nothing at the network (effect none), so a failure is
-// never "possible": the class follows the answer, and the provider's own error code is kept for the manifest's map.
-async function refreshTokens(
-  options: FixtureAdapterOptions & { readonly clientId: string },
+// One grant at the token route (a refresh or an authorization code). A grant changes nothing at the network (effect
+// none), so a failure is never "possible": the class follows the answer, and the provider's own error code is kept for
+// the manifest's map.
+async function tokenGrant(
+  options: FixtureAdapterOptions,
   context: AdapterContext,
-  input: RefreshInput,
+  fields: Record<string, string>,
 ): Promise<ProviderResult> {
   try {
     const response = await context.fetch(`${options.baseUrl}/token`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: input.refreshToken.expose(),
-        client_id: options.clientId,
-      }).toString(),
+      body: new URLSearchParams(fields).toString(),
     });
     const json = textToJson(await response.text());
     if (!response.ok) {
@@ -205,6 +205,47 @@ async function inspectAccount(
   return isAccount
     ? { ok: true, effect: "none", health: "ok" }
     : errorResult({ effect: "none", errorClass: "unknown" });
+}
+
+const account = z.object({ id: z.string().min(1).max(256) });
+
+// The connect side of the fixture network: the authorization URL with PKCE, the code exchange and the account read.
+function connectOf(options: FixtureAdapterOptions & { readonly clientId: string }): ConnectAdapter {
+  return {
+    ...(options.issuer === undefined ? {} : { issuer: options.issuer }),
+    authorize: (input) =>
+      `${options.baseUrl}/authorize?${new URLSearchParams({
+        response_type: "code",
+        client_id: options.clientId,
+        redirect_uri: input.redirectUri,
+        state: input.state,
+        code_challenge: input.codeChallenge,
+        code_challenge_method: "S256",
+      })}`,
+    exchangeCode: (context, input) =>
+      tokenGrant(options, context, {
+        grant_type: "authorization_code",
+        code: input.code,
+        code_verifier: input.codeVerifier.expose(),
+        client_id: options.clientId,
+        redirect_uri: input.redirectUri,
+      }),
+    identity: async (context, input) => {
+      const answer = await request(options, context, "GET", "/v1/me", { token: input.accessToken });
+      if (!answer.ok) return answer.result;
+      const parsed = account.safeParse(answer.json);
+      if (!parsed.success) return errorResult({ effect: "none", errorClass: "unknown" });
+      return {
+        ok: true,
+        effect: "none",
+        identity: {
+          providerAccountId: parsed.data.id,
+          accountKind: "profile",
+          displayName: `Account ${parsed.data.id}`,
+        },
+      };
+    },
+  };
 }
 
 export function createFixtureAdapter(options: FixtureAdapterOptions): ProviderAdapter {
@@ -257,7 +298,12 @@ export function createFixtureAdapter(options: FixtureAdapterOptions): ProviderAd
       ? {}
       : {
           refresh: (context: AdapterContext, input: RefreshInput) =>
-            refreshTokens({ ...options, clientId: options.clientId as string }, context, input),
+            tokenGrant(options, context, {
+              grant_type: "refresh_token",
+              refresh_token: input.refreshToken.expose(),
+              client_id: options.clientId as string,
+            }),
+          connect: connectOf({ ...options, clientId: options.clientId }),
         }),
   };
 }

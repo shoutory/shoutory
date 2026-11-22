@@ -315,7 +315,7 @@ const DEFINERS: Definer[] = [
   // 0015: the connect state is written and taken by a signed-in user only, so the app role alone may call them.
   {
     name: "oauth_flow_put",
-    args: `workspace_id uuid, provider_id text, state_hash bytea, channel_id uuid, instance_host text, ${SEALED_FIELDS}, request_uri text`,
+    args: `flow_id uuid, workspace_id uuid, provider_id text, state_hash bytea, channel_id uuid, instance_host text, ${SEALED_FIELDS}, request_uri text`,
     callers: ["shoutory_app"],
   },
   {

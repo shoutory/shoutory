@@ -84,6 +84,33 @@ describe("bucket_take: spending, refilling and refunding", () => {
   });
 });
 
+// The connect scopes join the throttle and every earlier scope keeps its limit. Each row empties a bucket
+// and reads the wait for the next token, which is the scope's refill span divided by its capacity.
+describe("bucket_take: the connect scopes and every earlier limit", () => {
+  const b = useBuckets();
+  const LIMITS: [scope: string, capacity: number, secondsPerToken: number][] = [
+    ["verification_resend", 5, 720],
+    ["two_factor", 10, 90],
+    ["password_reset", 5, 720],
+    ["totp_code", 1, 90],
+    ["link_confirm", 20, 45],
+    ["invite", 20, 180],
+    ["invite_accept", 10, 90],
+    ["unsubscribe", 20, 45],
+    ["tenant_create", 10, 8640],
+    ["connect_start", 10, 60],
+    ["connect_callback", 20, 30],
+  ];
+  it.each(LIMITS)("%s holds %i tokens and refills one per %i seconds", async (scope, capacity, seconds) => {
+    const key = fresh();
+    for (let i = 0; i < capacity; i++) expect((await b.take(key, scope)).allowed).toBe(true);
+    const refused = await b.take(key, scope);
+    expect(refused.allowed).toBe(false);
+    expect(refused.retry_after_seconds).toBeGreaterThanOrEqual(seconds - 1);
+    expect(refused.retry_after_seconds).toBeLessThanOrEqual(seconds);
+  });
+});
+
 describe("bucket_take: the refill clock", () => {
   const b = useBuckets();
 

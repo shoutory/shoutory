@@ -119,7 +119,7 @@ describe("envelope open refuses tampering", () => {
 // Every kind of the enum, so a kind added later is covered by this table the day it joins it.
 describe.each(CREDENTIAL_KINDS)("envelope open fails when any AAD field of kind %s differs", (kind) => {
   // A kind outside the enum: open must fail at the payload AAD, not by pre-rejecting the kind.
-  const otherKind = "oauth_flow" as CredentialKind;
+  const otherKind = "bot_token" as CredentialKind;
   const base: Aad = { ...aad, credentialKind: kind };
   const salt = saltFor(kind);
   it.each([
@@ -139,11 +139,13 @@ describe("the salt of a kind", () => {
   const salted = CREDENTIAL_KINDS.filter((kind) => CREDENTIAL_SALT_POLICY[kind] === "salted");
   const unsalted = CREDENTIAL_KINDS.filter((kind) => CREDENTIAL_SALT_POLICY[kind] === "unsalted");
 
-  it("channel_token is salted and email_link is not", () => {
-    expect([CREDENTIAL_SALT_POLICY.channel_token, CREDENTIAL_SALT_POLICY.email_link]).toEqual([
-      "salted",
-      "unsalted",
-    ]);
+  // R554: the sealed OAuth flow object (the PKCE verifier) is salted like a token, so deleting the salt shreds it too.
+  it("channel_token and oauth_flow are salted and email_link is not", () => {
+    expect([
+      CREDENTIAL_SALT_POLICY.channel_token,
+      CREDENTIAL_SALT_POLICY.email_link,
+      CREDENTIAL_SALT_POLICY.oauth_flow,
+    ]).toEqual(["salted", "unsalted", "salted"]);
   });
 
   it.each(salted)("%s refuses to seal with a missing salt or one of 31 bytes", (credentialKind) => {

@@ -25,6 +25,10 @@
       "source": "./src/config/env.ts",
       "default": "./dist/config/env.js"
     },
+    "./connect/flow": {
+      "source": "./src/connect/flow.ts",
+      "default": "./dist/connect/flow.js"
+    },
     "./counting": {
       "source": "./src/counting/count-text.ts",
       "default": "./dist/counting/count-text.js"

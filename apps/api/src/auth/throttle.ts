@@ -14,7 +14,9 @@ type Scope =
   | "password_reset"
   | "invite"
   | "invite_accept"
-  | "unsubscribe";
+  | "unsubscribe"
+  | "connect_start"
+  | "connect_callback";
 
 // A successful sign-in refunds the whole account bucket: `bucket_take` accepts a cost down to minus the capacity.
 const LOGIN_ACCOUNT_CAPACITY = 100;

@@ -229,19 +229,20 @@ const putCall = (
   seal = sealed(),
   host: string | null = null,
   channel: string | null = null,
+  flow: string = randomUUID(),
 ) =>
   [
-    "SELECT app.oauth_flow_put($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) AS id",
-    [ws, "fixture_oauth", digestOf(state), channel, host, ...seal, "https://par.example/request"],
+    "SELECT app.oauth_flow_put($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) AS id",
+    [flow, ws, "fixture_oauth", digestOf(state), channel, host, ...seal, "https://par.example/request"],
   ] as [string, unknown[]];
 
-async function plantChannel(workspace: string): Promise<string> {
+async function plantChannel(workspace: string, provider = "fixture_oauth"): Promise<string> {
   const id = randomUUID();
   await rows(
     `INSERT INTO app.channels (id, workspace_id, provider_id, account_kind, provider_account_id, display_name,
        connection_state)
-     VALUES ($1::uuid, $2, 'fixture_oauth', 'profile', $1::text, 'flow channel', 'connected')`,
-    [id, workspace],
+     VALUES ($1::uuid, $2, $3, 'profile', $1::text, 'flow channel', 'connected')`,
+    [id, workspace, provider],
   );
   return id;
 }
@@ -291,11 +292,29 @@ describe("oauth_flow_put", () => {
     expect(await flowOf(state)).toMatchObject({ channel_id: channel });
   });
 
-  it("a channel of another workspace is refused and nothing is written", async () => {
+  // A channel of another provider is refused exactly as one of another workspace (the flow is for one provider).
+  it.each([
+    ["another workspace", () => plantChannel(WB)],
+    ["another provider", () => plantChannel(WA, "other_provider")],
+  ])("a channel of %s is refused with 42501 and nothing is written", async (_name, plant) => {
     const state = `put-foreign-channel-${randomUUID()}`;
-    const [sql, params] = putCall(WA, state, sealed(), null, await plantChannel(WB));
-    expect((await attempt(db.pool("app"), asUser(U.admin), sql, params)).error).toBeDefined();
+    const [sql, params] = putCall(WA, state, sealed(), null, await plant());
+    expect((await attempt(db.pool("app"), asUser(U.admin), sql, params)).error).toMatchObject({
+      code: "42501",
+    });
     expect(await flowOf(state)).toBeUndefined();
+  });
+});
+
+// The service reads the flow id first and seals the verifier with it as the owner, so the definer stores that id.
+describe("oauth_flow_put with a chosen id", () => {
+  it("stores the id the caller chose, which is also the id it answers", async () => {
+    const chosen = randomUUID();
+    const state = `put-id-${randomUUID()}`;
+    const call = putCall(WA, state, sealed(), null, null, chosen);
+    const [made] = await commitAs(db.pool("app"), U.admin, ...call);
+    expect(made?.id).toBe(chosen);
+    expect((await flowOf(state))?.id).toBe(chosen);
   });
 });
 

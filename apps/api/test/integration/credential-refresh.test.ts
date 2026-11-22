@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { inspect } from "node:util";
 import { SealedSecret } from "@shoutory/core/crypto";
 import type { TenantCtx } from "@shoutory/db/context";
+import { withAdvisoryLock } from "@shoutory/db/locks";
 import { fixtureOAuthManifest } from "@shoutory/testkit/fixture-oauth/manifest";
 import { startFixtureOAuthSimulator } from "@shoutory/testkit/fixture-oauth/simulator";
 import { createFixtureAdapter } from "@shoutory/testkit/fixture-provider/adapter";
@@ -348,4 +349,59 @@ describe("no token leaves the sealed store", () => {
     expect(logged.join("\n")).not.toContain("unmapped_code_value_7");
     expect(logged.length).toBeGreaterThan(0);
   });
+});
+
+// A reconnect of a channel takes the channel's advisory lock, so two reconnects of one channel are ordered; a first
+// connect has no channel to lock and relies on the identity key.
+describe("a reconnect", () => {
+  const waitsOnAdvisoryLock = async () => {
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline) {
+      const waiting = await fx.admin((c) =>
+        c.query("SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND NOT granted"),
+      );
+      if (waiting.rowCount) return;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error("the reconnect never waited for the channel's lock");
+  };
+
+  it("takes the channel's advisory lock: it waits for another holder, then lands the next generation", async () => {
+    const account = randomUUID();
+    const connectWith = (reconnectChannelId?: string) =>
+      service().connect({
+        principal: principal(),
+        workspaceId: workspace,
+        identity: {
+          providerId: "fixture_oauth",
+          accountKind: "profile",
+          providerAccountId: account,
+          displayName: "Fixture account",
+        },
+        ...(reconnectChannelId === undefined ? {} : { reconnectChannelId }),
+        tokens: { access_token: `reconnect-token-${randomUUID()}` },
+        accessExpiresAt: new Date(Date.now() + 3_600_000),
+        snapshot: {
+          manifestDigest: "digest-a",
+          apiVersion: "v1",
+          sunsetAt: null,
+          capabilities: { text: true },
+          limits: { text: 280 },
+        },
+        audit: { requestId: "req-reconnect", ipHmac: null },
+      });
+    const first = await connectWith();
+    const holder = await fx.db.pool("worker").connect();
+    try {
+      await holder.query("BEGIN");
+      await withAdvisoryLock(holder, "channel", async () => undefined, first.channelId);
+      const pending = connectWith(first.channelId);
+      await waitsOnAdvisoryLock();
+      await holder.query("COMMIT");
+      expect(await pending).toEqual({ channelId: first.channelId, generation: 2 });
+    } finally {
+      await holder.query("ROLLBACK");
+      holder.release();
+    }
+  }, 30_000);
 });

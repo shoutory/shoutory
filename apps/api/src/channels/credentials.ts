@@ -19,6 +19,7 @@ import {
 import { pepperDigest } from "@shoutory/core/crypto/digest";
 import type { KeyProvider } from "@shoutory/core/keys";
 import { type TenantCtx, type TenantTx, withTenant } from "@shoutory/db/context";
+import { withAdvisoryLock } from "@shoutory/db/locks";
 import type { AppPool } from "@shoutory/db/pool";
 import type { ProviderAdapter } from "@shoutory/provider-sdk/adapter";
 import type { ProviderResult } from "@shoutory/provider-sdk/result";
@@ -139,7 +140,19 @@ const aadOf = (workspaceId: string, channelId: string, generation: number): Aad 
   generation,
 });
 
-const sealedParams = (s: StoredSecret) => [
+/**
+ * The workspace's salt, created on first use: two first callers end with one salt and the loser receives the winner's.
+ * It is ensured before anything is sealed under it, in the caller's own transaction.
+ */
+export async function ensureSalt(tx: TenantTx, workspaceId: string): Promise<Buffer> {
+  const salted = await tx.query("SELECT app.workspace_salt_ensure($1, $2) AS salt", [
+    workspaceId,
+    randomBytes(SALT_BYTES),
+  ]);
+  return saltSchema.parse(salted.rows[0]).salt;
+}
+
+export const sealedParams = (s: StoredSecret) => [
   s.formatVersion,
   s.keyId,
   s.iv,
@@ -209,33 +222,37 @@ export class CredentialService {
   /** Stores the first or a new credential generation of a channel, in one transaction. */
   async connect(input: ConnectInput): Promise<{ channelId: string; generation: number }> {
     // The salt is ensured in its own statement first, so no row lock is held while it is drawn.
-    const salted = await withTenant(this.#deps.pool, input.principal, (tx) =>
-      tx.query("SELECT app.workspace_salt_ensure($1, $2) AS salt", [
-        input.workspaceId,
-        randomBytes(SALT_BYTES),
-      ]),
+    const salt = await withTenant(this.#deps.pool, input.principal, (tx) =>
+      ensureSalt(tx, input.workspaceId),
     );
-    const { salt } = saltSchema.parse(salted.rows[0]);
     return withTenant(this.#deps.pool, input.principal, async (tx) => {
       const { identity, audit } = input;
-      const made = await tx.query<{ channel_id: string; next_generation: number }>(
-        ...callOf("channel_connect", [
-          input.workspaceId,
-          identity.providerId,
-          identity.accountKind,
-          identity.providerAccountId,
-          identity.instanceHost ?? null,
-          identity.displayName,
-          identity.handle ?? null,
-          identity.avatar ?? null,
-          input.reconnectChannelId ?? null,
-          audit.requestId,
-          audit.ipHmac,
-        ]),
-      );
-      const { channel_id: channelId, next_generation: generation } = connectedSchema.parse(made.rows[0]);
-      await this.#put(tx, input, channelId, generation, salt);
-      return { channelId, generation };
+      const store = async () => {
+        const made = await tx.query<{ channel_id: string; next_generation: number }>(
+          ...callOf("channel_connect", [
+            input.workspaceId,
+            identity.providerId,
+            identity.accountKind,
+            identity.providerAccountId,
+            identity.instanceHost ?? null,
+            identity.displayName,
+            identity.handle ?? null,
+            identity.avatar ?? null,
+            input.reconnectChannelId ?? null,
+            audit.requestId,
+            audit.ipHmac,
+          ]),
+        );
+        const { channel_id: channelId, next_generation: generation } = connectedSchema.parse(made.rows[0]);
+        await this.#put(tx, input, channelId, generation, salt);
+        return { channelId, generation };
+      };
+      // A reconnect names its channel, so two of them are ordered by its advisory lock (the first rank of the lock order).
+      // A connect that names none takes no advisory lock, also when its identity turns out to match an existing channel
+      // and reuses it: it relies on the identity key and the channel row lock.
+      return input.reconnectChannelId === undefined
+        ? store()
+        : withAdvisoryLock(tx, "channel", store, input.reconnectChannelId);
     });
   }
 

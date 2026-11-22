@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { inspect } from "node:util";
 import { deriveKey, type KeyProvider } from "./keys.js";
 
-export const CREDENTIAL_KINDS = ["channel_token", "email_link"] as const;
+export const CREDENTIAL_KINDS = ["channel_token", "email_link", "oauth_flow"] as const;
 export type CredentialKind = (typeof CREDENTIAL_KINDS)[number];
 
 /**
@@ -12,6 +12,7 @@ export type CredentialKind = (typeof CREDENTIAL_KINDS)[number];
 export const CREDENTIAL_SALT_POLICY: Readonly<Record<CredentialKind, "salted" | "unsalted">> = {
   channel_token: "salted",
   email_link: "unsalted",
+  oauth_flow: "salted",
 };
 
 /** The salt length (HKDF-SHA256 HashLen, RFC 5869 section 3.1). */

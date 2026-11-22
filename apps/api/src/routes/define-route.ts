@@ -99,7 +99,10 @@ export interface RouteSpec<
   readonly body?: B;
   /** Strict by default: an unknown query key is refused. */
   readonly query?: Q;
-  /** The one opt-out of a strict query, for the SPA shell route; every other route refuses it at registration. */
+  /**
+   * The opt-out of a strict query, for the SPA shell route and the OAuth callback (a provider may add parameters,
+   * RFC 6749 section 4.1.2): the route's schema names the keys it reads and the rest is ignored.
+   */
   readonly looseQuery?: boolean;
   readonly params?: P;
   /** The route authenticates by its cookie alone: a request carrying an `Authorization` header is refused. */
