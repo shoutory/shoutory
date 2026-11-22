@@ -33,6 +33,14 @@
       "source": "./src/connect/flow.ts",
       "default": "./dist/connect/flow.js"
     },
+    "./content": {
+      "source": "./src/content/document.ts",
+      "default": "./dist/content/document.js"
+    },
+    "./content/snapshot": {
+      "source": "./src/content/snapshot.ts",
+      "default": "./dist/content/snapshot.js"
+    },
     "./counting": {
       "source": "./src/counting/count-text.ts",
       "default": "./dist/counting/count-text.js"
@@ -72,6 +80,10 @@
     "./password": {
       "source": "./src/password/policy.ts",
       "default": "./dist/password/policy.js"
+    },
+    "./time": {
+      "source": "./src/time/resolve-local.ts",
+      "default": "./dist/time/resolve-local.js"
     },
     "./storage": {
       "source": "./src/storage/storage.ts",
