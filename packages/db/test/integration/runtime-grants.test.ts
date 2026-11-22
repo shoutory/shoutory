@@ -54,6 +54,10 @@ const EXACT: Record<string, Record<string, string[]>> = {
   // 0015: the connect state is template W with no runtime grant at all (R546); only its definers reach it.
   oauth_flows: {},
   connect_challenges: {},
+  // 0016: the media tables are template W and read-only to the runtime roles: only the media definers write them.
+  media_assets: { shoutory_app: READ, shoutory_worker: READ },
+  media_uploads: { shoutory_app: READ, shoutory_worker: READ },
+  media_derivatives: { shoutory_app: READ, shoutory_worker: READ },
 };
 // "role table.column privilege": the column-level grants, and the only ones.
 const COLUMN_GRANTS = [

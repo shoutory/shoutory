@@ -219,6 +219,59 @@ REGISTRY["app.sync_cursors"] = {
     changeKey: WA,
   },
 };
+// Migration 0016: the media tables are template W (the app role only reads them; the planted grants try the policies).
+const MA = randomUUID();
+const MB = randomUUID();
+const assetRow = (id: string, workspace: string) =>
+  `INSERT INTO app.media_assets (id, workspace_id, object_key, file_name, source, created_by)
+   VALUES ('${id}', '${workspace}', 'ws/${workspace}/${id}/1/original', 'matrix.png', 'upload', '${UA}')`;
+REGISTRY["app.media_assets"] = {
+  key: "workspace_id",
+  a: WA,
+  b: WB,
+  seed: [assetRow(MA, WA), assetRow(MB, WB)],
+  insertForB: () => assetRow(randomUUID(), WB),
+  write: {
+    update: "UPDATE app.media_assets SET tags = tags",
+    insertOwn: () => assetRow(randomUUID(), WA),
+    insertWs: WA,
+    changeWs: WA,
+    changeKey: WA,
+  },
+};
+const derivativeRow = (asset: string, workspace: string, profile: string) =>
+  `INSERT INTO app.media_derivatives (workspace_id, media_id, profile, object_key, state)
+   VALUES ('${workspace}', '${asset}', '${profile}', 'ws/${workspace}/${asset}/1/${profile}', 'pending')`;
+REGISTRY["app.media_derivatives"] = {
+  key: "workspace_id",
+  a: WA,
+  b: WB,
+  seed: [derivativeRow(MA, WA, "thumb"), derivativeRow(MB, WB, "thumb")],
+  insertForB: () => derivativeRow(MB, WB, "other"),
+  write: {
+    update: "UPDATE app.media_derivatives SET error = error",
+    insertOwn: () => derivativeRow(MA, WA, "other"),
+    insertWs: WA,
+    changeWs: WA,
+    changeKey: WA,
+  },
+};
+const uploadRow = (asset: string, workspace: string) =>
+  `INSERT INTO app.media_uploads (workspace_id, media_id, expires_at) VALUES ('${workspace}', '${asset}', now())`;
+REGISTRY["app.media_uploads"] = {
+  key: "workspace_id",
+  a: WA,
+  b: WB,
+  seed: [uploadRow(MA, WA), uploadRow(MB, WB)],
+  insertForB: () => uploadRow(MB, WB),
+  write: {
+    update: "UPDATE app.media_uploads SET parts_done = parts_done",
+    insertOwn: () => uploadRow(MA, WA),
+    insertWs: WA,
+    changeWs: WA,
+    changeKey: WA,
+  },
+};
 const TABLES = Object.keys(REGISTRY);
 const WRITABLE = TABLES.filter((table) => REGISTRY[table]?.write);
 
@@ -288,6 +341,9 @@ async function seed(admin: Client): Promise<void> {
     "app.channels",
     "app.channel_capability_snapshots",
     "app.sync_cursors",
+    "app.media_assets",
+    "app.media_derivatives",
+    "app.media_uploads",
   ];
   for (const table of order) for (const sql of REGISTRY[table]?.seed ?? []) await admin.query(sql);
   const viewer = await admin.query("SELECT id FROM app.roles WHERE workspace_id IS NULL AND key = 'viewer'");

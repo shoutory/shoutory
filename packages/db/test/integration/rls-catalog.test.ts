@@ -329,6 +329,46 @@ const DEFINERS: Definer[] = [
     args: "workspace_id uuid, provider_id text, code_hash bytea",
     callers: APP_WORKER,
   },
+  // 0016 (R551): the media writers. One principal helper (a rank argument, no lock) and the immutability guard.
+  {
+    name: "media_caller",
+    args: "workspace_id uuid, min_rank integer, job_ok boolean",
+    callers: [],
+    helper: true,
+  },
+  { name: "media_guard", args: "", callers: [], helper: true },
+  {
+    name: "media_register",
+    args: "workspace_id uuid, file_name text, mime text, source text, source_ref text, multipart_upload_id text, part_size integer",
+    callers: ["shoutory_app"],
+  },
+  {
+    name: "media_mark_uploaded",
+    args: "workspace_id uuid, asset_id uuid, digest bytea, byte_size bigint, mime text",
+    callers: ["shoutory_app"],
+  },
+  {
+    name: "media_advance",
+    args: "workspace_id uuid, asset_id uuid, from_state text, to_state text, reject_reason text, facts jsonb",
+    callers: APP_WORKER,
+  },
+  {
+    name: "media_derivative_put",
+    args: "workspace_id uuid, asset_id uuid, profile text, state text, digest bytea, byte_size bigint, error text",
+    callers: ["shoutory_worker"],
+  },
+  {
+    name: "media_upload_progress",
+    args: "workspace_id uuid, asset_id uuid, parts_done integer[]",
+    callers: APP_WORKER,
+  },
+  {
+    name: "media_set_metadata",
+    args: "workspace_id uuid, asset_id uuid, file_name text, tags text[], in_library boolean",
+    callers: ["shoutory_app"],
+  },
+  { name: "media_object_removed", args: "workspace_id uuid, asset_id uuid", callers: ["shoutory_worker"] },
+  { name: "media_gc_candidates", args: "lim integer", callers: ["shoutory_worker"] },
 ];
 const TENANCY_TABLES = ["organizations", "organization_members", "workspaces", "workspace_members", "roles"];
 const RUNTIME_AND_OWNER_ROLES = [

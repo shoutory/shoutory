@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   customType,
   date,
@@ -483,4 +484,54 @@ export const connectChallenges = app.table("connect_challenges", {
   codeHash: bytea("code_hash").notNull(),
   expiresAt: stamp("expires_at").notNull(),
   consumedAt: stamp("consumed_at"),
+});
+
+// An uploaded original and what is known of it; written only by the media definers.
+export const mediaAssets = app.table("media_assets", {
+  id: id(),
+  workspaceId: uuid("workspace_id").notNull(),
+  objectKey: text("object_key").notNull(),
+  fileName: text("file_name").notNull(),
+  mime: text("mime"),
+  byteSize: bigint("byte_size", { mode: "number" }),
+  width: integer("width"),
+  height: integer("height"),
+  durationMs: integer("duration_ms"),
+  codecFacts: jsonb("codec_facts"),
+  sha256: bytea("sha256"),
+  state: text("state").notNull().default("pending_upload"),
+  rejectReason: text("reject_reason"),
+  inLibrary: boolean("in_library").notNull().default(false),
+  tags: text("tags").array().notNull().default(sql`'{}'`),
+  source: text("source").notNull(),
+  sourceRef: text("source_ref"),
+  createdBy: uuid("created_by").notNull(),
+  createdAt: stamp("created_at").notNull().default(sql`clock_timestamp()`),
+  deletedAt: stamp("deleted_at"),
+  objectRemovedAt: stamp("object_removed_at"),
+});
+
+// The upload session of an asset (multipart id and parts; empty for a single request).
+export const mediaUploads = app.table("media_uploads", {
+  id: id(),
+  workspaceId: uuid("workspace_id").notNull(),
+  mediaId: uuid("media_id").notNull(),
+  multipartUploadId: text("multipart_upload_id"),
+  partSize: integer("part_size"),
+  partsDone: integer("parts_done").array(),
+  expiresAt: stamp("expires_at").notNull(),
+  completedAt: stamp("completed_at"),
+});
+
+// A processed copy of an original, one per profile.
+export const mediaDerivatives = app.table("media_derivatives", {
+  id: id(),
+  workspaceId: uuid("workspace_id").notNull(),
+  mediaId: uuid("media_id").notNull(),
+  profile: text("profile").notNull(),
+  objectKey: text("object_key").notNull(),
+  state: text("state").notNull().default("pending"),
+  sha256: bytea("sha256"),
+  byteSize: bigint("byte_size", { mode: "number" }),
+  error: text("error"),
 });
