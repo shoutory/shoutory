@@ -101,6 +101,8 @@ export const rateBuckets = app.table(
     key: text("key").notNull(),
     tokens: doublePrecision("tokens").notNull(),
     refilledAt: stamp("refilled_at").notNull().default(sql`clock_timestamp()`),
+    pausedUntil: stamp("paused_until"),
+    pauseReason: text("pause_reason"),
   },
   (table) => [primaryKey({ columns: [table.scope, table.key] })],
 );

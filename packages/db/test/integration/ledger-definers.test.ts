@@ -873,11 +873,18 @@ describe("the ledger tables are written only by ledger definers", () => {
         ORDER BY p.proname`,
     );
     expect(writers.map((row) => row.proname)).toEqual([
+      "admit_due_targets",
+      "claim_operations",
+      "claim_polls",
+      "claim_reconciles",
+      "heartbeat",
       "ledger_add_evidence",
+      "ledger_due_move",
       "operation_cancel",
       "operation_insert",
       "operation_transition",
       "record_evidence",
+      "sweep_expired_leases",
     ]);
     expect(writers.filter((row) => row.owner !== "shoutory_definer")).toEqual([]);
     // A worker that skips the definers is refused by the grants, not by a policy.
@@ -898,6 +905,7 @@ describe("the ledger tables are written only by ledger definers", () => {
         "blocked_since",
         "effect",
         "external_id",
+        "fencing_token",
         "heartbeat_at",
         "last_actor",
         "lease_expires_at",

@@ -84,6 +84,16 @@ const COLUMN_GRANTS = [
   // R533 (D): a channel's nickname is the one column the app role writes; connection_state and state_reason have
   // no runtime UPDATE grant, so a state can only come from a definer that checks the move.
   "shoutory_app channels.nickname UPDATE",
+  // The worker reads the seven columns of a channel it needs to act on an operation: no secret and no display column.
+  ...[
+    "id",
+    "workspace_id",
+    "provider_id",
+    "provider_account_id",
+    "instance_host",
+    "connection_state",
+    "capability_epoch",
+  ].map((column) => `shoutory_worker channels.${column} SELECT`),
   // The digest of an invitation is the one column the app role never reads.
   ...[
     "id",

@@ -692,7 +692,7 @@ const GRANTS: Record<string, string[]> = {
   operation_attempts: ["DELETE", "SELECT"],
   operation_evidence: ["INSERT"],
   operation_resolutions: [],
-  usage_reservations: ["DELETE", "SELECT"],
+  usage_reservations: ["DELETE", "INSERT", "SELECT"],
   ledger_transitions: ["SELECT"],
 };
 const POLICIES = [

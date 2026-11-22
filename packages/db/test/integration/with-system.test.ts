@@ -21,6 +21,11 @@ describe("withSystem", () => {
     expect(inside.rows[0]).toEqual({ kind: "job", purpose: "outbox_relay", ids: [] });
   });
 
+  it("runs the ledger runtime's jobs under the ledger purpose", async () => {
+    const inside = await withSystem(db.pool("worker"), "ledger", (tx) => tx.query(SEEN));
+    expect(inside.rows[0]).toEqual({ kind: "job", purpose: "ledger", ids: [] });
+  });
+
   it.each(["", "unknown", "outbox_relay'; --", "OUTBOX_RELAY"])(
     "the purpose %j is refused before any statement runs",
     async (purpose) => {

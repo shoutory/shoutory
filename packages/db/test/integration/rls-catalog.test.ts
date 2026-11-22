@@ -385,6 +385,42 @@ const DEFINERS: Definer[] = [
     args: "workspace_id uuid, operation_id uuid, kind text, level text, outcome_kind text, refs jsonb",
     callers: ["shoutory_worker"],
   },
+  // 0021: the runtime of the ledger. Each runs for a worker job under the ledger purpose; the helper is their caller check.
+  { name: "ledger_caller", args: "", callers: [], helper: true },
+  { name: "admit_due_targets", args: "p_limit integer, p_providers jsonb", callers: ["shoutory_worker"] },
+  {
+    name: "claim_operations",
+    args: "p_queue text, p_limit integer, p_owner text",
+    callers: ["shoutory_worker"],
+  },
+  {
+    name: "bucket_take_scoped",
+    args: "p_key text, p_scope text, p_capacity integer, p_window_seconds integer, p_cost integer",
+    callers: ["shoutory_worker"],
+  },
+  {
+    name: "bucket_pause",
+    args: "p_key text, p_scope text, p_until timestamp with time zone, p_reason text",
+    callers: ["shoutory_worker"],
+  },
+  { name: "sweep_expired_leases", args: "", callers: ["shoutory_worker"] },
+  { name: "sweep_due_moves", args: "", callers: ["shoutory_worker"] },
+  { name: "ledger_due_move", args: "p_ws uuid, p_id uuid", callers: [], helper: true },
+  {
+    name: "claim_polls",
+    args: "p_queue text, p_limit integer, p_owner text, p_lease_seconds integer",
+    callers: ["shoutory_worker"],
+  },
+  {
+    name: "claim_reconciles",
+    args: "p_queue text, p_limit integer, p_owner text, p_lease_seconds integer, p_class_e_kinds text[]",
+    callers: ["shoutory_worker"],
+  },
+  {
+    name: "heartbeat",
+    args: "p_id uuid, p_token bigint, p_owner text, p_extend_seconds integer",
+    callers: ["shoutory_worker"],
+  },
   { name: "operation_cancel", args: "workspace_id uuid, operation_id uuid", callers: ["shoutory_app"] },
   { name: "operation_insert", args: "workspace_id uuid, fields jsonb, actor text", callers: [] },
   {
