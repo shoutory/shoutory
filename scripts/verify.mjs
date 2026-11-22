@@ -95,21 +95,17 @@ const gitMessage = () =>
   process.env.PR_TITLE ||
   spawnSync("git", ["log", "-1", "--format=%B"], { cwd: root, encoding: "utf8" }).stdout;
 
-// What the image is built from (the workspaces its Dockerfile copies, the Dockerfile and the root files that fix the
-// install): a local run executes the image steps only when one of these changed.
+// What makes a local run build the image and drive the browser: the web app, the Dockerfile and the root files that fix
+// the install. A change in the api, db, core or provider packages leaves both steps to the full run on main (the
+// browser and image checks take minutes and the unit, integration and contract steps already cover those packages).
 const IMAGE_INPUTS = [
-  "apps/api/**",
   "apps/web/**",
-  "packages/core/**",
-  "packages/db/**",
-  "packages/provider-sdk/**",
   "docker/**",
   "package.json",
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
   ".nvmrc",
-  "tsconfig.json",
-  "tsconfig.base.json",
+  "tsconfig*.json",
   ".dockerignore",
   "scripts/image-smoke.mjs",
 ];

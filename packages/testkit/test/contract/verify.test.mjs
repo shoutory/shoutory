@@ -78,8 +78,10 @@ const ALWAYS = ["unit", "lint", "typecheck", "gitleaks"];
 const SELECTIONS = [
   ["docs only", ["docs/guide/x.md"], {}, ["unit", ...ALWAYS], ["e2e", "image-smoke"]],
   ["a web source", ["apps/web/src/a.tsx"], {}, ["e2e", "image-smoke"], []],
-  ["an api source", ["apps/api/src/a.ts"], {}, ["e2e", "image-smoke"], []],
-  ["a core package", ["packages/core/src/a.ts"], {}, ["e2e", "image-smoke"], []],
+  // The api, db, core and provider packages leave the browser and image steps to the full run on main.
+  ["an api source", ["apps/api/src/a.ts"], {}, ALWAYS, ["e2e", "image-smoke"]],
+  ["a core package", ["packages/core/src/a.ts"], {}, ALWAYS, ["e2e", "image-smoke"]],
+  ["a db migration", ["packages/db/migrations/0018_x.sql"], {}, ["unit", ...ALWAYS], ["e2e", "image-smoke"]],
   ["a spec only", ["e2e/specs/a.spec.ts"], {}, ["e2e"], ["image-smoke"]],
   ["the Dockerfile", ["docker/Dockerfile"], {}, ["e2e", "image-smoke"], []],
   // A move lists the old path and the new one (`--no-renames`), so leaving a watched folder still selects the steps.
@@ -118,7 +120,7 @@ test("each changed path selects exactly its steps", () => {
   }
 });
 
-test("the e2e watch list covers every path the Dockerfile COPYs", () => {
+test("every workspace the Dockerfile COPYs still gets the browser and image steps on main", () => {
   const dockerfile = readFileSync(join(root, "docker/Dockerfile"), "utf8");
   // `COPY --from=build /app/<dir>/<name> ...`: the first two segments name the workspace the image takes from.
   const copied = [...dockerfile.matchAll(/^COPY --from=build \/app\/((?:apps|packages)\/[^/\s]+)\//gm)].map(
@@ -126,10 +128,8 @@ test("the e2e watch list covers every path the Dockerfile COPYs", () => {
   );
   assert.ok(copied.length > 0, "no COPY of a workspace was found");
   for (const dir of new Set(copied)) {
-    assert.ok(
-      selected([`${dir}/src/a.ts`]).includes("e2e"),
-      `${dir} is copied into the image but not watched`,
-    );
+    const names = selected([`${dir}/src/a.ts`], { ref: "refs/heads/main" });
+    assert.ok(names.includes("e2e") && names.includes("image-smoke"), `${dir}: main must run both`);
   }
 });
 
