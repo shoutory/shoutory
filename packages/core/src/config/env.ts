@@ -246,6 +246,41 @@ export function parseStorageEnv(env: Env): StorageConfig {
   };
 }
 
+// The upload scan hook: `off` (the default) or `warn`, which logs a scan that finds something or fails and goes on. The
+// scanner is the operator's own clamd, so its host is a setting and never a workspace field: a host name or address
+// with no userinfo or path and not a metadata or link-local address (the S3 endpoint precedent).
+// A host made only of digits is refused: a connect reads it as one number (2852039166 is 169.254.169.254).
+const isScannerHost = (value: string) =>
+  /^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$/.test(value) &&
+  !/^\d+$/.test(value) &&
+  !isMetadataOrLinkLocal(value);
+const scanSchema = z.object({
+  SHOUTORY_MEDIA_SCAN: z.enum(["off", "warn"]).default("off"),
+  SHOUTORY_CLAMAV_HOST: text
+    .refine(isScannerHost, "must be a host name or address with no userinfo or path")
+    .optional(),
+  SHOUTORY_CLAMAV_PORT: z
+    .string()
+    .regex(/^\d{1,5}$/, "must be a port number")
+    .transform(Number)
+    .pipe(z.number().int().min(1).max(65_535))
+    .default(3310),
+});
+
+export type MediaScanConfig = { mode: "off" } | { mode: "warn"; host: string; port: number };
+
+/** The scan hook settings alone, or a refusal that names the variable. */
+export function parseMediaScanEnv(env: Env): MediaScanConfig {
+  const scan = parseWith(scanSchema, env);
+  if (scan.SHOUTORY_MEDIA_SCAN === "off") return { mode: "off" };
+  if (scan.SHOUTORY_CLAMAV_HOST === undefined)
+    throw new ConfigError(
+      "SHOUTORY_CLAMAV_HOST",
+      "SHOUTORY_CLAMAV_HOST is required with SHOUTORY_MEDIA_SCAN=warn",
+    );
+  return { mode: "warn", host: scan.SHOUTORY_CLAMAV_HOST, port: scan.SHOUTORY_CLAMAV_PORT };
+}
+
 export interface Config {
   role: ServerRole;
   /** Set for every role that serves HTTP; only a worker may lack it. */
@@ -269,6 +304,7 @@ export interface Config {
   /** The release channel of this build: `stable` unless the image says `beta` or `nightly`. */
   releaseChannel: (typeof RELEASE_CHANNELS)[number];
   storage: StorageConfig;
+  mediaScan: MediaScanConfig;
   /** Only the URLs of the roles this process role connects as (`URL_ROLES`); read one through `databaseUrlOf`. */
   databaseUrls: Readonly<Partial<Record<Role, SealedSecret>>>;
 }
@@ -348,6 +384,7 @@ export function parseEnv(env: Env): Config {
     mailDkimSelector: http.data.SHOUTORY_MAIL_DKIM_SELECTOR,
     releaseChannel: http.data.SHOUTORY_RELEASE_CHANNEL,
     storage: parseStorageEnv(env),
+    mediaScan: parseMediaScanEnv(env),
     databaseUrls: Object.fromEntries(
       URL_ROLES[http.data.SHOUTORY_ROLE].map((r) => [r, secret(roleVariable("SHOUTORY_DATABASE_URL_", r))]),
     ),

@@ -14,5 +14,6 @@
     "OFL-1.1",
     "Python-2.0",
     "Unicode-3.0"
-  ]
+  ],
+  "allowedPackages": ["@img/sharp-*"]
 }

@@ -15,7 +15,7 @@
       "ignoreDependencies": ["happy-dom", "@lingui/cli", "cldr-dates-full"]
     },
     "apps/api": {
-      "entry": ["src/main.ts"],
+      "entry": ["src/main.ts", "src/jobs/media/sharp-child.ts"],
       "project": ["src/**", "test/**"]
     }
   }

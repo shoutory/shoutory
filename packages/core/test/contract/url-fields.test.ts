@@ -27,6 +27,7 @@ const H3_IDS = [
   "rss",
   "s3-endpoint",
   "s3-public-endpoint",
+  "clamav-host",
   "smtp-url",
   "otlp-endpoint",
   "mail-check-dns",
@@ -62,8 +63,10 @@ describe("every URL field names a guard route (NFR-SEC-11, H3)", () => {
       ["server-instance-url", "webhook-target", "media-import", "rss", "ai-base-url"].map(route),
     ).toEqual(Array(5).fill("egress"));
     expect(
-      ["s3-endpoint", "s3-public-endpoint", "smtp-url", "otlp-endpoint", "mail-check-dns"].map(route),
-    ).toEqual(Array(5).fill("operator_exception"));
+      ["s3-endpoint", "s3-public-endpoint", "clamav-host", "smtp-url", "otlp-endpoint", "mail-check-dns"].map(
+        route,
+      ),
+    ).toEqual(Array(6).fill("operator_exception"));
   });
 
   it.each([

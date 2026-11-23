@@ -5,6 +5,11 @@
     "reason": "The operator's own S3-compatible endpoint (SHOUTORY_S3_ENDPOINT); no user names this host. Private ranges are the normal case, so the user-URL policy would refuse it."
   },
   {
+    "id": "media-scan",
+    "path": "apps/api/src/jobs/media/scan.ts",
+    "reason": "The operator's own clamd scanner (SHOUTORY_CLAMAV_HOST and SHOUTORY_CLAMAV_PORT, validated at start-up); the upload scan hook opens the socket and no user names the host."
+  },
+  {
     "id": "smtp-driver",
     "path": "apps/api/src/jobs/mail-sender.ts",
     "reason": "The operator's own SMTP relay (SHOUTORY_SMTP_URL); nodemailer opens the socket and no user names the host."

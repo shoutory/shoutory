@@ -12,6 +12,13 @@ import {
 
 const pkg = [{ name: "some-package" }];
 const licence = (expression) => licenceProblems({ [expression]: pkg }, allowlist.allowed);
+// The packages the allowlist names (sharp's prebuilt libvips), judged by name and never by licence at large.
+const named = (expression, ...names) =>
+  licenceProblems(
+    { [expression]: names.map((name) => ({ name })) },
+    allowlist.allowed,
+    allowlist.allowedPackages,
+  );
 const exclusion = (entry) => exclusionProblems(`minimumReleaseAgeExclude:${entry}\n`, "2026-11-17");
 const TWO_DOCUMENTS = [
   "lockfileVersion: '9.0'",
@@ -56,6 +63,37 @@ const CASES = [
   ["a trailing token fails", () => licence("MIT GPL-3.0"), 1],
   ["a missing closing parenthesis fails", () => licence("(MIT"), 1],
   ["an empty expression fails", () => licence(""), 1],
+  [
+    "sharp's libvips package, named in the allowlist, passes",
+    () => named("LGPL-3.0-or-later", "@img/sharp-libvips-linux-x64"),
+    0,
+  ],
+  [
+    "sharp's Windows platform package, named in the allowlist, passes",
+    () => named("Apache-2.0 AND LGPL-3.0-or-later", "@img/sharp-win32-x64"),
+    0,
+  ],
+  ["an LGPL package that is not named fails", () => named("LGPL-3.0-or-later", "some-lgpl-package"), 1],
+  [
+    "a named package under a GPL licence fails",
+    () => named("GPL-3.0-only", "@img/sharp-libvips-linux-x64"),
+    1,
+  ],
+  [
+    "a named package whose licence adds a GPL clause fails",
+    () => named("Apache-2.0 AND GPL-3.0-only", "@img/sharp-win32-x64"),
+    1,
+  ],
+  [
+    "only the unnamed package of one licence group fails",
+    () => named("LGPL-3.0-or-later", "@img/sharp-libvips-linux-x64", "some-lgpl-package"),
+    1,
+  ],
+  [
+    "a package that merely starts like a named one fails",
+    () => named("LGPL-3.0-or-later", "@img-evil/sharp-libvips-linux-x64"),
+    1,
+  ],
   ["an expired exclusion fails", () => exclusion("\n  - a@1.0.0 # until 2026-01-01, advisory"), 1],
   ["an undated exclusion fails", () => exclusion("\n  - a@1.0.0"), 1],
   ["an exclusion that has not expired passes", () => exclusion("\n  - a@1.0.0 # until 2026-12-01"), 0],

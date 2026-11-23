@@ -479,3 +479,29 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
 - Advisories: `pnpm audit --audit-level=high` reported none at adoption (to be re-read at each upgrade).
 - Rejected: the `command` runner (it reruns the whole suite per mutant); the TypeScript checker plugin (not needed: the run
   uses vitest only).
+
+## sharp 0.35.5
+
+- Used for: decoding an uploaded image in a child process (`apps/api/src/jobs/media/`), stripping every kind of metadata
+  and writing the `stripped` and `thumb` derivatives. It runs with a pixel limit, no cache and one thread, never in the
+  server process.
+- Licence: Apache-2.0. Its prebuilt libvips comes in platform packages (`@img/sharp-libvips-*` "LGPL-3.0-or-later",
+  `@img/sharp-<platform>` "Apache-2.0" or "Apache-2.0 AND LGPL-3.0-or-later"): unmodified and dynamically loaded, as the
+  ffmpeg binary is (Q-A1). `packages/testkit/licence-allowlist.json` names these packages (`allowedPackages`), never
+  LGPL at large. Published 2026-09-27, more than 14 days before adoption.
+- Install scripts: none. The package has only a `build` script and no platform package has any (registry documents read
+  2026-11-23); the install ran under `strictDepBuilds` with no build script allowed.
+- Egress: none.
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
+- Rejected: `jimp` (pure JavaScript, no pixel limit through libvips and far slower); `imagemagick` and `graphicsmagick`
+  binaries (a separate native install and a larger attack surface); a hand-written decoder.
+
+## file-type 22.3.0
+
+- Used for: naming the type of an uploaded file from its first 4100 bytes (`fileTypeFromBuffer`), so that the claimed
+  type of a file is never trusted.
+- Licence: MIT. Published 2026-10-29, more than 14 days before adoption. ESM only. Its install scripts: none.
+- Egress: none.
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
+- Rejected: the client's `Content-Type` and the file extension (both are chosen by the sender); `mmmagic` and `libmagic`
+  bindings (native modules).

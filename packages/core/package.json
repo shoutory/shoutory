@@ -105,6 +105,10 @@
       "source": "./src/storage/storage.ts",
       "default": "./dist/storage/storage.js"
     },
+    "./media": {
+      "source": "./src/media/media.ts",
+      "default": "./dist/media/media.js"
+    },
     "./keys": {
       "source": "./src/crypto/keys.ts",
       "default": "./dist/crypto/keys.js"

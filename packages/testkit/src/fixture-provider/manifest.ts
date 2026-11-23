@@ -8,7 +8,7 @@ export const fixtureManifest = {
   lifecycle: "beta",
   auth: { method: "api_key" },
   scopes: ["post.write"],
-  capabilities: ["text", "thread", "first_comment", "edit", "delete"],
+  capabilities: ["text", "image", "thread", "first_comment", "edit", "delete"],
   readBackMode: "A",
   idempotency: { mechanism: "header", keyWindowSeconds: 3600, resendAfterUnknown: "same_key_in_window" },
   retrySafety: {
@@ -52,5 +52,12 @@ export const fixtureManifest = {
   ],
   limits: {
     textLength: { value: 500, source: "https://docs.fixture.example/limits", checked: "2026-11-21" },
+    imageMaxBytes: { value: 5_242_880, source: "https://docs.fixture.example/limits", checked: "2026-11-21" },
+    imageMaxPixels: {
+      value: 25_000_000,
+      source: "https://docs.fixture.example/limits",
+      checked: "2026-11-21",
+    },
+    mediaMaxCount: { value: 4, source: "https://docs.fixture.example/limits", checked: "2026-11-21" },
   },
 } as const;

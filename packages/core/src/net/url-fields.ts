@@ -37,6 +37,7 @@ export const URL_FIELDS: readonly UrlField[] = [
   egress("ai-base-url", "M7"),
   exception("s3-endpoint", "s3-driver"),
   exception("s3-public-endpoint", "s3-driver"),
+  exception("clamav-host", "media-scan"),
   exception("smtp-url", "smtp-driver"),
   exception("otlp-endpoint", "otlp-exporter"),
   exception("mail-check-dns", "mail-check-dns"),

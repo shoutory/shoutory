@@ -39,9 +39,25 @@ function allowedExpression(expression, allowed) {
   return valid && at === tokens.length && result;
 }
 
-export function licenceProblems(licences, allowed) {
+// A package the allowlist names (`allowedPackages`, an exact name or a prefix ending in `*`) is not judged by its licence:
+// sharp's prebuilt libvips packages are LGPL, unmodified and dynamically loaded, and nothing else is.
+const named = (name, patterns) =>
+  patterns.some((pattern) =>
+    pattern.endsWith("*") ? name.startsWith(pattern.slice(0, -1)) : name === pattern,
+  );
+
+// The exemption covers only a licence expression made of these two (their LGPL and the Apache-2.0 of sharp itself).
+const EXEMPT_TOKENS = new Set(["LGPL-3.0-or-later", "Apache-2.0", "AND", "OR", "(", ")"]);
+const withinExemption = (expression) =>
+  (expression.match(/\(|\)|AND|OR|[^\s()]+/g) ?? []).every((token) => EXEMPT_TOKENS.has(token));
+
+export function licenceProblems(licences, allowed, allowedPackages = []) {
   return Object.entries(licences)
-    .filter(([expression]) => !allowedExpression(expression, allowed))
+    .map(([expression, found]) => [
+      expression,
+      withinExemption(expression) ? found.filter((p) => !named(p.name, allowedPackages)) : found,
+    ])
+    .filter(([expression, found]) => found.length > 0 && !allowedExpression(expression, allowed))
     .map(([expression, found]) => `licence ${expression} is not allowed: ${found.map((p) => p.name)}`);
 }
 
@@ -108,12 +124,14 @@ function changedFiles() {
 }
 
 function main() {
-  const allowed = JSON.parse(readFileSync("packages/testkit/licence-allowlist.json", "utf8")).allowed;
+  const { allowed, allowedPackages } = JSON.parse(
+    readFileSync("packages/testkit/licence-allowlist.json", "utf8"),
+  );
   const files = ["package.json", ...globSync("{apps,packages}/*/package.json")];
   files.push(...globSync("packages/providers/*/package.json"));
   const manifests = files.map((file) => ({ file, ...JSON.parse(readFileSync(file, "utf8")) }));
   const problems = [
-    ...licenceProblems(pnpmLicences(), allowed),
+    ...licenceProblems(pnpmLicences(), allowed, allowedPackages),
     ...lockfileChangeProblems(changedFiles()),
     ...lockProblems(readFileSync("pnpm-lock.yaml", "utf8")),
     ...exclusionProblems(readFileSync("pnpm-workspace.yaml", "utf8"), new Date().toISOString().slice(0, 10)),

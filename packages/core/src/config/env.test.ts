@@ -292,6 +292,49 @@ describe("start-up: storage settings (R331, R340)", () => {
   });
 });
 
+describe("start-up: the upload scan hook", () => {
+  const scan = (extra: Record<string, string>) => ({ ...valid, ...extra });
+
+  it("is off unless the operator turns it on, and `warn` needs a scanner address (default port 3310)", () => {
+    expect(parseEnv(valid).mediaScan).toEqual({ mode: "off" });
+    expect(
+      parseEnv(scan({ SHOUTORY_MEDIA_SCAN: "warn", SHOUTORY_CLAMAV_HOST: "clamav.internal" })).mediaScan,
+    ).toEqual({ mode: "warn", host: "clamav.internal", port: 3310 });
+    expect(
+      parseEnv(
+        scan({ SHOUTORY_MEDIA_SCAN: "warn", SHOUTORY_CLAMAV_HOST: "10.0.0.5", SHOUTORY_CLAMAV_PORT: "3311" }),
+      ).mediaScan,
+    ).toMatchObject({ host: "10.0.0.5", port: 3311 });
+  });
+
+  it.each([
+    ["a mode that does not exist", { SHOUTORY_MEDIA_SCAN: "require" }, "SHOUTORY_MEDIA_SCAN"],
+    ["warn with no scanner address", { SHOUTORY_MEDIA_SCAN: "warn" }, "SHOUTORY_CLAMAV_HOST"],
+    [
+      "the metadata address as the scanner",
+      { SHOUTORY_MEDIA_SCAN: "warn", SHOUTORY_CLAMAV_HOST: "169.254.169.254" },
+      "SHOUTORY_CLAMAV_HOST",
+    ],
+    [
+      "the metadata address written as one decimal number",
+      { SHOUTORY_MEDIA_SCAN: "warn", SHOUTORY_CLAMAV_HOST: "2852039166" },
+      "SHOUTORY_CLAMAV_HOST",
+    ],
+    [
+      "a scanner address with userinfo or a path",
+      { SHOUTORY_MEDIA_SCAN: "warn", SHOUTORY_CLAMAV_HOST: "user@clamav/x" },
+      "SHOUTORY_CLAMAV_HOST",
+    ],
+    [
+      "a port outside 1 to 65535",
+      { SHOUTORY_MEDIA_SCAN: "warn", SHOUTORY_CLAMAV_HOST: "clamav", SHOUTORY_CLAMAV_PORT: "70000" },
+      "SHOUTORY_CLAMAV_PORT",
+    ],
+  ])("refuses %s and names the variable", (_name, extra, variable) => {
+    expect(refusedVariable(scan(extra))).toBe(variable);
+  });
+});
+
 describe("start-up: web root setting (V-76)", () => {
   it("is optional: unset serves no web, a set absolute folder is read", () => {
     expect(parseEnv(valid).webRoot).toBeUndefined();
