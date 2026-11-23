@@ -12,6 +12,8 @@ import { refuseEgress } from "./ledger/held.js";
 import { subscribePublish } from "./ledger/subscribe.js";
 import { createLedgerTick } from "./ledger/tick.js";
 import { createMailSender, type MailSenderOptions } from "./mail-sender.js";
+import type { PipelineDeps } from "./media/pipeline.js";
+import { mediaUploadedHandler } from "./media/uploaded.js";
 import { createOutboxRelay } from "./outbox-relay.js";
 import {
   JOB_QUEUES,
@@ -26,6 +28,8 @@ export interface WorkerOptions {
   readonly pool: AppPool;
   readonly logger: Logger;
   readonly role: "worker" | "all";
+  /** What the image pipeline reads and writes: the same storage as the api, and the optional upload scan. */
+  readonly media: Pick<PipelineDeps, "storage" | "scan">;
   /** What the mail sender needs besides the pool and the logger. */
   readonly mail: Pick<
     MailSenderOptions,
@@ -152,6 +156,7 @@ export async function startWorker({
   pool,
   logger,
   role,
+  media,
   mail,
   registry = createRegistry(builtInManifests),
   adapters = {},
@@ -166,7 +171,8 @@ export async function startWorker({
   const closing = new AbortController();
   const beat = () =>
     withSystem(pool, "heartbeat", (tx) => tx.query("SELECT app.worker_heartbeat($1, $2)", [workerId, role]));
-  const relay = createOutboxRelay({ pool, handlers: {}, logger, intervalMs: relayIntervalMs });
+  const handlers = { "media.uploaded": mediaUploadedHandler({ pool, logger, ...media }) };
+  const relay = createOutboxRelay({ pool, handlers, logger, intervalMs: relayIntervalMs });
   const sender = createMailSender({ ...mail, pool, logger, intervalMs: mailIntervalMs });
   const ledger = createLedgerTick({
     pool,

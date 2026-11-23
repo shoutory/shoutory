@@ -15,6 +15,7 @@ import { createApp } from "./app.js";
 import { createAuth } from "./auth/auth.js";
 import { RANGE_HOST } from "./auth/hibp.js";
 import { type CliIo, collectSecrets, run } from "./cli/main.js";
+import { createClamdScan } from "./jobs/media/scan.js";
 import { startWorker } from "./jobs/worker.js";
 import { createLogger, type Logger } from "./logging/logger.js";
 import { createScrubber } from "./logging/scrub.js";
@@ -143,7 +144,10 @@ async function startWorkerRole(
 ): Promise<{ close(): Promise<void> }> {
   const url = databaseUrlOf(config, "worker").expose();
   const pool = createAppPool(url, (error) => logger.error({ err: error }, "worker database pool error"));
+  // The same storage as the api reads: the image pipeline runs here, and a driver that cannot open stops the start.
+  let storage: StorageDriver | undefined;
   try {
+    storage = createStorageDriver(config.storage);
     await assertMigrationsApplied(pool);
     // The worker and all roles need the sender; the configuration refuses a start without it.
     if (config.mailFrom === undefined) throw new Error("SHOUTORY_MAIL_FROM is required");
@@ -161,16 +165,22 @@ async function startWorkerRole(
       logger,
       role,
       mail,
+      media: {
+        storage,
+        ...(config.mediaScan.mode === "warn" ? { scan: createClamdScan(config.mediaScan) } : {}),
+      },
       fetchFor: providerFetch(config),
     });
     logger.info({ role }, "worker started");
     return {
       close: async () => {
         await worker.close();
+        storage?.close?.();
         await pool.end();
       },
     };
   } catch (error) {
+    storage?.close?.();
     await pool
       .end()
       .catch((endError: unknown) => logger.error({ err: endError }, "worker database pool did not close"));

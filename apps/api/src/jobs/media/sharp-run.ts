@@ -30,6 +30,8 @@ interface Options {
   readonly inputPath: string;
   readonly outputDir: string;
   readonly timeoutMs?: number;
+  /** Kills the child when the caller gives up (the relay's handler limit); the run then throws, like any crash. */
+  readonly signal?: AbortSignal;
 }
 
 const refusal = (reason: RejectReason): SharpResult => ({ ok: false, reason });
@@ -68,6 +70,7 @@ export async function runSharpChild(options: Options): Promise<SharpResult> {
     env: {},
     stdio: ["ignore", "pipe", "ignore"],
     windowsHide: true,
+    ...(options.signal ? { signal: options.signal, killSignal: "SIGKILL" as const } : {}),
   });
   let out = "";
   child.stdout.on("data", (data: Buffer) => {
@@ -80,7 +83,8 @@ export async function runSharpChild(options: Options): Promise<SharpResult> {
   }, options.timeoutMs ?? TIME_LIMIT_MS);
   const closed = await new Promise<number | null>((done) => {
     child.once("close", done);
-    child.once("error", () => done(null));
+    // A child that started is awaited to its `close`, an aborted one too: it is gone when this answers.
+    child.once("error", () => child.pid === undefined && done(null));
   });
   clearTimeout(timer);
   // The child answers and exits 0 for every image it judged. An exit that is not 0, a kill by a signal (the memory

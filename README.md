@@ -161,6 +161,15 @@ With driver `s3`, browsers upload straight to the bucket through a presigned URL
 the app's origin to `PUT` with the request headers `If-None-Match` and `x-amz-checksum-sha256` (and `Content-Length`,
 which browsers send themselves). Without them the browser's preflight is refused and the upload never starts.
 
+A completed upload is checked, stripped of its metadata and resized by the `worker` role (so also by `all`), which
+therefore needs the same storage settings as the `api`: with driver `fs`, the same `SHOUTORY_DATA_DIR` (mount the one
+volume in both containers), and with driver `s3`, the same endpoint, bucket and keys. A worker whose storage cannot be
+opened does not start. An image the worker cannot process in three tries is rejected as `processing_failed`. A post takes only
+ready media that fits its channel's limits: a medium still processing, rejected or over a limit is refused when the
+draft is saved (422 `media_unavailable`, with the refused limit in `details.rule`). A scheduled post whose media
+are not all ready when it falls due stays scheduled and is taken once they are; if they are still not ready when
+the workspace's late window ends, the target is recorded as missed.
+
 Generate real values with `openssl rand -base64 32`. The values below are examples only and are refused at start-up. To
 rotate, add a new `SHOUTORY_KEK_<ID>`, point `SHOUTORY_ACTIVE_KEY_ID` at it and keep the old key until no row uses it.
 

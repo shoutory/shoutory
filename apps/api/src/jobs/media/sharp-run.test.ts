@@ -69,6 +69,26 @@ describe("EXIF GPS is gone from every derivative", () => {
   });
 });
 
+describe("stripped is re-encoded at quality 90 for JPEG and WebP", () => {
+  // Detailed pixels, so that quality decides the size; the same pixels re-encoded at sharp's default (80) are smaller.
+  const pixels = Buffer.from(
+    Array.from({ length: 128 * 128 * 3 }, (_, i) => (i * 7919 + (i >> 3) * 31) % 251),
+  );
+  const source = (format: "jpeg" | "webp") =>
+    sharp(pixels, { raw: { width: 128, height: 128, channels: 3 } })
+      .toFormat(format, { quality: 100 })
+      .toBuffer();
+  it.each(["jpeg", "webp"] as const)("%s", async (format) => {
+    const bytes = await source(format);
+    const staged = await stage(bytes);
+    const result = await runSharpChild(staged);
+    if (!result.ok) throw new Error("the child refused the image");
+    const stripped = await readFile(result.files.stripped);
+    const atDefault = await sharp(bytes).rotate().toFormat(format).toBuffer();
+    expect(stripped.length).toBeGreaterThan(atDefault.length);
+  });
+});
+
 describe("the child gets no secrets and is killed at its time limit", () => {
   it("starts with an empty environment, whatever the server holds", async () => {
     process.env.SHOUTORY_CANARY = "canary-secret-1";
@@ -87,6 +107,17 @@ describe("the child gets no secrets and is killed at its time limit", () => {
   it("kills a child that outlasts its limit and answers a timeout, leaving no process", async () => {
     const staged = await stage(await jpeg());
     expect(await runSharpChild({ ...staged, timeoutMs: 1 })).toEqual({ ok: false, reason: "timeout" });
+    const pid = vi.mocked(spawn).mock.results.at(-1)?.value.pid as number;
+    expect(() => process.kill(pid, 0)).toThrow();
+    expect(await readdir(staged.outputDir)).toEqual([]);
+  });
+
+  it("kills a child whose caller gave up (an aborted signal), leaving no process and no file, and throws", async () => {
+    const staged = await stage(await jpeg());
+    const controller = new AbortController();
+    const pending = runSharpChild({ ...staged, signal: controller.signal });
+    controller.abort();
+    await expect(pending).rejects.toThrow();
     const pid = vi.mocked(spawn).mock.results.at(-1)?.value.pid as number;
     expect(() => process.kill(pid, 0)).toThrow();
     expect(await readdir(staged.outputDir)).toEqual([]);

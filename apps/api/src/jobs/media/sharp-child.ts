@@ -9,6 +9,9 @@ import sharp from "sharp";
 // decodes to about 400 MB. The pixel limit is also what bounds libvips' memory, which the parent's heap flag does not.
 const MAX_PIXELS = 50_000_000;
 const THUMB_WIDTH = 320;
+// The copy a provider receives is re-encoded, so it is kept closer to the original than sharp's default of 80; PNG and
+// GIF stay lossless.
+const STRIPPED_QUALITY = 90;
 const EXTENSIONS: Record<string, string> = { jpeg: "jpg", png: "png", gif: "gif", webp: "webp" };
 const MIMES: Record<string, string> = {
   jpeg: "image/jpeg",
@@ -34,7 +37,7 @@ async function run(inputPath: string, outputDir: string) {
   const strippedPath = join(outputDir, `stripped.${EXTENSIONS[format]}`);
   const stripped = await open(format === "gif" || format === "webp")
     .rotate()
-    .toFormat(format as "jpeg")
+    .toFormat(format as "jpeg", format === "jpeg" || format === "webp" ? { quality: STRIPPED_QUALITY } : {})
     .toFile(strippedPath);
   const thumbPath = join(outputDir, "thumb.webp");
   await open(false)

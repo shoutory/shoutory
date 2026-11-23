@@ -1,3 +1,5 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { SealedSecret } from "@shoutory/core/crypto";
 import { EnvKeyProvider } from "@shoutory/core/keys";
 import { withAdvisoryLock } from "@shoutory/db/locks";
@@ -7,6 +9,7 @@ import { PARTITION_CLASSES } from "../../src/jobs/registry.js";
 import { ensurePartitions, purgeExpired, startWorker } from "../../src/jobs/worker.js";
 import { createLogger } from "../../src/logging/logger.js";
 import { enqueueMail } from "../../src/mail/enqueue.js";
+import { createFsDriver } from "../../src/storage/fs-driver.js";
 import { startSmtpSink } from "../support/smtp-sink.js";
 
 const env = readTestEnv();
@@ -34,6 +37,7 @@ const options = (database: TestDatabase, smtpUrl = "smtp://127.0.0.1:9") => ({
   pool: database.pool("worker"),
   logger,
   role: "worker" as const,
+  media: { storage: createFsDriver(join(tmpdir(), "shoutory-worker-jobs-unused")) },
   mail: { keys, pepper, smtpUrl: new SealedSecret(smtpUrl), from: "noreply@mail.example.test" },
 });
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

@@ -1,3 +1,5 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { SealedSecret } from "@shoutory/core/crypto";
 import { EnvKeyProvider } from "@shoutory/core/keys";
 import { withSystem } from "@shoutory/db/context/system";
@@ -12,9 +14,12 @@ import { admitAndWake, createLedgerTick } from "../../src/jobs/ledger/tick.js";
 import { runTurn } from "../../src/jobs/ledger/turn.js";
 import { startWorker } from "../../src/jobs/worker.js";
 import { createLogger } from "../../src/logging/logger.js";
+import { createFsDriver } from "../../src/storage/fs-driver.js";
 import { seedDueTarget, seedWorkspace } from "../support/ledger-seed.js";
 
 const env = readTestEnv();
+// The worker's image pipeline is not exercised here: its storage is a folder nothing writes to.
+const media = { storage: createFsDriver(join(tmpdir(), "shoutory-ledger-tick-unused")) };
 
 // The tick of the ledger: admission sends its wake-up in its own transaction, at most one wake-up waits for a queue, and
 // a step of the tick that fails does not stop the others. Each row says what it fails against once the module exists;
@@ -94,6 +99,7 @@ describe("the worker's ledger tick", () => {
       pool: db.pool("worker"),
       logger,
       role: "worker",
+      media,
       mail: {
         keys,
         pepper: new SealedSecret("ledger-tick-pepper-for-tests-0123456789"),
@@ -126,6 +132,7 @@ describe("the publish subscription", () => {
       pool: db.pool("worker"),
       logger,
       role: "worker",
+      media,
       mail: {
         keys,
         pepper: new SealedSecret("ledger-tick-pepper-for-tests-0123456789"),
@@ -159,6 +166,7 @@ describe("a post admitted ahead of its time", () => {
       pool: db.pool("worker"),
       logger,
       role: "worker",
+      media,
       mail: {
         keys,
         pepper: new SealedSecret("ledger-tick-pepper-for-tests-0123456789"),
@@ -209,6 +217,7 @@ describe("a provider added without a migrate", () => {
       pool: db.pool("worker"),
       logger,
       role: "worker",
+      media,
       mail: {
         keys,
         pepper: new SealedSecret("ledger-tick-pepper-for-tests-0123456789"),

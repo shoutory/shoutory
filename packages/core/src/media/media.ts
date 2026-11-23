@@ -16,6 +16,8 @@ export const REJECT_REASONS = [
   "pixel_limit",
   "corrupt",
   "timeout",
+  // The image could not be processed after every retry: neither the image nor the clock is shown to be at fault.
+  "processing_failed",
   "too_large",
   "too_many",
   "infected",

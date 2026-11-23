@@ -40,16 +40,40 @@ let c1: string;
 let cOther: string;
 const media = { ready: "", pending: "", foreign: "" };
 
-async function plantMedia(workspace: string, state: string): Promise<string> {
+interface Facts {
+  /** The size of the `stripped` derivative, the one a provider receives. */
+  bytes?: number;
+  width?: number;
+  height?: number;
+  /** `false` plants a ready asset whose `stripped` derivative is missing. */
+  stripped?: boolean;
+}
+// An asset as the pipeline leaves it: a ready one has its sniffed type, its size in pixels and a ready `stripped` derivative.
+async function plantMedia(workspace: string, state: string, facts: Facts = {}): Promise<string> {
   const id = randomUUID();
-  await fx.admin((client) =>
-    client.query(
-      `INSERT INTO app.media_assets (id, workspace_id, object_key, file_name, source, created_by, state, sha256)
-       VALUES ($1::uuid, $2::uuid, 'ws/' || $2::text || '/' || $1::text || '/1/original', 'posts.png', 'upload',
-         $3::uuid, $4::text, CASE WHEN $4::text = 'ready' THEN sha256(convert_to($1::text, 'UTF8')) END)`,
-      [id, workspace, user("owner").id, state],
-    ),
-  );
+  const ready = state === "ready";
+  await fx.admin(async (client) => {
+    await client.query(
+      `INSERT INTO app.media_assets (id, workspace_id, object_key, file_name, mime, width, height, source, created_by, state, sha256)
+       VALUES ($1::uuid, $2::uuid, 'ws/' || $2::text || '/' || $1::text || '/1/original', 'posts.png', 'image/png', $5, $6,
+         'upload', $3::uuid, $4::text, CASE WHEN $4::text <> 'pending_upload' THEN sha256(convert_to($1::text, 'UTF8')) END)`,
+      [
+        id,
+        workspace,
+        user("owner").id,
+        state,
+        ready ? (facts.width ?? 400) : null,
+        ready ? (facts.height ?? 300) : null,
+      ],
+    );
+    if (ready && facts.stripped !== false)
+      await client.query(
+        `INSERT INTO app.media_derivatives (workspace_id, media_id, profile, object_key, state, sha256, byte_size)
+         VALUES ($1::uuid, $2::uuid, 'stripped', 'ws/' || $1::text || '/' || $2::text || '/1/stripped', 'ready',
+           sha256(convert_to($2::text || 'stripped', 'UTF8')), $3)`,
+        [workspace, id, facts.bytes ?? 1000],
+      );
+  });
   return id;
 }
 
@@ -493,6 +517,70 @@ const REFUSAL_ROWS: [string, () => unknown, number, string | undefined, string][
   ],
   ["no draft at all", () => ({}), 400, undefined, "validation_failed"],
 ];
+
+const attach = (...ids: string[]) =>
+  draftBody(variant(c1, { media: ids.map((media_id) => ({ media_id, alt_text: null, crop: null })) }));
+const refusedDetails = async (answer: Response) => [
+  answer.status,
+  ((await answer.json()) as { error?: { details?: unknown } }).error?.details,
+];
+
+describe("only ready media is attached, and only media the channel's rule takes (BG-8)", () => {
+  const STATES: [string, () => Promise<string>][] = [
+    ["uploaded", () => plantMedia(ws, "uploaded")],
+    ["processing", () => plantMedia(ws, "processing")],
+    ["rejected", () => plantMedia(ws, "rejected")],
+    ["deleted", () => plantMedia(ws, "deleted")],
+    ["ready without a stripped derivative", () => plantMedia(ws, "ready", { stripped: false })],
+    ["ready in another workspace", () => plantMedia(other, "ready")],
+  ];
+  it.each(STATES)("a medium that is %s is refused at create", async (_name, plant) => {
+    const answer = await call(user("editor"), "POST", base(ws), attach(await plant()));
+    expect(await refusedDetails(answer)).toEqual([422, { reason: "media_unavailable" }]);
+  });
+
+  it("a ready medium with its facts is taken, at create and at autosave", async () => {
+    const who = user("editor");
+    const made = await call(who, "POST", base(ws), attach(await plantMedia(ws, "ready")));
+    expect(made.status).toBe(201);
+    const { id, version_id: first } = await dataOf(made);
+    const saved = await call(who, "PATCH", `${base(ws)}/${id}`, attach(media.ready), match(first as string));
+    expect(saved.status).toBe(200);
+  });
+
+  it("autosave refuses a medium that is still processing", async () => {
+    const who = user("editor");
+    const { id, version_id: first } = await dataOf(await call(who, "POST", base(ws), draftBody(variant(c1))));
+    const answer = await call(
+      who,
+      "PATCH",
+      `${base(ws)}/${id}`,
+      attach(await plantMedia(ws, "processing")),
+      match(first as string),
+    );
+    expect(await refusedDetails(answer)).toEqual([422, { reason: "media_unavailable" }]);
+  });
+
+  // The fixture manifest allows 5 MiB, 25 MP and 4 media: a medium ready and valid at upload but outside the rule of the
+  // channel it is attached to is refused now, not at publish; the reason of the rule is named beside the code.
+  const RULES: [string, () => Promise<string[]>, string][] = [
+    ["over imageMaxBytes", async () => [await plantMedia(ws, "ready", { bytes: 5_242_881 })], "too_large"],
+    [
+      "over imageMaxPixels",
+      async () => [await plantMedia(ws, "ready", { width: 5001, height: 5000 })],
+      "pixel_limit",
+    ],
+    [
+      "a fifth medium over mediaMaxCount",
+      async () => Promise.all([1, 2, 3, 4, 5].map(() => plantMedia(ws, "ready"))),
+      "too_many",
+    ],
+  ];
+  it.each(RULES)("media %s is refused at create with the rule named", async (_name, plant, rule) => {
+    const answer = await call(user("editor"), "POST", base(ws), attach(...(await plant())));
+    expect(await refusedDetails(answer)).toEqual([422, { reason: "media_unavailable", rule }]);
+  });
+});
 
 describe("a draft the server refuses", () => {
   it.each(REFUSAL_ROWS)("%s", async (_what, body, status, reason, code) => {

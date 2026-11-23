@@ -1,12 +1,13 @@
 import { type Draft, settingsIssues } from "@shoutory/core/content";
 import { buildSnapshot, type Resolved, snapshotHash } from "@shoutory/core/content/snapshot";
+import { mediaFits, type RejectReason } from "@shoutory/core/media";
 import type { TenantTx } from "@shoutory/db/context";
 import { snapshotOf } from "@shoutory/provider-sdk/snapshot";
 import type { HealthProvider } from "../../channels/health.js";
 import { Refusal } from "../../errors/refusal.js";
 
 // What a draft needs from the server before it can be stored: the channels it names (they must exist in the workspace and
-// have a provider the app holds), the media it uses (a stored original with a hash) and the settings each channel
+// have a provider the app holds), the media it uses (ready, and inside the rules of its channel) and the settings each channel
 // accepts. One function turns a draft into the snapshot a version keeps and its hash, inside the transaction of the write.
 
 type Providers = Readonly<Record<string, HealthProvider>>;
@@ -14,11 +15,10 @@ type Defaults = Readonly<Record<string, string | number | boolean>>;
 
 const MAX_ISSUES = 20;
 
-// The media states that hold a hash: the set of `media_assets_live_hash_check`.
-const HASHED_MEDIA = "state IN ('uploaded', 'scanning', 'processing', 'ready')";
-
-const unprocessable = (reason: string): Refusal =>
-  new Refusal("unprocessable_content", `draft refused: ${reason}`, { details: { reason } });
+const unprocessable = (reason: string, rule?: RejectReason): Refusal =>
+  new Refusal("unprocessable_content", `draft refused: ${reason}`, {
+    details: { reason, ...(rule ? { rule } : {}) },
+  });
 
 async function providersOfChannels(
   tx: TenantTx,
@@ -46,20 +46,51 @@ async function providersOfChannels(
   return byChannel;
 }
 
-async function hashesOfMedia(
+interface ReadyMedium {
+  id: string;
+  sha256: string;
+  mime: string;
+  width: number;
+  height: number;
+  /** The size of the `stripped` copy: the bytes a provider receives. */
+  bytes: number;
+}
+
+/** The media a draft names, each one `ready` with its `stripped` copy in this workspace; any other is unavailable. */
+async function readyMedia(
   tx: TenantTx,
   workspaceId: string,
   draft: Draft,
-): Promise<Record<string, string>> {
+): Promise<Map<string, ReadyMedium>> {
   const ids = [...new Set(draft.variants.flatMap((v) => v.media.map((m) => m.media_id.toLowerCase())))];
-  if (ids.length === 0) return {};
-  const found = await tx.query<{ id: string; sha256: string }>(
-    `SELECT id, encode(sha256, 'hex') AS sha256 FROM app.media_assets
-     WHERE workspace_id = $1 AND id = ANY ($2::uuid[]) AND ${HASHED_MEDIA}`,
+  if (ids.length === 0) return new Map();
+  const found = await tx.query<ReadyMedium>(
+    `SELECT a.id, encode(a.sha256, 'hex') AS sha256, a.mime, a.width, a.height, d.byte_size::float8 AS bytes
+     FROM app.media_assets AS a
+     JOIN app.media_derivatives AS d ON d.workspace_id = a.workspace_id AND d.media_id = a.id
+       AND d.profile = 'stripped' AND d.state = 'ready'
+     WHERE a.workspace_id = $1 AND a.id = ANY ($2::uuid[]) AND a.state = 'ready'`,
     [workspaceId, ids],
   );
   if (found.rows.length !== ids.length) throw unprocessable("media_unavailable");
-  return Object.fromEntries(found.rows.map((row) => [row.id, row.sha256]));
+  return new Map(found.rows.map((row) => [row.id, row]));
+}
+
+/** The one rule set of core, with the manifest of each variant's channel: a medium it refuses is refused here, not at publish. */
+function checkMediaRules(
+  draft: Draft,
+  media: Map<string, ReadyMedium>,
+  channels: Map<string, HealthProvider>,
+) {
+  for (const variant of draft.variants) {
+    const rules = channels.get(variant.channel_id.toLowerCase())?.manifest;
+    for (const { media_id: id } of variant.media) {
+      const medium = media.get(id.toLowerCase());
+      if (!medium || !rules) continue;
+      const fit = mediaFits({ ...medium, count: variant.media.length }, rules);
+      if (!fit.ok) throw unprocessable("media_unavailable", fit.reason);
+    }
+  }
 }
 
 /** The settings of the draft against what each channel's provider declares; a refusal names the caller's own keys. */
@@ -84,7 +115,9 @@ export async function resolveDraft(
   now: Date,
 ) {
   const channels = await providersOfChannels(tx, workspaceId, draft, providers);
-  const media = await hashesOfMedia(tx, workspaceId, draft);
+  const ready = await readyMedia(tx, workspaceId, draft);
+  checkMediaRules(draft, ready, channels);
+  const media = Object.fromEntries([...ready.values()].map((medium) => [medium.id, medium.sha256]));
   const defaults = Object.fromEntries(
     [...channels].map(([id, provider]) => [id, provider.manifest.providerDefault ?? {}]),
   );

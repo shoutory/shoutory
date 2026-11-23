@@ -148,7 +148,15 @@ async function warnScan(deps: PipelineDeps, ws: string, id: string, path: string
 }
 
 /** Decodes the original in the sharp child and stores both derivatives; the facts of the image, or why it is refused. */
-async function derive(deps: PipelineDeps, job: Job, ws: string, id: string, asset: Asset, scan: boolean) {
+async function derive(
+  deps: PipelineDeps,
+  job: Job,
+  ws: string,
+  id: string,
+  asset: Asset,
+  scan: boolean,
+  signal?: AbortSignal,
+) {
   const dir = await mkdtemp(join(tmpdir(), "shoutory-media-"));
   try {
     const original = await deps.storage.get(asset.object_key);
@@ -156,7 +164,7 @@ async function derive(deps: PipelineDeps, job: Job, ws: string, id: string, asse
     const input = join(dir, "input");
     await pipeline(Readable.fromWeb(original as NodeReadableStream<Uint8Array>), createWriteStream(input));
     if (scan) await warnScan(deps, ws, id, input);
-    const result = await runSharpChild({ inputPath: input, outputDir: dir });
+    const result = await runSharpChild({ inputPath: input, outputDir: dir, ...(signal ? { signal } : {}) });
     if (!result.ok) return result;
     for (const profile of PROFILES)
       await putDerivative(deps, job, ws, id, profile, result.files[profile], asset.object_key);
@@ -187,11 +195,12 @@ async function judge(
   id: string,
   asset: Asset,
   scan: boolean,
+  signal?: AbortSignal,
 ): Promise<Verdict> {
   const sniffed = await sniff(deps.storage, asset.object_key);
   if (sniffed === undefined || !isImageType(sniffed)) return { ok: false, reason: "unsupported_type" };
   if (sniffed !== claimedType(asset.mime)) return { ok: false, reason: "type_mismatch" };
-  const derived = await derive(deps, job, ws, id, asset, scan);
+  const derived = await derive(deps, job, ws, id, asset, scan, signal);
   if (!derived.ok) return derived;
   if (derived.mime !== sniffed) return { ok: false, reason: "type_mismatch" };
   return { ok: true, facts: { width: derived.width, height: derived.height, mime: derived.mime } };
@@ -201,19 +210,50 @@ async function judge(
  * Takes one uploaded asset to `ready` or `rejected`. An asset that is not `uploaded` or `processing` is left as it is, so
  * a repeated or late call changes nothing; a `processing` one (a run that stopped) is continued.
  */
-export async function processAsset(deps: PipelineDeps, workspaceId: string, mediaId: string): Promise<void> {
-  const job: Job = (run) =>
+export async function processAsset(
+  deps: PipelineDeps,
+  workspaceId: string,
+  mediaId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const job = jobOf(deps, workspaceId);
+  await unlessLost(advanceAsset(deps, job, workspaceId, mediaId, signal));
+}
+
+/**
+ * The end of the bounded retry: an asset still `uploaded` or `processing` is rejected as `processing_failed` (through
+ * `processing`, the one move table has no `uploaded` to `rejected`); one that has finished is left as it is.
+ */
+export async function failAsset(deps: PipelineDeps, workspaceId: string, mediaId: string): Promise<void> {
+  const job = jobOf(deps, workspaceId);
+  const state = (await readAsset(job, workspaceId, mediaId))?.state;
+  if (state !== "uploaded" && state !== "processing") return;
+  await unlessLost(
+    (async () => {
+      if (state === "uploaded") await advance(job, workspaceId, mediaId, "uploaded", "processing", null);
+      await advance(job, workspaceId, mediaId, "processing", "rejected", "processing_failed");
+    })(),
+  );
+}
+
+function jobOf(deps: PipelineDeps, workspaceId: string): Job {
+  return (run) =>
     withTenant(
       deps.pool,
       { principalKind: "job", principalId: randomUUID(), workspaceIds: [workspaceId] },
       run,
     );
+}
+
+/**
+ * Two runs of one asset (a retry racing its first run): the loser's refused move is not an error. It returns at once;
+ * the other run owns the asset, and one it leaves `processing` by crashing is the bounded retry's. Any other refusal
+ * is rethrown.
+ */
+async function unlessLost(run: Promise<void>): Promise<void> {
   try {
-    await advanceAsset(deps, job, workspaceId, mediaId);
+    await run;
   } catch (error) {
-    // Two runs of one asset (a retry racing its first run): the loser's refused move is not an error. It returns at
-    // once; the other run owns the asset, and one it leaves `processing` by crashing is the bounded retry's. Any other
-    // refusal is rethrown.
     const refused = error as { code?: string; message?: string };
     const lost = refused.code === "SH409" && /^media_(advance|derivative_put)/.test(refused.message ?? "");
     if (!lost) throw error;
@@ -225,6 +265,7 @@ async function advanceAsset(
   job: Job,
   workspaceId: string,
   mediaId: string,
+  signal?: AbortSignal,
 ): Promise<void> {
   let asset = await readAsset(job, workspaceId, mediaId);
   // The scan belongs to the run that takes the asset out of `uploaded`; a resume of a `processing` one does not repeat it.
@@ -234,7 +275,7 @@ async function advanceAsset(
     asset = { ...asset, state: "processing" };
   }
   if (asset?.state !== "processing") return;
-  const verdict = await judge(deps, job, workspaceId, mediaId, asset, fresh);
+  const verdict = await judge(deps, job, workspaceId, mediaId, asset, fresh, signal);
   if (verdict.ok) await advance(job, workspaceId, mediaId, "processing", "ready", null, verdict.facts);
   else await advance(job, workspaceId, mediaId, "processing", "rejected", verdict.reason);
 }
