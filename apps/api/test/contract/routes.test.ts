@@ -61,7 +61,15 @@ describe("route registration", () => {
         );
     const read = "GET session library.view";
     const edit = "session library.edit";
-    expect(mediaOf(buildApp({ storage }))).toEqual([`POST ${edit}`, `POST ${edit}`, `PUT ${edit}`, read]);
+    // The filesystem driver takes a file in parts too: a route to sign them, and a PUT for each part.
+    expect(mediaOf(buildApp({ storage }))).toEqual([
+      `POST ${edit}`,
+      `POST ${edit}`,
+      `POST ${edit}`,
+      `PUT ${edit}`,
+      `PUT ${edit}`,
+      read,
+    ]);
     expect(mediaOf(buildApp({ storage, presigner }))).toEqual([`POST ${edit}`, `POST ${edit}`, read]);
     // The part-signing route exists only where storage can run multipart uploads.
     const multipart = {} as never;

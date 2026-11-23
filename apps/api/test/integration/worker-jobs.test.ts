@@ -1,12 +1,13 @@
+import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { SealedSecret } from "@shoutory/core/crypto";
 import { EnvKeyProvider } from "@shoutory/core/keys";
 import { withAdvisoryLock } from "@shoutory/db/locks";
 import { cloneTemplate, readTestEnv, type TestDatabase, withAdminClient } from "@shoutory/db/testing";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { PARTITION_CLASSES } from "../../src/jobs/registry.js";
-import { ensurePartitions, purgeExpired, startWorker } from "../../src/jobs/worker.js";
+import { ensurePartitions, purgeExpired, startWorker, sweepUploadParts } from "../../src/jobs/worker.js";
 import { createLogger } from "../../src/logging/logger.js";
 import { enqueueMail } from "../../src/mail/enqueue.js";
 import { createFsDriver } from "../../src/storage/fs-driver.js";
@@ -37,7 +38,10 @@ const options = (database: TestDatabase, smtpUrl = "smtp://127.0.0.1:9") => ({
   pool: database.pool("worker"),
   logger,
   role: "worker" as const,
-  media: { storage: createFsDriver(join(tmpdir(), "shoutory-worker-jobs-unused")) },
+  media: {
+    storage: createFsDriver(join(tmpdir(), "shoutory-worker-jobs-unused")),
+    partsRoot: join(tmpdir(), "shoutory-worker-jobs-unused"),
+  },
   mail: { keys, pepper, smtpUrl: new SealedSecret(smtpUrl), from: "noreply@mail.example.test" },
 });
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -60,7 +64,7 @@ const queueClientGone = async (database: TestDatabase) => {
 };
 
 describe("the scheduled upkeep of the worker role", () => {
-  it("registers ensure_partitions once and purge_expired once per retention class", async () => {
+  it("registers ensure_partitions once, purge_expired once per retention class and sweep_upload_parts once", async () => {
     const worker = await startWorker(options(db));
     try {
       const { schedules, classes } = await admin(async (a) => ({
@@ -68,7 +72,11 @@ describe("the scheduled upkeep of the worker role", () => {
         classes: (await a.query("SELECT class, kind FROM app.retention_classes ORDER BY class")).rows,
       }));
       const wanted = classes.map(({ class: name }) => ({ name: "purge_expired", key: name }));
-      expect(schedules).toEqual([{ name: "ensure_partitions", key: "" }, ...wanted]);
+      expect(schedules).toEqual([
+        { name: "ensure_partitions", key: "" },
+        ...wanted,
+        { name: "sweep_upload_parts", key: "" },
+      ]);
       const partitioned = classes.filter(({ kind }) => kind === "partition").map(({ class: name }) => name);
       expect([...PARTITION_CLASSES].sort()).toEqual(partitioned);
     } finally {
@@ -107,6 +115,66 @@ describe("the scheduled upkeep of the worker role", () => {
     expect(lines.slice(before).some((line) => line.includes(leaf) && line.includes('"level":"warn"'))).toBe(
       true,
     );
+  });
+});
+
+describe("the part sweep is the filesystem's alone", () => {
+  it("schedules no part sweep for a worker whose storage is not the filesystem", async () => {
+    const fresh = await cloneTemplate(env, inject("shoutoryTemplate"));
+    try {
+      const worker = await startWorker({
+        ...options(fresh),
+        media: { storage: createFsDriver(join(tmpdir(), "shoutory-worker-jobs-unused")) },
+      });
+      const names = await adminOf(() => fresh)(
+        async (a) => (await a.query("SELECT DISTINCT name FROM pgboss.schedule ORDER BY name")).rows,
+      );
+      await worker.close();
+      expect(names).toEqual([{ name: "ensure_partitions" }, { name: "purge_expired" }]);
+    } finally {
+      await fresh.drop();
+    }
+  });
+});
+
+// The nightly sweep of the filesystem's abandoned part files: what it removed and how many folders it walked are logged,
+// and a walk that ran out of time says so.
+describe("the sweep of upload parts", () => {
+  const NOW = new Date("2026-11-24T03:23:00Z");
+  const eightDays = new Date(NOW.getTime() - 8 * 86_400_000);
+  const planted = async (): Promise<string> => {
+    const root = await mkdtemp(join(tmpdir(), "shoutory-sweep-job-"));
+    const part = join(root, "ws/w1/m1/parts/1");
+    await mkdir(dirname(part), { recursive: true });
+    await writeFile(part, "stale-part-1");
+    await utimes(part, eightDays, eightDays);
+    return root;
+  };
+
+  it("removes a stale part and logs the count of files removed and of folders visited", async () => {
+    const root = await planted();
+    try {
+      const before = lines.length;
+      await sweepUploadParts(root, logger, { now: NOW });
+      expect(
+        lines.slice(before).some((line) => line.includes('"removed":1') && line.includes('"visited":')),
+      ).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("warns when the walk stopped at its deadline", async () => {
+    const root = await planted();
+    try {
+      const before = lines.length;
+      await sweepUploadParts(root, logger, { now: NOW, deadlineMs: 0 });
+      expect(
+        lines.slice(before).some((line) => line.includes('"level":"warn"') && line.includes('"removed":0')),
+      ).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
 

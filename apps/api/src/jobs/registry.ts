@@ -7,6 +7,8 @@ const retentionClass = z.string().regex(/^[a-z_.]{1,64}$/);
 export const JOB_QUEUES = {
   ensure_partitions: { payload: z.strictObject({}), cron: "17 2 * * *" },
   purge_expired: { payload: z.strictObject({ class: retentionClass }), cron: "41 2 * * *" },
+  // The filesystem driver's abandoned part files and temporary leftovers; scheduled only for that driver.
+  sweep_upload_parts: { payload: z.strictObject({}), cron: "23 3 * * *" },
 } as const;
 export type JobQueue = keyof typeof JOB_QUEUES;
 

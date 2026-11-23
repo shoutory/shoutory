@@ -5,6 +5,7 @@ import { Refusal } from "../../errors/refusal.js";
 import type { Logger } from "../../logging/logger.js";
 import type { S3Multipart, S3Presigner } from "../../storage/s3-driver.js";
 import { type App, defineRoute } from "../define-route.js";
+import { finishFsParts, registerFsParts } from "./fs-parts.js";
 import {
   finishMultipart,
   MAX_MULTIPART_BYTES,
@@ -22,6 +23,7 @@ import {
   LIVE,
   markUploaded,
   mediaParams,
+  OCTET_STREAM,
   originalKey,
   type Scope,
   settled,
@@ -80,9 +82,11 @@ interface S3Side {
   presigner: S3Presigner | undefined;
   multipart: S3Multipart | undefined;
   logger: Logger;
+  /** Whether the storage takes a file above 64 MiB in parts: S3 with its multipart half, or the filesystem. */
+  parts: boolean;
 }
 
-function registerUpload(app: App, { presigner, multipart, logger }: S3Side): void {
+function registerUpload(app: App, { presigner, multipart, logger, parts }: S3Side): void {
   defineRoute(app, {
     method: "post",
     path: BASE,
@@ -94,7 +98,7 @@ function registerUpload(app: App, { presigner, multipart, logger }: S3Side): voi
     handler: async ({ scoped, body }) => {
       // Above the single-PUT size a file goes in parts, and only where storage can take them.
       const large = body.byte_size > MAX_UPLOAD_BYTES;
-      if (body.byte_size > MAX_MULTIPART_BYTES || (large && !multipart)) throw tooLarge();
+      if (body.byte_size > MAX_MULTIPART_BYTES || (large && !parts)) throw tooLarge();
       const made = await scoped(true, async (tx, scope) => ({
         workspaceId: scope.workspaceId,
         id: (
@@ -105,7 +109,7 @@ function registerUpload(app: App, { presigner, multipart, logger }: S3Side): voi
           )
         ).id,
       }));
-      if (large && multipart) return startMultipart({ multipart, logger }, scoped, made, body);
+      if (large) return startMultipart({ multipart, logger }, scoped, made, body);
       const target = await uploadTarget(presigner, made.workspaceId, made.id, body);
       return { id: made.id, url: target.url, headers: target.headers };
     },
@@ -130,7 +134,7 @@ async function finish(
   return markUploaded(storage, workspaceId, asset, scoped, { sha256: head.sha256, size: head.size });
 }
 
-function registerComplete(app: App, storage: StorageDriver, s3: Omit<S3Side, "presigner">): void {
+function registerComplete(app: App, storage: StorageDriver, s3: Pick<S3Side, "multipart" | "logger">): void {
   defineRoute(app, {
     method: "post",
     path: `${BASE}/{media_id}/complete`,
@@ -146,7 +150,9 @@ function registerComplete(app: App, storage: StorageDriver, s3: Omit<S3Side, "pr
       if (asset.state !== "pending_upload") return settled(storage, workspaceId, asset, scoped);
       // A large upload is completed from storage's own part list; every storage call is outside a transaction.
       if (upload?.multipart_upload_id)
-        return finishMultipart({ storage, ...s3 }, workspaceId, asset, upload, scoped);
+        return s3.multipart
+          ? finishMultipart({ storage, ...s3 }, workspaceId, asset, upload, scoped)
+          : finishFsParts({ storage, logger: s3.logger }, workspaceId, asset, upload, scoped);
       // The head is outside every transaction: the size and the digest are what storage holds for the object.
       return finish(storage, workspaceId, asset, scoped);
     },
@@ -234,7 +240,6 @@ export function sandboxDownloads(app: App): void {
 
 // An upload may be started this long after it was registered, as long as an S3 upload URL lives.
 const UPLOAD_WINDOW_MS = 15 * 60 * 1000;
-const OCTET_STREAM = /^application\/octet-stream\s*(;|$)/i;
 
 /** Passes the bytes through while hashing and counting them; the digest is read once the put has finished. */
 function hashing(source: ReadableStream<Uint8Array>) {
@@ -328,9 +333,11 @@ export function registerMedia(
   now: () => Date = () => new Date(),
 ): void {
   const { presigner, multipart, logger } = s3;
-  registerUpload(app, { presigner, multipart, logger });
+  const fs = storage.name === "fs" && !presigner;
+  registerUpload(app, { presigner, multipart, logger, parts: fs || (!!presigner && !!multipart) });
   registerComplete(app, storage, { multipart, logger });
-  if (presigner && multipart) registerParts(app, presigner);
+  if ((presigner && multipart) || fs) registerParts(app, presigner);
   if (!presigner) registerPut(app, storage, now);
+  if (fs) registerFsParts(app, storage);
   registerRead(app, storage);
 }

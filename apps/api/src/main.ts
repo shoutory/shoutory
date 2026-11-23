@@ -192,6 +192,7 @@ async function startWorkerRole(
       mail,
       media: {
         storage,
+        ...(config.storage.driver === "fs" ? { partsRoot: config.storage.dataDir } : {}),
         ...(config.mediaScan.mode === "warn" ? { scan: createClamdScan(config.mediaScan) } : {}),
         ...(config.ffprobePath === undefined ? {} : { ffprobe: config.ffprobePath }),
       },

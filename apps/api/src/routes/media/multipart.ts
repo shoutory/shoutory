@@ -44,7 +44,7 @@ const partsBody = z.strictObject({
 });
 
 /** What the server knows of a large upload that is still open: its storage id, the declared size and digest, the part size. */
-interface OpenUpload {
+export interface OpenUpload {
   uploadId: string;
   size: number;
   partSize: number;
@@ -52,7 +52,7 @@ interface OpenUpload {
 }
 
 /** The upload of a pending asset that can still take parts, or the conflict that says why it cannot. */
-function openUpload(asset: Asset, upload: UploadSession | undefined): OpenUpload {
+export function openUpload(asset: Asset, upload: UploadSession | undefined): OpenUpload {
   if (asset.state !== "pending_upload") throw conflict("not_pending");
   if (!upload?.multipart_upload_id || !upload.part_size || !upload.declared_size || !upload.declared_sha256)
     throw conflict("not_multipart");
@@ -65,14 +65,25 @@ function openUpload(asset: Asset, upload: UploadSession | undefined): OpenUpload
   };
 }
 
-const partCount = (open: OpenUpload) => Math.ceil(open.size / open.partSize);
+export const partCount = (open: OpenUpload) => Math.ceil(open.size / open.partSize);
 /** Every part is a whole part but the last, which is the rest of the file. */
-const lengthOf = (open: OpenUpload, number: number) =>
+export const lengthOf = (open: OpenUpload, number: number) =>
   number < partCount(open) ? open.partSize : open.size - (partCount(open) - 1) * open.partSize;
+/** What the filesystem driver records as the storage id of an upload: it has none, its parts are files under the asset. */
+const FS_UPLOAD_ID = "fs-parts";
 
-/** What a route needs of storage and of the log: the multipart half of the driver and a logger for what it cannot undo. */
+/** The part URL of the filesystem driver: this API's own route, so one client serves both drivers. */
+const fsPartUrl = (workspaceId: string, mediaId: string, number: number) => ({
+  url: `${BASE.replace("{workspace_id}", workspaceId)}/${mediaId}/parts/${number}`,
+  headers: { "content-type": "application/octet-stream" },
+});
+
+/**
+ * What a route needs of storage and of the log: the multipart half of the driver (the S3 driver only; the filesystem
+ * driver stores its parts as files) and a logger for what it cannot undo.
+ */
 interface Multipart {
-  multipart: S3Multipart;
+  multipart: S3Multipart | undefined;
   logger: Pick<Logger, "warn">;
 }
 
@@ -81,7 +92,7 @@ interface Multipart {
  * class of the failure, never a URL, a key or a credential) and the parts it left age out with the bucket's own rule.
  */
 async function abortQuietly(
-  { multipart, logger }: Multipart,
+  { multipart, logger }: { multipart: S3Multipart; logger: Pick<Logger, "warn"> },
   target: { mediaId: string; key: string; uploadId: string },
 ): Promise<void> {
   try {
@@ -114,7 +125,11 @@ async function recordUpload(
       ]),
     );
   } catch (error) {
-    await abortQuietly(stores, { mediaId: asset.id, ...upload });
+    if (stores.multipart)
+      await abortQuietly(
+        { multipart: stores.multipart, logger: stores.logger },
+        { mediaId: asset.id, ...upload },
+      );
     throw error;
   }
 }
@@ -137,7 +152,10 @@ async function retire(logger: Pick<Logger, "warn">, scoped: Scope, mediaId: stri
   }
 }
 
-/** Creates the storage upload of a registered large file and records it; a failure of either retires the asset. */
+/**
+ * Creates the storage upload of a registered large file (the filesystem driver has none: it records a fixed token) and
+ * records it; a failure of either retires the asset.
+ */
 export async function startMultipart(
   stores: Multipart,
   scoped: Scope,
@@ -146,7 +164,7 @@ export async function startMultipart(
 ): Promise<{ id: string; part_size: number }> {
   const key = originalKey(asset.workspaceId, asset.id);
   try {
-    const { uploadId } = await stores.multipart.createUpload(key);
+    const uploadId = stores.multipart ? (await stores.multipart.createUpload(key)).uploadId : FS_UPLOAD_ID;
     await recordUpload(stores, scoped, asset, { key, uploadId }, declared);
   } catch (error) {
     await retire(stores.logger, scoped, asset.id);
@@ -224,8 +242,11 @@ async function completeOnce(
   }
 }
 
-/** The URLs of the parts a browser names, each signing that part's sha256 and the length the server derives. */
-export function registerParts(app: App, presigner: S3Presigner): void {
+/**
+ * The URLs of the parts a browser names. On S3 each URL signs that part's sha256 and the length the server derives; on
+ * the filesystem (no presigner) it is this API's own part route, which checks the length itself.
+ */
+export function registerParts(app: App, presigner: S3Presigner | undefined): void {
   defineRoute(app, {
     method: "post",
     path: `${BASE}/{media_id}/parts`,
@@ -248,7 +269,9 @@ export function registerParts(app: App, presigner: S3Presigner): void {
       const parts = await Promise.all(
         body.parts.map(async ({ number, sha256 }) => ({
           number,
-          ...(await presigner.presignPart(key, open.uploadId, number, lengthOf(open, number), sha256)),
+          ...(presigner
+            ? await presigner.presignPart(key, open.uploadId, number, lengthOf(open, number), sha256)
+            : fsPartUrl(workspaceId, asset.id, number)),
         })),
       );
       return { parts };

@@ -165,6 +165,19 @@ The sha256 and size declared at register are not checked at the PUT: complete re
 other bytes to an upload that already holds some is refused, so a wrong file needs a new register. A slow upload is cut
 by the server's request timeout (300 seconds by default).
 
+With driver `fs`, a file above 64 MiB (up to 5 GiB) goes through the app in parts of 16 MiB. Register answers
+`{ id, part_size }`, `POST .../media/{media_id}/parts` answers the app's own URL for each part, and each part is sent with
+`PUT .../media/{media_id}/parts/{number}` as `application/octet-stream` with the length the declared file gives it (a part may
+be sent again). Complete checks that every part is there, copies them in order into the original and stores it only when its
+sha256 is the declared one; a wrong digest stores nothing and keeps the parts for a retry. The copy reads and writes the whole
+file, so complete on a large file takes as long as the disk needs for that; a reverse proxy must allow it that time. The
+parts and the copy need disk room: up to the cap of pending uploads times 5 GiB of parts, plus one more copy of the file
+being assembled. When the disk reports less free space than the declared file, complete answers 503 before it writes anything,
+logs a warning and keeps the parts, so the same complete works once there is room. The
+worker role removes part files and temporary leftovers of writes that died once they are older than 7 days (a nightly job
+over `SHOUTORY_DATA_DIR`, so the worker must see the same folder as the `api`), and the empty `parts` folder of a finished
+upload with them.
+
 With driver `s3`, browsers upload straight to the bucket through a presigned URL, so the bucket's CORS rule must allow
 the app's origin to `PUT` with the request headers `If-None-Match` and `x-amz-checksum-sha256` (and `Content-Length`,
 which browsers send themselves). Without them the browser's preflight is refused and the upload never starts.
@@ -175,7 +188,7 @@ with `{ "parts": [{ "number": 1, "sha256": "<hex of that part>" }] }` (at most 2
 URL for each, valid for 15 minutes, that accepts exactly that part's length and sha256. Asking again for a part re-signs it,
 so an upload can be resumed. Complete lists the parts the bucket holds (never a list from the browser), refuses a total that
 is not the declared size, and refuses to replace an existing original (the bucket must support `If-None-Match` on completing an
-upload). A file above 5 GiB, or above 64 MiB with driver `fs`, which has no part route yet, is refused with 422. The bucket
+upload). A file above 5 GiB is refused with 422. The bucket
 checks each part's sha256, not the whole file, so the digest declared at register is proved by the worker, which hashes the
 original: bytes that differ end the upload as `corrupt`. Until then another member's upload of the same bytes is answered as
 a duplicate of it, and registers again if it is rejected. S3 keeps the parts of an upload that is never completed until it is

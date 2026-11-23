@@ -7,6 +7,7 @@ import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import { builtInManifests, createRegistry, type Registry } from "@shoutory/provider-sdk/registry";
 import type { PgBoss } from "pg-boss";
 import type { Logger } from "../logging/logger.js";
+import { sweepStaleFiles } from "../storage/fs-sweep.js";
 import { createBoss } from "./boss.js";
 import { refuseEgress } from "./ledger/held.js";
 import { subscribePublish } from "./ledger/subscribe.js";
@@ -29,7 +30,10 @@ export interface WorkerOptions {
   readonly logger: Logger;
   readonly role: "worker" | "all";
   /** What the media pipeline reads and writes: the same storage as the api, the optional upload scan and ffprobe. */
-  readonly media: Pick<PipelineDeps, "storage" | "scan" | "ffprobe">;
+  readonly media: Pick<PipelineDeps, "storage" | "scan" | "ffprobe"> & {
+    /** The data folder of the filesystem driver, set only for that driver: the nightly sweep of upload parts runs over it. */
+    readonly partsRoot?: string;
+  };
   /** What the mail sender needs besides the pool and the logger. */
   readonly mail: Pick<
     MailSenderOptions,
@@ -111,6 +115,19 @@ export async function purgeExpired(pool: AppPool, retentionClass: string, logger
   return total;
 }
 
+/** Sweeps the filesystem driver's abandoned part files and temporary leftovers, and logs what it did. */
+export async function sweepUploadParts(
+  root: string,
+  logger: Logger,
+  { now = new Date(), deadlineMs }: { now?: Date; deadlineMs?: number } = {},
+): Promise<void> {
+  const { removed, visited, cut } = await sweepStaleFiles(root, now, {
+    ...(deadlineMs === undefined ? {} : { deadlineMs }),
+  });
+  if (cut) logger.warn({ removed, visited }, "the sweep of upload parts stopped at its deadline");
+  else logger.info({ removed, visited }, "the sweep of upload parts finished");
+}
+
 function logged(logger: Logger, queue: string, run: () => Promise<unknown>): Promise<void> {
   return run().then(
     () => undefined,
@@ -121,7 +138,22 @@ function logged(logger: Logger, queue: string, run: () => Promise<unknown>): Pro
   );
 }
 
-async function register(boss: PgBoss, pool: AppPool, logger: Logger): Promise<void> {
+/**
+ * The sweep exists for the filesystem driver alone. Another driver removes a stale schedule: one left from a time the
+ * instance ran on the filesystem would never be worked and the queue lag would grow.
+ */
+async function scheduleSweep(boss: PgBoss, logger: Logger, partsRoot: string | undefined): Promise<void> {
+  if (partsRoot === undefined) return boss.unschedule("sweep_upload_parts");
+  await boss.work("sweep_upload_parts", { pollingIntervalSeconds: POLL_SECONDS }, (jobs) =>
+    logged(logger, "sweep_upload_parts", async () => {
+      for (const job of jobs) parseJobPayload("sweep_upload_parts", job.data);
+      await sweepUploadParts(partsRoot, logger);
+    }),
+  );
+  await boss.schedule("sweep_upload_parts", JOB_QUEUES.sweep_upload_parts.cron, {}, { missed: "once" });
+}
+
+async function register(boss: PgBoss, pool: AppPool, logger: Logger, partsRoot?: string): Promise<void> {
   const options = { pollingIntervalSeconds: POLL_SECONDS };
   await boss.work("ensure_partitions", options, (jobs) =>
     logged(logger, "ensure_partitions", async () => {
@@ -145,6 +177,7 @@ async function register(boss: PgBoss, pool: AppPool, logger: Logger): Promise<vo
       { ...missed, key: name },
     );
   }
+  await scheduleSweep(boss, logger, partsRoot);
 }
 
 /**
@@ -188,7 +221,7 @@ export async function startWorker({
     await boss.start();
     // Idempotent: a provider added without `shoutory migrate` must not stall admission on a queue that is missing.
     for (const name of registry.allQueueNames()) await boss.createQueue(name, PROVIDER_QUEUE_OPTIONS);
-    await register(boss, pool, logger);
+    await register(boss, pool, logger, media.partsRoot);
     await subscribePublish({
       pool,
       boss,
