@@ -1,0 +1,342 @@
+import { fixtureManifest } from "@shoutory/testkit/fixture-provider/manifest";
+import { describe, expect, it } from "vitest";
+import {
+  admin,
+  called,
+  type Env,
+  holdFirst,
+  isCommit,
+  isPrepare,
+  ledger,
+  makeEnv,
+  marked,
+  opOf,
+  type Plant,
+  plant,
+  READ_BACK_ONLY,
+  recover,
+  rows,
+  sleep,
+  takeBack,
+  typesOf,
+  useDispatchEnv,
+} from "../support/ledger-dispatch-env.js";
+
+// Security floor of the dispatch: the worker marks that a post may have been sent before it calls the provider, in a
+// transaction of its own; it records the result and the move together; it never resends after an unknown outcome unless
+// the manifest and the key window allow it, and then only through a normal publish turn; and a worker that lost its lease
+// writes nothing more. The environment of the rows is `support/ledger-dispatch-env.ts`.
+useDispatchEnv();
+
+// [crash, the call that is held (it never reaches the provider), what runs first, the plant, the state the sweep leaves]
+type Crash = [
+  string,
+  ((url: string, method: string) => boolean) | undefined,
+  "turn" | "resend" | "none",
+  Plant,
+  string,
+];
+const CRASHES: Crash[] = [
+  ["claim", undefined, "none", {}, "pending"],
+  ["prepare", isPrepare, "turn", {}, "pending"],
+  ["after the marker, before the send", isCommit, "turn", {}, "unknown_external_state"],
+  ["before the commit", undefined, "turn", {}, "pending"],
+  ["after the commit, before the receipt", isCommit, "turn", {}, "unknown_external_state"],
+  [
+    "during the resend that follows a read-back",
+    isCommit,
+    "resend",
+    { state: "unknown_external_state", effect: "possible", reconcile: true },
+    "unknown_external_state",
+  ],
+];
+describe("a crash at every step of a dispatch", () => {
+  it.each(CRASHES)(
+    "%s ends in a defined state with at most one create at the provider",
+    async (name, match, first, planted, left) => {
+      // fails first because: the turn ends before the call, so nothing is dispatched, recovered or counted
+      const hold = holdFirst(match ?? (() => false));
+      let current = "";
+      let ended = false;
+      const e = await makeEnv({
+        hold,
+        before: async (route) => {
+          // The lease ends once, while the provider is validating: the commit that follows is no longer the worker's.
+          if (name !== "before the commit" || route !== "POST /v1/validate" || ended) return;
+          ended = true;
+          await takeBack(current);
+        },
+      });
+      try {
+        current = await plant(e, planted);
+        if (planted.state !== undefined) await marked(current);
+        if (name === "claim") {
+          await ledger("SELECT * FROM app.claim_operations($1, 1, 'dead')", [e.queueName]);
+          expect((await opOf(current)).state).toBe("claimed");
+          await takeBack(current);
+        } else {
+          // The resend is the next publish turn after the tick's move back to retry (a second tick makes the row due).
+          if (first === "resend") {
+            await e.tick();
+            await e.tick();
+          }
+          const running = e.turn();
+          if (match) {
+            await called(hold);
+            await takeBack(current, e.sweepNow);
+          }
+          await running;
+        }
+        expect((await opOf(current)).state).toBe(left);
+        hold.release();
+        await recover(e, current);
+        expect(await opOf(current)).toMatchObject({ state: "published", effect: "confirmed" });
+        expect(e.sim.effects()).toBe(1);
+        expect(e.sim.stored().length).toBe(1);
+        if (first === "resend") {
+          // Each commit has its own marker and raised the attempt count: the planted one, the held one and the resend.
+          const [marks] = await rows(
+            `SELECT count(*)::int AS n, count(effect_started_at)::int AS marked FROM app.operation_attempts
+              WHERE operation_id = $1 AND step = 'commit'`,
+            [current],
+          );
+          expect(marks).toEqual({ n: 3, marked: 3 });
+          expect(await opOf(current)).toMatchObject({ attempt_count: 2 });
+        }
+      } finally {
+        hold.release();
+        await e.close();
+      }
+    },
+    90_000,
+  );
+});
+
+// [what changed at the provider's side of the target between the timeout and the resend, the state the turn leaves]
+const GONE: [string, string, string][] = [
+  [
+    "the post was archived",
+    `UPDATE app.posts p SET status = 'archived' FROM app.post_variants v JOIN app.operations o ON o.variant_id = v.id
+      WHERE v.post_id = p.id AND o.id = $1`,
+    "failed",
+  ],
+  [
+    "the channel was disabled",
+    `UPDATE app.channels c SET connection_state = 'disabled' FROM app.operations o
+      WHERE o.channel_id = c.id AND o.id = $1`,
+    "paused",
+  ],
+];
+describe("a resend after an unknown outcome", () => {
+  it.each(GONE)(
+    "is never sent when %s in between",
+    async (_name, change, after) => {
+      // fails first because: the reconcile turn calls the provider itself, without the live re-read of a publish turn
+      const e = await makeEnv();
+      try {
+        const id = await plant(e, { state: "unknown_external_state", effect: "possible", reconcile: true });
+        await marked(id);
+        await e.tick();
+        expect(await opOf(id)).toMatchObject({ state: "retry_wait", effect: "none", queue: e.queueName });
+        await rows(change, [id]);
+        await e.tick();
+        await e.turn();
+        expect((await opOf(id)).state).toBe(after);
+        expect(e.commits.count).toBe(0);
+        expect(e.sim.effects()).toBe(0);
+      } finally {
+        await e.close();
+      }
+    },
+    30_000,
+  );
+});
+
+describe("an absence read before a resend", () => {
+  it("does not count for the cycle after it: the old id is not read again", async () => {
+    // fails first because: the read-back target and the absence reads are taken from the whole history of the row
+    const e = await makeEnv({
+      manifest: {
+        readBackGapSeconds: 1,
+        idempotency: { ...fixtureManifest.idempotency, keyWindowSeconds: 100 },
+      },
+    });
+    try {
+      const id = await plant(e, { state: "unknown_external_state", effect: "possible", reconcile: true });
+      await marked(id, "gone-1", 120);
+      await e.tick();
+      await rows("UPDATE app.operations SET next_check_at = now() WHERE id = $1", [id]);
+      await sleep(1_200);
+      await e.tick();
+      expect(await opOf(id)).toMatchObject({ state: "retry_wait", effect: "none" });
+      // The resend times out: unknown again, with no id of its own.
+      await e.tick();
+      e.sim.arm("commit", { kind: "hang" });
+      await e.turn();
+      expect(await opOf(id)).toMatchObject({ state: "unknown_external_state", effect: "possible" });
+      await rows("UPDATE app.operations SET next_check_at = now() WHERE id = $1", [id]);
+      await e.tick();
+      // No read of the old id counted for this cycle, so nothing is proven and nothing moved.
+      expect(await opOf(id)).toMatchObject({ state: "unknown_external_state", effect: "possible" });
+      const [reads] = await rows(
+        `SELECT count(*)::int AS n FROM app.operation_attempts a
+          WHERE a.operation_id = $1 AND a.step = 'read_back'
+            AND a.attempt_no > (SELECT max(attempt_no) FROM app.operation_attempts WHERE operation_id = $1 AND step = 'commit')`,
+        [id],
+      );
+      expect(reads?.n).toBe(0);
+    } finally {
+      await e.close();
+    }
+  }, 40_000);
+});
+
+describe("the effect marker", () => {
+  it("is committed and visible from a second session when the simulator receives the commit", async () => {
+    // fails first because: the marker is written late or with the result, so the provider gets a call the ledger does not know
+    let seen: Record<string, unknown> | undefined;
+    let id = "";
+    const e = await makeEnv({
+      before: async (route) => {
+        if (route !== "POST /v1/posts") return;
+        seen = (
+          await rows(
+            `SELECT o.state, o.effect, a.step, a.effect AS attempt_effect, a.effect_started_at IS NOT NULL AS marked,
+               a.finished_at IS NULL AS open, o.attempt_count
+             FROM app.operations o JOIN app.operation_attempts a ON a.operation_id = o.id
+             WHERE o.id = $1 AND a.step = 'commit'`,
+            [id],
+          )
+        )[0];
+      },
+    });
+    try {
+      id = await plant(e);
+      await e.turn();
+      expect(seen).toEqual({
+        state: "dispatching",
+        effect: "possible",
+        step: "commit",
+        attempt_effect: "possible",
+        marked: true,
+        open: true,
+        attempt_count: 1,
+      });
+      expect(await opOf(id)).toMatchObject({ state: "published", effect: "confirmed", open: 0 });
+    } finally {
+      await e.close();
+    }
+  });
+});
+
+// [provider, manifest, the state the next tick leaves, whether the first notice is stamped]
+const UNKNOWN: [string, Record<string, unknown>, string, boolean][] = [
+  ["a provider that reads back only", READ_BACK_ONLY, "unknown_external_state", false],
+  [
+    "a provider that cannot read back (class E)",
+    { ...READ_BACK_ONLY, readBackMode: "E" },
+    "needs_human",
+    true,
+  ],
+];
+describe("a timeout after the send", () => {
+  it.each(UNKNOWN)(
+    "ends unknown with its horizon and is never resent: %s",
+    async (_name, manifest, after, notice) => {
+      // fails first because: the call is not made, or a timeout is written as a failure and the post is sent again
+      const e = await makeEnv({ manifest });
+      try {
+        e.sim.arm("commit", { kind: "hang" });
+        const id = await plant(e);
+        await e.turn();
+        expect(await opOf(id)).toMatchObject({
+          state: "unknown_external_state",
+          effect: "possible",
+          queue: e.reconcileQueue,
+          horizon: true,
+          open: 0,
+          attempt_count: 1,
+        });
+        expect(Number((await opOf(id)).horizon_in)).toBeGreaterThan(0);
+        await rows("UPDATE app.operations SET next_check_at = now() WHERE id = $1", [id]);
+        await e.tick();
+        expect(e.commits.count).toBe(1);
+        expect(await opOf(id)).toMatchObject({ state: after, escalated: notice });
+        expect(await typesOf(id)).toContain(
+          `operation.${after === "needs_human" ? "needs_human" : "reconciling"}`,
+        );
+        expect(await typesOf(id)).not.toContain("operation.retry_wait");
+      } finally {
+        await e.close();
+      }
+    },
+    60_000,
+  );
+});
+
+describe("the heartbeat of a dispatch", () => {
+  it("keeps running from the claim through the call that was already sent", async () => {
+    // fails first because: the beat stops when the turn is ready, so a long commit call outlives its lease
+    const hold = holdFirst(isCommit);
+    const e = await makeEnv({ hold, lease: 24 });
+    try {
+      const id = await plant(e);
+      const running = e.turn();
+      await called(hold);
+      const during = await opOf(id);
+      expect(during.state).toBe("dispatching");
+      await sleep(9_500);
+      const later = await opOf(id);
+      expect(new Date(later.heartbeat_at as string).getTime()).toBeGreaterThan(
+        new Date(during.heartbeat_at as string).getTime(),
+      );
+      hold.release();
+      await running;
+      expect(await opOf(id)).toMatchObject({ state: "published", effect: "confirmed" });
+    } finally {
+      hold.release();
+      await e.close();
+    }
+  }, 60_000);
+});
+
+// [how the lease is lost while the commit call is held]
+const LOST: [string, (id: string, e: Env) => Promise<void>][] = [
+  [
+    "the token moves on",
+    (id) =>
+      admin(async (client) => {
+        await client.query("BEGIN");
+        await client.query("SELECT set_config('app.job_purpose', 'claim_polls', true)");
+        await client.query("UPDATE app.operations SET fencing_token = fencing_token + 1 WHERE id = $1", [id]);
+        await client.query("COMMIT");
+      }),
+  ],
+  ["the lease ends and the sweep takes the row", (id, e) => takeBack(id, e.sweepNow)],
+];
+describe("a lease lost during the call", () => {
+  it.each(LOST)(
+    "ends the turn lost with no later write: %s",
+    async (_name, lose) => {
+      // fails first because: the worker records a result, or moves the row, after its lease went to another
+      const hold = holdFirst(isCommit);
+      const e = await makeEnv({ hold, lease: 24 });
+      try {
+        const id = await plant(e);
+        const running = e.turn();
+        await called(hold);
+        await lose(id, e);
+        const before = await opOf(id);
+        expect(await running).toMatchObject({ kind: "lost" });
+        await sleep(600);
+        // The horizon counts down by itself; every other column stays as the sweep left it.
+        expect({ ...(await opOf(id)), horizon_in: 0 }).toEqual({ ...before, horizon_in: 0 });
+        expect(e.sim.effects()).toBe(0);
+      } finally {
+        hold.release();
+        await e.close();
+      }
+    },
+    60_000,
+  );
+});

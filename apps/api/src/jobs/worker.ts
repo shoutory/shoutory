@@ -2,10 +2,14 @@ import { randomUUID } from "node:crypto";
 import { withSystem } from "@shoutory/db/context/system";
 import { withAdvisoryLock } from "@shoutory/db/locks";
 import type { AppPool } from "@shoutory/db/pool";
+import type { AdapterMap } from "@shoutory/provider-sdk/adapter";
+import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import { builtInManifests, createRegistry, type Registry } from "@shoutory/provider-sdk/registry";
 import type { PgBoss } from "pg-boss";
 import type { Logger } from "../logging/logger.js";
 import { createBoss } from "./boss.js";
+import { refuseEgress } from "./ledger/held.js";
+import { subscribePublish } from "./ledger/subscribe.js";
 import { createLedgerTick } from "./ledger/tick.js";
 import { createMailSender, type MailSenderOptions } from "./mail-sender.js";
 import { createOutboxRelay } from "./outbox-relay.js";
@@ -29,6 +33,10 @@ export interface WorkerOptions {
   >;
   /** The providers whose targets the ledger tick admits; the default is the built-in ones (none yet). */
   readonly registry?: Registry;
+  /** The adapter of each registered provider, by id; a provider with none is admitted but never dispatched (its rows fail). */
+  readonly adapters?: AdapterMap;
+  /** The `fetch` an adapter of a provider is given; the default refuses every call. */
+  readonly fetchFor?: (manifest: Manifest) => typeof fetch;
   /** Beat, relay, mail and ledger tick intervals; the defaults are the production values (30 s, 1 s, 1 s, 30 s). */
   readonly heartbeatMs?: number;
   readonly relayIntervalMs?: number;
@@ -146,6 +154,8 @@ export async function startWorker({
   role,
   mail,
   registry = createRegistry(builtInManifests),
+  adapters = {},
+  fetchFor = refuseEgress,
   heartbeatMs = HEARTBEAT_MS,
   relayIntervalMs = RELAY_INTERVAL_MS,
   mailIntervalMs = RELAY_INTERVAL_MS,
@@ -153,6 +163,7 @@ export async function startWorker({
 }: WorkerOptions): Promise<StartedWorker> {
   const boss = createBoss(connectionString, (error) => logger.error({ err: error }, "job queue error"));
   const workerId = randomUUID();
+  const closing = new AbortController();
   const beat = () =>
     withSystem(pool, "heartbeat", (tx) => tx.query("SELECT app.worker_heartbeat($1, $2)", [workerId, role]));
   const relay = createOutboxRelay({ pool, handlers: {}, logger, intervalMs: relayIntervalMs });
@@ -162,6 +173,8 @@ export async function startWorker({
     boss,
     registry,
     logger,
+    adapters,
+    fetchFor,
     ...(ledgerIntervalMs === undefined ? {} : { intervalMs: ledgerIntervalMs }),
   });
   // A failed start stops the client, so its pool never stays open: `start` opens the pool before it checks the schema.
@@ -170,6 +183,16 @@ export async function startWorker({
     // Idempotent: a provider added without `shoutory migrate` must not stall admission on a queue that is missing.
     for (const name of registry.allQueueNames()) await boss.createQueue(name, PROVIDER_QUEUE_OPTIONS);
     await register(boss, pool, logger);
+    await subscribePublish({
+      pool,
+      boss,
+      registry,
+      logger,
+      adapters,
+      fetchFor,
+      owner: `worker-${workerId}`,
+      closing: closing.signal,
+    });
     await beat();
   } catch (error) {
     await boss
@@ -186,6 +209,8 @@ export async function startWorker({
   return {
     async close() {
       clearInterval(timer);
+      // A turn in flight hands its row back and no new one starts; the queue client waits for the turns when it stops.
+      closing.abort();
       // The tick stops first: it sends wake-ups through the queue client, which stops last.
       await ledger.stop();
       await Promise.all([relay.stop(), sender.stop()]);

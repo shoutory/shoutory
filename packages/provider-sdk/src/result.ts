@@ -46,6 +46,10 @@ export interface ProviderResult {
   readonly errorClass?: ProviderErrorClass;
   readonly retryAfterMs?: number;
   readonly providerCode?: string;
+  /** The HTTP status of a failed answer, so core can compare it with the manifest's `absentAnswers`. */
+  readonly httpStatus?: number;
+  /** A read-back whose answer is itself "the post is not there" (no status says so). */
+  readonly absent?: boolean;
 }
 
 /** What the adapter knows about a failed attempt. The class is the adapter's call, never read from a body. */

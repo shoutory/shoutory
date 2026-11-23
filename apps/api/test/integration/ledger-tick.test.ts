@@ -3,7 +3,9 @@ import { EnvKeyProvider } from "@shoutory/core/keys";
 import { withSystem } from "@shoutory/db/context/system";
 import { cloneTemplate, readTestEnv, type TestDatabase, withAdminClient } from "@shoutory/db/testing";
 import { createRegistry } from "@shoutory/provider-sdk/registry";
+import { createFixtureAdapter } from "@shoutory/testkit/fixture-provider/adapter";
 import { fixtureManifest } from "@shoutory/testkit/fixture-provider/manifest";
+import { startFixtureSimulator } from "@shoutory/testkit/fixture-provider/simulator";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { createBoss } from "../../src/jobs/boss.js";
 import { admitAndWake, createLedgerTick } from "../../src/jobs/ledger/tick.js";
@@ -32,11 +34,16 @@ const jobs = async () =>
       )
     ).rows[0].n,
   );
+let simulator: Awaited<ReturnType<typeof startFixtureSimulator>>;
 beforeAll(async () => {
+  simulator = await startFixtureSimulator();
   db = await cloneTemplate(env, inject("shoutoryTemplate"));
   ws = await admin((a) => seedWorkspace(a));
 });
-afterAll(() => db.drop());
+afterAll(async () => {
+  await simulator.close();
+  await db.drop();
+});
 
 describe("admission and its wake-up", () => {
   it("a rolled-back admission leaves no job, a committed one leaves one per queue, and a second wake-up is not stored", async () => {
@@ -109,6 +116,39 @@ describe("the worker's ledger tick", () => {
   });
 });
 
+describe("the publish subscription", () => {
+  it("dispatches an admitted target from the wake-up of its queue, for a provider that has an adapter", async () => {
+    // fails first because: the worker admits the target and wakes its queue, but nothing takes the wake-up
+    const wired = createRegistry([{ ...fixtureManifest, id: "subscribed" }]);
+    const target = await admin((a) => seedDueTarget(a, ws, 30, "subscribed"));
+    const worker = await startWorker({
+      connectionString: db.url("worker"),
+      pool: db.pool("worker"),
+      logger,
+      role: "worker",
+      mail: {
+        keys,
+        pepper: new SealedSecret("ledger-tick-pepper-for-tests-0123456789"),
+        smtpUrl: new SealedSecret("smtp://127.0.0.1:9"),
+        from: "noreply@mail.example.test",
+      },
+      registry: wired,
+      adapters: { subscribed: createFixtureAdapter({ baseUrl: simulator.url }) },
+      fetchFor: () => fetch,
+      ledgerIntervalMs: 50,
+    });
+    try {
+      const state = async () =>
+        (await admin((a) => a.query("SELECT state FROM app.operations WHERE variant_id = $1", [target])))
+          .rows[0]?.state;
+      for (let tries = 0; tries < 200 && (await state()) !== "published"; tries++) await sleep(50);
+      expect(await state()).toBe("published");
+    } finally {
+      await worker.close();
+    }
+  }, 30_000);
+});
+
 describe("a provider added without a migrate", () => {
   it("has its queues created when the worker starts, so admission can wake it", async () => {
     // fails first because: the queues exist only after `shoutory migrate`, and a wake-up for a missing queue stalls admission
@@ -165,6 +205,8 @@ describe("a lost wake-up", () => {
       pool: db.pool("worker"),
       logger,
       registry,
+      adapters: { fixture: createFixtureAdapter({ baseUrl: simulator.url }) },
+      fetchFor: () => fetch,
       queue: "publish.fixture",
       owner: "owner-w",
       closing: new AbortController().signal,
@@ -173,8 +215,8 @@ describe("a lost wake-up", () => {
       a.query("SELECT id, state FROM app.operations WHERE variant_id = $1", [variant]),
     );
     expect(made.rows.length).toBe(1);
-    expect(turn).toMatchObject({ kind: "ready", id: made.rows[0].id });
-    expect(made.rows[0].state).toBe("claimed");
+    expect(turn).toMatchObject({ kind: "dispatched", id: made.rows[0].id });
+    expect(made.rows[0].state).toBe("published");
   });
 });
 

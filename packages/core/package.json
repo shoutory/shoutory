@@ -73,6 +73,14 @@
       "source": "./src/ledger/client.ts",
       "default": "./dist/ledger/client.js"
     },
+    "./ledger/dispatch": {
+      "source": "./src/ledger/dispatch.ts",
+      "default": "./dist/ledger/dispatch.js"
+    },
+    "./ledger/reconcile": {
+      "source": "./src/ledger/reconcile.ts",
+      "default": "./dist/ledger/reconcile.js"
+    },
     "./net": {
       "source": "./src/net/address.ts",
       "default": "./dist/net/address.js"

@@ -1,11 +1,16 @@
-import { providersArgument } from "@shoutory/core/ledger/client";
+import { randomUUID } from "node:crypto";
+import { providersArgument, sweepArguments } from "@shoutory/core/ledger/client";
 import type { TenantTx } from "@shoutory/db/context";
 import { withSystem } from "@shoutory/db/context/system";
 import type { AppPool } from "@shoutory/db/pool";
+import type { AdapterMap } from "@shoutory/provider-sdk/adapter";
+import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import type { Registry } from "@shoutory/provider-sdk/registry";
 import type { PgBoss } from "pg-boss";
 import type { Logger } from "../../logging/logger.js";
 import { type IntervalLoop, intervalLoop } from "../outbox-relay.js";
+import { refuseEgress } from "./held.js";
+import { reconcileStep } from "./reconcile.js";
 
 const TICK_MS = 30_000;
 const STOP_MS = 10_000;
@@ -61,6 +66,9 @@ export interface LedgerTickOptions {
   readonly boss: PgBoss;
   readonly registry: Registry;
   readonly logger: Logger;
+  /** The adapter of each provider the tick reads back for; a provider with none is only swept and admitted. */
+  readonly adapters?: AdapterMap;
+  readonly fetchFor?: (manifest: Manifest) => typeof fetch;
   readonly intervalMs?: number;
 }
 export interface LedgerTick extends IntervalLoop {
@@ -73,8 +81,13 @@ export function createLedgerTick({
   boss,
   registry,
   logger,
+  adapters = {},
+  fetchFor = refuseEgress,
   intervalMs = TICK_MS,
 }: LedgerTickOptions): LedgerTick {
+  const owner = `tick-${randomUUID()}`;
+  const closing = new AbortController();
+  const sweeps = sweepArguments(registry.manifests);
   const step = async (name: string, run: () => Promise<unknown>): Promise<void> => {
     try {
       await run();
@@ -88,7 +101,17 @@ export function createLedgerTick({
       logger.error(fields, "ledger tick step failed");
     }
   };
-  const call = (sql: string) => () => withSystem(pool, "ledger", (tx) => tx.query(sql));
+  // A sweep that put rows back in play wakes the publish queue of each provider that can send them.
+  const sweep = (sql: string, argument: Record<string, unknown>) => async () => {
+    const moved = await withSystem(pool, "ledger", async (tx) =>
+      Number((await tx.query<{ n: number }>(sql, [JSON.stringify(argument)])).rows[0]?.n ?? 0),
+    );
+    if (moved === 0) return;
+    for (const manifest of registry.manifests) {
+      if (adapters[manifest.id] === undefined) continue;
+      await boss.send(registry.queueNames(manifest.id).publish, {}, { singletonKey: "wake", retryLimit: 0 });
+    }
+  };
   // Admits batch after batch while one comes back full, so a backlog does not wait a tick for each hundred.
   async function admitBacklog(): Promise<void> {
     for (let batch = 0; batch < MAX_ADMIT_BATCHES; batch++) {
@@ -97,9 +120,21 @@ export function createLedgerTick({
     }
   }
   async function tick(): Promise<void> {
-    await step("expired leases", call("SELECT app.sweep_expired_leases()"));
-    await step("due moves", call("SELECT app.sweep_due_moves()"));
+    await step("expired leases", sweep("SELECT app.sweep_expired_leases($1::jsonb) AS n", sweeps.leases));
+    await step("due moves", sweep("SELECT app.sweep_due_moves($1::jsonb) AS n", sweeps.due));
     await step("admission", admitBacklog);
+    await step("reconcile", () =>
+      reconcileStep({ pool, logger, registry, adapters, fetchFor, owner, closing: closing.signal }),
+    );
   }
-  return { tick, ...intervalLoop("ledger tick", tick, logger, intervalMs, STOP_MS) };
+  const loop = intervalLoop("ledger tick", tick, logger, intervalMs, STOP_MS);
+  return {
+    tick,
+    start: loop.start,
+    // A reconcile in flight hands its row back instead of finishing a call the worker is closing on.
+    stop: () => {
+      closing.abort();
+      return loop.stop();
+    },
+  };
 }

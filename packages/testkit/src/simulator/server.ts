@@ -60,7 +60,13 @@ interface State {
   readonly late: Set<Promise<unknown>>;
   readonly timers: Set<NodeJS.Timeout>;
   readonly context: SimContext;
+  readonly before: ((route: string) => void | Promise<void>) | undefined;
   effects: number;
+}
+
+export interface SimulatorOptions {
+  /** Runs when a request has been received, before an armed fault or the route's handler (so before any effect). */
+  readonly before?: (route: string) => void | Promise<void>;
 }
 
 // A route is "METHOD /path", where a path segment `:name` matches any one segment and is passed as a param.
@@ -144,6 +150,7 @@ async function handle(state: State, request: IncomingMessage, response: ServerRe
   };
   state.requests.push(seen);
   if (state.requests.length > MAX_RECORDED_REQUESTS) state.requests.shift();
+  await state.before?.(route.key);
   const run = async () => route.handler(seen, state.context);
   const fault = state.faults.take(route.key);
   if (fault) return applyFault(state, fault, run, response);
@@ -151,9 +158,10 @@ async function handle(state: State, request: IncomingMessage, response: ServerRe
 }
 
 /** Starts a loopback HTTP server that answers the routes, applies armed faults and records what it received. */
-export async function startSimulator(routes: Routes): Promise<Simulator> {
+export async function startSimulator(routes: Routes, options: SimulatorOptions = {}): Promise<Simulator> {
   const state: State = {
     routes,
+    before: options.before,
     faults: createFaultQueue(),
     requests: [],
     late: new Set(),

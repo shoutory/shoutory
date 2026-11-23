@@ -7,7 +7,9 @@ import { assertKeyIdsLoaded } from "@shoutory/core/keys";
 import { createAppPool, createAuthDb } from "@shoutory/db/pool";
 import { assertMigrationsApplied, sealedKeyIds } from "@shoutory/db/startup";
 import { type EgressRequest, egressFetch } from "@shoutory/provider-sdk/egress";
+import { fetchOf } from "@shoutory/provider-sdk/egress/fetch-adapter";
 import { createOperatorPolicy } from "@shoutory/provider-sdk/egress/policy";
+import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import { createApp } from "./app.js";
 import { createAuth } from "./auth/auth.js";
 import { RANGE_HOST } from "./auth/hibp.js";
@@ -54,6 +56,15 @@ function boundEgress(config: Config) {
   const operator = createOperatorPolicy({ allowCidrs: config.egressAllowCidrs });
   const request = { kind: "provider", egressHosts: [RANGE_HOST] } as const;
   return (req: EgressRequest) => egressFetch(req, { request, operator });
+}
+
+/** The `fetch` of a provider adapter: the same operator policy, narrowed to the hosts its manifest names. */
+function providerFetch(config: Config) {
+  const operator = createOperatorPolicy({ allowCidrs: config.egressAllowCidrs });
+  return (manifest: Manifest) =>
+    fetchOf((req) =>
+      egressFetch(req, { request: { kind: "provider", egressHosts: manifest.egressHosts }, operator }),
+    );
 }
 
 async function startServer(config: Config, logger: Logger): Promise<RunningServer> {
@@ -129,7 +140,14 @@ async function startWorkerRole(
       marketingFrom: config.mailMarketingFrom,
       publicOrigin: config.publicOrigin,
     };
-    const worker = await startWorker({ connectionString: url, pool, logger, role, mail });
+    const worker = await startWorker({
+      connectionString: url,
+      pool,
+      logger,
+      role,
+      mail,
+      fetchFor: providerFetch(config),
+    });
     logger.info({ role }, "worker started");
     return {
       close: async () => {

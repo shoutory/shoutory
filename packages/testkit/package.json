@@ -20,6 +20,10 @@
     "./fixture-provider/adapter": {
       "source": "./src/fixture-provider/adapter.ts",
       "default": "./dist/fixture-provider/adapter.js"
+    },
+    "./fixture-provider/simulator": {
+      "source": "./src/fixture-provider/simulator.ts",
+      "default": "./dist/fixture-provider/simulator.js"
     }
   },
   "dependencies": {

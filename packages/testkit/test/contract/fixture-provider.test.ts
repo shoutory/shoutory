@@ -135,3 +135,37 @@ describe("the fault matrix refuses a wrong client", () => {
     await expect(row.run(build())).rejects.toThrow(message);
   });
 });
+
+describe("what the dispatch needs of the fixture provider", () => {
+  it("a failed answer carries the http status of the provider, whatever the failure mapper says", async () => {
+    // fails first because: the result drops the status, so core cannot compare it with the manifest's absentAnswers
+    const context = { fetch, now: () => new Date("2026-11-21T00:00:00Z") };
+    const result = await harness().adapter.readBack(context, { externalId: "no-such-post" });
+    expect([result.ok, result.httpStatus]).toEqual([false, fixtureManifest.absentAnswers[0].status]);
+    const wrong = await harness({ mapFailure: reportsNoEffectAfter5xx }).adapter.readBack(context, {
+      externalId: "no-such-post",
+    });
+    expect(wrong.httpStatus).toBe(fixtureManifest.absentAnswers[0].status);
+  });
+
+  it("a request hook runs before the handler's effect, with the route it is for", async () => {
+    // fails first because: the simulator has no hook, so a test cannot look at the ledger while the provider holds a call
+    const seen: [string, number][] = [];
+    const hooked = await startFixtureSimulator({
+      before: (route) => {
+        seen.push([route, hooked.effects()]);
+      },
+    });
+    try {
+      const context = { fetch, now: () => new Date("2026-11-21T00:00:00Z") };
+      await createFixtureAdapter({ baseUrl: hooked.url }).commit(context, {
+        idempotencyKey: "k",
+        text: "hi",
+      });
+      expect(seen).toEqual([["POST /v1/posts", 0]]);
+      expect(hooked.effects()).toBe(1);
+    } finally {
+      await hooked.close();
+    }
+  });
+});

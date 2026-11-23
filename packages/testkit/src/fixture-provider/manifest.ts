@@ -26,6 +26,13 @@ export const fixtureManifest = {
   callTimeoutSeconds: 30,
   retryAfterMaxSeconds: 900,
   dispatchMarginSeconds: 300,
+  maxInFlightSeconds: 60,
+  readBackGapSeconds: 30,
+  maxAttempts: 5,
+  unverifiedHorizonDays: 30,
+  clockSkewSeconds: 120,
+  // The test quota: generous, so only a test that fills it sees a denial.
+  quotas: [{ name: "posts", max: 1000, windowSeconds: 86400 }],
   concurrency: 4,
   refreshErrorMap: {
     grant_revoked: "revoked",

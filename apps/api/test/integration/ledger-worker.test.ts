@@ -3,21 +3,21 @@ import { withTenant } from "@shoutory/db/context";
 import { createAppPool } from "@shoutory/db/pool";
 import { cloneTemplate, readTestEnv, type TestDatabase, withAdminClient } from "@shoutory/db/testing";
 import { createRegistry } from "@shoutory/provider-sdk/registry";
+import { createFixtureAdapter } from "@shoutory/testkit/fixture-provider/adapter";
 import { fixtureManifest } from "@shoutory/testkit/fixture-provider/manifest";
+import { startFixtureSimulator } from "@shoutory/testkit/fixture-provider/simulator";
 import { afterAll, beforeAll, describe, expect, inject, it, vi } from "vitest";
 import { startHeartbeat } from "../../src/jobs/ledger/heartbeat.js";
 import { runTurn } from "../../src/jobs/ledger/turn.js";
 import { createLogger } from "../../src/logging/logger.js";
-import { seedWorkspace } from "../support/ledger-seed.js";
+import { seedFrozenVersion, seedWorkspace } from "../support/ledger-seed.js";
 
 const env = readTestEnv();
 
 // Security floor of the worker turn: a lost lease stops every write of its holder, a closing worker claims nothing and
 // hands back what it took, and the state of the channel and of the target is read again after the claim and before any
-// work. The turn ends at the point where the provider call would start (it is not in this slice), so a turn that passes
-// every check ends `ready` holding its lease. The module names, argument lists, result kinds and column names are the
-// contract the runtime must meet. Each row says what it fails against once the module exists; today every row fails first
-// because the modules do not exist.
+// work. A turn that passes every check goes on to dispatch to the fixture provider and ends `dispatched`. The module
+// names, argument lists, result kinds and column names are the contract the runtime must meet.
 let db: TestDatabase;
 const logger = createLogger({ secrets: [], stream: { write: () => undefined } });
 const admin = <T>(run: Parameters<typeof withAdminClient<T>>[2]) => withAdminClient(env, db.name, run);
@@ -25,7 +25,15 @@ const rows = (sql: string, params: unknown[] = []) =>
   admin(async (a) => (await a.query(sql, params)).rows as Record<string, unknown>[]);
 
 let ws: string;
+// The turns dispatch to the fixture provider: its adapter on its simulator, over the plain `fetch`.
+let wiring: Pick<Parameters<typeof runTurn>[0], "adapters" | "fetchFor">;
+let simulator: Awaited<ReturnType<typeof startFixtureSimulator>>;
 beforeAll(async () => {
+  simulator = await startFixtureSimulator();
+  wiring = {
+    adapters: { fixture: createFixtureAdapter({ baseUrl: simulator.url }) },
+    fetchFor: () => fetch,
+  };
   db = await cloneTemplate(env, inject("shoutoryTemplate"));
   ws = randomUUID();
   const [user, org] = [randomUUID(), randomUUID()];
@@ -56,7 +64,10 @@ beforeAll(async () => {
     await a.query("COMMIT");
   });
 });
-afterAll(() => db.drop());
+afterAll(async () => {
+  await simulator.close();
+  await db.drop();
+});
 
 const registry = createRegistry([fixtureManifest]);
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -112,7 +123,10 @@ async function plant(o: Scenario = {}): Promise<Planted> {
     "INSERT INTO app.post_variants (workspace_id, post_id, channel_id, schedule_state) VALUES ($1, $2, $3, $4) RETURNING id",
     [home, post?.id, channel?.id, o.scheduleState ?? "in_progress"],
   );
+  const frozen = await admin((a) => seedFrozenVersion(a, home, String(post?.id), String(channel?.id)));
   const given: Record<string, unknown> = {
+    frozen_version_id: frozen,
+    frozen_snapshot_hash: Buffer.alloc(32, 0xab),
     workspace_id: home,
     variant_id: variant?.id,
     channel_id: channel?.id,
@@ -152,7 +166,10 @@ const opOf = async (id: string) =>
       [id],
     )
   )[0] as Record<string, unknown>;
-const attempts = async () => Number((await rows("SELECT count(*) AS n FROM app.operation_attempts"))[0]?.n);
+const attempts = async (id: string) =>
+  Number(
+    (await rows("SELECT count(*) AS n FROM app.operation_attempts WHERE operation_id = $1", [id]))[0]?.n,
+  );
 
 const start = (id: string, extra: Partial<Parameters<typeof startHeartbeat>[0]> = {}) =>
   startHeartbeat({
@@ -252,7 +269,7 @@ describe("a heartbeat that cannot reach the database", () => {
 const bucketOf = (account: string, name = "posts") =>
   createHash("sha256").update(["fixture", name, "account", account].join("\0")).digest("hex");
 const turn = (queue: string, closing: AbortSignal) =>
-  runTurn({ pool: db.pool("worker"), logger, registry, queue, owner: "owner-w", closing });
+  runTurn({ pool: db.pool("worker"), logger, registry, ...wiring, queue, owner: "owner-w", closing });
 /** Waits until a statement of the bucket definer is parked on a row lock. */
 async function untilParked(): Promise<void> {
   for (let tries = 0; tries < 160; tries++) {
@@ -340,7 +357,13 @@ describe("close() on a turn", () => {
 
 // [case, scenario, what the turn answers, the row afterwards, its wait in seconds when it waits]
 const CASES: [string, Scenario, string, Record<string, unknown>, number | null][] = [
-  ["a connected channel and a live target", {}, "ready", { state: "claimed", lease_owner: "owner-w" }, null],
+  [
+    "a connected channel and a live target",
+    {},
+    "dispatched",
+    { state: "published", lease_owner: null },
+    null,
+  ],
   [
     "a disabled channel",
     { channelState: "disabled" },
@@ -352,15 +375,15 @@ const CASES: [string, Scenario, string, Record<string, unknown>, number | null][
     "a channel that needs a reconnect",
     { channelState: "needs_reconnect" },
     "moved",
-    { state: "retry_wait", reason_code: null },
-    300,
+    { state: "blocked_reconnect", reason_code: "pending" },
+    null,
   ],
   [
     "a channel revoked by the provider",
     { channelState: "revoked_by_provider" },
     "moved",
-    { state: "retry_wait", reason_code: null },
-    300,
+    { state: "blocked_reconnect", reason_code: "pending" },
+    null,
   ],
   [
     "a channel the worker cannot see",
@@ -382,23 +405,28 @@ describe("the re-read after the claim", () => {
       pool: db.pool("worker"),
       logger,
       registry,
+      ...wiring,
       queue: planted.queue,
       owner: "owner-w",
       closing: closing.signal,
     });
     expect(result).toMatchObject({ kind, id: planted.id });
-    expect(await opOf(planted.id)).toMatchObject({ ...after, effect: "none" });
+    expect(await opOf(planted.id)).toMatchObject({
+      ...after,
+      effect: kind === "dispatched" ? "confirmed" : "none",
+    });
     if (wait !== null) {
       const due = new Date((await opOf(planted.id)).next_attempt_at as string).getTime();
       expect(Math.abs((due - Date.now()) / 1000 - wait)).toBeLessThan(10);
     }
-    // The turn never reaches a provider: no attempt is written for any case.
-    expect(await attempts()).toBe(0);
+    // Only the turn that passes every check reaches the provider (a prepare and a commit); a turn that does not writes no attempt.
+    expect(await attempts(planted.id)).toBe(kind === "dispatched" ? 2 : 0);
   });
 
   it("counts a wait by the database clock, not by the clock of this process", async () => {
     // fails first because: the wait is a timestamp made from this process's clock, so a skewed clock moves the due time
-    const planted = await plant({ channelState: "needs_reconnect" });
+    const planted = await plant();
+    await setTokens(planted.account, "posts", 0);
     const skewed = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 3_600_000);
     try {
       await gate(planted);
@@ -409,7 +437,8 @@ describe("the re-read after the claim", () => {
       "SELECT extract(epoch FROM next_attempt_at - clock_timestamp())::float8 AS left FROM app.operations WHERE id = $1",
       [planted.id],
     );
-    expect(Math.abs(Number(row?.left) - 300)).toBeLessThan(10);
+    // A full refill takes 10800 s for 300 tokens: one token is 36 s away.
+    expect(Math.abs(Number(row?.left) - 36)).toBeLessThan(10);
   });
 });
 
@@ -445,6 +474,7 @@ const gate = (planted: Planted, using = registry) =>
     pool: db.pool("worker"),
     logger,
     registry: using,
+    ...wiring,
     queue: planted.queue,
     owner: "owner-w",
     closing: new AbortController().signal,
@@ -474,6 +504,7 @@ describe("a claimed row whose provider is not registered", () => {
       pool: db.pool("worker"),
       logger: own,
       registry,
+      ...wiring,
       queue: planted.queue,
       owner: "owner-w",
       closing: new AbortController().signal,
@@ -513,9 +544,9 @@ describe("the bucket gate", () => {
     const [first, second] = [await plant({ account }), await plant({ account, workspace: other })];
     const [apart] = [await plant()];
     await setTokens(account, "posts", 1);
-    expect(await gate(first)).toMatchObject({ kind: "ready" });
+    expect(await gate(first)).toMatchObject({ kind: "dispatched" });
     expect(await gate(second)).toMatchObject({ kind: "moved", to: "retry_wait" });
-    expect(await gate(apart)).toMatchObject({ kind: "ready" });
+    expect(await gate(apart)).toMatchObject({ kind: "dispatched" });
   });
 
   it("takes the limits in manifest order and stops at the first denial, leaving the tokens it took spent", async () => {

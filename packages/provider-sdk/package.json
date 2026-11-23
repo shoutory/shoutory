@@ -9,6 +9,10 @@
       "source": "./src/egress/client.ts",
       "default": "./dist/egress/client.js"
     },
+    "./egress/fetch-adapter": {
+      "source": "./src/egress/fetch-adapter.ts",
+      "default": "./dist/egress/fetch-adapter.js"
+    },
     "./egress/errors": {
       "source": "./src/egress/errors.ts",
       "default": "./dist/egress/errors.js"

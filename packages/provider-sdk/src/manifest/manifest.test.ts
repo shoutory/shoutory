@@ -220,6 +220,47 @@ const REFUSALS: [string, Mutate, string][] = [
   ],
 ];
 
+// The unknown-outcome and quota fields of the dispatch: each is required (a default would hide a provider that never
+// said it) and bounded, so a manifest cannot make the worker wait for ever or retry without end.
+const OUT_OF_BOUNDS: [string, unknown][] = [
+  ["maxInFlightSeconds", 0],
+  ["maxInFlightSeconds", 86_401],
+  ["readBackGapSeconds", 0],
+  ["maxAttempts", 0],
+  ["maxAttempts", 21],
+  ["unverifiedHorizonDays", 0],
+  ["unverifiedHorizonDays", 3_651],
+  ["clockSkewSeconds", 3_601],
+];
+for (const [field, value] of OUT_OF_BOUNDS) {
+  REFUSALS.push([
+    `${field} of ${String(value)}`,
+    (m) => {
+      m[field] = value;
+    },
+    field,
+  ]);
+}
+for (const field of ["maxInFlightSeconds", "readBackGapSeconds", "maxAttempts", "unverifiedHorizonDays"]) {
+  REFUSALS.push([`a missing ${field}`, (m) => delete m[field], field]);
+}
+REFUSALS.push(
+  [
+    "a quota above what the ledger counts",
+    (m) => {
+      m.quotas = [{ name: "posts", max: 10_001, windowSeconds: 3_600 }];
+    },
+    "quotas.0.max",
+  ],
+  [
+    "a quota window above a day",
+    (m) => {
+      m.quotas = [{ name: "posts", max: 10, windowSeconds: 86_401 }];
+    },
+    "quotas.0.windowSeconds",
+  ],
+);
+
 describe("manifestSchema", () => {
   it("accepts a complete manifest", () => {
     expect(manifestSchema.safeParse(fixtureManifest()).success).toBe(true);
@@ -232,6 +273,10 @@ describe("manifestSchema", () => {
     expect(result.success).toBe(false);
     const paths = result.error?.issues.map((issue) => issue.path.join(".")) ?? [];
     expect(paths).toContain(path);
+  });
+
+  it("gives a manifest that declares no quota an empty list", () => {
+    expect(manifestSchema.parse(fixtureManifest()).quotas).toEqual([]);
   });
 });
 

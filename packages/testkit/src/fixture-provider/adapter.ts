@@ -119,9 +119,15 @@ async function request(
   context: AdapterContext,
   method: string,
   path: string,
-  send: { readonly body?: unknown; readonly key?: string; readonly token?: SealedSecret } = {},
+  send: {
+    readonly body?: unknown;
+    readonly key?: string;
+    readonly token?: SealedSecret;
+    /** False for a call that changes nothing at the provider though it is not a GET (a validation). */
+    readonly write?: boolean;
+  } = {},
 ): Promise<Answer> {
-  const write = method !== "GET";
+  const write = send.write ?? method !== "GET";
   try {
     const response = await context.fetch(`${options.baseUrl}${path}`, {
       method,
@@ -140,7 +146,11 @@ async function request(
     return {
       ok: false,
       status: response.status,
-      result: map({ status: response.status, code, retryAfter, now: context.now(), write }),
+      // The status is the provider's answer, kept whatever the mapper says of the failure.
+      result: {
+        ...map({ status: response.status, code, retryAfter, now: context.now(), write }),
+        httpStatus: response.status,
+      },
     };
   } catch (error) {
     return { ok: false, result: networkFailure(error, write) };
@@ -253,7 +263,7 @@ export function createFixtureAdapter(options: FixtureAdapterOptions): ProviderAd
     context: AdapterContext,
     method: string,
     path: string,
-    send?: { readonly body?: unknown; readonly key?: string },
+    send?: { readonly body?: unknown; readonly key?: string; readonly write?: boolean },
   ) => request(options, context, method, path, send);
 
   // A success answer must hold an id; one that does not (cut short, or garbled) is an unknown outcome.
@@ -271,7 +281,7 @@ export function createFixtureAdapter(options: FixtureAdapterOptions): ProviderAd
 
   return {
     prepare: async (context: AdapterContext, input: CommitInput) =>
-      done(await call(context, "POST", "/v1/validate", { body: { text: input.text } })),
+      done(await call(context, "POST", "/v1/validate", { body: { text: input.text }, write: false })),
     commit: async (context, input) =>
       withId(
         await call(context, "POST", "/v1/posts", {

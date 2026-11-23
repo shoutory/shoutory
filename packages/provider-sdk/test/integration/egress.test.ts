@@ -213,6 +213,43 @@ describe("egressFetch size and total time (SSRF-09)", () => {
   });
 });
 
+describe("egressFetch caller's signal (LIM-01)", () => {
+  it("a signal that aborts ends a sent call at once, as a possible effect, long before its own time limit", async () => {
+    // fails first because: the request carries no signal of the caller, so a lost lease cannot cancel a call in flight
+    handler = () => undefined;
+    const caller = new AbortController();
+    setTimeout(() => caller.abort(), 150);
+    const began = Date.now();
+    const failure = await refusal(
+      egressFetch(
+        {
+          url: `http://slow.test:${port}/`,
+          method: "POST",
+          body: "payload",
+          timeoutMs: 5_000,
+          signal: caller.signal,
+        },
+        policyOf(["127.0.0.0/8"], local().lookup),
+      ),
+    );
+    expect([failure.class, failure.effect]).toEqual(["network", "possible"]);
+    expect(Date.now() - began).toBeLessThan(2_000);
+  });
+
+  it("a signal that is already aborted refuses the call before any connection is opened", async () => {
+    // fails first because: the signal is ignored, so the call connects and waits for the answer
+    const caller = new AbortController();
+    caller.abort();
+    await refusal(
+      egressFetch(
+        { url: `http://slow.test:${port}/`, timeoutMs: 5_000, signal: caller.signal },
+        policyOf(["127.0.0.0/8"], local().lookup),
+      ),
+    );
+    expect(connections).toBe(0);
+  });
+});
+
 describe("egressFetch connections and retry (BG-18)", () => {
   it("keep-alive reuses one connection per host", async () => {
     const policy = policyOf(["127.0.0.0/8"], local().lookup);

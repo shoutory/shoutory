@@ -20,6 +20,8 @@ export interface EgressRequest {
   readonly timeoutMs?: number;
   /** The response body cap, default 1 MiB. */
   readonly maxBytes?: number;
+  /** Cancels the call, in flight or before it starts (a lost lease), whatever time the call has left. */
+  readonly signal?: AbortSignal;
 }
 
 export interface EgressResponse {
@@ -188,7 +190,9 @@ export async function egressFetch(req: EgressRequest, policy: EgressPolicy): Pro
     headers: req.headers ?? {},
     body: req.body,
   };
-  const signal = AbortSignal.timeout(req.timeoutMs ?? DEFAULT_TOTAL_MS);
+  if (req.signal?.aborted) throw new EgressError({ class: "network", host: hop.url.hostname });
+  const timeout = AbortSignal.timeout(req.timeoutMs ?? DEFAULT_TOTAL_MS);
+  const signal = req.signal === undefined ? timeout : AbortSignal.any([timeout, req.signal]);
   for (let redirects = 0; ; redirects += 1) {
     const response = await attempt(hop, policy, req, signal);
     const next = nextHop(hop, response);

@@ -1,7 +1,8 @@
-import { heartbeat } from "@shoutory/core/ledger/client";
-import { withTenant } from "@shoutory/db/context";
+import { type Claim, heartbeat } from "@shoutory/core/ledger/client";
 import type { AppPool } from "@shoutory/db/pool";
+import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import type { Logger } from "../../logging/logger.js";
+import { type Held, inJob, type Operation, sqlOf } from "./held.js";
 
 export interface HeartbeatOptions {
   readonly pool: AppPool;
@@ -24,13 +25,8 @@ export interface Heartbeat {
 }
 
 const extendLease = ({ pool, workspaceId, id, token, owner, leaseSeconds }: HeartbeatOptions) =>
-  withTenant(pool, { principalKind: "job", jobPurpose: "ledger", workspaceIds: [workspaceId] }, (tx) =>
-    heartbeat((text, values) => tx.query(text, values), {
-      id,
-      token: String(token),
-      owner,
-      extendSeconds: leaseSeconds,
-    }),
+  inJob(pool, workspaceId, (tx) =>
+    heartbeat(sqlOf(tx), { id, token: String(token), owner, extendSeconds: leaseSeconds }),
   );
 
 // A beat is given a third of the lease; one that is still waiting then counts as failed.
@@ -95,5 +91,39 @@ export function startHeartbeat(options: HeartbeatOptions): Heartbeat {
       clearTimeout(deadline);
       await inFlight;
     },
+  };
+}
+
+export interface HoldOptions {
+  readonly pool: AppPool;
+  readonly logger: Logger;
+  readonly claim: Claim;
+  readonly operation: Operation;
+  readonly manifest: Manifest;
+  readonly leaseSeconds: number;
+  /** The lease owner. */
+  readonly owner: string;
+  readonly now: () => number;
+  /** Taken on the monotonic clock before the claim, so the abort deadline never lies after the lease end. */
+  readonly started: number;
+}
+
+/** Starts the heartbeat of a claim and gathers what the turn holds; `stop` ends the beat and waits for one in flight. */
+export function hold(options: HoldOptions): { held: Held; stop: () => Promise<void> } {
+  const { claim, operation, manifest, leaseSeconds, started } = options;
+  const beating = startHeartbeat({
+    pool: options.pool,
+    logger: options.logger,
+    workspaceId: claim.workspaceId,
+    id: claim.id,
+    token: claim.fencingToken,
+    owner: options.owner,
+    leaseSeconds,
+    now: options.now,
+    claimStartedMs: started,
+  });
+  return {
+    held: { claim, operation, manifest, leaseSeconds, started, signal: beating.signal },
+    stop: () => beating.stop(),
   };
 }

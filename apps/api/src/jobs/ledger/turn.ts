@@ -1,27 +1,43 @@
 import {
   bucketKey,
-  type Claim,
-  callTimeoutMs,
   claimOperation,
   denialMove,
   type PreflightMove,
   publishLeaseSeconds,
   rereadOutcome,
   takeBucket,
-  transition,
 } from "@shoutory/core/ledger/client";
-import { type TenantTx, withTenant } from "@shoutory/db/context";
 import { withSystem } from "@shoutory/db/context/system";
 import type { AppPool } from "@shoutory/db/pool";
+import type { AdapterMap } from "@shoutory/provider-sdk/adapter";
 import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import type { Registry } from "@shoutory/provider-sdk/registry";
 import type { Logger } from "../../logging/logger.js";
-import { startHeartbeat } from "./heartbeat.js";
+import { dispatch } from "./dispatch.js";
+import { hold } from "./heartbeat.js";
+import {
+  type ChannelFacts,
+  type Held,
+  handBack,
+  inJob,
+  move,
+  movedOrLost,
+  type Operation,
+  readOperation,
+  sqlOf,
+  type TurnResult,
+} from "./held.js";
+
+export type { TurnResult } from "./held.js";
 
 export interface TurnOptions {
   readonly pool: AppPool;
   readonly logger: Logger;
   readonly registry: Registry;
+  /** The adapter of each registered provider; a provider with none fails its operations. */
+  readonly adapters: AdapterMap;
+  /** The `fetch` an adapter of this provider is given: the one network path of the worker. */
+  readonly fetchFor: (manifest: Manifest) => typeof fetch;
   readonly queue: string;
   /** The lease owner: one value for the worker process. */
   readonly owner: string;
@@ -30,38 +46,12 @@ export interface TurnOptions {
   /** A monotonic clock in milliseconds; the default is `performance.now`. */
   readonly now?: () => number;
 }
-export type TurnResult =
-  | { kind: "idle" }
-  | { kind: "closed" }
-  | { kind: "handed_back" }
-  | { kind: "lost"; id: string }
-  | { kind: "moved"; id: string; to: string; reason?: string }
-  | { kind: "ready"; id: string; token: string; callTimeoutMs: number };
-
-interface Operation {
-  readonly id: string;
-  readonly workspace_id: string;
-  readonly channel_id: string;
-  readonly variant_id: string;
-  readonly provider_id: string;
-  /** What is left of the lateness window, blocked time not counted, as the database counts it. */
-  readonly lateness_left_seconds: number;
-}
-interface ChannelFacts {
-  readonly provider_id: string;
-  readonly provider_account_id: string | null;
-  readonly instance_host: string | null;
-  readonly connection_state: string;
-}
-
-const sqlOf = (tx: TenantTx) => (text: string, values: unknown[]) => tx.query(text, values);
-const asJob = (workspaceId: string) =>
-  ({ principalKind: "job", jobPurpose: "ledger", workspaceIds: [workspaceId] }) as const;
 
 /**
  * One turn of a worker on a queue: it claims one due operation, keeps its lease alive, reads the channel and the target
- * again, and ends at the point where the provider call would begin. Every write is fenced by the token it was handed, so a
- * turn whose lease went elsewhere writes nothing more. It ends `lost` the moment the heartbeat says so.
+ * again, and dispatches it: the marker, the one committing call, the result and its move. Every write is fenced by the
+ * token it was handed, so a turn whose lease went elsewhere writes nothing more. It ends `lost` the moment the heartbeat
+ * says so.
  */
 export async function runTurn(options: TurnOptions): Promise<TurnResult> {
   const { pool, closing, now = () => performance.now() } = options;
@@ -77,57 +67,27 @@ export async function runTurn(options: TurnOptions): Promise<TurnResult> {
     options.logger.error({ provider: operation.provider_id }, "claimed operation has no registered provider");
     throw new Error(`no provider "${operation.provider_id}" is registered`);
   }
-  const leaseSeconds = publishLeaseSeconds(manifest.leaseSeconds);
-  const beating = startHeartbeat({
+  const holding = hold({
     pool,
     logger: options.logger,
-    workspaceId: claim.workspaceId,
-    id: claim.id,
-    token: claim.fencingToken,
+    claim,
+    operation,
+    manifest,
+    leaseSeconds: publishLeaseSeconds(manifest.leaseSeconds),
     owner: options.owner,
-    leaseSeconds,
     now,
-    claimStartedMs: started,
+    started,
   });
   try {
-    return await preflight(options, {
-      claim,
-      operation,
-      manifest,
-      leaseSeconds,
-      started,
-      signal: beating.signal,
-    });
+    return await preflight(options, holding.held);
   } finally {
-    await beating.stop();
+    await holding.stop();
   }
-}
-
-interface Held {
-  readonly claim: Claim;
-  readonly operation: Operation;
-  readonly manifest: Manifest;
-  readonly leaseSeconds: number;
-  readonly started: number;
-  readonly signal: AbortSignal;
-}
-
-async function readOperation(pool: AppPool, claim: Claim): Promise<Operation> {
-  const { rows } = await withTenant(pool, asJob(claim.workspaceId), (tx) =>
-    tx.query<Operation>(
-      `SELECT id, workspace_id, channel_id, variant_id, provider_id,
-              extract(epoch FROM lateness_deadline + blocked_total - clock_timestamp())::float8 AS lateness_left_seconds
-         FROM app.operations WHERE id = $1`,
-      [claim.id],
-    ),
-  );
-  if (rows[0] === undefined) throw new Error("the claimed operation cannot be read");
-  return rows[0];
 }
 
 // The channel, then the variant and the post of the target, as they are now.
 async function readTarget(pool: AppPool, operation: Operation) {
-  return withTenant(pool, asJob(operation.workspace_id), async (tx) => {
+  return inJob(pool, operation.workspace_id, async (tx) => {
     const channel = await tx.query<ChannelFacts>(
       `SELECT provider_id, provider_account_id, instance_host, connection_state
          FROM app.channels WHERE id = $1`,
@@ -154,51 +114,13 @@ async function readTarget(pool: AppPool, operation: Operation) {
   });
 }
 
-/** Moves the claimed row by one fenced pre-flight move of the worker (row 12, or row 10 to hand it back). */
-async function move(
-  pool: AppPool,
-  held: Held,
-  to: string,
-  changes: { reasonCode?: string; waitSeconds?: number } = {},
-): Promise<boolean> {
-  const result = await withTenant(pool, asJob(held.claim.workspaceId), async (tx) => {
-    // A wait is counted by the database clock, in seconds from now, never by this process's clock.
-    const due =
-      changes.waitSeconds === undefined
-        ? undefined
-        : (
-            await tx.query<{ at: string }>(
-              "SELECT (clock_timestamp() + make_interval(secs => $1::float8))::text AS at",
-              [changes.waitSeconds],
-            )
-          ).rows[0]?.at;
-    return transition(sqlOf(tx), {
-      workspaceId: held.claim.workspaceId,
-      operationId: held.claim.id,
-      token: held.claim.fencingToken,
-      from: "claimed",
-      to,
-      actor: "W",
-      changes: {
-        ...(changes.reasonCode === undefined ? {} : { reason_code: changes.reasonCode }),
-        ...(due === undefined ? {} : { next_attempt_at: due }),
-      },
-    });
-  });
-  return result.outcome === "moved";
-}
-
 async function preflightMove(pool: AppPool, held: Held, outcome: PreflightMove): Promise<TurnResult> {
   const changes: { reasonCode?: string; waitSeconds?: number } = {};
   if (outcome.to === "paused") changes.reasonCode = outcome.reasonCode;
-  if (outcome.to !== "failed" && outcome.waitSeconds !== undefined) changes.waitSeconds = outcome.waitSeconds;
-  if (!(await move(pool, held, outcome.to, changes))) return { kind: "lost", id: held.claim.id };
-  return {
-    kind: "moved",
-    id: held.claim.id,
-    to: outcome.to,
-    ...(outcome.to === "paused" ? { reason: outcome.reasonCode } : {}),
-  };
+  if ("waitSeconds" in outcome && outcome.waitSeconds !== undefined)
+    changes.waitSeconds = outcome.waitSeconds;
+  const moved = await move(pool, held, outcome.to, changes);
+  return movedOrLost(held, outcome.to, moved, outcome.to === "paused" ? outcome.reasonCode : undefined);
 }
 
 // Spends one token of each rate limit of the manifest, in its order, and stops at the first denial (the tokens already
@@ -211,7 +133,7 @@ async function takeLimits(
 ): Promise<PreflightMove | null> {
   for (const limit of held.manifest.rateLimits) {
     const key = bucketKey({ limitName: limit.name, scope: limit.scope, keyName: limit.key, channel });
-    const answer = await withTenant(pool, asJob(held.claim.workspaceId), (tx) =>
+    const answer = await inJob(pool, held.claim.workspaceId, (tx) =>
       takeBucket(sqlOf(tx), {
         key,
         scope: limit.scope,
@@ -234,10 +156,8 @@ async function takeLimits(
 async function preflight(options: TurnOptions, held: Held): Promise<TurnResult> {
   const { pool, closing, now = () => performance.now() } = options;
   const { claim, operation, manifest, signal } = held;
-  const handBack = async (kind: "closed" | "handed_back" = "closed"): Promise<TurnResult> =>
-    (await move(pool, held, "pending")) ? { kind } : { kind: "lost", id: claim.id };
   const lost: TurnResult = { kind: "lost", id: claim.id };
-  if (closing.aborted) return handBack();
+  if (closing.aborted) return handBack(pool, held, "closed");
   const target = await readTarget(pool, operation);
   if (signal.aborted) return lost;
   // A channel the worker cannot see is a removed target: the operation fails.
@@ -245,18 +165,25 @@ async function preflight(options: TurnOptions, held: Held): Promise<TurnResult> 
   if (channel === undefined) return preflightMove(pool, held, { to: "failed" });
   const outcome = rereadOutcome({ channelState: channel.connection_state, targetLive: target.targetLive });
   if (outcome !== null) return preflightMove(pool, held, outcome);
-  if (closing.aborted) return handBack();
+  if (closing.aborted) return handBack(pool, held, "closed");
   const denied = await takeLimits(pool, held, channel, () => signal.aborted || closing.aborted);
   if (signal.aborted) return lost;
-  if (closing.aborted) return handBack();
+  if (closing.aborted) return handBack(pool, held, "closed");
   if (denied !== null) return preflightMove(pool, held, denied);
-  const timeout = callTimeoutMs({
-    manifestTimeoutMs: manifest.callTimeoutSeconds * 1000,
-    leaseSeconds: held.leaseSeconds,
-    elapsedMs: now() - held.started,
-  });
-  if (signal.aborted) return lost;
-  // Too little lease for a call: the row goes back to pending now instead of staying leased until the lease ends.
-  if (timeout === null) return handBack("handed_back");
-  return { kind: "ready", id: claim.id, token: claim.fencingToken, callTimeoutMs: timeout };
+  const adapter = options.adapters[manifest.id];
+  if (adapter === undefined) {
+    options.logger.error({ provider: manifest.id }, "claimed operation has no adapter");
+    return preflightMove(pool, held, { to: "failed" });
+  }
+  const deps = {
+    pool,
+    logger: options.logger,
+    owner: options.owner,
+    adapter,
+    fetch: options.fetchFor(manifest),
+    now,
+    reconcileQueue: options.registry.queueNames(manifest.id).reconcile,
+    closing,
+  };
+  return dispatch(deps, held, channel);
 }

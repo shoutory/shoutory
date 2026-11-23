@@ -62,6 +62,9 @@ export interface ConnectAdapter {
   identity(context: AdapterContext, input: IdentityInput): Promise<ProviderResult>;
 }
 
+/** The adapter of each registered provider, by provider id (the worker's second input beside the registry). */
+export type AdapterMap = Readonly<Record<string, ProviderAdapter>>;
+
 /** A post that already exists at the provider, found by its id or, where the provider allows it, by the key. */
 export interface RemotePost {
   readonly externalId?: string;

@@ -84,21 +84,50 @@ export function providersArgument(facts: readonly ProviderFacts[]): Record<strin
   );
 }
 
-const WAIT_FOR_RECONNECT_SECONDS = 300;
+interface SweepFacts {
+  id: string;
+  readBackMode: string;
+  maxAttempts: number;
+  unverifiedHorizonDays: number;
+}
+/**
+ * The arguments of the two sweeps, from the manifests: for the lease sweep, how soon a row that became unknown is first
+ * read back (at once for a provider that cannot read back) and how long it is chased; for the due-move sweep, the
+ * attempts a row may use. A provider not listed is not touched by the rules that need its manifest.
+ */
+export function sweepArguments(facts: readonly SweepFacts[]): {
+  leases: Record<string, unknown>;
+  due: Record<string, unknown>;
+} {
+  return {
+    leases: Object.fromEntries(
+      facts.map((fact) => [
+        fact.id,
+        {
+          first_backoff_seconds: fact.readBackMode === "E" ? 0 : 60,
+          unverified_horizon_days: fact.unverifiedHorizonDays,
+        },
+      ]),
+    ),
+    due: Object.fromEntries(facts.map((fact) => [fact.id, { max_attempts: fact.maxAttempts }])),
+  };
+}
+
 export type PreflightMove =
   | { to: "paused"; reasonCode: "channel_disabled" | "provider_cooldown"; waitSeconds?: number }
   | { to: "retry_wait"; waitSeconds: number }
+  | { to: "blocked_reconnect" }
   | { to: "failed" };
 
 /**
  * What the worker does when it has claimed an operation and reads its channel and its target again: a target that is gone
- * or settled fails the operation; a disabled channel pauses it; any other channel that is not connected makes it wait.
+ * or settled fails the operation; a disabled channel pauses it; a channel that lost its grant parks it until the owner
+ * reconnects (OL row 13, which only the channel states `needs_reconnect`, `disconnected` and `revoked_by_provider` allow).
  */
 export function rereadOutcome(input: { channelState: string; targetLive: boolean }): PreflightMove | null {
   if (!input.targetLive) return { to: "failed" };
   if (input.channelState === "disabled") return { to: "paused", reasonCode: "channel_disabled" };
-  if (input.channelState !== "connected")
-    return { to: "retry_wait", waitSeconds: WAIT_FOR_RECONNECT_SECONDS };
+  if (input.channelState !== "connected") return { to: "blocked_reconnect" };
   return null;
 }
 
@@ -133,6 +162,8 @@ export const transitionChangesSchema = z.strictObject({
   lease_expires_at: z.string().optional(),
   heartbeat_at: z.string().optional(),
   evidence: z.unknown().optional(),
+  idempotent_resend: z.boolean().optional(),
+  unverified_horizon_days: z.number().int().optional(),
 });
 
 export interface TransitionCall {
@@ -143,21 +174,33 @@ export interface TransitionCall {
   to: string;
   actor: "W" | "P" | "R";
   changes?: z.input<typeof transitionChangesSchema>;
+  /** The next attempt and the next check, in seconds from now on the database clock, set in the move's own statement. */
+  attemptInSeconds?: number;
+  checkInSeconds?: number;
 }
 export type TransitionResult = { outcome: "moved"; fencingToken: string } | { outcome: "lost_lease" };
 
 /** One fenced move; a move whose token or state is no longer the caller's answers `lost_lease`, never an error. */
 export async function transition(run: SqlRun, call: TransitionCall): Promise<TransitionResult> {
   const changes = transitionChangesSchema.parse(call.changes ?? {});
-  const { rows } = await run("SELECT * FROM app.operation_transition($1, $2, $3, $4, $5, $6, $7::jsonb)", [
-    call.workspaceId,
-    call.operationId,
-    String(call.token),
-    call.from,
-    call.to,
-    call.actor,
-    JSON.stringify(changes),
-  ]);
+  const { rows } = await run(
+    `SELECT * FROM app.operation_transition($1, $2, $3, $4, $5, $6, $7::jsonb
+       || CASE WHEN $8::float8 IS NULL THEN '{}'::jsonb
+            ELSE jsonb_build_object('next_attempt_at', (clock_timestamp() + make_interval(secs => $8::float8))::text) END
+       || CASE WHEN $9::float8 IS NULL THEN '{}'::jsonb
+            ELSE jsonb_build_object('next_check_at', (clock_timestamp() + make_interval(secs => $9::float8))::text) END)`,
+    [
+      call.workspaceId,
+      call.operationId,
+      String(call.token),
+      call.from,
+      call.to,
+      call.actor,
+      JSON.stringify(changes),
+      call.attemptInSeconds ?? null,
+      call.checkInSeconds ?? null,
+    ],
+  );
   const row = rows[0];
   if (row?.outcome === "lost_lease") return { outcome: "lost_lease" };
   if (row?.outcome === "moved") return { outcome: "moved", fencingToken: String(row.fencing_token) };
@@ -188,6 +231,46 @@ export async function claimOperation(run: SqlRun, queue: string, owner: string):
   };
 }
 
+/**
+ * Claims up to `limit` unknown outcomes of a reconcile queue that are due. A kind in `classEKinds` goes to a person at once
+ * (the provider cannot read back); every other row becomes `reconciling` under a lease for `owner`.
+ */
+export async function claimReconciles(
+  run: SqlRun,
+  call: { queue: string; limit: number; owner: string; leaseSeconds: number; classEKinds: readonly string[] },
+): Promise<Claim[]> {
+  const { rows } = await run("SELECT * FROM app.claim_reconciles($1, $2, $3, $4, $5::text[])", [
+    call.queue,
+    call.limit,
+    call.owner,
+    call.leaseSeconds,
+    call.classEKinds,
+  ]);
+  // A row handed to a person has no lease: only the leased rows are parsed and returned.
+  return rows
+    .filter((row) => row.state === "reconciling")
+    .map((row) => claimRow.parse(row))
+    .map((row) => ({
+      id: row.id,
+      workspaceId: row.workspace_id,
+      fencingToken: row.fencing_token,
+      kind: row.kind,
+      state: row.state,
+    }));
+}
+
+/** Records that a read-back proved the post absent; the evidence a move back to retry needs (OL 7.3). */
+export async function recordAbsent(
+  run: SqlRun,
+  call: { workspaceId: string; operationId: string; externalId: string },
+): Promise<void> {
+  await run("SELECT * FROM app.record_evidence($1, $2, 'absent', 'read_back', NULL, $3::jsonb)", [
+    call.workspaceId,
+    call.operationId,
+    JSON.stringify({ source: "adapter", external_id: call.externalId }),
+  ]);
+}
+
 /** Extends the lease the caller holds by `extendSeconds`; `lost` when it no longer holds it. */
 export async function heartbeat(
   run: SqlRun,
@@ -200,6 +283,81 @@ export async function heartbeat(
     call.extendSeconds,
   ]);
   return rows[0]?.outcome === "ok" ? "ok" : "lost";
+}
+
+export type AttemptStep = "prepare" | "commit" | "poll" | "read_back";
+export type AttemptStart =
+  | { outcome: "started"; attemptId: string; attemptNo: number }
+  | { outcome: "lost_lease" }
+  | { outcome: "quota_denied" };
+
+/**
+ * Starts one step of an attempt. A `commit` start is the effect marker: it moves the row to dispatching with the effect
+ * `possible` and takes the manifest's quotas, all in the caller's transaction, which must commit before the provider is called.
+ */
+export async function startAttempt(
+  run: SqlRun,
+  call: {
+    workspaceId: string;
+    operationId: string;
+    token: string;
+    owner: string;
+    step: AttemptStep;
+    quotas?: Record<string, { capacity: number; window_seconds: number }>;
+  },
+): Promise<AttemptStart> {
+  const { rows } = await run("SELECT * FROM app.operation_attempt_start($1, $2, $3, $4, $5, $6::jsonb)", [
+    call.workspaceId,
+    call.operationId,
+    call.token,
+    call.owner,
+    call.step,
+    JSON.stringify(call.quotas ?? {}),
+  ]);
+  const row = rows[0];
+  if (row?.outcome === "started")
+    return { outcome: "started", attemptId: String(row.attempt_id), attemptNo: Number(row.attempt_no) };
+  if (row?.outcome === "lost_lease") return { outcome: "lost_lease" };
+  if (row?.outcome === "quota_denied") return { outcome: "quota_denied" };
+  throw new Error("operation_attempt_start answered an unknown outcome");
+}
+
+export interface AttemptResult {
+  effect: "none" | "possible" | "confirmed";
+  http_status?: number;
+  error_class?: string;
+  provider_code?: string;
+  retry_after_ms?: number;
+  /** The id the provider answered with, kept on the attempt. */
+  response_excerpt?: string;
+}
+
+/** Writes what an attempt did, once; `lost_lease` when the token is no longer the caller's. */
+export async function finishAttempt(
+  run: SqlRun,
+  call: { workspaceId: string; attemptId: string; token: string; result: AttemptResult },
+): Promise<"finished" | "lost_lease"> {
+  const { rows } = await run("SELECT * FROM app.operation_attempt_finish($1, $2, $3, $4::jsonb)", [
+    call.workspaceId,
+    call.attemptId,
+    call.token,
+    JSON.stringify(call.result),
+  ]);
+  return rows[0]?.outcome === "finished" ? "finished" : "lost_lease";
+}
+
+/** Records the step a worker has reached, with no move of state. */
+export async function recordProgress(
+  run: SqlRun,
+  call: { workspaceId: string; operationId: string; token: string; cursor: string },
+): Promise<"recorded" | "lost_lease"> {
+  const { rows } = await run("SELECT * FROM app.operation_record_progress($1, $2, $3, $4, NULL)", [
+    call.workspaceId,
+    call.operationId,
+    call.token,
+    call.cursor,
+  ]);
+  return rows[0]?.outcome === "recorded" ? "recorded" : "lost_lease";
 }
 
 export interface BucketAnswer {

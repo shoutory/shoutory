@@ -107,6 +107,24 @@ const manifestShape = z.strictObject({
   callTimeoutSeconds: z.int().positive().max(3_600),
   retryAfterMaxSeconds: z.int().positive().max(86_400),
   dispatchMarginSeconds: z.int().nonnegative().max(3_600),
+  // The unknown-outcome rules (OL 7.3): how long a sent call may still land, the gap between two absence reads, the
+  // attempts a post gets, how long an unknown outcome is chased before it is `unverified`, and the clock skew allowed.
+  maxInFlightSeconds: z.int().positive().max(86_400),
+  readBackGapSeconds: z.int().positive().max(86_400),
+  maxAttempts: z.int().positive().max(20),
+  unverifiedHorizonDays: z.int().positive().max(3_650),
+  clockSkewSeconds: z.int().nonnegative().max(3_600),
+  // The publishing quotas the provider counts on top of its rate limits; none by default (no M1 provider has one).
+  quotas: z
+    .array(
+      z.strictObject({
+        name,
+        max: z.int().positive().max(10_000),
+        windowSeconds: z.int().positive().max(86_400),
+      }),
+    )
+    .max(8)
+    .default([]),
   concurrency: z.int().positive().max(1000),
   // The four classes of a refresh failure: only `revoked` disconnects a channel.
   refreshErrorMap: z.record(name, z.enum(["transient", "rate_limited", "config", "revoked"])),

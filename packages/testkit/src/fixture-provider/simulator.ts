@@ -5,7 +5,7 @@ import type {
 } from "@shoutory/provider-sdk/conformance/fault-matrix";
 import { z } from "zod";
 import type { Fault } from "../simulator/faults.js";
-import { type Handler, type SimReply, startSimulator } from "../simulator/server.js";
+import { type Handler, type SimReply, type SimulatorOptions, startSimulator } from "../simulator/server.js";
 
 const POST = "/v1/posts";
 const ROUTES: Record<MatrixOperation, string> = {
@@ -111,9 +111,9 @@ export function fixtureRoutes(posts: Map<string, StoredPost>): Readonly<Record<s
 }
 
 /** Starts the fixture network on a loopback port. It answers the fixture adapter and arms matrix faults. */
-export async function startFixtureSimulator() {
+export async function startFixtureSimulator(options: SimulatorOptions = {}) {
   const posts = new Map<string, StoredPost>();
-  const simulator = await startSimulator(fixtureRoutes(posts));
+  const simulator = await startSimulator(fixtureRoutes(posts), options);
   return {
     url: simulator.url,
     close: () => simulator.close(),

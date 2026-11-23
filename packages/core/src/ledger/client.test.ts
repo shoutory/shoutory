@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bucketKey, callTimeoutMs, denialMove } from "./client.js";
+import { bucketKey, callTimeoutMs, denialMove, rereadOutcome } from "./client.js";
 
 describe("callTimeoutMs", () => {
   // [manifest timeout ms, lease seconds, ms since the claim started, the timeout or null for no call]
@@ -19,6 +19,22 @@ describe("callTimeoutMs", () => {
       );
     },
   );
+});
+
+describe("rereadOutcome", () => {
+  // [channel state, whether the target is live, the move or null to go on]
+  const ROWS: [string, boolean, object | null][] = [
+    ["connected", true, null],
+    ["connected", false, { to: "failed" }],
+    ["disabled", true, { to: "paused", reasonCode: "channel_disabled" }],
+    ["needs_reconnect", true, { to: "blocked_reconnect" }],
+    ["disconnected", true, { to: "blocked_reconnect" }],
+    ["revoked_by_provider", true, { to: "blocked_reconnect" }],
+  ];
+  it.each(ROWS)("a %s channel with a live target %s gives %j", (channelState, targetLive, expected) => {
+    // fails first because: a channel that lost its grant waits 300 s and is claimed again, instead of parking (OL row 13)
+    expect(rereadOutcome({ channelState, targetLive })).toEqual(expected);
+  });
 });
 
 describe("denialMove", () => {
