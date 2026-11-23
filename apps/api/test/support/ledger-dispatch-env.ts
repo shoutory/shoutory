@@ -94,6 +94,8 @@ interface Options {
   hold?: Hold;
   /** Runs when the simulator receives a request, before the route's handler. */
   before?: (route: string) => void | Promise<void>;
+  /** The clock the turn and the tick read (the sunset of an API version); the default is the real one. */
+  clock?: () => Date;
 }
 export async function makeEnv(o: Options = {}) {
   const lease = o.lease ?? 12;
@@ -106,21 +108,36 @@ export async function makeEnv(o: Options = {}) {
   });
   // A provider id of its own, so a row another test left behind is never claimed by this test's tick.
   const providerId = `fx_${randomUUID().replaceAll("-", "").slice(0, 8)}`;
-  const registry = createRegistry([
-    {
-      ...fixtureManifest,
-      id: providerId,
-      leaseSeconds: { prepare: lease, commit: lease, readBack: lease, edit: lease, delete: lease },
-      ...o.manifest,
-    },
-  ]);
+  const manifestWith = (extra: Record<string, unknown> = {}) => ({
+    ...fixtureManifest,
+    id: providerId,
+    leaseSeconds: { prepare: lease, commit: lease, readBack: lease, edit: lease, delete: lease },
+    ...o.manifest,
+    ...extra,
+  });
+  const registry = createRegistry([manifestWith()]);
   const adapters: Record<string, ProviderAdapter> = {
     [providerId]: createFixtureAdapter({ baseUrl: sim.url }),
   };
   const fetchFor = () => o.hold?.fetch ?? fetch;
   const queueName = `publish.${providerId}`;
-  const common = { pool: workerPool(), logger, registry, adapters, fetchFor };
+  const common = {
+    pool: workerPool(),
+    logger,
+    registry,
+    adapters,
+    fetchFor,
+    ...(o.clock === undefined ? {} : { clock: o.clock }),
+  };
   return {
+    // One tick as another manifest of the same provider (a newer API version named) and at another time.
+    tickWith: (extra: Record<string, unknown>, at?: Date) =>
+      createLedgerTick({
+        ...common,
+        registry: createRegistry([manifestWith(extra)]),
+        ...(at === undefined ? {} : { clock: () => at }),
+        boss: state.queue,
+      }).tick(),
     sim,
     commits,
     registry,
@@ -173,9 +190,17 @@ export interface Plant {
   unreadable?: true;
   /** Held by a worker that is gone: the lease ended a second ago. */
   leased?: true;
+  /** The sends the operation has used, and the reason it is paused for. */
+  attempts?: number;
+  reason?: string;
+  /** Not due for this many seconds. */
+  waitSeconds?: number;
 }
 // The columns a plant sets beyond the common ones.
 const plantExtras = (o: Plant): Record<string, unknown> => ({
+  ...(o.attempts === undefined ? {} : { attempt_count: o.attempts }),
+  ...(o.reason === undefined ? {} : { reason_code: o.reason }),
+  ...(o.waitSeconds === undefined ? {} : { next_attempt_at: new Date(Date.now() + o.waitSeconds * 1000) }),
   ...(o.leased
     ? { lease_owner: "dead", lease_expires_at: new Date(Date.now() - 1000), heartbeat_at: new Date() }
     : {}),

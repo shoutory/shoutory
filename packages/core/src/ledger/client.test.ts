@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bucketKey, callTimeoutMs, denialMove, rereadOutcome } from "./client.js";
+import { bucketKey, callTimeoutMs, denialMove, rereadOutcome, sweepArguments } from "./client.js";
 
 describe("callTimeoutMs", () => {
   // [manifest timeout ms, lease seconds, ms since the claim started, the timeout or null for no call]
@@ -34,6 +34,19 @@ describe("rereadOutcome", () => {
   it.each(ROWS)("a %s channel with a live target %s gives %j", (channelState, targetLive, expected) => {
     // fails first because: a channel that lost its grant waits 300 s and is claimed again, instead of parking (OL row 13)
     expect(rereadOutcome({ channelState, targetLive })).toEqual(expected);
+  });
+});
+
+describe("sweepArguments", () => {
+  it("lists every provider for the lease sweep and only the live ones for the due-move sweep", () => {
+    // fails first because: the due list names a retired provider, so its rows at the last attempt fail while it is retired
+    const base = { readBackMode: "A", maxAttempts: 5, unverifiedHorizonDays: 30 };
+    const { leases, due } = sweepArguments([
+      { id: "live", live: true, ...base },
+      { id: "retired", live: false, ...base },
+    ]);
+    expect([Object.keys(leases), Object.keys(due)]).toEqual([["live", "retired"], ["live"]]);
+    expect(due.live).toEqual({ max_attempts: 5 });
   });
 });
 

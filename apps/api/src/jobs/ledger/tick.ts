@@ -6,6 +6,7 @@ import type { AppPool } from "@shoutory/db/pool";
 import type { AdapterMap } from "@shoutory/provider-sdk/adapter";
 import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import type { Registry } from "@shoutory/provider-sdk/registry";
+import { pastSunset } from "@shoutory/provider-sdk/snapshot";
 import type { PgBoss } from "pg-boss";
 import type { Logger } from "../../logging/logger.js";
 import { type IntervalLoop, intervalLoop } from "../outbox-relay.js";
@@ -34,7 +35,9 @@ const bossDb = (tx: TenantTx) => ({
 /**
  * Admits the due targets and sends one wake-up for each queue that got an operation, inside the transaction of `tx`: a
  * rollback leaves no job, and a commit never leaves an operation without its job. The queue keeps one waiting wake-up per
- * queue; the claim of the next tick covers a job that is lost.
+ * queue. Admission takes a target up to its dispatch margin before it is due, so this wake-up can come before the post is
+ * due: the end of every tick wakes each publish queue again (`createLedgerTick`), which sends it when it falls due and
+ * covers a wake-up that is lost.
  */
 export async function admitAndWake(
   tx: TenantTx,
@@ -69,6 +72,8 @@ export interface LedgerTickOptions {
   /** The adapter of each provider the tick reads back for; a provider with none is only swept and admitted. */
   readonly adapters?: AdapterMap;
   readonly fetchFor?: (manifest: Manifest) => typeof fetch;
+  /** The calendar time, for the sunset of an API version; the default is the real clock. */
+  readonly clock?: () => Date;
   readonly intervalMs?: number;
 }
 export interface LedgerTick extends IntervalLoop {
@@ -76,19 +81,15 @@ export interface LedgerTick extends IntervalLoop {
   tick(): Promise<void>;
 }
 
-export function createLedgerTick({
-  pool,
-  boss,
-  registry,
-  logger,
-  adapters = {},
-  fetchFor = refuseEgress,
-  intervalMs = TICK_MS,
-}: LedgerTickOptions): LedgerTick {
-  const owner = `tick-${randomUUID()}`;
-  const closing = new AbortController();
-  const sweeps = sweepArguments(registry.manifests);
-  const step = async (name: string, run: () => Promise<unknown>): Promise<void> => {
+// Worked out at each tick: a provider whose API retires between two ticks leaves the live list at the next one.
+const sweepsAt = (registry: Registry, now: Date) =>
+  sweepArguments(registry.manifests.map((manifest) => ({ ...manifest, live: !pastSunset(manifest, now) })));
+
+type Step = (name: string, run: () => Promise<unknown>) => Promise<void>;
+// Runs one step of the tick; a step that fails is logged and the others still run.
+const stepper =
+  (logger: Logger): Step =>
+  async (name, run) => {
     try {
       await run();
     } catch (error) {
@@ -101,16 +102,43 @@ export function createLedgerTick({
       logger.error(fields, "ledger tick step failed");
     }
   };
-  // A sweep that put rows back in play wakes the publish queue of each provider that can send them.
+
+// One wake-up for the publish queue of each provider that can send, each in its own logged step so that one failing send
+// does not skip the others; the queue keeps one waiting wake-up of this key.
+async function wakePublish(
+  step: Step,
+  boss: PgBoss,
+  registry: Registry,
+  adapters: AdapterMap,
+): Promise<void> {
+  for (const manifest of registry.manifests) {
+    if (adapters[manifest.id] === undefined) continue;
+    const queue = registry.queueNames(manifest.id).publish;
+    await step(`wake ${manifest.id}`, () => boss.send(queue, {}, { singletonKey: "wake", retryLimit: 0 }));
+  }
+}
+
+export function createLedgerTick({
+  pool,
+  boss,
+  registry,
+  logger,
+  adapters = {},
+  fetchFor = refuseEgress,
+  clock = () => new Date(),
+  intervalMs = TICK_MS,
+}: LedgerTickOptions): LedgerTick {
+  const owner = `tick-${randomUUID()}`;
+  const closing = new AbortController();
+  const step = stepper(logger);
+  const wake = () => wakePublish(step, boss, registry, adapters);
+  // A sweep that put rows back in play wakes the publish queues at once: a shortcut for latency, since the wake at the
+  // end of the tick sends them anyway.
   const sweep = (sql: string, argument: Record<string, unknown>) => async () => {
     const moved = await withSystem(pool, "ledger", async (tx) =>
       Number((await tx.query<{ n: number }>(sql, [JSON.stringify(argument)])).rows[0]?.n ?? 0),
     );
-    if (moved === 0) return;
-    for (const manifest of registry.manifests) {
-      if (adapters[manifest.id] === undefined) continue;
-      await boss.send(registry.queueNames(manifest.id).publish, {}, { singletonKey: "wake", retryLimit: 0 });
-    }
+    if (moved > 0) await wake();
   };
   // Admits batch after batch while one comes back full, so a backlog does not wait a tick for each hundred.
   async function admitBacklog(): Promise<void> {
@@ -120,12 +148,17 @@ export function createLedgerTick({
     }
   }
   async function tick(): Promise<void> {
+    // One reading of the clock for the whole tick: both sweeps see the same live list.
+    const sweeps = sweepsAt(registry, clock());
     await step("expired leases", sweep("SELECT app.sweep_expired_leases($1::jsonb) AS n", sweeps.leases));
     await step("due moves", sweep("SELECT app.sweep_due_moves($1::jsonb) AS n", sweeps.due));
     await step("admission", admitBacklog);
     await step("reconcile", () =>
       reconcileStep({ pool, logger, registry, adapters, fetchFor, owner, closing: closing.signal }),
     );
+    // A post is admitted up to its dispatch margin before it is due, and the wake-up of admission comes then: waking the
+    // queues at the end of every tick sends it when it falls due, and covers a wake-up that was lost.
+    await wake();
   }
   const loop = intervalLoop("ledger tick", tick, logger, intervalMs, STOP_MS);
   return {

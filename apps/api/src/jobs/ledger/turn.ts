@@ -12,6 +12,7 @@ import type { AppPool } from "@shoutory/db/pool";
 import type { AdapterMap } from "@shoutory/provider-sdk/adapter";
 import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import type { Registry } from "@shoutory/provider-sdk/registry";
+import { pastSunset } from "@shoutory/provider-sdk/snapshot";
 import type { Logger } from "../../logging/logger.js";
 import { dispatch } from "./dispatch.js";
 import { hold } from "./heartbeat.js";
@@ -45,6 +46,8 @@ export interface TurnOptions {
   readonly closing: AbortSignal;
   /** A monotonic clock in milliseconds; the default is `performance.now`. */
   readonly now?: () => number;
+  /** The calendar time, for the sunset of an API version; the default is the real clock. */
+  readonly clock?: () => Date;
 }
 
 /**
@@ -165,6 +168,9 @@ async function preflight(options: TurnOptions, held: Held): Promise<TurnResult> 
   if (channel === undefined) return preflightMove(pool, held, { to: "failed" });
   const outcome = rereadOutcome({ channelState: channel.connection_state, targetLive: target.targetLive });
   if (outcome !== null) return preflightMove(pool, held, outcome);
+  // A provider whose API has retired sends nothing and spends no token: the row waits, visibly, until a live version is named.
+  if (pastSunset(manifest, (options.clock ?? (() => new Date()))()))
+    return preflightMove(pool, held, { to: "paused", reasonCode: "api_sunset" });
   if (closing.aborted) return handBack(pool, held, "closed");
   const denied = await takeLimits(pool, held, channel, () => signal.aborted || closing.aborted);
   if (signal.aborted) return lost;

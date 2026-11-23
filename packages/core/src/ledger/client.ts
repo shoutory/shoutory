@@ -89,11 +89,15 @@ interface SweepFacts {
   readBackMode: string;
   maxAttempts: number;
   unverifiedHorizonDays: number;
+  /** False for a provider whose API has retired at the time of the tick. */
+  live: boolean;
 }
 /**
  * The arguments of the two sweeps, from the manifests: for the lease sweep, how soon a row that became unknown is first
  * read back (at once for a provider that cannot read back) and how long it is chased; for the due-move sweep, the
- * attempts a row may use. A provider not listed is not touched by the rules that need its manifest.
+ * attempts a row may use, and only for a live provider: one whose API has retired is left out, so its `api_sunset` pauses
+ * stay and its retry and unknown rows wait until a live version is named. A provider not listed is not touched
+ * by the rules that need its manifest.
  */
 export function sweepArguments(facts: readonly SweepFacts[]): {
   leases: Record<string, unknown>;
@@ -109,12 +113,18 @@ export function sweepArguments(facts: readonly SweepFacts[]): {
         },
       ]),
     ),
-    due: Object.fromEntries(facts.map((fact) => [fact.id, { max_attempts: fact.maxAttempts }])),
+    due: Object.fromEntries(
+      facts.filter((fact) => fact.live).map((fact) => [fact.id, { max_attempts: fact.maxAttempts }]),
+    ),
   };
 }
 
 export type PreflightMove =
-  | { to: "paused"; reasonCode: "channel_disabled" | "provider_cooldown"; waitSeconds?: number }
+  | {
+      to: "paused";
+      reasonCode: "channel_disabled" | "provider_cooldown" | "api_sunset";
+      waitSeconds?: number;
+    }
   | { to: "retry_wait"; waitSeconds: number }
   | { to: "blocked_reconnect" }
   | { to: "failed" };

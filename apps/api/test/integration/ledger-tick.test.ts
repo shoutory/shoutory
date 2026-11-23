@@ -149,6 +149,57 @@ describe("the publish subscription", () => {
   }, 30_000);
 });
 
+describe("a post admitted ahead of its time", () => {
+  it("sends a post admitted ahead of its due time when it falls due, with no other row admitted or moved", async () => {
+    // fails first because: only an admission or a sweep wakes the queue, so the one wake-up came before the post was due
+    const wired = createRegistry([{ ...fixtureManifest, id: "aheadoftime" }]);
+    const target = await admin((a) => seedDueTarget(a, ws, -4, "aheadoftime"));
+    const worker = await startWorker({
+      connectionString: db.url("worker"),
+      pool: db.pool("worker"),
+      logger,
+      role: "worker",
+      mail: {
+        keys,
+        pepper: new SealedSecret("ledger-tick-pepper-for-tests-0123456789"),
+        smtpUrl: new SealedSecret("smtp://127.0.0.1:9"),
+        from: "noreply@mail.example.test",
+      },
+      registry: wired,
+      adapters: { aheadoftime: createFixtureAdapter({ baseUrl: simulator.url }) },
+      fetchFor: () => fetch,
+      ledgerIntervalMs: 300,
+    });
+    try {
+      const read = async () =>
+        (
+          await admin((a) =>
+            a.query(
+              "SELECT state, clock_timestamp() < due_at AS early FROM app.operations WHERE variant_id = $1",
+              [target],
+            ),
+          )
+        ).rows[0] as { state: string; early: boolean } | undefined;
+      // One cap for the whole row (the post is due after 4 s); the poll ends as soon as the state is what it waits for.
+      const deadline = Date.now() + 15_000;
+      const until = async (done: (found: Awaited<ReturnType<typeof read>>) => boolean) => {
+        let found = await read();
+        while (!done(found) && Date.now() < deadline) {
+          await sleep(100);
+          found = await read();
+        }
+        return found;
+      };
+      // Seen before it is due, it is pending and not sent; a slow start that first sees it after its time says nothing here.
+      const first = await until((found) => found !== undefined);
+      if (first?.early) expect(first.state).toBe("pending");
+      expect((await until((found) => found?.state === "published"))?.state).toBe("published");
+    } finally {
+      await worker.close();
+    }
+  }, 30_000);
+});
+
 describe("a provider added without a migrate", () => {
   it("has its queues created when the worker starts, so admission can wake it", async () => {
     // fails first because: the queues exist only after `shoutory migrate`, and a wake-up for a missing queue stalls admission

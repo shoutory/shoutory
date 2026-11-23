@@ -5,6 +5,11 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   ssr: { resolve: { conditions: ["source"], externalConditions: ["source"] } },
   test: {
-    include: ["packages/core/src/authz/**/*.test.ts", "packages/core/src/counting/**/*.test.ts"],
+    include: [
+      "packages/core/src/authz/**/*.test.ts",
+      "packages/core/src/counting/**/*.test.ts",
+      "packages/core/src/ledger/client.test.ts",
+      "packages/provider-sdk/src/snapshot.test.ts",
+    ],
   },
 });

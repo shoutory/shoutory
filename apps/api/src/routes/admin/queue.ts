@@ -19,8 +19,13 @@ export function registerQueue(app: App): void {
         const jobs = await tx.query<{ installed: boolean; lag_seconds: number | null }>(
           "SELECT installed, lag_seconds FROM app.job_lag()",
         );
+        // One total for each of the 17 states across every workspace, with no workspace, post or channel in it.
+        const counts = await tx.query<{ state: string; total: string }>(
+          "SELECT state, total FROM app.ledger_state_counts()",
+        );
         return {
           workers: workers.rows,
+          ledger: counts.rows.map((row) => ({ state: row.state, total: Number(row.total) })),
           outbox_lag_seconds: Number(outbox.rows[0]?.lag ?? 0),
           // Before the queue library's schema is installed there is no lag, never a zero.
           jobs: {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { fixtureManifest } from "../test/fixture-manifest.js";
 import { type Manifest, manifestSchema } from "./manifest/manifest.js";
-import { snapshotOf } from "./snapshot.js";
+import { pastSunset, snapshotOf } from "./snapshot.js";
 
 // The capability snapshot a channel records (R542 (7)): a digest of the manifest, the API version in force at `now` and
 // when it sunsets, and the capabilities and limits as the manifest lists them. The clock is an input.
@@ -48,5 +48,43 @@ describe("snapshotOf", () => {
       apiVersion: "v1",
       sunsetAt: null,
     });
+  });
+});
+
+describe("pastSunset", () => {
+  // NOW is 2026-11-21 00:00 UTC: a sunset takes effect at the start of its date. [what is announced, past or not]
+  const ROWS: [string, Record<string, unknown>, boolean][] = [
+    ["a version that sunsets tomorrow", { apiVersions: [version("v1", "2026-01-01", "2026-11-22")] }, false],
+    [
+      "a version whose sunset date is today",
+      { apiVersions: [version("v1", "2026-01-01", "2026-11-21")] },
+      true,
+    ],
+    ["a version that sunset yesterday", { apiVersions: [version("v1", "2026-01-01", "2026-11-20")] }, true],
+    ["no sunset announced", { apiVersions: [version("v1", "2026-01-01")] }, false],
+    [
+      "every version past its sunset",
+      { apiVersions: [version("v1", "2026-01-01", "2026-06-01"), version("v2", "2026-03-01", "2026-10-01")] },
+      true,
+    ],
+    [
+      "a newer version live beside a retired one",
+      { apiVersions: [version("v1", "2026-01-01", "2026-06-01"), version("v2", "2026-09-01")] },
+      false,
+    ],
+    [
+      "the whole provider retired",
+      { apiVersions: [version("v1", "2026-01-01")], sunset: "2026-11-01" },
+      true,
+    ],
+    [
+      "the whole provider retiring later",
+      { apiVersions: [version("v1", "2026-01-01")], sunset: "2026-12-01" },
+      false,
+    ],
+  ];
+  it.each(ROWS)("%s", (_name, overrides, past) => {
+    // fails first because: a sunset day counts as live all day, or only the version and never the provider is read
+    expect(pastSunset(manifestWith(overrides), NOW)).toBe(past);
   });
 });
