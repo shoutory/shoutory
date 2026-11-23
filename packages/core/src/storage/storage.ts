@@ -44,9 +44,18 @@ export function checkRange(range: { start: number; end: number }): void {
     throw new StorageError("invalid_key");
 }
 
+/** What a check found that is advice, not a failure; a closed list, so a warning never carries text of the store. */
+export type StorageWarning =
+  | "no_abort_rule"
+  | "abort_rule_too_long"
+  | "abort_rule_excludes_uploads"
+  | "abort_rule_unreadable";
+
 export interface StorageCheckInfo {
   /** Bytes a write can still use, or null where the driver cannot tell. */
   readonly freeBytes: number | null;
+  /** Advice about the store itself (the S3 lifecycle rule that aborts abandoned uploads); absent where there is none. */
+  readonly warnings?: readonly StorageWarning[];
 }
 
 export interface StorageDriver {

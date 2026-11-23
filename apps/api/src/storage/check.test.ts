@@ -42,6 +42,21 @@ const ROWS: Row[] = [
   ],
 ];
 
+describe("storage check: the warnings of the driver", () => {
+  const warned = { check: async () => ({ freeBytes: null, warnings: ["no_abort_rule" as const] }) };
+
+  it.each([
+    ["are copied into the answer when the probe passes", {}, ["no_abort_rule"]],
+    ["are dropped when the probe fails, so a missing bucket adds no noise", { put: fails }, []],
+  ])("%s", async (_name, broken, warnings) => {
+    expect((await checkStorage({ ...real, ...warned, ...broken })).warnings).toEqual(warnings);
+  });
+
+  it("are an empty list for a driver that has none", async () => {
+    expect((await checkStorage(real)).warnings).toEqual([]);
+  });
+});
+
 describe("storage check: a failing probe is a class, never error text", () => {
   it.each(ROWS)("%s", async (_name, broken, writable, readable, failure, options) => {
     const driver = { ...real, ...broken };

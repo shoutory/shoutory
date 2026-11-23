@@ -45,4 +45,18 @@ describe("shoutory storage check with the s3 driver", () => {
       expectNoCanary([...out, ...err].join("\n"));
     },
   );
+
+  // The simulator has no lifecycle API (it answers 501), so the check cannot read the rules: that is a warning with its
+  // own line on stderr, and the exit code and the one JSON line of stdout stay as they were.
+  it("warns on stderr that the lifecycle rules cannot be read, and still exits 0", async () => {
+    const out: string[] = [];
+    const err: string[] = [];
+    const io = { stdout: (line: string) => out.push(line), stderr: (line: string) => err.push(line) };
+    expect(await run(["storage", "check"], s3Env(BUCKET), io)).toBe(0);
+    expect(out).toHaveLength(1);
+    expect(JSON.parse(out.join(""))).toMatchObject({ failure: null, warnings: ["abort_rule_unreadable"] });
+    expect(err).toHaveLength(1);
+    expect(err[0]).toMatch(/^warning: /);
+    expectNoCanary([...out, ...err].join("\n"));
+  });
 });

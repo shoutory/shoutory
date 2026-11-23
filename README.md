@@ -193,7 +193,28 @@ checks each part's sha256, not the whole file, so the digest declared at registe
 original: bytes that differ end the upload as `corrupt`. Until then another member's upload of the same bytes is answered as
 a duplicate of it, and registers again if it is rejected. S3 keeps the parts of an upload that is never completed until it is
 aborted, so give the bucket a lifecycle rule that aborts incomplete multipart uploads after 7 days
-(`AbortIncompleteMultipartUpload`, `DaysAfterInitiation` 7); the app aborts the uploads it refuses itself.
+(`AbortIncompleteMultipartUpload`, `DaysAfterInitiation` 7); the app aborts the uploads it refuses itself. Save this as
+`rule.json` and apply it (the key needs permission to write the bucket's lifecycle configuration, which the app's own key
+does not need):
+
+```json
+{
+  "Rules": [
+    {
+      "ID": "shoutory-abort-incomplete-uploads",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "" },
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
+    }
+  ]
+}
+```
+
+```sh
+aws s3api put-bucket-lifecycle-configuration --bucket <bucket> --lifecycle-configuration file://rule.json
+```
+
+`shoutory storage check` reads the bucket's rules (it never writes one) and warns when none does this.
 
 A completed upload is checked, stripped of its metadata and resized by the `worker` role (so also by `all`), which
 therefore needs the same storage settings as the `api`: with driver `fs`, the same `SHOUTORY_DATA_DIR` (mount the one
@@ -249,6 +270,14 @@ creates it, so a missing mount fails instead of filling the container's own disk
 object, reads it back, deletes it and prints one JSON line: `driver`, `writable`, `readable`, `free_bytes` (null when
 unknown) and `failure` (null, or `write_failed`, `read_failed`, `delete_failed` or `timeout`). It exits 0 only when
 `failure` is null. The answer never names a path.
+
+The line also holds `warnings`, a list of codes (empty when there is nothing to say, and when the probe failed). With driver
+`s3` the command reads the bucket's lifecycle rules, and each warning is also printed as one `warning:` line on stderr; the
+exit code and the JSON line are not changed by it. The codes: `no_abort_rule` (no enabled rule aborts incomplete multipart
+uploads), `abort_rule_too_long` (the fastest rule that covers the app's keys waits more than 7 days),
+`abort_rule_excludes_uploads` (the rules that abort uploads have a tag filter or a prefix that leaves out the keys under
+`ws/`) and `abort_rule_unreadable` (the server refused the read or has no lifecycle API, as some S3-compatible servers do:
+check the rule by hand). The admin screen's storage test returns the same `warnings`.
 
 ### Logs and telemetry
 

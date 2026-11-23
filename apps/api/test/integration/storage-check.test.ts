@@ -83,6 +83,7 @@ describe("shoutory storage check", () => {
       readable: false,
       free_bytes: null,
       failure: "write_failed",
+      warnings: [],
     });
     expectNoPath([...out, ...err].join("\n"));
   });

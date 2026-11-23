@@ -187,3 +187,102 @@ describe("s3 driver: a streamed get body", () => {
     expect(closedByClient).toBe(true);
   });
 });
+
+// The lifecycle rules of a bucket, as the S3 API answers them (GetBucketLifecycleConfiguration): the check warns when
+// no rule aborts incomplete multipart uploads within 7 days for the keys the app writes (`ws/<workspace>/...`).
+const abortRule = (
+  days: number,
+  { filter = "<Filter><Prefix></Prefix></Filter>", status = "Enabled" } = {},
+) =>
+  `<Rule><ID>r</ID>${filter}<Status>${status}</Status><AbortIncompleteMultipartUpload><DaysAfterInitiation>${days}</DaysAfterInitiation></AbortIncompleteMultipartUpload></Rule>`;
+const configuration = (...rules: string[]) =>
+  `<?xml version="1.0" encoding="UTF-8"?><LifecycleConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">${rules.join("")}</LifecycleConfiguration>`;
+const refusal = (code: string) =>
+  `<?xml version="1.0" encoding="UTF-8"?><Error><Code>${code}</Code><Message>${KEY} on unit-bucket-1 for ${ACCESS_KEY}</Message></Error>`;
+
+// [row, status, body, the warnings the check reports]
+const LIFECYCLE: [string, number, string, string[]][] = [
+  [
+    "a bucket with no lifecycle configuration",
+    404,
+    refusal("NoSuchLifecycleConfiguration"),
+    ["no_abort_rule"],
+  ],
+  ["a rule of 7 days over every key", 200, configuration(abortRule(7)), []],
+  [
+    "a rule of 3 days over the legacy empty prefix",
+    200,
+    configuration(abortRule(3, { filter: "<Prefix/>" })),
+    [],
+  ],
+  [
+    "a rule of 7 days over the prefix ws/",
+    200,
+    configuration(abortRule(7, { filter: "<Filter><Prefix>ws/</Prefix></Filter>" })),
+    [],
+  ],
+  ["a rule of 30 days", 200, configuration(abortRule(30)), ["abort_rule_too_long"]],
+  ["a fast rule beside a slow one", 200, configuration(abortRule(30), abortRule(2)), []],
+  [
+    "a rule for another prefix",
+    200,
+    configuration(abortRule(7, { filter: "<Filter><Prefix>other/</Prefix></Filter>" })),
+    ["abort_rule_excludes_uploads"],
+  ],
+  [
+    "a rule for one workspace only",
+    200,
+    configuration(abortRule(7, { filter: "<Filter><Prefix>ws/some-workspace/</Prefix></Filter>" })),
+    ["abort_rule_excludes_uploads"],
+  ],
+  [
+    "a rule with a tag filter",
+    200,
+    configuration(abortRule(7, { filter: "<Filter><Tag><Key>a</Key><Value>b</Value></Tag></Filter>" })),
+    ["abort_rule_excludes_uploads"],
+  ],
+  ["a disabled rule", 200, configuration(abortRule(7, { status: "Disabled" })), ["no_abort_rule"]],
+  [
+    "a rule that expires objects and never aborts uploads",
+    200,
+    configuration(
+      "<Rule><ID>e</ID><Filter><Prefix></Prefix></Filter><Status>Enabled</Status><Expiration><Days>30</Days></Expiration></Rule>",
+    ),
+    ["no_abort_rule"],
+  ],
+  ["a server that refuses the read", 403, refusal("AccessDenied"), ["abort_rule_unreadable"]],
+  ["a server without the lifecycle API", 501, refusal("NotImplemented"), ["abort_rule_unreadable"]],
+];
+
+describe("s3 driver: the lifecycle warnings of its check", () => {
+  it.each(LIFECYCLE)("%s", async (_name, status, body, warnings) => {
+    const endpoint = await listen((_request, response) => {
+      response.writeHead(status, { "content-type": "application/xml" });
+      response.end(body);
+    });
+    const answer = await createS3Driver(configFor(endpoint)).check();
+    expect(answer).toEqual({ freeBytes: null, warnings });
+    const host = endpoint.replace("http://", "");
+    expect(leaks(JSON.stringify(answer), [KEY, ACCESS_KEY, SECRET_KEY, "unit-bucket-1", host])).toEqual([]);
+  });
+
+  it("lets any other failure of the read through as a storage failure, never as a warning", async () => {
+    const endpoint = await listen((_request, response) => {
+      response.writeHead(404, { "content-type": "application/xml" });
+      response.end(refusal("NoSuchBucket"));
+    });
+    await expect(createS3Driver(configFor(endpoint)).check()).rejects.toMatchObject({ kind: "failed" });
+  });
+
+  it("only reads the configuration: no request of the check is a write", async () => {
+    const methods: string[] = [];
+    const endpoint = await listen((request, response) => {
+      methods.push(`${request.method} ${request.url}`);
+      response.writeHead(200, { "content-type": "application/xml" });
+      response.end(configuration(abortRule(7)));
+    });
+    await createS3Driver(configFor(endpoint)).check();
+    expect(methods).toHaveLength(1);
+    expect(methods[0]).toMatch(/^GET \/unit-bucket-1\/?\?lifecycle/);
+  });
+});

@@ -3,8 +3,10 @@ import {
   CompleteMultipartUploadCommand,
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
+  GetBucketLifecycleConfigurationCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  type LifecycleRule,
   ListPartsCommand,
   PutObjectCommand,
   S3Client,
@@ -13,7 +15,13 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { StorageConfig } from "@shoutory/core/config";
-import { checkRange, type StorageDriver, StorageError, storageKeySegments } from "@shoutory/core/storage";
+import {
+  checkRange,
+  type StorageDriver,
+  StorageError,
+  type StorageWarning,
+  storageKeySegments,
+} from "@shoutory/core/storage";
 
 // Bounds of every request the client makes (R344). `throwOnRequestTimeout` is needed: without it a request that outlasts
 // `requestTimeout` only logs a warning.
@@ -344,6 +352,48 @@ export function createS3Multipart(config: S3Config) {
 
 export type S3Multipart = ReturnType<typeof createS3Multipart>;
 
+// Abandoned parts of a multipart upload cost storage until the bucket aborts them: a rule that does so within 7 days
+// for the keys the app writes (`ws/<workspace>/...`) is the advice of the check.
+const UPLOAD_KEY_PREFIX = "ws/";
+const MAX_ABORT_DAYS = 7;
+
+const prefixOf = (rule: LifecycleRule) =>
+  rule.Filter?.And?.Prefix ?? rule.Filter?.Prefix ?? rule.Prefix ?? "";
+const tagged = (rule: LifecycleRule) => rule.Filter?.Tag !== undefined || !!rule.Filter?.And?.Tags?.length;
+
+/** What the rules of a bucket mean for uploads: a rule counts when it is enabled, aborts uploads, has no tag filter and covers `ws/`. */
+function lifecycleWarnings(rules: readonly LifecycleRule[]): StorageWarning[] {
+  const aborting = rules.filter(
+    (rule) =>
+      rule.Status === "Enabled" && rule.AbortIncompleteMultipartUpload?.DaysAfterInitiation !== undefined,
+  );
+  if (aborting.length === 0) return ["no_abort_rule"];
+  const covering = aborting.filter((rule) => !tagged(rule) && UPLOAD_KEY_PREFIX.startsWith(prefixOf(rule)));
+  if (covering.length === 0) return ["abort_rule_excludes_uploads"];
+  const days = covering.map((rule) => rule.AbortIncompleteMultipartUpload?.DaysAfterInitiation ?? Infinity);
+  return Math.min(...days) <= MAX_ABORT_DAYS ? [] : ["abort_rule_too_long"];
+}
+
+const UNREADABLE_NAMES = new Set(["AccessDenied", "NotImplemented"]);
+
+/**
+ * Reads the lifecycle configuration (never writes one). A bucket with none is the plain "no rule" answer; a server that
+ * refuses the read or has no such API is "unreadable"; any other failure is the storage failure it is (R333: no SDK text).
+ */
+async function lifecycleAdvice(client: S3Client, Bucket: string): Promise<StorageWarning[]> {
+  try {
+    const answer = await client.send(new GetBucketLifecycleConfigurationCommand({ Bucket }));
+    return lifecycleWarnings(answer.Rules ?? []);
+  } catch (error) {
+    const { name, $metadata } = (error ?? {}) as { name?: string; $metadata?: { httpStatusCode?: number } };
+    if (name === "NoSuchLifecycleConfiguration") return ["no_abort_rule"];
+    const status = $metadata?.httpStatusCode;
+    if (UNREADABLE_NAMES.has(name ?? "") || status === 403 || status === 501)
+      return ["abort_rule_unreadable"];
+    throw mapped(error);
+  }
+}
+
 /**
  * Objects in one bucket of an S3-compatible server, under the storage key itself. The bucket must exist: the driver
  * never creates one. The credentials are read from their sealed form only when the SDK asks for them. One client
@@ -406,8 +456,8 @@ export function createS3Driver(config: S3Config, options: { bodyDeadlineMs?: num
       storageKeySegments(key);
       await guarded(() => client.send(new DeleteObjectCommand({ Bucket, Key: key })));
     },
-    // An S3 bucket has no free-space figure to report.
-    check: async () => ({ freeBytes: null }),
+    // An S3 bucket has no free-space figure to report; its advice is the lifecycle rule that aborts abandoned uploads.
+    check: async () => ({ freeBytes: null, warnings: await lifecycleAdvice(client, Bucket) }),
     close() {
       client.destroy();
       onceClient.destroy();

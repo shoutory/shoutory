@@ -1,5 +1,10 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import type { StorageDriver } from "@shoutory/core/storage";
+import {
+  type StorageCheckInfo,
+  type StorageDriver,
+  StorageError,
+  type StorageWarning,
+} from "@shoutory/core/storage";
 
 type CheckFailure = "write_failed" | "read_failed" | "delete_failed" | "timeout";
 
@@ -11,6 +16,8 @@ export interface StorageCheckResult {
   /** Null where the driver cannot tell. */
   free_bytes: number | null;
   failure: CheckFailure | null;
+  /** Advice about the store, as closed codes (never text of the store); empty when none, and when the probe failed. */
+  warnings: StorageWarning[];
 }
 
 interface CheckOptions {
@@ -52,11 +59,19 @@ async function step(
   }
 }
 
-async function freeBytes(driver: StorageDriver, signal: AbortSignal): Promise<number | null> {
+/**
+ * What the driver reports about itself; nothing once the time limit has passed. After a failed probe a storage failure
+ * of the report is expected (the same bucket that would not take the probe), so it adds nothing to the failure class.
+ */
+async function inspected(
+  driver: StorageDriver,
+  signal: AbortSignal,
+  probeFailed: boolean,
+): Promise<StorageCheckInfo> {
   try {
-    return (await within(driver.check(), signal)).freeBytes;
+    return await within(driver.check(), signal);
   } catch (error) {
-    if (error instanceof Lapse) return null;
+    if (error instanceof Lapse || (probeFailed && error instanceof StorageError)) return { freeBytes: null };
     throw error;
   }
 }
@@ -78,6 +93,7 @@ export async function checkStorage(
     readable: false,
     free_bytes: null,
     failure: null,
+    warnings: [],
   };
   result.failure = await step("write_failed", signal, () =>
     driver.put(key, new Blob([probe]).stream(), probe.length),
@@ -94,6 +110,9 @@ export async function checkStorage(
   if (result.writable && result.failure !== "timeout") {
     result.failure ??= await step("delete_failed", signal, () => driver.delete(key));
   }
-  result.free_bytes = await freeBytes(driver, signal);
+  const info = await inspected(driver, signal, result.failure !== null);
+  result.free_bytes = info.freeBytes;
+  // Advice about a store that failed its probe would only add noise to the failure.
+  if (result.failure === null) result.warnings = [...(info.warnings ?? [])];
   return result;
 }
