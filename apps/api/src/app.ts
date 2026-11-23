@@ -38,7 +38,7 @@ import { registerEntitlements } from "./routes/workspaces/entitlements.js";
 import { registerWorkspaces } from "./routes/workspaces/workspace.js";
 import { clientAddressResolver } from "./security/client-address.js";
 import { inlineScriptSource, readShell, registerStatic } from "./static/static.js";
-import type { S3Presigner } from "./storage/s3-driver.js";
+import type { S3Multipart, S3Presigner } from "./storage/s3-driver.js";
 
 export interface AppOptions {
   /** The exact origin the web app is served from; CSRF compares `Origin` with it. */
@@ -57,6 +57,8 @@ export interface AppOptions {
   readonly storage?: StorageDriver;
   /** Signs upload URLs (the S3 driver only); absent, the app has no register or complete routes for uploads. */
   readonly presigner?: S3Presigner;
+  /** The server side of S3 multipart uploads (the S3 driver only); absent, a file above 64 MiB is refused. */
+  readonly multipart?: S3Multipart;
   /** The folder of the built web app; when set, the app serves it after every other route. */
   readonly webRoot?: string | undefined;
   /** The release channel of this build (`stable`, `beta`, `nightly`); `stable` when absent. */
@@ -202,7 +204,7 @@ export function createApp(options: AppOptions): App {
   registerMailChecks(app, options.auth, options.mail ?? { from: undefined, dkimSelector: undefined });
   if (options.storage) registerStorageCheck(app, options.auth, options.storage);
   if (options.storage)
-    registerMedia(app, options.storage, options.presigner, () => new Date(options.now?.() ?? Date.now()));
+    registerMedia(app, options.storage, options, () => new Date(options.now?.() ?? Date.now()));
   app.notFound((c) => errorResponse(c, new Refusal("not_found", "no such route")));
   // Last, so a route added before it is never shadowed by the shell (R360).
   if (options.webRoot) registerStatic(app, options.webRoot, shell);

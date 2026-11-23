@@ -227,7 +227,8 @@ describe("the same bytes are one asset in a workspace", () => {
 describe("the size bound and the pending cap", () => {
   const MAX = 64 * 1024 * 1024;
   it.each([
-    ["one byte over 64 MiB", MAX + 1, 400],
+    // Without the multipart half of the driver, a file above 64 MiB has no way in.
+    ["one byte over 64 MiB with no multipart support", MAX + 1, 422],
     ["zero", 0, 400],
     ["a fraction", 1.5, 400],
     ["exactly 64 MiB", MAX, 201],
@@ -235,8 +236,11 @@ describe("the size bound and the pending cap", () => {
     const before = await assetCount(ws);
     const answer = await register(user("editor"), ws, { ...registerBody(), byte_size: byteSize });
     expect(answer.status).toBe(status);
-    if (status === 400) expect((await errorOf(answer)).code).toBe("validation_failed");
-    expect(await assetCount(ws)).toBe(status === 400 ? before : before + 1);
+    if (status !== 201)
+      expect((await errorOf(answer)).code).toBe(
+        status === 422 ? "unprocessable_content" : "validation_failed",
+      );
+    expect(await assetCount(ws)).toBe(status === 201 ? before + 1 : before);
   });
 
   it.each([

@@ -1,24 +1,44 @@
 import { createHash } from "node:crypto";
-import type { AuthorizedScope } from "@shoutory/core/authz/scope";
 import { type StorageDriver, StorageError } from "@shoutory/core/storage";
-import type { TenantTx } from "@shoutory/db/context";
 import { z } from "zod";
 import { Refusal } from "../../errors/refusal.js";
-import type { S3Presigner } from "../../storage/s3-driver.js";
+import type { Logger } from "../../logging/logger.js";
+import type { S3Multipart, S3Presigner } from "../../storage/s3-driver.js";
 import { type App, defineRoute } from "../define-route.js";
-import { definerRefusal } from "../definer-refusal.js";
+import {
+  finishMultipart,
+  MAX_MULTIPART_BYTES,
+  PART_SIZE,
+  registerParts,
+  startMultipart,
+} from "./multipart.js";
+import {
+  type Asset,
+  assetOf,
+  BASE,
+  callDefiner,
+  conflict,
+  EDIT_SPLIT,
+  LIVE,
+  markUploaded,
+  mediaParams,
+  originalKey,
+  type Scope,
+  settled,
+  uploadOf,
+  VIEW_SPLIT,
+  workspaceParams,
+} from "./shared.js";
 
 // Media uploads: register an upload (a presigned URL the browser sends the bytes to), complete it, and read the original
 // back by range. The bytes never pass through the API on the way in. The digest of an upload is the one storage holds
 // for the object (the URL signs the declared sha256, so storage refuses other bytes); the client's claim is never read
-// back as the digest. A member with library.edit uploads and library.view reads.
+// back as the digest. A file above the single-PUT size goes in parts (multipart.ts). A member with library.edit uploads
+// and library.view reads.
 
-/** The largest single upload (one PUT; larger files wait for multipart). */
+/** The largest single upload (one PUT; larger files go to storage in parts). */
 const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
 
-const uuid = z.uuid().transform((id) => id.toLowerCase());
-const workspaceParams = z.strictObject({ workspace_id: uuid });
-const mediaParams = z.strictObject({ workspace_id: uuid, media_id: uuid });
 const registerBody = z.strictObject({
   file_name: z
     .string()
@@ -30,54 +50,10 @@ const registerBody = z.strictObject({
     .min(1)
     .max(255)
     .regex(/^[^\p{Cc}]+$/u),
-  byte_size: z.number().int().min(1).max(MAX_UPLOAD_BYTES),
+  // The cap is the handler's: a file above it is refused as unprocessable, not as a malformed body.
+  byte_size: z.number().int().min(1),
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
 });
-
-const BASE = "/api/v1/workspaces/{workspace_id}/media";
-const EDIT = { workspace: "workspace_id", permission: "library.edit" } as const;
-const EDIT_SPLIT = { ...EDIT, split: true } as const;
-const VIEW_SPLIT = { workspace: "workspace_id", permission: "library.view", split: true } as const;
-const LIVE = ["uploaded", "scanning", "processing", "ready"];
-
-// The key the register definer derives for version 1 of an original.
-const originalKey = (workspaceId: string, mediaId: string) => `ws/${workspaceId}/${mediaId}/1/original`;
-
-const ASSET = `SELECT id, state, mime, byte_size, encode(sha256, 'hex') AS sha256, created_at FROM app.media_assets
-  WHERE workspace_id = $1 AND id = $2`;
-interface Asset {
-  id: string;
-  state: string;
-  created_at: Date;
-  mime: string | null;
-  byte_size: string | null;
-  sha256: string | null;
-}
-
-async function assetOf(tx: TenantTx, workspaceId: string, id: string): Promise<Asset> {
-  const row = (await tx.query<Asset>(ASSET, [workspaceId, id])).rows[0];
-  if (!row) throw new Refusal("not_found", "media row not visible");
-  return row;
-}
-
-/** A definer call whose refusals are answers (the cap of pending uploads, a state that is not allowed). */
-async function callDefiner<T extends Record<string, unknown>>(
-  tx: TenantTx,
-  sql: string,
-  params: unknown[],
-): Promise<T> {
-  try {
-    return (await tx.query<T>(sql, params)).rows[0] as T;
-  } catch (error) {
-    throw definerRefusal(error) ?? error;
-  }
-}
-
-/** What a `split` route calls: each call is its own short scoped transaction. */
-type Scope = <T>(write: boolean, run: (tx: TenantTx, scope: AuthorizedScope) => Promise<T>) => Promise<T>;
-
-const conflict = (reason: string) =>
-  new Refusal("conflict", `upload not completed: ${reason}`, { details: { reason } });
 
 /** Where the browser sends the bytes: an S3 upload URL, or on the filesystem driver the PUT route of this API. */
 async function uploadTarget(
@@ -94,49 +70,46 @@ async function uploadTarget(
   };
 }
 
-function registerUpload(app: App, presigner: S3Presigner | undefined): void {
+const tooLarge = () =>
+  new Refusal("unprocessable_content", "the file is larger than this server takes", {
+    details: { reason: "too_large" },
+  });
+
+/** What the S3 side of the app can do: sign single uploads, and (when it has them) run multipart uploads. */
+interface S3Side {
+  presigner: S3Presigner | undefined;
+  multipart: S3Multipart | undefined;
+  logger: Logger;
+}
+
+function registerUpload(app: App, { presigner, multipart, logger }: S3Side): void {
   defineRoute(app, {
     method: "post",
     path: BASE,
     policy: "session",
-    access: EDIT,
+    access: EDIT_SPLIT,
     params: workspaceParams,
     body: registerBody,
     status: 201,
-    handler: async ({ tx, scope, body }) => {
-      const made = await callDefiner<{ id: string }>(
-        tx,
-        "SELECT app.media_register($1, $2, $3, 'upload', NULL, NULL, NULL) AS id",
-        [scope.workspaceId, body.file_name, body.mime],
-      );
-      const target = await uploadTarget(presigner, scope.workspaceId, made.id, body);
+    handler: async ({ scoped, body }) => {
+      // Above the single-PUT size a file goes in parts, and only where storage can take them.
+      const large = body.byte_size > MAX_UPLOAD_BYTES;
+      if (body.byte_size > MAX_MULTIPART_BYTES || (large && !multipart)) throw tooLarge();
+      const made = await scoped(true, async (tx, scope) => ({
+        workspaceId: scope.workspaceId,
+        id: (
+          await callDefiner<{ id: string }>(
+            tx,
+            "SELECT app.media_register($1, $2, $3, 'upload', NULL, NULL, $4) AS id",
+            [scope.workspaceId, body.file_name, body.mime, large ? PART_SIZE : null],
+          )
+        ).id,
+      }));
+      if (large && multipart) return startMultipart({ multipart, logger }, scoped, made, body);
+      const target = await uploadTarget(presigner, made.workspaceId, made.id, body);
       return { id: made.id, url: target.url, headers: target.headers };
     },
   });
-}
-
-/** What a complete after the first answers: the live asset of the same bytes, or a refusal. */
-async function settled(
-  storage: StorageDriver,
-  workspaceId: string,
-  asset: Asset,
-  scoped: Scope,
-): Promise<{ id: string }> {
-  if (LIVE.includes(asset.state)) return { id: asset.id };
-  const head = await storage.head(originalKey(workspaceId, asset.id));
-  const live = head?.sha256
-    ? (
-        await scoped(false, (tx) =>
-          tx.query<{ id: string }>(
-            `SELECT id FROM app.media_assets WHERE workspace_id = $1 AND sha256 = decode($2, 'hex')
-             AND state = ANY($3) ORDER BY created_at LIMIT 1`,
-            [workspaceId, head.sha256, LIVE],
-          ),
-        )
-      ).rows[0]
-    : undefined;
-  if (!live) throw conflict("not_pending");
-  return { id: live.id };
 }
 
 /**
@@ -154,25 +127,10 @@ async function finish(
   if (head.size <= 0) throw conflict("empty");
   if (head.size > MAX_UPLOAD_BYTES) throw conflict("too_large");
   if (!head.sha256) throw conflict("no_checksum");
-  const { sha256, size } = { sha256: head.sha256, size: head.size };
-  try {
-    const done = await scoped(true, (tx, scope) =>
-      callDefiner<{ outcome: string; live_id: string }>(
-        tx,
-        "SELECT * FROM app.media_mark_uploaded($1, $2, decode($3, 'hex'), $4, $5)",
-        [scope.workspaceId, asset.id, sha256, size, asset.mime ?? "application/octet-stream"],
-      ),
-    );
-    return { id: done.live_id };
-  } catch (error) {
-    if (!(error instanceof Refusal) || error.code !== "conflict") throw error;
-    const now = await scoped(false, (tx, scope) => assetOf(tx, scope.workspaceId, asset.id));
-    if (now.state === "pending_upload") throw error;
-    return settled(storage, workspaceId, now, scoped);
-  }
+  return markUploaded(storage, workspaceId, asset, scoped, { sha256: head.sha256, size: head.size });
 }
 
-function registerComplete(app: App, storage: StorageDriver): void {
+function registerComplete(app: App, storage: StorageDriver, s3: Omit<S3Side, "presigner">): void {
   defineRoute(app, {
     method: "post",
     path: `${BASE}/{media_id}/complete`,
@@ -180,11 +138,15 @@ function registerComplete(app: App, storage: StorageDriver): void {
     access: EDIT_SPLIT,
     params: mediaParams,
     handler: async ({ scoped, params }) => {
-      const { workspaceId, asset } = await scoped(false, async (tx, scope) => ({
+      const { workspaceId, asset, upload } = await scoped(false, async (tx, scope) => ({
         workspaceId: scope.workspaceId,
         asset: await assetOf(tx, scope.workspaceId, params.media_id),
+        upload: await uploadOf(tx, scope.workspaceId, params.media_id),
       }));
       if (asset.state !== "pending_upload") return settled(storage, workspaceId, asset, scoped);
+      // A large upload is completed from storage's own part list; every storage call is outside a transaction.
+      if (upload?.multipart_upload_id)
+        return finishMultipart({ storage, ...s3 }, workspaceId, asset, upload, scoped);
       // The head is outside every transaction: the size and the digest are what storage holds for the object.
       return finish(storage, workspaceId, asset, scoped);
     },
@@ -356,16 +318,19 @@ function registerPut(app: App, storage: StorageDriver, now: () => Date): void {
 
 /**
  * The media routes, for either driver: register, complete and the read. Register answers an S3 upload URL when there is
- * a presigner; without one (the filesystem driver) it answers the PUT route of this API, which takes the bytes.
+ * a presigner; without one (the filesystem driver) it answers the PUT route of this API, which takes the bytes. With
+ * the multipart half of the S3 driver too, a file above 64 MiB registers in parts and has a route to sign them.
  */
 export function registerMedia(
   app: App,
   storage: StorageDriver,
-  presigner?: S3Presigner,
+  s3: { presigner?: S3Presigner | undefined; multipart?: S3Multipart | undefined; logger: Logger },
   now: () => Date = () => new Date(),
 ): void {
-  registerUpload(app, presigner);
-  registerComplete(app, storage);
+  const { presigner, multipart, logger } = s3;
+  registerUpload(app, { presigner, multipart, logger });
+  registerComplete(app, storage, { multipart, logger });
+  if (presigner && multipart) registerParts(app, presigner);
   if (!presigner) registerPut(app, storage, now);
   registerRead(app, storage);
 }

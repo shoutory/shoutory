@@ -50,7 +50,8 @@ describe("route registration", () => {
 
   it("the media routes are session routes with a library permission; the PUT exists only without a presigner", () => {
     const storage = createFsDriver(".");
-    const presigner = { presignPut: async () => ({ url: "", headers: {} }) };
+    const signed = async () => ({ url: "", headers: {} });
+    const presigner = { presignPut: signed, presignPart: signed };
     const mediaOf = (app: ReturnType<typeof createApp>) =>
       registeredRoutes(app)
         .filter((route) => route.path.includes("/media"))
@@ -62,5 +63,13 @@ describe("route registration", () => {
     const edit = "session library.edit";
     expect(mediaOf(buildApp({ storage }))).toEqual([`POST ${edit}`, `POST ${edit}`, `PUT ${edit}`, read]);
     expect(mediaOf(buildApp({ storage, presigner }))).toEqual([`POST ${edit}`, `POST ${edit}`, read]);
+    // The part-signing route exists only where storage can run multipart uploads.
+    const multipart = {} as never;
+    expect(mediaOf(buildApp({ storage, presigner, multipart }))).toEqual([
+      `POST ${edit}`,
+      `POST ${edit}`,
+      `POST ${edit}`,
+      read,
+    ]);
   });
 });

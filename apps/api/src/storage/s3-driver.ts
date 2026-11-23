@@ -1,10 +1,15 @@
 import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListPartsCommand,
   PutObjectCommand,
   S3Client,
   type S3ClientConfig,
+  UploadPartCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { StorageConfig } from "@shoutory/core/config";
@@ -115,6 +120,9 @@ type S3Config = Extract<StorageConfig, { driver: "s3" }>;
 
 // An upload URL lives 15 minutes.
 const PRESIGN_EXPIRY_SECONDS = 900;
+// S3 numbers the parts of an upload from 1 to 10,000; one page of ListParts holds at most 1,000 of them.
+const MAX_PART_NUMBER = 10_000;
+const MAX_LIST_PAGES = MAX_PART_NUMBER / 1000;
 
 const clientFor = (config: S3Config, endpoint: string, extra: Partial<S3ClientConfig> = {}) =>
   new S3Client({
@@ -133,6 +141,14 @@ const clientFor = (config: S3Config, endpoint: string, extra: Partial<S3ClientCo
     },
   });
 
+/** The base64 sha256 header value of a body of `contentLength` bytes, or a RangeError for a length or digest that is not one. */
+function checksumOf(contentLength: number, sha256: string): string {
+  if (!Number.isSafeInteger(contentLength) || contentLength <= 0)
+    throw new RangeError("contentLength must be a whole number of bytes above zero");
+  if (!/^[0-9a-f]{64}$/.test(sha256)) throw new RangeError("sha256 must be 64 lower-case hex digits");
+  return Buffer.from(sha256, "hex").toString("base64");
+}
+
 /**
  * Upload URLs for browsers. The presigner holds its own client on the public endpoint, because the URL carries the
  * host of the client that signs it; the server's own client is unchanged. The declared length is signed
@@ -141,7 +157,42 @@ const clientFor = (config: S3Config, endpoint: string, extra: Partial<S3ClientCo
 export function createS3Presigner(config: S3Config) {
   // No default checksum parameter is signed into the URL: a browser would have to send it too.
   const client = clientFor(config, config.publicEndpoint, { requestChecksumCalculation: "WHEN_REQUIRED" });
+  // The presigner moves `x-amz-` headers into the query string, where S3-compatible servers may ignore the checksum and
+  // store wrong bytes. Kept a signed header, a body that does not match is refused (BadDigest).
+  const signing = (signingDate: Date) => ({
+    expiresIn: PRESIGN_EXPIRY_SECONDS,
+    signingDate,
+    unhoistableHeaders: new Set(["x-amz-checksum-sha256"]),
+  });
   return {
+    /**
+     * A PUT URL for one part of a multipart upload: it accepts exactly `contentLength` bytes whose sha256 is `sha256`,
+     * for 15 minutes after `signedAt`. Parts are signed one by one because each carries its own digest, which only the
+     * browser that holds the bytes knows. The URL belongs to this upload id and this key.
+     */
+    async presignPart(
+      key: string,
+      uploadId: string,
+      partNumber: number,
+      contentLength: number,
+      sha256: string,
+      signedAt: Date = new Date(),
+    ): Promise<{ url: string; headers: Record<string, string> }> {
+      storageKeySegments(key);
+      if (!Number.isInteger(partNumber) || partNumber < 1 || partNumber > MAX_PART_NUMBER)
+        throw new RangeError("partNumber must be a whole number from 1 to 10000");
+      const checksum = checksumOf(contentLength, sha256);
+      const command = new UploadPartCommand({
+        Bucket: config.bucket,
+        Key: key,
+        UploadId: uploadId,
+        PartNumber: partNumber,
+        ContentLength: contentLength,
+        ChecksumSHA256: checksum,
+      });
+      const url = await getSignedUrl(client, command, signing(signedAt));
+      return { url, headers: { "x-amz-checksum-sha256": checksum } };
+    },
     /**
      * A PUT URL for `key` that accepts exactly `contentLength` bytes for 15 minutes after `signedAt`, and only while
      * nothing is stored there: the caller must send `If-None-Match: *`, which the URL signs, so it cannot replace an
@@ -154,10 +205,7 @@ export function createS3Presigner(config: S3Config) {
       signedAt: Date = new Date(),
     ): Promise<{ url: string; headers: Record<string, string> }> {
       storageKeySegments(key);
-      if (!Number.isSafeInteger(contentLength) || contentLength <= 0)
-        throw new RangeError("contentLength must be a whole number of bytes above zero");
-      if (!/^[0-9a-f]{64}$/.test(sha256)) throw new RangeError("sha256 must be 64 lower-case hex digits");
-      const checksum = Buffer.from(sha256, "hex").toString("base64");
+      const checksum = checksumOf(contentLength, sha256);
       const command = new PutObjectCommand({
         Bucket: config.bucket,
         Key: key,
@@ -165,19 +213,136 @@ export function createS3Presigner(config: S3Config) {
         IfNoneMatch: "*",
         ChecksumSHA256: checksum,
       });
-      // The presigner moves `x-amz-` headers into the query string, where S3-compatible servers may ignore the
-      // checksum and store wrong bytes. Kept a signed header, a body that does not match is refused (BadDigest).
-      const url = await getSignedUrl(client, command, {
-        expiresIn: PRESIGN_EXPIRY_SECONDS,
-        signingDate: signedAt,
-        unhoistableHeaders: new Set(["x-amz-checksum-sha256"]),
-      });
-      return { url, headers: { "if-none-match": "*", "x-amz-checksum-sha256": checksum } };
+      return {
+        url: await getSignedUrl(client, command, signing(signedAt)),
+        headers: { "if-none-match": "*", "x-amz-checksum-sha256": checksum },
+      };
     },
   };
 }
 
 export type S3Presigner = ReturnType<typeof createS3Presigner>;
+
+/** One part of an upload as storage lists it: its number, its size, its ETag and the sha256 (base64) it holds for it. */
+export interface UploadedPart {
+  readonly number: number;
+  readonly size: number;
+  readonly etag: string;
+  readonly checksum?: string;
+}
+
+/** Every page of the parts of an upload; null when storage has no such upload (finished or aborted). */
+async function listAllParts(
+  client: S3Client,
+  Bucket: string,
+  Key: string,
+  UploadId: string,
+): Promise<UploadedPart[] | null> {
+  const parts: UploadedPart[] = [];
+  let PartNumberMarker: string | undefined;
+  for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
+    const answer = await listPage(client, { Bucket, Key, UploadId, PartNumberMarker });
+    if (answer === null) return null;
+    parts.push(...(answer.Parts ?? []).map(uploadedPart));
+    if (!answer.IsTruncated) return parts;
+    PartNumberMarker = answer.NextPartNumberMarker;
+  }
+  throw new StorageError("failed");
+}
+
+/** One page of ListParts; null when storage has no such upload. */
+async function listPage(client: S3Client, input: ConstructorParameters<typeof ListPartsCommand>[0]) {
+  try {
+    return await client.send(new ListPartsCommand(input));
+  } catch (error) {
+    if (isNamed(error, "NoSuchUpload")) return null;
+    throw error;
+  }
+}
+
+function uploadedPart(part: {
+  PartNumber?: number | undefined;
+  Size?: number | undefined;
+  ETag?: string | undefined;
+  ChecksumSHA256?: string | undefined;
+}): UploadedPart {
+  if (part.PartNumber === undefined || part.Size === undefined || part.ETag === undefined)
+    throw new StorageError("failed");
+  const checksum = part.ChecksumSHA256 ? { checksum: part.ChecksumSHA256 } : {};
+  return { number: part.PartNumber, size: part.Size, etag: part.ETag, ...checksum };
+}
+
+/**
+ * The server side of S3 multipart uploads, on the server's own endpoint and credentials: it creates an upload, lists
+ * what storage holds, completes it and aborts it. The parts themselves go from the browser to the presigned URLs. A
+ * complete is attempted once and never replaces an object (`If-None-Match: *`), and it states the size it expects, so
+ * storage refuses a list that does not add up to it.
+ */
+export function createS3Multipart(config: S3Config) {
+  const client = clientFor(config, config.endpoint);
+  const onceClient = clientFor(config, config.endpoint, { maxAttempts: 1 });
+  const Bucket = config.bucket;
+  return {
+    async createUpload(key: string): Promise<{ uploadId: string }> {
+      storageKeySegments(key);
+      const answer = await guarded(() =>
+        client.send(new CreateMultipartUploadCommand({ Bucket, Key: key, ChecksumAlgorithm: "SHA256" })),
+      );
+      if (!answer.UploadId) throw new StorageError("failed");
+      return { uploadId: answer.UploadId };
+    },
+    async listParts(key: string, uploadId: string): Promise<UploadedPart[] | null> {
+      storageKeySegments(key);
+      return guarded(() => listAllParts(client, Bucket, key, uploadId));
+    },
+    async complete(
+      key: string,
+      uploadId: string,
+      parts: readonly { number: number; etag: string; checksum?: string }[],
+      objectSize: number,
+    ): Promise<void> {
+      storageKeySegments(key);
+      const command = new CompleteMultipartUploadCommand({
+        Bucket,
+        Key: key,
+        UploadId: uploadId,
+        IfNoneMatch: "*",
+        MpuObjectSize: objectSize,
+        MultipartUpload: {
+          Parts: parts.map(({ number, etag, checksum }) => ({
+            PartNumber: number,
+            ETag: etag,
+            ...(checksum ? { ChecksumSHA256: checksum } : {}),
+          })),
+        },
+      });
+      // An upload storage no longer has was finished (or removed) by an earlier complete: the caller settles by the object.
+      await guarded(async () => {
+        try {
+          await onceClient.send(command);
+        } catch (error) {
+          if (!isNamed(error, "NoSuchUpload")) throw error;
+        }
+      });
+    },
+    async abort(key: string, uploadId: string): Promise<void> {
+      storageKeySegments(key);
+      await guarded(async () => {
+        try {
+          await client.send(new AbortMultipartUploadCommand({ Bucket, Key: key, UploadId: uploadId }));
+        } catch (error) {
+          if (!isNamed(error, "NoSuchUpload")) throw error;
+        }
+      });
+    },
+    close(): void {
+      client.destroy();
+      onceClient.destroy();
+    },
+  };
+}
+
+export type S3Multipart = ReturnType<typeof createS3Multipart>;
 
 /**
  * Objects in one bucket of an S3-compatible server, under the storage key itself. The bucket must exist: the driver

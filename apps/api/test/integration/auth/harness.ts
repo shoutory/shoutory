@@ -256,6 +256,8 @@ export interface FixtureOptions {
   readonly storage?: StorageDriver;
   /** The upload-URL signer of the app; absent, the app has no register or complete routes. */
   readonly presigner?: AppOptions["presigner"];
+  /** The server side of S3 multipart uploads; absent, a file above 64 MiB is refused. */
+  readonly multipart?: AppOptions["multipart"];
   /** The plan limits of the app; absent, the app answers the core self-host value. */
   readonly entitlements?: Entitlements;
   /** The providers and egress client of the channel check; absent, the app has no check route. */
@@ -348,6 +350,7 @@ function buildOn({ logger, hibp, authPool, appPool, options }: Parts, libraryPoo
   const clock = options.now ? { now: options.now } : {};
   const storage = options.storage ? { storage: options.storage } : {};
   const signer = options.presigner ? { presigner: options.presigner } : {};
+  const parts = options.multipart ? { multipart: options.multipart } : {};
   const limits = options.entitlements ? { entitlements: options.entitlements } : {};
   const channels = options.channels ? { channels: options.channels } : {};
   const app = createApp({
@@ -360,6 +363,7 @@ function buildOn({ logger, hibp, authPool, appPool, options }: Parts, libraryPoo
     ...clock,
     ...storage,
     ...signer,
+    ...parts,
     ...limits,
     ...channels,
   });

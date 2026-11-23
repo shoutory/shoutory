@@ -41,17 +41,23 @@ afterAll(async () => {
 });
 
 /** An uploaded original as complete leaves it: the bytes stored, the asset `uploaded` with the mime the sender claimed. */
-async function uploaded(bytes: Buffer, claimedMime: string): Promise<string> {
+async function uploaded(bytes: Buffer, claimedMime: string, declared?: Buffer): Promise<string> {
   const id = randomUUID();
-  await fx.admin((client) =>
-    client.query(
+  // The digest of an upload is the hash of its bytes unless a row says what its sender declared.
+  const digest = (declared ?? createHash("sha256").update(bytes).digest()).toString("hex");
+  await fx.admin(async (client) => {
+    // Rows of this file plant the same image again and again, and the live-hash index allows one asset of a hash.
+    await client.query(
+      "DELETE FROM app.media_assets WHERE workspace_id = $1 AND sha256 = decode($2, 'hex')",
+      [ws, digest],
+    );
+    await client.query(
       `INSERT INTO app.media_assets (id, workspace_id, object_key, file_name, mime, source, created_by, state, sha256, byte_size)
        VALUES ($1::uuid, $2::uuid, 'ws/' || $2::text || '/' || $1::text || '/1/original', 'p.png', $3, 'upload',
          $4::uuid, 'uploaded', decode($5, 'hex'), $6)`,
-      // A hash of its own per asset: the live-hash index is unique, and this slice is not about duplicates.
-      [id, ws, claimedMime, owner, createHash("sha256").update(id).digest("hex"), bytes.length],
-    ),
-  );
+      [id, ws, claimedMime, owner, digest, bytes.length],
+    );
+  });
   await storage.put(`ws/${ws}/${id}/1/original`, new Blob([new Uint8Array(bytes)]).stream(), 1024 * 1024);
   return id;
 }
@@ -384,6 +390,49 @@ describe("the run of an uploaded video", () => {
     await probePrints(h264);
     await runVideo(id, { ffprobe: process.execPath, scan });
     expect([scans, (await rowOf(id)).state]).toEqual([1, "ready"]);
+  });
+});
+
+// A large upload reaches `uploaded` with the digest its sender declared (storage proved each part, not the whole), and
+// even a single PUT's digest is only as good as the row that holds it: the pipeline hashes every original it copies and
+// rejects an asset whose bytes are not the sha256 it carries, whatever way the upload came in and whether or not its
+// upload session still exists.
+async function uploadedWith(bytes: Buffer, digest: Buffer, session: boolean): Promise<string> {
+  const id = await uploaded(bytes, "image/jpeg", digest);
+  if (session)
+    await fx.admin((client) =>
+      client.query(
+        `INSERT INTO app.media_uploads (workspace_id, media_id, multipart_upload_id, part_size, expires_at)
+         VALUES ($1, $2, 'storage-upload-id-1', 16777216, now() + interval '1 day')`,
+        [ws, id],
+      ),
+    );
+  return id;
+}
+
+describe("the pipeline proves the digest of every upload", () => {
+  it.each([
+    ["a large upload", true],
+    ["a single PUT", false],
+  ])(
+    "%s whose bytes differ from its sha256 ends rejected corrupt, with no image decoded (floor)",
+    async (_name, session) => {
+      const id = await uploadedWith(
+        await jpeg(),
+        createHash("sha256").update("not the bytes").digest(),
+        session,
+      );
+      await run(id);
+      expect(await rowOf(id)).toEqual({ state: "rejected", reject_reason: "corrupt", derivatives: 0 });
+      expect(spawn).not.toHaveBeenCalled();
+    },
+  );
+
+  it("makes an upload ready when its bytes are the sha256 it carries", async () => {
+    const bytes = await jpeg();
+    const id = await uploadedWith(bytes, createHash("sha256").update(bytes).digest(), true);
+    await run(id);
+    expect((await rowOf(id)).state).toBe("ready");
   });
 });
 

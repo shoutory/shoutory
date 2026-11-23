@@ -27,6 +27,7 @@ const DEFINERS = [
   // The two media definers a user route calls name themselves in their own refusals (the cap, a state that is not allowed).
   "media_register",
   "media_mark_uploaded",
+  "media_set_multipart",
 ];
 const isDefinerMessage = (message: unknown): message is string =>
   typeof message === "string" &&
@@ -89,7 +90,7 @@ function detailsOf(state: string, message: string, detail: unknown): Record<stri
 // Only the invitation, member, channel, resolution and creation definers raise the SH states; the same state under
 // another definer's name is a defect.
 const SH_DEFINERS =
-  /^(invitation|member|channel)_|^resolve_operation:|^(workspace|organization)_create:|^media_mark_uploaded:/;
+  /^(invitation|member|channel)_|^resolve_operation:|^(workspace|organization)_create:|^media_(mark_uploaded|set_multipart):/;
 // SH429 is the creation limit alone.
 const LIMIT_DEFINERS = /^(workspace|organization)_create:/;
 

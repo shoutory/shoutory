@@ -22,7 +22,12 @@ import { createLogger, type Logger } from "./logging/logger.js";
 import { createScrubber } from "./logging/scrub.js";
 import { closeServer, closeTogether, drain, firstOnly } from "./shutdown.js";
 import { createStorageDriver } from "./storage/driver.js";
-import { createS3Presigner, type S3Presigner } from "./storage/s3-driver.js";
+import {
+  createS3Multipart,
+  createS3Presigner,
+  type S3Multipart,
+  type S3Presigner,
+} from "./storage/s3-driver.js";
 import { telemetry, telemetryFailure } from "./telemetry/preload.js";
 
 export interface RunningServer {
@@ -71,12 +76,23 @@ function providerFetch(config: Config) {
     );
 }
 
-/** The storage driver and, for S3 only (the filesystem driver has no upload URL), the signer of upload URLs. */
-function storageOptions(storage: Config["storage"]): { storage: StorageDriver; presigner?: S3Presigner } {
+/**
+ * The storage driver and, for S3 only (the filesystem driver has no upload URL), the signer of upload URLs and the server
+ * side of multipart uploads. The driver's `close` also releases the multipart connections.
+ */
+function storageOptions(storage: Config["storage"]): {
+  storage: StorageDriver;
+  presigner?: S3Presigner;
+  multipart?: S3Multipart;
+} {
   const driver = createStorageDriver(storage);
-  return storage.driver === "s3"
-    ? { storage: driver, presigner: createS3Presigner(storage) }
-    : { storage: driver };
+  if (storage.driver !== "s3") return { storage: driver };
+  const multipart = createS3Multipart(storage);
+  const close = () => {
+    driver.close?.();
+    multipart.close();
+  };
+  return { storage: { ...driver, close }, presigner: createS3Presigner(storage), multipart };
 }
 
 async function startServer(config: Config, logger: Logger): Promise<RunningServer> {

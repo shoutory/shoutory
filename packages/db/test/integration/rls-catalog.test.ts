@@ -367,6 +367,12 @@ const DEFINERS: Definer[] = [
     args: "workspace_id uuid, asset_id uuid, file_name text, tags text[], in_library boolean",
     callers: ["shoutory_app"],
   },
+  // 0024: the storage upload id of a large upload, recorded once with its declared digest and size; an Editor user only.
+  {
+    name: "media_set_multipart",
+    args: "workspace_id uuid, asset_id uuid, upload_id text, digest bytea, byte_size bigint",
+    callers: ["shoutory_app"],
+  },
   { name: "media_object_removed", args: "workspace_id uuid, asset_id uuid", callers: ["shoutory_worker"] },
   { name: "media_gc_candidates", args: "lim integer", callers: ["shoutory_worker"] },
   // 0019: the two trigger functions of the ledger. They run for whoever writes an operation, and no role calls them.

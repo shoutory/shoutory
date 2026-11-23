@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -73,17 +73,20 @@ afterEach(async () => {
 });
 
 // An uploaded original with its event, as `media_mark_uploaded` leaves them; `claims` is how many claims it has had.
+let planted = 0;
 async function plant(state: string, claims: number): Promise<{ asset: string; event: string }> {
   const asset = randomUUID();
+  // An image of its own size per asset: the pipeline proves the digest, and the live-hash index allows one asset of it.
+  planted += 1;
+  const bytes = await png(8 + planted);
   await admin((client) =>
     client.query(
       `INSERT INTO app.media_assets (id, workspace_id, object_key, file_name, mime, source, created_by, state, sha256)
        VALUES ($1::uuid, $2::uuid, 'ws/' || $2::text || '/' || $1::text || '/1/original', 'gate.png', 'image/png',
-         'upload', $3::uuid, $4, sha256(convert_to($1::text, 'UTF8')))`,
-      [asset, ws, randomUUID(), state],
+         'upload', $3::uuid, $4, decode($5, 'hex'))`,
+      [asset, ws, randomUUID(), state, createHash("sha256").update(bytes).digest("hex")],
     ),
   );
-  const bytes = await png();
   await storage.put(`ws/${ws}/${asset}/1/original`, new Blob([new Uint8Array(bytes)]).stream(), 1024 * 1024);
   const event = (
     await admin((client) =>

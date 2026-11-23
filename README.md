@@ -169,6 +169,19 @@ With driver `s3`, browsers upload straight to the bucket through a presigned URL
 the app's origin to `PUT` with the request headers `If-None-Match` and `x-amz-checksum-sha256` (and `Content-Length`,
 which browsers send themselves). Without them the browser's preflight is refused and the upload never starts.
 
+With driver `s3`, a file above 64 MiB (up to 5 GiB) goes to the bucket in parts of 16 MiB and never through the app. Register
+answers `{ id, part_size }` instead of an upload URL; the browser then asks `POST /api/v1/workspaces/{workspace_id}/media/{media_id}/parts`
+with `{ "parts": [{ "number": 1, "sha256": "<hex of that part>" }] }` (at most 20 parts a call, numbered from 1) and gets a
+URL for each, valid for 15 minutes, that accepts exactly that part's length and sha256. Asking again for a part re-signs it,
+so an upload can be resumed. Complete lists the parts the bucket holds (never a list from the browser), refuses a total that
+is not the declared size, and refuses to replace an existing original (the bucket must support `If-None-Match` on completing an
+upload). A file above 5 GiB, or above 64 MiB with driver `fs`, which has no part route yet, is refused with 422. The bucket
+checks each part's sha256, not the whole file, so the digest declared at register is proved by the worker, which hashes the
+original: bytes that differ end the upload as `corrupt`. Until then another member's upload of the same bytes is answered as
+a duplicate of it, and registers again if it is rejected. S3 keeps the parts of an upload that is never completed until it is
+aborted, so give the bucket a lifecycle rule that aborts incomplete multipart uploads after 7 days
+(`AbortIncompleteMultipartUpload`, `DaysAfterInitiation` 7); the app aborts the uploads it refuses itself.
+
 A completed upload is checked, stripped of its metadata and resized by the `worker` role (so also by `all`), which
 therefore needs the same storage settings as the `api`: with driver `fs`, the same `SHOUTORY_DATA_DIR` (mount the one
 volume in both containers), and with driver `s3`, the same endpoint, bucket and keys. A worker whose storage cannot be

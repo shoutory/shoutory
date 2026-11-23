@@ -3,7 +3,7 @@ import { createWriteStream } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { isImageType, isVideoType, type RejectReason, type VideoType } from "@shoutory/core/media";
@@ -39,7 +39,11 @@ interface Asset {
   state: string;
   mime: string | null;
   object_key: string;
+  /** The digest the asset was marked uploaded with (hex): the stored one, or for a large upload the sender's claim. */
+  sha256: string | null;
 }
+// The verdict on bytes that are not the ones the asset's digest names.
+const CORRUPT = { ok: false, reason: "corrupt" } as const;
 type Job = <T>(run: (tx: TenantTx) => Promise<T>) => Promise<T>;
 
 const keyOf = (original: string, profile: Profile) => original.replace(/original$/, profile);
@@ -54,7 +58,8 @@ const readAsset = async (job: Job, ws: string, id: string): Promise<Asset | unde
   (
     await sql<Asset>(
       job,
-      "SELECT state, mime, object_key FROM app.media_assets WHERE workspace_id = $1 AND id = $2",
+      `SELECT state, mime, object_key, encode(sha256, 'hex') AS sha256
+       FROM app.media_assets WHERE workspace_id = $1 AND id = $2`,
       [ws, id],
     )
   ).rows[0];
@@ -150,7 +155,27 @@ async function warnScan(deps: PipelineDeps, ws: string, id: string, path: string
   }
 }
 
-/** Runs `use` on a temporary copy of the original (scanned first on a fresh run) in a folder that is removed after. */
+/** Copies the original to `path`, hashing the bytes on the way; the sha256 (hex) of what was copied. */
+async function copyOriginal(deps: PipelineDeps, asset: Asset, path: string): Promise<string> {
+  const original = await deps.storage.get(asset.object_key);
+  if (original === null) throw new Error("the original of an uploaded asset is missing");
+  const source = Readable.fromWeb(original as NodeReadableStream<Uint8Array>);
+  const hash = createHash("sha256");
+  const counting = new Transform({
+    transform(chunk: Buffer, _encoding, done) {
+      hash.update(chunk);
+      done(null, chunk);
+    },
+  });
+  await pipeline(source, counting, createWriteStream(path));
+  return hash.digest("hex");
+}
+
+/**
+ * Runs `use` on a temporary copy of the original (scanned first on a fresh run) in a folder that is removed after. The
+ * bytes are proved first, whatever way they were uploaded: bytes that are not the asset's sha256 are `corrupt`, and
+ * nothing is scanned or decoded.
+ */
 async function withOriginal<T>(
   deps: PipelineDeps,
   ws: string,
@@ -158,13 +183,12 @@ async function withOriginal<T>(
   asset: Asset,
   scan: boolean,
   use: (input: string, dir: string) => Promise<T>,
-): Promise<T> {
+): Promise<T | typeof CORRUPT> {
   const dir = await mkdtemp(join(tmpdir(), "shoutory-media-"));
   try {
-    const original = await deps.storage.get(asset.object_key);
-    if (original === null) throw new Error("the original of an uploaded asset is missing");
     const input = join(dir, "input");
-    await pipeline(Readable.fromWeb(original as NodeReadableStream<Uint8Array>), createWriteStream(input));
+    const digest = await copyOriginal(deps, asset, input);
+    if (digest !== asset.sha256) return CORRUPT;
     if (scan) await warnScan(deps, ws, id, input);
     return await use(input, dir);
   } finally {
