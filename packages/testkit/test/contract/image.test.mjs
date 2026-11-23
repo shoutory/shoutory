@@ -81,10 +81,72 @@ test("the debug and the default runtime bases name the same Node version", () =>
   assert.equal(debug, base, "the debug image runs another Node than the shipped one");
 });
 
-test("the Dockerfile downloads nothing and uses no package runner or corepack", () => {
+// The image's ffprobe is built from source, never from a distro package: the one stage is pinned like the others and its source is checksummed.
+test("the ffprobe stage uses the build stage's base and a checksummed FFmpeg tarball with an LGPL-only, local-files-only configure line", () => {
+  const at = lines.findIndex((line) => /^FROM node:\S+ AS ffprobe$/.test(line));
+  assert.ok(at > 0, "no ffprobe stage");
+  assert.match(
+    lines[at - 1],
+    /[Ii]ndex digest read 20\d\d-\d\d-\d\d/,
+    "no digest-read date on the line above the pin",
+  );
+  const base = lines.find((line) => /^FROM node:\S+ AS build$/.test(line))?.replace(/ AS build$/, "");
+  assert.equal(lines[at], `${base} AS ffprobe`, "the ffprobe stage is not on the build stage's base digest");
+  const end = lines.findIndex((line, index) => index > at && line.startsWith("FROM "));
+  const stage = lines.slice(at, end).join("\n");
+  assert.match(
+    stage,
+    /^ADD --checksum=sha256:[0-9a-f]{64} https:\/\/ffmpeg\.org\/releases\/ffmpeg-\d+\.\d+\.\d+\.tar\.xz /m,
+  );
+  // The one configure command, comments left out and continuation lines joined: its words are exactly these.
+  const command = lines
+    .slice(at, end)
+    .filter((line) => !line.trimStart().startsWith("#"))
+    .join("\n")
+    .replaceAll(/\\\n/g, " ");
+  const configures = command.match(/\.\/configure\b[^&|;\n]*/g) ?? [];
+  assert.equal(configures.length, 1, "the ffprobe stage must run ./configure exactly once");
+  const options = configures[0].split(/\s+/).slice(1).filter(Boolean).sort();
+  assert.deepEqual(options, [
+    "--disable-autodetect",
+    "--disable-doc",
+    "--disable-everything",
+    "--disable-ffmpeg",
+    "--disable-ffplay",
+    "--disable-network",
+    "--disable-x86asm",
+    "--enable-demuxer=mov,matroska",
+    "--enable-protocol=file",
+  ]);
+});
+
+test("every ADD of a URL carries a sha256 checksum", () => {
+  const adds = lines.filter((line) => /^ADD\b/.test(line) && /\bhttps?:\/\//.test(line));
+  assert.ok(adds.length > 0, "no ADD of a URL to check");
+  for (const add of adds) assert.match(add, /^ADD --checksum=sha256:[0-9a-f]{64} https?:\/\//, add);
+});
+
+test("the nonroot and debug runtime stages copy ffprobe from the one ffprobe stage", () => {
+  const copy = /^COPY --from=ffprobe \/usr\/local\/bin\/ffprobe \/usr\/local\/bin\/ffprobe$/m;
+  const debug = lines.findIndex((line) => / AS debug$/.test(line));
+  const last = lines.findLastIndex((line) => line.startsWith("FROM "));
+  assert.match(lines.slice(debug, last).join("\n"), copy, "the debug image lacks ffprobe");
+  assert.match(lines.slice(last).join("\n"), copy, "the default image lacks ffprobe");
+});
+
+// Only the ffprobe stage installs build packages, and they never leave it: the runtime is distroless.
+test("the Dockerfile uses no package runner, corepack or downloader, and apt-get only in the ffprobe stage with retries", () => {
   assert.ok(dockerfile.length > 0, "there is no docker/Dockerfile");
-  for (const word of ["npx", "dlx", "corepack", "curl", "wget", "apt-get"]) {
+  for (const word of ["npx", "dlx", "corepack", "curl", "wget"]) {
     assert.doesNotMatch(dockerfile, new RegExp(`\\b${word}\\b`), word);
+  }
+  for (const stage of dockerfile.split(/^(?=FROM )/m)) {
+    const own = /^FROM .* AS ffprobe$/m.test(stage.split("\n")[0]);
+    if (!own)
+      assert.doesNotMatch(stage, /\bapt-get\b/, `apt-get outside the ffprobe stage: ${stage.split("\n")[0]}`);
+    for (const call of stage.match(/\bapt-get\b[^\n]*/g) ?? []) {
+      assert.match(call, /^apt-get -o Acquire::Retries=5 /, `apt-get without retries: ${call}`);
+    }
   }
 });
 

@@ -20,6 +20,26 @@ RUN rm -rf node_modules apps/*/node_modules packages/*/node_modules packages/pro
   && pnpm install --frozen-lockfile --prod --filter @shoutory/api... \
   && mkdir /data
 
+# ffprobe, an LGPL-only build from pinned FFmpeg source that reads local files only (the probe for uploaded videos). The
+# toolchain comes from Debian's package index at build time and is never copied out; the shipped input is the tarball,
+# FFmpeg 9.0.2 of 2026-09-18, pinned by sha256 (its signature was checked once against the release key; docs/dependencies.md).
+# The same Debian 13 base as the build stage above, so the binary links the glibc the distroless runtimes carry. Index digest read 2026-11-20.
+FROM node:26.13.0-trixie-slim@sha256:5adad64f9a1fca2d51972caa65983634c8a774eb300d72b20f7f2a0f60368072 AS ffprobe
+RUN apt-get -o Acquire::Retries=5 update \
+  && apt-get -o Acquire::Retries=5 install -y --no-install-recommends gcc make libc6-dev xz-utils \
+  && rm -rf /var/lib/apt/lists/*
+ADD --checksum=sha256:8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz /src/ffmpeg.tar.xz
+WORKDIR /src
+# No GPL or nonfree option, no network, no decoder or parser, one protocol (file) and the two demuxers a video upload needs.
+RUN tar -xJf ffmpeg.tar.xz --strip-components=1 \
+  && ./configure --disable-everything --disable-autodetect --disable-network --disable-doc \
+    --disable-ffmpeg --disable-ffplay --disable-x86asm \
+    --enable-protocol=file --enable-demuxer=mov,matroska \
+  && make -j"$(nproc)" ffprobe \
+  && install -s ffprobe /usr/local/bin/ffprobe \
+  && ldd /usr/local/bin/ffprobe \
+  && ! ldd /usr/local/bin/ffprobe | grep -q "not found"
+
 # The files both images carry, one copy of the layout: the repository files the runtime needs, and the data folder.
 FROM scratch AS app
 WORKDIR /app
@@ -49,6 +69,7 @@ COPY --from=build /data /data
 FROM gcr.io/distroless/nodejs26-debian13:debug-nonroot@sha256:cbe836227180a05575ec5d3c7075df4ea73649ead0df6be06e92d34586d248c8 AS debug
 ARG SHOUTORY_RELEASE_CHANNEL
 WORKDIR /app
+COPY --from=ffprobe /usr/local/bin/ffprobe /usr/local/bin/ffprobe
 COPY --from=app /app /app
 COPY --from=app --chown=nonroot:nonroot /data /data
 ENV TZ=UTC
@@ -64,6 +85,7 @@ ENTRYPOINT ["/nodejs/bin/node", "--import", "/app/apps/api/dist/telemetry/preloa
 FROM gcr.io/distroless/nodejs26-debian13:nonroot@sha256:9b945e92c1b5463a4b75f11e8417515e4bea7355f6adfd79ec220fbbe905dda8
 ARG SHOUTORY_RELEASE_CHANNEL
 WORKDIR /app
+COPY --from=ffprobe /usr/local/bin/ffprobe /usr/local/bin/ffprobe
 COPY --from=app /app /app
 COPY --from=app --chown=nonroot:nonroot /data /data
 ENV TZ=UTC

@@ -97,6 +97,12 @@ by the published `127.0.0.1:3000` port, so `SHOUTORY_PORT` and `SHOUTORY_HOST` a
 The container runs as a non-root user with a read-only filesystem, keeps uploads in the `/data` volume, and `pnpm verify
 --only image-smoke` (needs Docker) checks the built image end to end.
 
+The image carries `ffprobe` (LGPL-2.1-or-later, no GPL or nonfree options) at `/usr/local/bin/ffprobe`, to read the size,
+duration and codec of uploaded videos. It is built from the unmodified FFmpeg 9.0.2 source in the `ffprobe` stage of
+[`docker/Dockerfile`](docker/Dockerfile), which holds the tarball URL, its sha256 and the configure line; the build
+reads local files only and has no network protocol. [`docs/dependencies.md`](docs/dependencies.md) records the signature
+check and the build packages.
+
 ### Backup and restore
 
 What to keep, how to dump and restore, and how to test your backups: [docs/self-host/backup-restore.md](docs/self-host/backup-restore.md).

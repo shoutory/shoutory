@@ -486,8 +486,8 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
   and writing the `stripped` and `thumb` derivatives. It runs with a pixel limit, no cache and one thread, never in the
   server process.
 - Licence: Apache-2.0. Its prebuilt libvips comes in platform packages (`@img/sharp-libvips-*` "LGPL-3.0-or-later",
-  `@img/sharp-<platform>` "Apache-2.0" or "Apache-2.0 AND LGPL-3.0-or-later"): unmodified and dynamically loaded, as the
-  ffmpeg binary is (Q-A1). `packages/testkit/licence-allowlist.json` names these packages (`allowedPackages`), never
+  `@img/sharp-<platform>` "Apache-2.0" or "Apache-2.0 AND LGPL-3.0-or-later"): unmodified and dynamically loaded.
+  `packages/testkit/licence-allowlist.json` names these packages (`allowedPackages`), never
   LGPL at large. Published 2026-09-27, more than 14 days before adoption.
 - Install scripts: none. The package has only a `build` script and no platform package has any (registry documents read
   2026-11-23); the install ran under `strictDepBuilds` with no build script allowed.
@@ -505,3 +505,40 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
 - Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
 - Rejected: the client's `Content-Type` and the file extension (both are chosen by the sender); `mmmagic` and `libmagic`
   bindings (native modules).
+
+## FFmpeg 9.0.2 (ffprobe only)
+
+- Used for: `ffprobe` in the production image (`/usr/local/bin/ffprobe`), to read the size, duration and codec of an
+  uploaded video. Built from source in the `ffprobe` stage of `docker/Dockerfile` and copied into both runtime targets;
+  there is no `ffmpeg` binary and no distro package.
+- Source: `https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz`, released 2026-09-18 (more than 14 days before adoption), pinned
+  by `ADD --checksum=sha256:8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e` (12,040,788 bytes).
+- Signature: checked once, at pin time (2026-11-23), with `gpg --verify` of `ffmpeg-9.0.2.tar.xz.asc` against
+  `ffmpeg-devel.asc` from ffmpeg.org: a good signature made 2026-09-18 by the key with fingerprint
+  `FCF9 86EA 15E6 E293 A564 4F10 B432 2F04 D676 58D8`, the fingerprint https://ffmpeg.org/download.html names (read
+  2026-11-23). Limit: the key, the page and the tarball all come from ffmpeg.org, so this shows the tarball matches the
+  key the site names, not that the key is the maintainers'. The `.pq.asc` post-quantum signatures the page also lists were
+  not checked. The build verifies only the sha256.
+- Licence: LGPL-2.1-or-later, as built: no `--enable-gpl`, no `--enable-nonfree`, no external libraries. The
+  image test reads `ffprobe -buildconf` and fails on either option.
+- Configure line: `--disable-everything --disable-autodetect --disable-network --disable-doc --disable-ffmpeg
+  --disable-ffplay --disable-x86asm --enable-protocol=file --enable-demuxer=mov,matroska`. No decoders and no parsers:
+  width, height, duration and codec name were present for h264, hevc and vp9 fixtures without them (a parser adds only
+  profile and level). `--disable-x86asm` avoids a nasm install; probing uses no assembly. `ffprobe -protocols` lists only
+  `file`. `--disable-autodetect` also leaves out zlib, so a QuickTime file with a compressed `moov` cannot be probed and is to be
+  rejected as unreadable.
+- Source offer: the source is the unmodified upstream tarball above, so the URL, the sha256 and the configure line are the
+  whole offer; they are in `docker/Dockerfile` at the tag of each release. Libraries are linked statically into the
+  binary; it links only glibc (`libc`, `libm`) dynamically.
+- Size and build: 3.27 MB stripped on amd64. The stage builds in about 2 minutes cold and about 1 second cached
+  (2026-11-23, 12 cores).
+- Build packages (VERIFY): `gcc`, `make`, `libc6-dev` and `xz-utils` come from Debian 13's package index at build time and
+  are not pinned, because they are never shipped and a pin would break at each Debian security rebuild. Seen 2026-11-23:
+  gcc 4:14.2.0-1 (GCC 14.2.0-19), make 4.4.1-2, libc6-dev 2.41-12+deb13u5, xz-utils 5.8.1-1+deb13u2. Verify by reading the
+  version lines of a fresh stage build. A `libc6-dev` newer than the glibc of the distroless runtime would stop the
+  binary from starting there; the image smoke test runs it in the runtime image and fails on that.
+- Egress: none; the binary has no network protocol.
+- Upgrade: a manual, reviewed bump of the version, the sha256 and this card; Renovate has no rule for the tarball. A new
+  release is adopted only after 14 days.
+- Rejected: Debian's `ffmpeg` and `ffmpeg-static` (GPL builds, an unpinned codec set); a network-capable probe (every
+  input is a local file).

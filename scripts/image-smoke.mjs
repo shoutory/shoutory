@@ -114,6 +114,83 @@ function shipped() {
   expect(found.migrations > 0, "no migration file is at /app/packages/db/migrations");
 }
 
+// The shipped ffprobe runs as the runtime user on a read-only root with no network, so its libraries resolve there; the
+// rows run independently and every failure is reported together.
+const FFPROBE = "/usr/local/bin/ffprobe";
+const FFPROBE_ROWS = [
+  [
+    "the image's ffprobe starts on a read-only root with no network as the image's user",
+    ["-version"],
+    (out) => expect(/^ffprobe version /.test(out), `-version printed: ${tail(out)}`),
+  ],
+  [
+    "the image's ffprobe is LGPL: -buildconf has no --enable-gpl or --enable-nonfree",
+    ["-buildconf"],
+    (out) =>
+      expect(
+        !/--enable-(gpl|nonfree)/.test(out) && out.includes("--disable-everything"),
+        "-buildconf is not LGPL-only",
+      ),
+  ],
+  [
+    "the image's ffprobe names the GNU Lesser General Public License: -L",
+    ["-L"],
+    // The licence text wraps lines, so the words are compared with their white space collapsed.
+    (out) => {
+      const text = out.replaceAll(/\s+/g, " ");
+      expect(
+        /GNU Lesser General Public License/.test(text) &&
+          !/terms of the GNU General Public License/.test(text),
+        `-L printed: ${tail(out)}`,
+      );
+    },
+  ],
+  [
+    "the image's ffprobe reads only local files: -protocols lists file and no network protocol as input",
+    ["-protocols"],
+    (out) => {
+      const input = /Input:\n([\s\S]*?)\nOutput:/
+        .exec(out)?.[1]
+        .split("\n")
+        .map((line) => line.trim());
+      expect(
+        JSON.stringify(input) === '["file"]',
+        `input protocols are ${JSON.stringify(input)}, not only file`,
+      );
+    },
+  ],
+];
+
+function ffprobe() {
+  const failures = [];
+  for (const [title, args, check] of FFPROBE_ROWS) {
+    step(title);
+    const run = docker(
+      [
+        "run",
+        "--rm",
+        "--read-only",
+        "--network",
+        "none",
+        "--entrypoint",
+        FFPROBE,
+        IMAGE,
+        "-hide_banner",
+        ...args,
+      ],
+      { allowFailure: true },
+    );
+    try {
+      expect(run.status === 0, `ffprobe ${args[0]} exited ${run.status} in the image: ${tail(run.stderr)}`);
+      check(`${run.stdout}${run.stderr}`);
+    } catch (error) {
+      if (!(error instanceof SmokeFailure)) throw error;
+      failures.push(`${title}: ${error.message}`);
+    }
+  }
+  expect(failures.length === 0, failures.join(" || "));
+}
+
 function startDatabase() {
   step("start PostgreSQL on a network with no way out");
   docker(["network", "create", "--internal", NETWORK]);
@@ -270,6 +347,7 @@ try {
   build();
   inspect();
   shipped();
+  ffprobe();
   startDatabase();
   startCollector();
   await migrate();
