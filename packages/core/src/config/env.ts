@@ -187,11 +187,12 @@ const isS3Endpoint = (value: string) => {
   const plain = ["http:", "https:"].includes(url.protocol) && !url.username && !url.password;
   return plain && !isMetadataOrLinkLocal(url.hostname);
 };
+const S3_ENDPOINT_RULE =
+  "must be an http or https URL with no userinfo and no metadata or link-local address";
 const s3Schema = z.object({
-  SHOUTORY_S3_ENDPOINT: text.refine(
-    isS3Endpoint,
-    "must be an http or https URL with no userinfo and no metadata or link-local address",
-  ),
+  SHOUTORY_S3_ENDPOINT: text.refine(isS3Endpoint, S3_ENDPOINT_RULE),
+  // The address browsers reach the S3 server at, where it differs from the one the server uses; presigned URLs carry it.
+  SHOUTORY_S3_PUBLIC_ENDPOINT: text.refine(isS3Endpoint, S3_ENDPOINT_RULE).optional(),
   SHOUTORY_S3_REGION: text,
   SHOUTORY_S3_BUCKET: text,
   SHOUTORY_S3_FORCE_PATH_STYLE: z
@@ -213,6 +214,8 @@ export type StorageConfig =
   | {
       driver: "s3";
       endpoint: string;
+      /** Where presigned URLs point; the endpoint itself unless the operator set `SHOUTORY_S3_PUBLIC_ENDPOINT`. */
+      publicEndpoint: string;
       region: string;
       bucket: string;
       forcePathStyle: boolean;
@@ -234,6 +237,7 @@ export function parseStorageEnv(env: Env): StorageConfig {
   return {
     driver,
     endpoint: s3.SHOUTORY_S3_ENDPOINT,
+    publicEndpoint: s3.SHOUTORY_S3_PUBLIC_ENDPOINT ?? s3.SHOUTORY_S3_ENDPOINT,
     region: s3.SHOUTORY_S3_REGION,
     bucket: s3.SHOUTORY_S3_BUCKET,
     forcePathStyle: s3.SHOUTORY_S3_FORCE_PATH_STYLE,

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { assertUtc, type Config, databaseUrlOf, parseEnv } from "@shoutory/core/config";
 import { assertKeyIdsLoaded } from "@shoutory/core/keys";
+import type { StorageDriver } from "@shoutory/core/storage";
 import { createAppPool, createAuthDb } from "@shoutory/db/pool";
 import { assertMigrationsApplied, sealedKeyIds } from "@shoutory/db/startup";
 import { type EgressRequest, egressFetch } from "@shoutory/provider-sdk/egress";
@@ -74,6 +75,7 @@ async function startServer(config: Config, logger: Logger): Promise<RunningServe
   const authPool = createAppPool(databaseUrlOf(config, "auth").expose(), (error) =>
     logger.error({ err: error }, "auth database pool error"),
   );
+  let opened: StorageDriver | undefined;
   try {
     await assertMigrationsApplied(pool);
     assertKeyIdsLoaded(await sealedKeyIds(pool), config.keys);
@@ -92,6 +94,8 @@ async function startServer(config: Config, logger: Logger): Promise<RunningServe
     });
     // The library starts asynchronously; a bad configuration refuses the start here, not on the first request.
     await auth.library.$context;
+    const storage = createStorageDriver(config.storage);
+    opened = storage;
     const app = createApp({
       publicOrigin,
       trustedProxies: config.trustedProxies,
@@ -99,7 +103,7 @@ async function startServer(config: Config, logger: Logger): Promise<RunningServe
       keys: config.keys,
       logger,
       auth,
-      storage: createStorageDriver(config.storage),
+      storage,
       webRoot: config.webRoot,
       mail: { from: config.mailFrom, dkimSelector: config.mailDkimSelector },
       releaseChannel: config.releaseChannel,
@@ -108,10 +112,12 @@ async function startServer(config: Config, logger: Logger): Promise<RunningServe
     logger.info({ port: server.port, role: config.role }, "listening");
     const close = async (): Promise<void> => {
       await server.close();
+      storage.close?.();
       await Promise.all([pool.end(), authPool.end()]);
     };
     return { port: server.port, close };
   } catch (error) {
+    opened?.close?.();
     // A failing close must not hide why the start failed.
     await Promise.all([pool.end(), authPool.end()]).catch((endError: unknown) =>
       logger.error({ err: endError }, "database pool did not close"),

@@ -218,7 +218,7 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
 ## @aws-sdk/client-s3 3.1161.0
 
 - Used for: the optional S3-compatible storage driver in `apps/api/src/storage/s3-driver.ts` (put, get and delete of whole
-  objects). The presigner package and multipart upload are not added; the slices that need them add their own cards.
+  objects). Multipart upload is not added; the slice that needs it adds its own card.
 - Licence: Apache-2.0. Published 2026-10-30, more than 14 days before adoption. Its install scripts: none (no package in
   its tree needs a build script, so `strictDepBuilds` stays satisfied).
 - Egress: the SDK keeps its own HTTP handler; the operator-chosen endpoint is checked at start-up (http or https, no
@@ -226,6 +226,18 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
 - Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
 - Rejected: `@aws-sdk/lib-storage` (multipart is not needed for the objects this driver writes); a hand-written SigV4 client
   (signing is infrastructure we do not reinvent); the MinIO client (its server is archived).
+
+## @aws-sdk/s3-request-presigner 3.1161.0
+
+- Used for: the presigned upload URLs of the S3 driver (`createS3Presigner` in `apps/api/src/storage/s3-driver.ts`), so a
+  browser sends a file straight to the bucket and the API never reads its bytes. It is pinned to the version of
+  `@aws-sdk/client-s3`.
+- Licence: Apache-2.0. Published 2026-10-30, more than 14 days before adoption. Its install scripts: none (the install
+  ran under `strictDepBuilds` with no build script added).
+- Egress: it opens no connection; it only signs a URL for the operator's public endpoint (`SHOUTORY_S3_PUBLIC_ENDPOINT`,
+  checked at start-up like the endpoint).
+- Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
+- Rejected: hand-written SigV4 query signing (signing is infrastructure we do not reinvent).
 
 ## react 19.3.1
 

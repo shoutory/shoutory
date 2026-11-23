@@ -8,7 +8,8 @@ import type { CliIo } from "./main.js";
  * also names its class on stderr and exits 1; exit 0 means the probe wrote, read back and deleted its object.
  */
 export async function storageCheckCommand(env: NodeJS.ProcessEnv, io: CliIo): Promise<number> {
-  const answer = await checkStorage(createStorageDriver(parseStorageEnv(env)));
+  const driver = createStorageDriver(parseStorageEnv(env));
+  const answer = await checkStorage(driver).finally(() => driver.close?.());
   io.stdout(JSON.stringify(answer));
   if (answer.failure === null) return 0;
   io.stderr(`the storage check failed: ${answer.failure}`);

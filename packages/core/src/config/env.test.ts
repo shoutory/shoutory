@@ -359,6 +359,24 @@ describe("start-up: S3 storage endpoint (R332)", () => {
   );
 });
 
+describe("start-up: S3 public endpoint", () => {
+  it("is the endpoint when unset and the given address when set", () => {
+    expect(parseStorageEnv(S3)).toMatchObject({ publicEndpoint: "https://s3.example.test" });
+    const set = { ...S3, SHOUTORY_S3_PUBLIC_ENDPOINT: "https://files.example.test" };
+    expect(parseStorageEnv(set)).toMatchObject({ publicEndpoint: "https://files.example.test" });
+  });
+
+  it.each([
+    ["userinfo", "https://user-marker:pass-marker@files.example.test"],
+    ["the metadata address", "http://169.254.169.254/latest"],
+    ["a scheme other than http and https", "ftp://files.example.test"],
+  ])("refuses an address with %s, naming the variable and never the value", (_name, value) => {
+    const refused = refusal(s3With("SHOUTORY_S3_PUBLIC_ENDPOINT", value));
+    expect(refused?.variable).toBe("SHOUTORY_S3_PUBLIC_ENDPOINT");
+    for (const marker of ENDPOINT_MARKERS) expect(refused?.shown).not.toContain(marker);
+  });
+});
+
 describe("start-up: S3 storage settings (R331)", () => {
   it.each([
     "SHOUTORY_S3_ENDPOINT",
