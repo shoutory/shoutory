@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
 import type { AuthorizedScope } from "@shoutory/core/authz/scope";
-import type { StorageDriver } from "@shoutory/core/storage";
+import { type StorageDriver, StorageError } from "@shoutory/core/storage";
 import type { TenantTx } from "@shoutory/db/context";
 import { z } from "zod";
 import { Refusal } from "../../errors/refusal.js";
@@ -42,11 +43,12 @@ const LIVE = ["uploaded", "scanning", "processing", "ready"];
 // The key the register definer derives for version 1 of an original.
 const originalKey = (workspaceId: string, mediaId: string) => `ws/${workspaceId}/${mediaId}/1/original`;
 
-const ASSET = `SELECT id, state, mime, byte_size, encode(sha256, 'hex') AS sha256 FROM app.media_assets
+const ASSET = `SELECT id, state, mime, byte_size, encode(sha256, 'hex') AS sha256, created_at FROM app.media_assets
   WHERE workspace_id = $1 AND id = $2`;
 interface Asset {
   id: string;
   state: string;
+  created_at: Date;
   mime: string | null;
   byte_size: string | null;
   sha256: string | null;
@@ -77,7 +79,22 @@ type Scope = <T>(write: boolean, run: (tx: TenantTx, scope: AuthorizedScope) => 
 const conflict = (reason: string) =>
   new Refusal("conflict", `upload not completed: ${reason}`, { details: { reason } });
 
-function registerUpload(app: App, presigner: S3Presigner): void {
+/** Where the browser sends the bytes: an S3 upload URL, or on the filesystem driver the PUT route of this API. */
+async function uploadTarget(
+  presigner: S3Presigner | undefined,
+  workspaceId: string,
+  mediaId: string,
+  declared: { byte_size: number; sha256: string },
+): Promise<{ url: string; headers: Record<string, string> }> {
+  if (presigner)
+    return presigner.presignPut(originalKey(workspaceId, mediaId), declared.byte_size, declared.sha256);
+  return {
+    url: `/api/v1/workspaces/${workspaceId}/media/${mediaId}/original`,
+    headers: { "content-type": "application/octet-stream" },
+  };
+}
+
+function registerUpload(app: App, presigner: S3Presigner | undefined): void {
   defineRoute(app, {
     method: "post",
     path: BASE,
@@ -92,12 +109,8 @@ function registerUpload(app: App, presigner: S3Presigner): void {
         "SELECT app.media_register($1, $2, $3, 'upload', NULL, NULL, NULL) AS id",
         [scope.workspaceId, body.file_name, body.mime],
       );
-      const signed = await presigner.presignPut(
-        originalKey(scope.workspaceId, made.id),
-        body.byte_size,
-        body.sha256,
-      );
-      return { id: made.id, url: signed.url, headers: signed.headers };
+      const target = await uploadTarget(presigner, scope.workspaceId, made.id, body);
+      return { id: made.id, url: target.url, headers: target.headers };
     },
   });
 }
@@ -138,6 +151,7 @@ async function finish(
 ): Promise<{ id: string }> {
   const head = await storage.head(originalKey(workspaceId, asset.id));
   if (!head) throw conflict("no_object");
+  if (head.size <= 0) throw conflict("empty");
   if (head.size > MAX_UPLOAD_BYTES) throw conflict("too_large");
   if (!head.sha256) throw conflict("no_checksum");
   const { sha256, size } = { sha256: head.sha256, size: head.size };
@@ -256,14 +270,102 @@ export function sandboxDownloads(app: App): void {
   });
 }
 
+// An upload may be started this long after it was registered, as long as an S3 upload URL lives.
+const UPLOAD_WINDOW_MS = 15 * 60 * 1000;
+const OCTET_STREAM = /^application\/octet-stream\s*(;|$)/i;
+
+/** Passes the bytes through while hashing and counting them; the digest is read once the put has finished. */
+function hashing(source: ReadableStream<Uint8Array>) {
+  const hash = createHash("sha256");
+  let size = 0;
+  const stream = source.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        hash.update(chunk);
+        size += chunk.length;
+        controller.enqueue(chunk);
+      },
+    }),
+  );
+  return { stream, size: () => size, digest: () => hash.digest("hex") };
+}
+
 /**
- * The media routes. The read exists whenever storage does; register and complete only with a presigner (the S3 driver),
- * since the filesystem driver has no upload URL.
+ * A put that found the object, or whose outcome is unknown (the answer was lost), counts when storage holds exactly the
+ * bytes that were streamed: the same size and sha256, which the client never supplies. Anything else is a conflict, and
+ * an unknown outcome with no object stays the storage failure it was.
  */
-export function registerMedia(app: App, storage: StorageDriver, presigner?: S3Presigner): void {
-  if (presigner) {
-    registerUpload(app, presigner);
-    registerComplete(app, storage);
+async function settleWrite(
+  storage: StorageDriver,
+  key: string,
+  bytes: ReturnType<typeof hashing>,
+  cause: StorageError,
+): Promise<void> {
+  const head = await storage.head(key);
+  if (head === null) throw cause;
+  if (head.size === bytes.size() && head.sha256 === bytes.digest()) return;
+  throw conflict("different_bytes");
+}
+
+/** Writes the original once: a body longer than it declares is 413, and a put that found the object or lost its answer is settled. */
+async function storeOriginal(
+  storage: StorageDriver,
+  key: string,
+  body: ReadableStream<Uint8Array>,
+  declared: number,
+): Promise<void> {
+  const bytes = hashing(body);
+  try {
+    await storage.put(key, bytes.stream, declared, { ifAbsent: true });
+  } catch (error) {
+    if (!(error instanceof StorageError)) throw error;
+    if (error.kind === "too_large")
+      throw new Refusal("payload_too_large", "the body is longer than it declares", { cause: error });
+    if (error.kind !== "exists" && error.kind !== "failed") throw error;
+    await settleWrite(storage, key, bytes, error);
   }
+}
+
+/** The PUT of an upload's bytes to the API (the filesystem driver has no upload URL): streamed, never buffered. */
+function registerPut(app: App, storage: StorageDriver, now: () => Date): void {
+  defineRoute(app, {
+    method: "put",
+    path: `${BASE}/{media_id}/original`,
+    policy: "session",
+    access: EDIT_SPLIT,
+    params: mediaParams,
+    rawBody: { maxBytes: MAX_UPLOAD_BYTES },
+    handler: async ({ c, scoped, params }) => {
+      const { workspaceId, asset } = await scoped(false, async (tx, scope) => ({
+        workspaceId: scope.workspaceId,
+        asset: await assetOf(tx, scope.workspaceId, params.media_id),
+      }));
+      if (!OCTET_STREAM.test(c.req.header("content-type") ?? ""))
+        throw new Refusal("validation_failed", "the body must be application/octet-stream");
+      if (asset.state !== "pending_upload") throw conflict("not_pending");
+      if (now().getTime() - asset.created_at.getTime() > UPLOAD_WINDOW_MS) throw conflict("expired");
+      const body = c.req.raw.body;
+      if (body === null) throw new Refusal("validation_failed", "the body is empty");
+      // Bounded at the declared length, so a body that lies about it is cut (the limit trusts the header).
+      const declared = Number(c.req.header("content-length"));
+      await storeOriginal(storage, originalKey(workspaceId, asset.id), body, declared);
+      return { id: asset.id };
+    },
+  });
+}
+
+/**
+ * The media routes, for either driver: register, complete and the read. Register answers an S3 upload URL when there is
+ * a presigner; without one (the filesystem driver) it answers the PUT route of this API, which takes the bytes.
+ */
+export function registerMedia(
+  app: App,
+  storage: StorageDriver,
+  presigner?: S3Presigner,
+  now: () => Date = () => new Date(),
+): void {
+  registerUpload(app, presigner);
+  registerComplete(app, storage);
+  if (!presigner) registerPut(app, storage, now);
   registerRead(app, storage);
 }

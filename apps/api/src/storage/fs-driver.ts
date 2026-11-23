@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream, type Stats } from "node:fs";
 import { link, lstat, mkdir, rename, rm, stat, statfs, unlink } from "node:fs/promises";
 import { join } from "node:path";
@@ -145,9 +145,17 @@ async function getFile(
   return path === null ? null : (Readable.toWeb(createReadStream(path, range)) as ReadableStream<Uint8Array>);
 }
 
-async function headFile(root: string, key: string): Promise<{ size: number } | null> {
+/** The size and the sha256 (hex) of the stored file, hashed by a streamed read: the filesystem keeps no checksum. */
+async function headFile(root: string, key: string): Promise<{ size: number; sha256: string } | null> {
   const path = await fileOf(root, key);
-  return path === null ? null : { size: (await stat(path)).size };
+  if (path === null) return null;
+  const hash = createHash("sha256");
+  let size = 0;
+  for await (const chunk of createReadStream(path) as AsyncIterable<Buffer>) {
+    hash.update(chunk);
+    size += chunk.length;
+  }
+  return { size, sha256: hash.digest("hex") };
 }
 
 async function deleteFile(root: string, key: string): Promise<void> {

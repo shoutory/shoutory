@@ -309,6 +309,27 @@ describe("defineRoute access", () => {
       "a split access with no permission",
       { policy: "session", access: { workspace: "workspace_id", split: true }, params },
     ],
+    [
+      "a raw body on a POST",
+      {
+        policy: "session",
+        access: { workspace: "workspace_id", permission: "library.edit" },
+        params,
+        method: "post",
+        rawBody: { maxBytes: 8 },
+      },
+    ],
+    [
+      "a raw body beside a JSON body",
+      {
+        policy: "session",
+        access: { workspace: "workspace_id", permission: "library.edit" },
+        params,
+        method: "put",
+        rawBody: { maxBytes: 8 },
+        body: z.strictObject({}),
+      },
+    ],
   ])("refuses %s at registration", (_name, extra) => {
     const { app } = build();
     expect(() =>

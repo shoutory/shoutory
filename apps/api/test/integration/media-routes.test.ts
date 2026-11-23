@@ -239,10 +239,13 @@ describe("the size bound and the pending cap", () => {
     expect(await assetCount(ws)).toBe(status === 400 ? before : before + 1);
   });
 
-  it("complete refuses a stored size above 64 MiB and moves nothing", async () => {
-    const info = await started(user("editor"), "stored-size-1");
-    expect((await upload(info, "stored-size-1")).status).toBe(200);
-    hide.size = MAX + 1;
+  it.each([
+    ["above 64 MiB", MAX + 1],
+    ["of zero bytes", 0],
+  ])("complete refuses a stored size %s and moves nothing", async (_name, stored) => {
+    const info = await started(user("editor"), `stored-size-${stored}`);
+    expect((await upload(info, `stored-size-${stored}`)).status).toBe(200);
+    hide.size = stored;
     try {
       expect((await complete(user("editor"), info.id)).status).toBe(409);
       expect(await assetOf(info.id)).toMatchObject({ state: "pending_upload", sha256: null });

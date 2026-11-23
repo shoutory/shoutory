@@ -123,7 +123,12 @@ describe.each(["fs", "s3"] as const)("%s driver: head and ranged get", (name) =>
   it("reports the size or null, and returns exactly the bytes asked: first, middle, last and past the end", async () => {
     const shared = pick(name);
     await shared.put("ranged/a1", stream("0123456789"), MAX);
-    expect(await shared.head("ranged/a1")).toEqual({ size: 10 });
+    // The filesystem driver hashes what it stores; an S3 object written without a checksum reports none.
+    expect(await shared.head("ranged/a1")).toEqual(
+      name === "fs"
+        ? { size: 10, sha256: createHash("sha256").update("0123456789").digest("hex") }
+        : { size: 10 },
+    );
     expect(await shared.head("ranged/missing")).toBeNull();
     expect(await shared.head("no-folder/missing")).toBeNull();
     const rows: [number, number, string][] = [
@@ -198,9 +203,9 @@ describe("s3 driver: a presigned PUT", () => {
   });
 });
 
-describe("s3 driver: a stored checksum", () => {
-  const digestOf = (text: string) => createHash("sha256").update(text).digest();
+const digestOf = (text: string) => createHash("sha256").update(text).digest();
 
+describe("s3 driver: a stored checksum", () => {
   it("head returns the sha256 the object was stored with", async () => {
     const client = new S3Client({
       region: "us-east-1",

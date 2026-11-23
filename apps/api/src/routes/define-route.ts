@@ -10,6 +10,7 @@ import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
 import type { AuthSession, SessionResolver } from "../auth/session-check.js";
 import { Refusal } from "../errors/refusal.js";
+import type { Logger } from "../logging/logger.js";
 import { csrf } from "../security/csrf.js";
 import { definerRefusal } from "./definer-refusal.js";
 
@@ -97,6 +98,14 @@ export interface RouteSpec<
   readonly policy: Policy;
   readonly access: A;
   readonly body?: B;
+  /**
+   * The route reads the request body itself, as a stream (`c.req.raw.body`), instead of a JSON schema: an upload. The
+   * JSON checks are skipped; CSRF, the policy and the access stay central. A PUT only, on a workspace access with a
+   * permission. The request must declare its `content-length` (digits, above zero, at most `maxBytes`) and no
+   * `transfer-encoding`, so the limit rests on the declared length and nothing is buffered here; the handler bounds
+   * the stream it reads at that length, since a body can lie about it.
+   */
+  readonly rawBody?: { readonly maxBytes: number };
   /** Strict by default: an unknown query key is refused. */
   readonly query?: Q;
   /**
@@ -122,16 +131,23 @@ interface RouteState {
   readonly publicOrigin: string;
   readonly auth: RouteAuth;
   readonly pool: AppPool;
+  readonly logger: Logger;
   readonly routes: RegisteredRoute[];
 }
 const states = new WeakMap<App, RouteState>();
 
 /**
- * Called once by `createApp`: the public origin the CSRF check compares with, the session reader of the policies and
- * the pool the scoped routes run on.
+ * Called once by `createApp`: the public origin the CSRF check compares with, the session reader of the policies, the
+ * pool the scoped routes run on and the logger of what a route does after it has answered.
  */
-export function initRoutes(app: App, publicOrigin: string, auth: RouteAuth, pool: AppPool): void {
-  states.set(app, { publicOrigin, auth, pool, routes: [] });
+export function initRoutes(
+  app: App,
+  publicOrigin: string,
+  auth: RouteAuth,
+  pool: AppPool,
+  logger: Logger,
+): void {
+  states.set(app, { publicOrigin, auth, pool, logger, routes: [] });
 }
 
 /** A cookie-only route never reads `Authorization`, so any value in it is a refused credential, not an exemption. */
@@ -173,6 +189,40 @@ function tooLarge(): never {
   throw new Refusal("payload_too_large", "the body is over the limit");
 }
 
+/**
+ * A raw-body route that answers without having read its body (a refusal, in the middleware or the handler) cancels it,
+ * so a client trickling a declared 64 MiB cannot hold the connection open on a request that was already refused.
+ */
+const cancelUnreadBody =
+  (logger: Logger): MiddlewareHandler<AppEnv> =>
+  async (c, next) => {
+    try {
+      await next();
+    } finally {
+      const body = c.req.raw.body;
+      // A failing cancel changes nothing for the client (the request was already answered); the operator sees why.
+      if (body && !body.locked && !c.req.raw.bodyUsed)
+        body.cancel().catch((error: unknown) => {
+          logger.warn({ requestId: c.get("requestId"), err: error }, "request body did not cancel");
+        });
+    }
+  };
+
+const DIGITS = /^\d{1,10}$/;
+
+/**
+ * A raw body states its length: digits (Hono's limit reads `12abc` as 12), above zero, and no transfer-encoding, with
+ * which the limit would buffer the whole body in memory. Runs before the limit, which then trusts the header.
+ */
+const requireLength: MiddlewareHandler = async (c, next) => {
+  const length = c.req.header("content-length");
+  if (c.req.header("transfer-encoding") !== undefined || length === undefined || !DIGITS.test(length)) {
+    throw new Refusal("validation_failed", "the body must declare its content-length");
+  }
+  if (Number(length) === 0) throw new Refusal("validation_failed", "the body is empty");
+  await next();
+};
+
 type ValidTarget = "json" | "query" | "param";
 // Hono types `valid` per route; this wrapper is the one place that reads the validated data untyped.
 const validated = (c: Context<AppEnv>, target: ValidTarget): unknown =>
@@ -190,6 +240,11 @@ function assertStrict(where: string, schema: Shape | undefined): void {
 /** Refuses at registration an access that could reach data without a principal, a workspace or a known permission. */
 function assertAccess(spec: RouteSpec<Shape | undefined, Shape, Shape | undefined, Access>): void {
   const { access, policy, method, params } = spec;
+  if (spec.rawBody && (method !== "put" || spec.body || typeof access !== "object" || !access.permission)) {
+    throw new Error(
+      `defineRoute: ${method} ${spec.path}: a raw body is for a PUT with a workspace permission and no JSON body`,
+    );
+  }
   if (spec.csrf === "token" && (policy !== "public" || method !== "post" || !params)) {
     throw new Error(
       `defineRoute: ${method} ${spec.path}: the token CSRF opt-out is for a public POST with a token`,
@@ -323,6 +378,12 @@ export function defineRoute<
     ...(spec.csrf === "token" ? [] : [csrf(state.publicOrigin)]),
   ];
   if (spec.body) middleware.push(bodyLimit({ maxSize: MAX_BODY_BYTES, onError: tooLarge }), requireJson);
+  if (spec.rawBody)
+    middleware.push(
+      cancelUnreadBody(state.logger),
+      requireLength,
+      bodyLimit({ maxSize: spec.rawBody.maxBytes, onError: tooLarge }),
+    );
   const route = createRoute({
     method: spec.method,
     path: spec.path,

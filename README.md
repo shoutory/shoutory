@@ -147,6 +147,14 @@ requires `TZ=UTC`.
 | `SHOUTORY_S3_ACCESS_KEY_ID`, `SHOUTORY_S3_SECRET_ACCESS_KEY`                | With driver `s3`: the access key pair; secrets, never logged and never part of an answer                                                                                                                                                               |
 | `SHOUTORY_S3_FORCE_PATH_STYLE`                                              | With driver `s3`: `true` for servers that need path-style addressing; default `false`                                                                                                                                                                  |
 
+With driver `fs` (the default), a browser has no bucket to upload to: register answers the API's own route,
+`PUT /api/v1/workspaces/{workspace_id}/media/{media_id}/original`, which takes the raw bytes as
+`application/octet-stream` with their `Content-Length` (at most 64 MiB, no chunked bodies) within 15 minutes of
+registering. A reverse proxy in front of the app must pass such a body through unbuffered and allow it that size.
+The sha256 and size declared at register are not checked at the PUT: complete records those of the stored bytes. A PUT of
+other bytes to an upload that already holds some is refused, so a wrong file needs a new register. A slow upload is cut
+by the server's request timeout (300 seconds by default).
+
 With driver `s3`, browsers upload straight to the bucket through a presigned URL, so the bucket's CORS rule must allow
 the app's origin to `PUT` with the request headers `If-None-Match` and `x-amz-checksum-sha256` (and `Content-Length`,
 which browsers send themselves). Without them the browser's preflight is refused and the upload never starts.

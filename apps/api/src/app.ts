@@ -162,7 +162,7 @@ export function createApp(options: AppOptions): App {
       }
     },
   });
-  initRoutes(app, options.publicOrigin, options.auth, options.pool);
+  initRoutes(app, options.publicOrigin, options.auth, options.pool, options.logger);
   app.use("*", requestContext(options.logger));
   sandboxDownloads(app); // before secureHeaders: it sets the page policy after the handler, this must come after it
   app.use("*", secureHeaders({ contentSecurityPolicy: cspFor(scriptSources) }));
@@ -201,7 +201,8 @@ export function createApp(options: AppOptions): App {
   registerSystem(app, options.pool, options.releaseChannel ?? "stable");
   registerMailChecks(app, options.auth, options.mail ?? { from: undefined, dkimSelector: undefined });
   if (options.storage) registerStorageCheck(app, options.auth, options.storage);
-  if (options.storage) registerMedia(app, options.storage, options.presigner);
+  if (options.storage)
+    registerMedia(app, options.storage, options.presigner, () => new Date(options.now?.() ?? Date.now()));
   app.notFound((c) => errorResponse(c, new Refusal("not_found", "no such route")));
   // Last, so a route added before it is never shadowed by the shell (R360).
   if (options.webRoot) registerStatic(app, options.webRoot, shell);

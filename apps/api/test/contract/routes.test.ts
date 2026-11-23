@@ -48,7 +48,7 @@ describe("route registration", () => {
       expect(keys, `${route.method} ${route.path}`).toContain(`${route.method} ${route.path}`);
   });
 
-  it("the media routes are session routes with a library permission; register and complete need a presigner", () => {
+  it("the media routes are session routes with a library permission; the PUT exists only without a presigner", () => {
     const storage = createFsDriver(".");
     const presigner = { presignPut: async () => ({ url: "", headers: {} }) };
     const mediaOf = (app: ReturnType<typeof createApp>) =>
@@ -59,8 +59,8 @@ describe("route registration", () => {
             `${route.method} ${route.policy} ${(route.access as { permission?: string }).permission}`,
         );
     const read = "GET session library.view";
-    expect(mediaOf(buildApp({ storage }))).toEqual([read]);
     const edit = "session library.edit";
+    expect(mediaOf(buildApp({ storage }))).toEqual([`POST ${edit}`, `POST ${edit}`, `PUT ${edit}`, read]);
     expect(mediaOf(buildApp({ storage, presigner }))).toEqual([`POST ${edit}`, `POST ${edit}`, read]);
   });
 });
