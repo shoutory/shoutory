@@ -125,6 +125,30 @@ describe("s3 driver: retries and a head with no length", () => {
     expect(requests).toBe(attempts);
   });
 
+  it.each([
+    ["a composite checksum of a multipart object", `${Buffer.alloc(32, 1).toString("base64")}-3`],
+    ["a checksum that is not 32 bytes", Buffer.alloc(5, 1).toString("base64")],
+    ["a checksum that is not base64", "***"],
+  ])("keeps no sha256 for %s, only the size", async (_name, checksum) => {
+    const endpoint = await listen((_request, response) => {
+      response.writeHead(200, { "content-length": "5", "x-amz-checksum-sha256": checksum });
+      response.end();
+    });
+    expect(await head(createS3Driver(configFor(endpoint)))).toEqual({ size: 5 });
+  });
+
+  it("keeps the sha256 of 32 bytes", async () => {
+    const digest = Buffer.alloc(32, 7);
+    const endpoint = await listen((_request, response) => {
+      response.writeHead(200, { "content-length": "5", "x-amz-checksum-sha256": digest.toString("base64") });
+      response.end();
+    });
+    expect(await head(createS3Driver(configFor(endpoint)))).toEqual({
+      size: 5,
+      sha256: digest.toString("hex"),
+    });
+  });
+
   it("answers failed, not size 0, for a head that carries no length", async () => {
     const endpoint = await listen((_request, response) => {
       response.writeHead(200);

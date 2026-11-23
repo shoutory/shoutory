@@ -1,0 +1,269 @@
+import type { AuthorizedScope } from "@shoutory/core/authz/scope";
+import type { StorageDriver } from "@shoutory/core/storage";
+import type { TenantTx } from "@shoutory/db/context";
+import { z } from "zod";
+import { Refusal } from "../../errors/refusal.js";
+import type { S3Presigner } from "../../storage/s3-driver.js";
+import { type App, defineRoute } from "../define-route.js";
+import { definerRefusal } from "../definer-refusal.js";
+
+// Media uploads: register an upload (a presigned URL the browser sends the bytes to), complete it, and read the original
+// back by range. The bytes never pass through the API on the way in. The digest of an upload is the one storage holds
+// for the object (the URL signs the declared sha256, so storage refuses other bytes); the client's claim is never read
+// back as the digest. A member with library.edit uploads and library.view reads.
+
+/** The largest single upload (one PUT; larger files wait for multipart). */
+const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
+
+const uuid = z.uuid().transform((id) => id.toLowerCase());
+const workspaceParams = z.strictObject({ workspace_id: uuid });
+const mediaParams = z.strictObject({ workspace_id: uuid, media_id: uuid });
+const registerBody = z.strictObject({
+  file_name: z
+    .string()
+    .min(1)
+    .max(255)
+    .regex(/^[^\p{Cc}]+$/u),
+  mime: z
+    .string()
+    .min(1)
+    .max(255)
+    .regex(/^[^\p{Cc}]+$/u),
+  byte_size: z.number().int().min(1).max(MAX_UPLOAD_BYTES),
+  sha256: z.string().regex(/^[0-9a-f]{64}$/),
+});
+
+const BASE = "/api/v1/workspaces/{workspace_id}/media";
+const EDIT = { workspace: "workspace_id", permission: "library.edit" } as const;
+const EDIT_SPLIT = { ...EDIT, split: true } as const;
+const VIEW_SPLIT = { workspace: "workspace_id", permission: "library.view", split: true } as const;
+const LIVE = ["uploaded", "scanning", "processing", "ready"];
+
+// The key the register definer derives for version 1 of an original.
+const originalKey = (workspaceId: string, mediaId: string) => `ws/${workspaceId}/${mediaId}/1/original`;
+
+const ASSET = `SELECT id, state, mime, byte_size, encode(sha256, 'hex') AS sha256 FROM app.media_assets
+  WHERE workspace_id = $1 AND id = $2`;
+interface Asset {
+  id: string;
+  state: string;
+  mime: string | null;
+  byte_size: string | null;
+  sha256: string | null;
+}
+
+async function assetOf(tx: TenantTx, workspaceId: string, id: string): Promise<Asset> {
+  const row = (await tx.query<Asset>(ASSET, [workspaceId, id])).rows[0];
+  if (!row) throw new Refusal("not_found", "media row not visible");
+  return row;
+}
+
+/** A definer call whose refusals are answers (the cap of pending uploads, a state that is not allowed). */
+async function callDefiner<T extends Record<string, unknown>>(
+  tx: TenantTx,
+  sql: string,
+  params: unknown[],
+): Promise<T> {
+  try {
+    return (await tx.query<T>(sql, params)).rows[0] as T;
+  } catch (error) {
+    throw definerRefusal(error) ?? error;
+  }
+}
+
+/** What a `split` route calls: each call is its own short scoped transaction. */
+type Scope = <T>(write: boolean, run: (tx: TenantTx, scope: AuthorizedScope) => Promise<T>) => Promise<T>;
+
+const conflict = (reason: string) =>
+  new Refusal("conflict", `upload not completed: ${reason}`, { details: { reason } });
+
+function registerUpload(app: App, presigner: S3Presigner): void {
+  defineRoute(app, {
+    method: "post",
+    path: BASE,
+    policy: "session",
+    access: EDIT,
+    params: workspaceParams,
+    body: registerBody,
+    status: 201,
+    handler: async ({ tx, scope, body }) => {
+      const made = await callDefiner<{ id: string }>(
+        tx,
+        "SELECT app.media_register($1, $2, $3, 'upload', NULL, NULL, NULL) AS id",
+        [scope.workspaceId, body.file_name, body.mime],
+      );
+      const signed = await presigner.presignPut(
+        originalKey(scope.workspaceId, made.id),
+        body.byte_size,
+        body.sha256,
+      );
+      return { id: made.id, url: signed.url, headers: signed.headers };
+    },
+  });
+}
+
+/** What a complete after the first answers: the live asset of the same bytes, or a refusal. */
+async function settled(
+  storage: StorageDriver,
+  workspaceId: string,
+  asset: Asset,
+  scoped: Scope,
+): Promise<{ id: string }> {
+  if (LIVE.includes(asset.state)) return { id: asset.id };
+  const head = await storage.head(originalKey(workspaceId, asset.id));
+  const live = head?.sha256
+    ? (
+        await scoped(false, (tx) =>
+          tx.query<{ id: string }>(
+            `SELECT id FROM app.media_assets WHERE workspace_id = $1 AND sha256 = decode($2, 'hex')
+             AND state = ANY($3) ORDER BY created_at LIMIT 1`,
+            [workspaceId, head.sha256, LIVE],
+          ),
+        )
+      ).rows[0]
+    : undefined;
+  if (!live) throw conflict("not_pending");
+  return { id: live.id };
+}
+
+/**
+ * Finishes a pending upload with the size and sha256 storage holds for it. When a complete that ran at the same time
+ * finished it first, the definer refuses with a conflict and this answers what that one settled, once.
+ */
+async function finish(
+  storage: StorageDriver,
+  workspaceId: string,
+  asset: Asset,
+  scoped: Scope,
+): Promise<{ id: string }> {
+  const head = await storage.head(originalKey(workspaceId, asset.id));
+  if (!head) throw conflict("no_object");
+  if (head.size > MAX_UPLOAD_BYTES) throw conflict("too_large");
+  if (!head.sha256) throw conflict("no_checksum");
+  const { sha256, size } = { sha256: head.sha256, size: head.size };
+  try {
+    const done = await scoped(true, (tx, scope) =>
+      callDefiner<{ outcome: string; live_id: string }>(
+        tx,
+        "SELECT * FROM app.media_mark_uploaded($1, $2, decode($3, 'hex'), $4, $5)",
+        [scope.workspaceId, asset.id, sha256, size, asset.mime ?? "application/octet-stream"],
+      ),
+    );
+    return { id: done.live_id };
+  } catch (error) {
+    if (!(error instanceof Refusal) || error.code !== "conflict") throw error;
+    const now = await scoped(false, (tx, scope) => assetOf(tx, scope.workspaceId, asset.id));
+    if (now.state === "pending_upload") throw error;
+    return settled(storage, workspaceId, now, scoped);
+  }
+}
+
+function registerComplete(app: App, storage: StorageDriver): void {
+  defineRoute(app, {
+    method: "post",
+    path: `${BASE}/{media_id}/complete`,
+    policy: "session",
+    access: EDIT_SPLIT,
+    params: mediaParams,
+    handler: async ({ scoped, params }) => {
+      const { workspaceId, asset } = await scoped(false, async (tx, scope) => ({
+        workspaceId: scope.workspaceId,
+        asset: await assetOf(tx, scope.workspaceId, params.media_id),
+      }));
+      if (asset.state !== "pending_upload") return settled(storage, workspaceId, asset, scoped);
+      // The head is outside every transaction: the size and the digest are what storage holds for the object.
+      return finish(storage, workspaceId, asset, scoped);
+    },
+  });
+}
+
+type ByteRange = "full" | "unsatisfiable" | { start: number; end: number };
+
+/** RFC 9110 14.1.2 for one range; a syntax this does not serve (several ranges, an inverted one) is read as no range. */
+function parseRange(header: string | undefined, size: number): ByteRange {
+  const parts = header ? /^bytes=(\d{0,15})-(\d{0,15})$/i.exec(header.trim()) : null;
+  if (!parts || (parts[1] === "" && parts[2] === "")) return "full";
+  const [, from = "", to = ""] = parts;
+  if (from === "") {
+    const length = Number(to);
+    return length === 0 ? "unsatisfiable" : { start: Math.max(0, size - length), end: size - 1 };
+  }
+  const start = Number(from);
+  if (to !== "" && Number(to) < start) return "full";
+  if (start >= size) return "unsatisfiable";
+  return { start, end: to === "" ? size - 1 : Math.min(Number(to), size - 1) };
+}
+
+function registerRead(app: App, storage: StorageDriver): void {
+  defineRoute(app, {
+    method: "get",
+    path: `${BASE}/{media_id}/original`,
+    policy: "session",
+    access: VIEW_SPLIT,
+    params: mediaParams,
+    handler: async ({ c, scoped, params }) => {
+      const { workspaceId, asset } = await scoped(false, async (tx, scope) => ({
+        workspaceId: scope.workspaceId,
+        asset: await assetOf(tx, scope.workspaceId, params.media_id),
+      }));
+      if (!LIVE.includes(asset.state) || asset.byte_size === null || asset.sha256 === null)
+        throw new Refusal("not_found", "media is not uploaded");
+      const size = Number(asset.byte_size);
+      // RFC 9110 13.1.5: a range is honoured only while If-Range names the current version (the ETag, never a date).
+      const ifRange = c.req.header("if-range");
+      const current = ifRange === undefined || ifRange.trim() === `"${asset.sha256}"`;
+      const asked = current ? c.req.header("range") : undefined;
+      const range = parseRange(asked, size);
+      if (range === "unsatisfiable")
+        return new Response(null, { status: 416, headers: { "content-range": `bytes */${size}` } });
+      const body = await storage.get(
+        originalKey(workspaceId, asset.id),
+        range === "full" ? undefined : range,
+      );
+      if (body === null) throw new Refusal("not_found", "media object is missing");
+      const headers: Record<string, string> = {
+        "content-type": "application/octet-stream",
+        "x-content-type-options": "nosniff",
+        // Bytes a member uploaded are downloaded, never rendered as a page of this origin.
+        "content-disposition": "attachment",
+        "accept-ranges": "bytes",
+        etag: `"${asset.sha256}"`,
+        "cache-control": "private, no-cache",
+      };
+      if (range === "full")
+        return new Response(body, { status: 200, headers: { ...headers, "content-length": String(size) } });
+      const length = range.end - range.start + 1;
+      return new Response(body, {
+        status: 206,
+        headers: {
+          ...headers,
+          "content-range": `bytes ${range.start}-${range.end}/${size}`,
+          "content-length": String(length),
+        },
+      });
+    },
+  });
+}
+
+/**
+ * The original of an upload is a download, never a page of this origin: the sandbox policy replaces the page policy
+ * on it. It must be registered before the secure-headers middleware, which sets the page policy after the handler.
+ */
+export function sandboxDownloads(app: App): void {
+  app.use("/api/v1/workspaces/:workspace_id/media/:media_id/original", async (c, next) => {
+    await next();
+    c.res.headers.set("content-security-policy", "sandbox");
+  });
+}
+
+/**
+ * The media routes. The read exists whenever storage does; register and complete only with a presigner (the S3 driver),
+ * since the filesystem driver has no upload URL.
+ */
+export function registerMedia(app: App, storage: StorageDriver, presigner?: S3Presigner): void {
+  if (presigner) {
+    registerUpload(app, presigner);
+    registerComplete(app, storage);
+  }
+  registerRead(app, storage);
+}

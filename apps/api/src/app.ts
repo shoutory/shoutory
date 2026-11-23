@@ -27,6 +27,7 @@ import { registerConnect } from "./routes/connect/connect.js";
 import { type App, type AppEnv, initRoutes } from "./routes/define-route.js";
 import { registerInstance } from "./routes/instance.js";
 import { registerInvitations } from "./routes/invitations/invitations.js";
+import { registerMedia, sandboxDownloads } from "./routes/media/media.js";
 import { registerMembers } from "./routes/members/members.js";
 import { registerOperations } from "./routes/operations/operations.js";
 import { registerOrganizations } from "./routes/organizations/organization.js";
@@ -37,6 +38,7 @@ import { registerEntitlements } from "./routes/workspaces/entitlements.js";
 import { registerWorkspaces } from "./routes/workspaces/workspace.js";
 import { clientAddressResolver } from "./security/client-address.js";
 import { inlineScriptSource, readShell, registerStatic } from "./static/static.js";
+import type { S3Presigner } from "./storage/s3-driver.js";
 
 export interface AppOptions {
   /** The exact origin the web app is served from; CSRF compares `Origin` with it. */
@@ -53,6 +55,8 @@ export interface AppOptions {
   readonly now?: () => number;
   /** Where objects are stored; the storage routes exist only when it is given. */
   readonly storage?: StorageDriver;
+  /** Signs upload URLs (the S3 driver only); absent, the app has no register or complete routes for uploads. */
+  readonly presigner?: S3Presigner;
   /** The folder of the built web app; when set, the app serves it after every other route. */
   readonly webRoot?: string | undefined;
   /** The release channel of this build (`stable`, `beta`, `nightly`); `stable` when absent. */
@@ -160,6 +164,7 @@ export function createApp(options: AppOptions): App {
   });
   initRoutes(app, options.publicOrigin, options.auth, options.pool);
   app.use("*", requestContext(options.logger));
+  sandboxDownloads(app); // before secureHeaders: it sets the page policy after the handler, this must come after it
   app.use("*", secureHeaders({ contentSecurityPolicy: cspFor(scriptSources) }));
   app.use("*", clientContext(options.trustedProxies));
   app.onError((error, c) => {
@@ -196,6 +201,7 @@ export function createApp(options: AppOptions): App {
   registerSystem(app, options.pool, options.releaseChannel ?? "stable");
   registerMailChecks(app, options.auth, options.mail ?? { from: undefined, dkimSelector: undefined });
   if (options.storage) registerStorageCheck(app, options.auth, options.storage);
+  if (options.storage) registerMedia(app, options.storage, options.presigner);
   app.notFound((c) => errorResponse(c, new Refusal("not_found", "no such route")));
   // Last, so a route added before it is never shadowed by the shell (R360).
   if (options.webRoot) registerStatic(app, options.webRoot, shell);

@@ -97,6 +97,20 @@ function withDeadline(source: ReadableStream<Uint8Array>, ms: number): ReadableS
   });
 }
 
+const SHA256_BASE64 = /^[A-Za-z0-9+/]{43}=$/;
+
+/** The size and stored sha256 (hex) of a HEAD answer; no length at all is a failure, never a made-up 0. */
+function headFacts(answer: { ContentLength?: number | undefined; ChecksumSHA256?: string | undefined }): {
+  size: number;
+  sha256?: string;
+} {
+  if (answer.ContentLength === undefined) throw new StorageError("failed");
+  // A sha256 of 32 bytes only: a multipart object carries a composite checksum ("<base64>-<parts>") that is no digest.
+  if (!answer.ChecksumSHA256 || !SHA256_BASE64.test(answer.ChecksumSHA256))
+    return { size: answer.ContentLength };
+  return { size: answer.ContentLength, sha256: Buffer.from(answer.ChecksumSHA256, "base64").toString("hex") };
+}
+
 type S3Config = Extract<StorageConfig, { driver: "s3" }>;
 
 // An upload URL lives 15 minutes.
@@ -133,20 +147,37 @@ export function createS3Presigner(config: S3Config) {
      * nothing is stored there: the caller must send `If-None-Match: *`, which the URL signs, so it cannot replace an
      * object (an original is immutable).
      */
-    async presignPut(key: string, contentLength: number, signedAt: Date = new Date()): Promise<string> {
+    async presignPut(
+      key: string,
+      contentLength: number,
+      sha256: string,
+      signedAt: Date = new Date(),
+    ): Promise<{ url: string; headers: Record<string, string> }> {
       storageKeySegments(key);
       if (!Number.isSafeInteger(contentLength) || contentLength <= 0)
         throw new RangeError("contentLength must be a whole number of bytes above zero");
+      if (!/^[0-9a-f]{64}$/.test(sha256)) throw new RangeError("sha256 must be 64 lower-case hex digits");
+      const checksum = Buffer.from(sha256, "hex").toString("base64");
       const command = new PutObjectCommand({
         Bucket: config.bucket,
         Key: key,
         ContentLength: contentLength,
         IfNoneMatch: "*",
+        ChecksumSHA256: checksum,
       });
-      return getSignedUrl(client, command, { expiresIn: PRESIGN_EXPIRY_SECONDS, signingDate: signedAt });
+      // The presigner moves `x-amz-` headers into the query string, where S3-compatible servers may ignore the
+      // checksum and store wrong bytes. Kept a signed header, a body that does not match is refused (BadDigest).
+      const url = await getSignedUrl(client, command, {
+        expiresIn: PRESIGN_EXPIRY_SECONDS,
+        signingDate: signedAt,
+        unhoistableHeaders: new Set(["x-amz-checksum-sha256"]),
+      });
+      return { url, headers: { "if-none-match": "*", "x-amz-checksum-sha256": checksum } };
     },
   };
 }
+
+export type S3Presigner = ReturnType<typeof createS3Presigner>;
 
 /**
  * Objects in one bucket of an S3-compatible server, under the storage key itself. The bucket must exist: the driver
@@ -196,10 +227,10 @@ export function createS3Driver(config: S3Config, options: { bodyDeadlineMs?: num
       storageKeySegments(key);
       return guarded(async () => {
         try {
-          const answer = await client.send(new HeadObjectCommand({ Bucket, Key: key }));
-          // A server that sends no length cannot tell the caller the size; never answer a made-up 0.
-          if (answer.ContentLength === undefined) throw new StorageError("failed");
-          return { size: answer.ContentLength };
+          const answer = await client.send(
+            new HeadObjectCommand({ Bucket, Key: key, ChecksumMode: "ENABLED" }),
+          );
+          return headFacts(answer);
         } catch (error) {
           if (isNamed(error, "NotFound")) return null;
           throw error;

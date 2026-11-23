@@ -254,6 +254,8 @@ export interface FixtureOptions {
   readonly now?: () => number;
   /** The storage driver of the app; absent, the app has no storage routes. */
   readonly storage?: StorageDriver;
+  /** The upload-URL signer of the app; absent, the app has no register or complete routes. */
+  readonly presigner?: AppOptions["presigner"];
   /** The plan limits of the app; absent, the app answers the core self-host value. */
   readonly entitlements?: Entitlements;
   /** The providers and egress client of the channel check; absent, the app has no check route. */
@@ -345,6 +347,7 @@ function buildOn({ logger, hibp, authPool, appPool, options }: Parts, libraryPoo
   });
   const clock = options.now ? { now: options.now } : {};
   const storage = options.storage ? { storage: options.storage } : {};
+  const signer = options.presigner ? { presigner: options.presigner } : {};
   const limits = options.entitlements ? { entitlements: options.entitlements } : {};
   const channels = options.channels ? { channels: options.channels } : {};
   const app = createApp({
@@ -356,6 +359,7 @@ function buildOn({ logger, hibp, authPool, appPool, options }: Parts, libraryPoo
     auth,
     ...clock,
     ...storage,
+    ...signer,
     ...limits,
     ...channels,
   });

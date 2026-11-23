@@ -1,4 +1,5 @@
 import type { ErrorCode } from "@shoutory/core/errors";
+import { StorageError, type StorageErrorKind } from "@shoutory/core/storage";
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -103,9 +104,23 @@ const FROM_HTTP_STATUS: Readonly<Record<number, ErrorCode>> = {
   415: "unsupported_media_type",
 };
 
+// What a storage failure means to a client. A store that is down, refuses the keys or cannot hold originals is an
+// outage the operator fixes (the kind is in the log through the cause); a key or a path outside the root is a code defect.
+const STORAGE_REFUSALS: Readonly<Record<StorageErrorKind, ErrorCode>> = {
+  failed: "service_unavailable",
+  denied: "service_unavailable",
+  unsupported: "service_unavailable",
+  exists: "conflict",
+  too_large: "conflict",
+  invalid_key: "internal_error",
+  outside_root: "internal_error",
+};
+
 /** Maps anything thrown on a request path to a refusal; an unknown error becomes a 500 with no detail. */
 export function toRefusal(error: unknown): Refusal {
   if (error instanceof Refusal) return error;
+  if (error instanceof StorageError)
+    return new Refusal(STORAGE_REFUSALS[error.kind], "storage refused the operation", { cause: error });
   if (error instanceof HTTPException) {
     const code = FROM_HTTP_STATUS[error.status] ?? "internal_error";
     return new Refusal(code, error.message, { cause: error });

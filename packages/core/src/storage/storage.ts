@@ -63,8 +63,8 @@ export interface StorageDriver {
   ): Promise<void>;
   /** The object's bytes, or null for a missing key; `range` keeps the bytes from `start` to `end`, both inclusive. */
   get(key: string, range?: { start: number; end: number }): Promise<ReadableStream<Uint8Array> | null>;
-  /** The object's size in bytes, or null for a missing key. */
-  head(key: string): Promise<{ size: number } | null>;
+  /** The object's size in bytes and, where the store keeps one, its sha256 as lower-case hex; null for a missing key. */
+  head(key: string): Promise<{ size: number; sha256?: string } | null>;
   /** Removes the object; a missing key is a no-op. */
   delete(key: string): Promise<void>;
   /** What the driver can report about itself without writing. */

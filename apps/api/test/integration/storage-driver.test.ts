@@ -1,19 +1,20 @@
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { parseStorageEnv, type StorageConfig } from "@shoutory/core/config";
 import { type StorageDriver, StorageError } from "@shoutory/core/storage";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createStorageDriver } from "../../src/storage/driver.js";
 import { createFsDriver } from "../../src/storage/fs-driver.js";
 import { createS3Presigner } from "../../src/storage/s3-driver.js";
-import { createBucket, s3Env } from "../support/s3.js";
+import { createBucket, S3_ACCESS_KEY, S3_SECRET_KEY, s3Env, s3Url } from "../support/s3.js";
 
 // The drivers against real storage: the filesystem driver on a folder, the S3 driver on the simulator. The first table
 // runs on both; the rest is the filesystem driver's own (its root, its links).
 const MAX = 1024;
 const BUCKET = "driver-table-1";
-const ABSENT_ONLY = { "if-none-match": "*" };
 const stream = (text: string) => new Blob([text]).stream();
 const read = async (body: ReadableStream<Uint8Array> | null) =>
   body === null ? null : new TextDecoder().decode(await new Response(body).arrayBuffer());
@@ -155,39 +156,99 @@ describe("s3 driver: a presigned PUT", () => {
     const presigner = createS3Presigner(config);
     const store = pick("s3");
     const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000);
-    const put = async (url: string, body: string, headers: Record<string, string> = ABSENT_ONLY) =>
-      (await fetch(url, { method: "PUT", body, headers })).status;
+    const hex = createHash("sha256").update("12345").digest("hex");
+    type Signed = { url: string; headers: Record<string, string> };
+    const put = async ({ url, headers }: Signed, body: string, sent: Record<string, string> = headers) =>
+      (await fetch(url, { method: "PUT", body, headers: sent })).status;
 
-    const fresh = await presigner.presignPut("presigned/a1", 5, minutesAgo(14));
+    const fresh = await presigner.presignPut("presigned/a1", 5, hex, minutesAgo(14));
     expect(await put(fresh, "12345")).toBe(200);
     expect(await read(await store.get("presigned/a1"))).toBe("12345");
 
-    const stale = await presigner.presignPut("presigned/a2", 5, minutesAgo(16));
+    const stale = await presigner.presignPut("presigned/a2", 5, hex, minutesAgo(16));
     expect(await put(stale, "12345")).toBe(403);
     expect(await store.get("presigned/a2")).toBeNull();
 
-    expect(await put(fresh.replace("presigned/a1", "presigned/a3"), "12345")).toBe(403);
+    const swapped = { ...fresh, url: fresh.url.replace("presigned/a1", "presigned/a3") };
+    expect(await put(swapped, "12345")).toBe(403);
     expect(await store.get("presigned/a3")).toBeNull();
 
-    const sized = await presigner.presignPut("presigned/a4", 5, new Date());
+    const sized = await presigner.presignPut("presigned/a4", 5, hex, new Date());
     expect(await put(sized, "123456")).toBe(403);
     expect(await store.get("presigned/a4")).toBeNull();
 
     // An original is never replaced through the URL either: a second PUT with the same URL is refused, and a PUT that
-    // leaves out the signed header is refused too.
-    expect(await put(fresh, "abcde")).toBe(412);
+    // leaves out the signed If-None-Match header is refused too.
+    expect(await put(fresh, "12345")).toBe(412);
     expect(await read(await store.get("presigned/a1"))).toBe("12345");
-    const bare = await presigner.presignPut("presigned/a5", 5, new Date());
-    expect(await put(bare, "12345", {})).toBe(403);
+    const bare = await presigner.presignPut("presigned/a5", 5, hex, new Date());
+    expect(
+      await put(bare, "12345", { "x-amz-checksum-sha256": bare.headers["x-amz-checksum-sha256"] as string }),
+    ).toBe(403);
     expect(await store.get("presigned/a5")).toBeNull();
     await store.delete("presigned/a1");
   });
 
   it.each([0, -1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1])("refuses the length %s", async (length) => {
     const config = parseStorageEnv(s3Env(BUCKET)) as Extract<StorageConfig, { driver: "s3" }>;
-    await expect(createS3Presigner(config).presignPut("presigned/a6", length)).rejects.toBeInstanceOf(
+    const hex = createHash("sha256").update("12345").digest("hex");
+    await expect(createS3Presigner(config).presignPut("presigned/a6", length, hex)).rejects.toBeInstanceOf(
       RangeError,
     );
+  });
+});
+
+describe("s3 driver: a stored checksum", () => {
+  const digestOf = (text: string) => createHash("sha256").update(text).digest();
+
+  it("head returns the sha256 the object was stored with", async () => {
+    const client = new S3Client({
+      region: "us-east-1",
+      endpoint: s3Url(),
+      forcePathStyle: true,
+      credentials: { accessKeyId: S3_ACCESS_KEY, secretAccessKey: S3_SECRET_KEY },
+    });
+    await client.send(
+      new PutObjectCommand({
+        Bucket: BUCKET,
+        Key: "checksummed/a1",
+        Body: "12345",
+        ChecksumSHA256: digestOf("12345").toString("base64"),
+      }),
+    );
+    client.destroy();
+    expect(await pick("s3").head("checksummed/a1")).toEqual({
+      size: 5,
+      sha256: digestOf("12345").toString("hex"),
+    });
+  });
+
+  it("a presigned PUT signs the checksum: right bytes store, wrong bytes get BadDigest and nothing is stored, a PUT without the header is refused", async () => {
+    const config = parseStorageEnv(s3Env(BUCKET)) as Extract<StorageConfig, { driver: "s3" }>;
+    const presigner = createS3Presigner(config);
+    const store = pick("s3");
+    const hex = digestOf("12345").toString("hex");
+    const send = async (url: string, body: string, headers: Record<string, string>) => {
+      const answer = await fetch(url, { method: "PUT", body, headers });
+      return { status: answer.status, code: /<Code>([^<]*)<\/Code>/.exec(await answer.text())?.[1] };
+    };
+
+    const good = await presigner.presignPut("checksummed/b1", 5, hex);
+    expect((await send(good.url, "12345", good.headers)).status).toBe(200);
+
+    const wrong = await presigner.presignPut("checksummed/b2", 5, hex);
+    expect(await send(wrong.url, "abcde", wrong.headers)).toEqual({ status: 400, code: "BadDigest" });
+    expect(await store.head("checksummed/b2")).toBeNull();
+
+    const bare = await presigner.presignPut("checksummed/b3", 5, hex);
+    expect((await send(bare.url, "12345", { "if-none-match": "*" })).status).toBe(403);
+    expect(await store.head("checksummed/b3")).toBeNull();
+
+    expect(good.headers).toEqual({
+      "if-none-match": "*",
+      "x-amz-checksum-sha256": digestOf("12345").toString("base64"),
+    });
+    expect(await store.head("checksummed/b1")).toEqual({ size: 5, sha256: hex });
   });
 });
 

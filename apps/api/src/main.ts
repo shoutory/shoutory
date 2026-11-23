@@ -20,6 +20,7 @@ import { createLogger, type Logger } from "./logging/logger.js";
 import { createScrubber } from "./logging/scrub.js";
 import { closeServer, closeTogether, drain, firstOnly } from "./shutdown.js";
 import { createStorageDriver } from "./storage/driver.js";
+import { createS3Presigner, type S3Presigner } from "./storage/s3-driver.js";
 import { telemetry, telemetryFailure } from "./telemetry/preload.js";
 
 export interface RunningServer {
@@ -68,6 +69,14 @@ function providerFetch(config: Config) {
     );
 }
 
+/** The storage driver and, for S3 only (the filesystem driver has no upload URL), the signer of upload URLs. */
+function storageOptions(storage: Config["storage"]): { storage: StorageDriver; presigner?: S3Presigner } {
+  const driver = createStorageDriver(storage);
+  return storage.driver === "s3"
+    ? { storage: driver, presigner: createS3Presigner(storage) }
+    : { storage: driver };
+}
+
 async function startServer(config: Config, logger: Logger): Promise<RunningServer> {
   const pool = createAppPool(databaseUrlOf(config, "app").expose(), (error) =>
     logger.error({ err: error }, "database pool error"),
@@ -94,8 +103,8 @@ async function startServer(config: Config, logger: Logger): Promise<RunningServe
     });
     // The library starts asynchronously; a bad configuration refuses the start here, not on the first request.
     await auth.library.$context;
-    const storage = createStorageDriver(config.storage);
-    opened = storage;
+    const stores = storageOptions(config.storage);
+    opened = stores.storage;
     const app = createApp({
       publicOrigin,
       trustedProxies: config.trustedProxies,
@@ -103,7 +112,7 @@ async function startServer(config: Config, logger: Logger): Promise<RunningServe
       keys: config.keys,
       logger,
       auth,
-      storage,
+      ...stores,
       webRoot: config.webRoot,
       mail: { from: config.mailFrom, dkimSelector: config.mailDkimSelector },
       releaseChannel: config.releaseChannel,
@@ -112,7 +121,7 @@ async function startServer(config: Config, logger: Logger): Promise<RunningServe
     logger.info({ port: server.port, role: config.role }, "listening");
     const close = async (): Promise<void> => {
       await server.close();
-      storage.close?.();
+      stores.storage.close?.();
       await Promise.all([pool.end(), authPool.end()]);
     };
     return { port: server.port, close };
