@@ -96,16 +96,19 @@ async function plant(state: string, claims: number): Promise<{ asset: string; ev
   ).rows[0].id as string;
   return { asset, event };
 }
+// The asset and its event in one statement, so one snapshot: the handler commits the asset's move before the relay marks
+// the event, and reads taken one after the other could see the asset before the move and the event after the mark.
 const look = async ({ asset, event }: { asset: string; event: string }) =>
-  admin(async (client) => ({
-    ...(await client.query("SELECT state, reject_reason FROM app.media_assets WHERE id = $1", [asset]))
-      .rows[0],
-    done: (
-      await client.query("SELECT dispatched_at IS NOT NULL AS done FROM app.outbox WHERE id = $1", [event])
-    ).rows[0].done as boolean,
-    claims: (await client.query("SELECT attempts FROM app.outbox WHERE id = $1", [event])).rows[0]
-      .attempts as number,
-  }));
+  admin(
+    async (client) =>
+      (
+        await client.query(
+          `SELECT a.state, a.reject_reason, o.dispatched_at IS NOT NULL AS done, o.attempts AS claims
+           FROM app.media_assets AS a, app.outbox AS o WHERE a.id = $1 AND o.id = $2`,
+          [asset, event],
+        )
+      ).rows[0] as { state: string; reject_reason: string | null; done: boolean; claims: number },
+  );
 // Reads until the answer is the one wanted or four seconds pass; the last answer is returned for the assertion.
 async function settle<T>(read: () => Promise<T>, wanted: (value: T) => boolean): Promise<T> {
   const until = Date.now() + 4_000;
