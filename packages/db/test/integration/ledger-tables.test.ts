@@ -174,7 +174,9 @@ function problems(
   before: string,
   outcome: Awaited<ReturnType<typeof attempt>>,
 ) {
-  const bumps = ALLOWED.get(KEY(from, to, actor));
+  // A confirmed effect cannot be kept into a state that holds none: the row of the table still needs its proof.
+  const confirmed = from === "provider_accepted" && NO_EFFECT.has(to);
+  const bumps = confirmed ? undefined : ALLOWED.get(KEY(from, to, actor));
   const wanted =
     bumps === undefined
       ? "SH409"
@@ -247,16 +249,10 @@ describe("the transition trigger", () => {
   );
 });
 
-// The effect and the token. Only the rows that prove nothing happened (19, 20, 21, 24, 36, 42, 44) may bring an effect
-// that is possible or confirmed back to none, no statement that leaves the state alone may, a move into published or
-// provider_accepted confirms the effect, the token never goes down, and an insert starts with no effect and token 0.
-const RESET_ROWS = new Set([19, 20, 21, 24, 36, 42, 44]);
-const RESETS = new Set(
-  LEDGER_TRANSITIONS.filter((move) => RESET_ROWS.has(move.row)).map((move) =>
-    KEY(move.from, move.to, move.actor),
-  ),
-);
-const CONFIRMING = new Set(["published", "provider_accepted"]);
+// The effect and the token. No statement that leaves the state alone brings an effect back to none or lowers the token,
+// and an insert starts with no effect and token 0 (the proof behind a move that resets an effect, and the refusal of a
+// move that keeps one into a state that holds none, are tested in ledger-resolutions).
+const NO_EFFECT = new Set(["retry_wait", "failed", "paused", "cancelled"]);
 const EFFECT_ROW = "SELECT state, effect, fencing_token::text AS token FROM app.operations WHERE id = $1";
 type After = { code?: string | undefined; state?: string; effect?: string; token?: string };
 
@@ -271,35 +267,6 @@ async function tried(client: Client, id: string, sql: string, params: unknown[])
   } finally {
     await client.query("ROLLBACK TO SAVEPOINT effect");
   }
-}
-
-const MOVE_SQL =
-  "UPDATE app.operations SET state = $2, last_actor = $3, blocked_since = $4, reason_code = $5";
-async function move(client: Client, id: string, to: string, actor: string, resetEffect: boolean) {
-  const scoped = scopedValues(to);
-  const sql = `${MOVE_SQL}${resetEffect ? ", effect = 'none'" : ""} WHERE id = $1`;
-  return tried(client, id, sql, [id, to, actor, scoped.blocked_since, scoped.reason_code]);
-}
-
-// Every move out of `from`, once with the effect reset and once without it.
-async function effectProblems(client: Client, id: string, from: string): Promise<string[]> {
-  const found: string[] = [];
-  const moves = new Map(
-    LEDGER_TRANSITIONS.filter((m) => m.from === from && m.to !== from).map((m) => [`${m.to}|${m.actor}`, m]),
-  );
-  for (const { to, actor } of moves.values()) {
-    const label = `${from} -> ${to} by ${actor}`;
-    const reset = await move(client, id, to, actor, true);
-    const allowed = RESETS.has(KEY(from, to, actor));
-    if (allowed !== (reset.code === undefined))
-      found.push(`${label} with a reset gave ${reset.code ?? "no error"}`);
-    if (!allowed && reset.code !== "SH409") found.push(`${label} with a reset was not refused with SH409`);
-    if (allowed && reset.effect !== "none") found.push(`${label} left effect ${reset.effect}`);
-    const kept = await move(client, id, to, actor, false);
-    const wanted = CONFIRMING.has(to) ? "confirmed" : "possible";
-    if (kept.effect !== wanted) found.push(`${label} kept the effect as ${kept.effect}, wanted ${wanted}`);
-  }
-  return found;
 }
 
 // Statements that leave the state alone: the effect may not fall and the token may not go down, a harmless one passes.
@@ -328,10 +295,7 @@ describe("the effect and the token", () => {
     });
     const found = await admin(async (client) => {
       await client.query("BEGIN");
-      const wrong = [
-        ...(await effectProblems(client, id, from)),
-        ...(await sameStateProblems(client, id, from)),
-      ];
+      const wrong = await sameStateProblems(client, id, from);
       await client.query("ROLLBACK");
       return wrong;
     });
@@ -684,14 +648,14 @@ describe("the purge of expired ledger rows", () => {
 });
 
 // What the definer role may touch of the ledger and of the tables the guards read, and the purposes it acts under
-// (the two guards, the garbage collection of media, the purge of expired rows, and the ledger writers of 0020). Nothing
-// else: attempts, resolutions and reservations are written by the definers of later migrations.
+// (the two guards, the garbage collection of media, the purge of expired rows, and the ledger writers of 0020 and 0022).
+// Nothing else.
 const GRANTS: Record<string, string[]> = {
   operations: ["INSERT", "SELECT"],
   operation_media: ["SELECT"],
-  operation_attempts: ["DELETE", "SELECT"],
-  operation_evidence: ["INSERT"],
-  operation_resolutions: [],
+  operation_attempts: ["DELETE", "INSERT", "SELECT"],
+  operation_evidence: ["INSERT", "SELECT"],
+  operation_resolutions: ["INSERT"],
   usage_reservations: ["DELETE", "INSERT", "SELECT"],
   ledger_transitions: ["SELECT"],
 };
@@ -717,6 +681,25 @@ const POLICIES = [
   "record_evidence_insert on outbox",
   "record_evidence_select on operations",
   "record_evidence_update on operations",
+  "ledger_guard_select on operation_attempts",
+  "ledger_guard_select on operation_evidence",
+  "operation_attempt_finish_select on operation_attempts",
+  "operation_attempt_finish_select on operations",
+  "operation_attempt_finish_update on operation_attempts",
+  "operation_attempt_start_insert on operation_attempts",
+  "operation_attempt_start_select on operation_attempts",
+  "operation_attempt_start_insert on outbox",
+  "operation_attempt_start_select on channels",
+  "operation_attempt_start_select on operations",
+  "operation_attempt_start_update on operations",
+  "operation_record_progress_select on operations",
+  "operation_record_progress_update on operations",
+  "operation_rollup_select on operation_evidence",
+  "operation_rollup_select on operations",
+  "operation_rollup_select on post_variants",
+  "operation_rollup_update on post_variants",
+  "operation_usage_select on usage_reservations",
+  "operation_usage_update on usage_reservations",
   "purge_expired_delete on operation_attempts",
   "purge_expired_delete on usage_reservations",
   "purge_expired_select on operation_attempts",

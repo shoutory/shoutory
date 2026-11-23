@@ -403,9 +403,42 @@ const DEFINERS: Definer[] = [
     args: "p_key text, p_scope text, p_until timestamp with time zone, p_reason text",
     callers: ["shoutory_worker"],
   },
-  { name: "sweep_expired_leases", args: "", callers: ["shoutory_worker"] },
-  { name: "sweep_due_moves", args: "", callers: ["shoutory_worker"] },
+  { name: "sweep_expired_leases", args: "p_providers jsonb", callers: ["shoutory_worker"] },
+  { name: "sweep_due_moves", args: "p_live_providers jsonb", callers: ["shoutory_worker"] },
   { name: "ledger_due_move", args: "p_ws uuid, p_id uuid", callers: [], helper: true },
+  // 0022: the effect SQL. The lock helpers, the rollup and the two triggers are called by the definers and by the
+  // table's own triggers; the attempt writers are the worker's, the resolution is a signed-in person's.
+  { name: "ledger_prelock", args: "p_ws uuid, p_op uuid", callers: [], helper: true },
+  {
+    name: "ledger_lock_target",
+    args: "p_ws uuid, p_op uuid, p_state text, p_token bigint",
+    callers: [],
+    helper: true,
+  },
+  { name: "ledger_rollup", args: "p_ws uuid, p_variant uuid, p_fired text", callers: [], helper: true },
+  { name: "operations_rollup", args: "", callers: [] },
+  { name: "operations_usage", args: "", callers: [] },
+  {
+    name: "operation_attempt_start",
+    args: "p_ws uuid, p_op uuid, p_token bigint, p_owner text, p_step text, p_quotas jsonb",
+    callers: ["shoutory_worker"],
+  },
+  {
+    name: "operation_attempt_finish",
+    args: "p_ws uuid, p_attempt uuid, p_token bigint, p_result jsonb",
+    callers: ["shoutory_worker"],
+  },
+  {
+    name: "operation_record_progress",
+    args: "p_ws uuid, p_op uuid, p_token bigint, p_cursor text, p_refs jsonb",
+    callers: ["shoutory_worker"],
+  },
+  {
+    name: "resolve_operation",
+    args: "p_ws uuid, p_op uuid, p_kind text, p_args jsonb",
+    callers: ["shoutory_app"],
+  },
+  { name: "ledger_state_counts", args: "", callers: ["shoutory_app"] },
   {
     name: "claim_polls",
     args: "p_queue text, p_limit integer, p_owner text, p_lease_seconds integer",

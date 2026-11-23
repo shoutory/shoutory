@@ -270,14 +270,14 @@ describe("admission faults", () => {
 });
 
 describe("admission by state", () => {
-  it("a missed admission books no usage, sets the variant to in_progress and the next tick inserts nothing", async () => {
+  it("a missed admission books no usage, leaves the variant to the rollup (settled) and the next tick inserts nothing", async () => {
     // fails first because: the variant stays scheduled and every tick inserts another missed row, or usage is booked
     const p = await newProvider();
     const variant = await newTarget(p, { dueIn: -3 * 3600 });
     expect((await admit(p)).rows?.map((row) => row.state)).toEqual(["missed"]);
     expect((await opsOf(variant))[0]).toMatchObject({ state: "missed", effect: "none" });
     expect(await reservationsOf(variant)).toEqual([]);
-    expect(await variantState(variant)).toBe("in_progress");
+    expect(await variantState(variant)).toBe("settled");
     expect((await admit(p)).rows).toEqual([]);
     expect((await opsOf(variant)).length).toBe(1);
   });
@@ -501,7 +501,7 @@ describe("poll claims", () => {
 });
 
 describe("a stale poller and the reconcile claim", () => {
-  it("a stale poller is refused after a poll claim, and the claim's own token carries the move to dispatching", async () => {
+  it("a stale poller is refused after a poll claim, and the claim's own token carries the move", async () => {
     // fails first because: the claim keeps the old token, so two pollers hold the same fence
     const p = await newProvider();
     const id = await plant(p, { state: "processing", at: { next_check_at: -5 } });
@@ -510,7 +510,7 @@ describe("a stale poller and the reconcile claim", () => {
     const move = (held: number) =>
       exec(
         WORKSPACE_JOB,
-        "SELECT * FROM app.operation_transition($1, $2, $3, 'processing', 'dispatching', 'P', '{}')",
+        "SELECT * FROM app.operation_transition($1, $2, $3, 'processing', 'retry_wait', 'P', '{}')",
         [WA, id, held],
       );
     expect((await move(token - 1)).rows?.[0]).toMatchObject({ outcome: "lost_lease" });
@@ -596,7 +596,7 @@ describe("the fencing token", () => {
     expect(await opOf(id)).toMatchObject({ state: "processing", token: 5, leased: false });
     const stale = await exec(
       WORKSPACE_JOB,
-      "SELECT * FROM app.operation_transition($1, $2, 4, 'processing', 'dispatching', 'P', '{}')",
+      "SELECT * FROM app.operation_transition($1, $2, 4, 'processing', 'retry_wait', 'P', '{}')",
       [WA, id],
     );
     expect(stale.rows?.[0]).toMatchObject({ outcome: "lost_lease" });
@@ -649,7 +649,10 @@ describe("a swept dispatching row", () => {
       at: { lease_expires_at: -60 },
       extra: LEASED,
     });
-    await ledger("SELECT app.sweep_expired_leases()");
+    // A provider that cannot wait for its first read-back says so: its entry has a first back-off of 0.
+    await ledger("SELECT app.sweep_expired_leases($1::jsonb)", [
+      JSON.stringify({ [p.provider]: { first_backoff_seconds: 0 } }),
+    ]);
     expect(Math.abs(Number((await opOf(id)).check_in))).toBeLessThan(5);
     const taken = await ledger("SELECT * FROM app.claim_reconciles($1, 5, 'r1', 60, ARRAY[]::text[])", [
       `reconcile.${p.provider}`,

@@ -15,8 +15,22 @@ const SET_CONFIG = "set_" + "config";
 const FUNCTION_CALL = /\bset_config\s*\(/i;
 const SET_STATEMENT = /\bSET\s+(?:LOCAL\s+|SESSION\s+)?app\./i;
 const ALTERED_DEFAULT = /\bALTER\s+(?:ROLE|DATABASE)\b[^;]*\bSET\s+app\./i;
-// Migrations may set only the job purpose: a definer function does it at entry.
+// Migrations may set only the job purpose (a definer function does it at entry), and the resend flag inside
+// operation_transition alone, from the literals 'true' and 'false' (it says nothing about a tenant).
 const ALLOWED_IN_SQL = /\bset_config\s*\(\s*'app\.job_purpose'|\bSET\s+(?:LOCAL\s+)?app\.job_purpose\b/gi;
+const RESEND_CALL =
+  /\bset_config\s*\(\s*'app\.idempotent_resend'\s*,\s*(?:'(?:true|false)'|CASE\s+WHEN\s[^;]*?THEN\s+'true'\s+ELSE\s+'false'\s+END)\s*,\s*true\s*\)/gi;
+// The text of a migration with the allowed resend calls removed from the body of operation_transition.
+function withoutResendCalls(text) {
+  return text
+    .split(/(?=CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s)/i)
+    .map((chunk) =>
+      /^CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:\w+\.)?operation_transition\b/i.test(chunk)
+        ? chunk.replace(RESEND_CALL, "")
+        : chunk,
+    )
+    .join("");
+}
 
 function inTestFile(file) {
   return file.split("/").includes("test") || /\.test\.(ts|tsx|mts|js|cjs|mjs)$/.test(file);
@@ -32,7 +46,7 @@ function scannedFiles(base) {
 function violates(file, text) {
   if (ALTERED_DEFAULT.test(text)) return true;
   if (!file.endsWith(".sql")) return FUNCTION_CALL.test(text) || SET_STATEMENT.test(text);
-  const code = text.replace(/--[^\n]*/g, "").replace(ALLOWED_IN_SQL, "");
+  const code = withoutResendCalls(text.replace(/--[^\n]*/g, "")).replace(ALLOWED_IN_SQL, "");
   return FUNCTION_CALL.test(code) || SET_STATEMENT.test(code);
 }
 
@@ -66,6 +80,16 @@ const FLAGGED = [
     "packages/db/migrations/9998_x.sql",
     `SELECT ${SET_CONFIG}('app.workspace_ids', 'x', true);\n`,
   ],
+  [
+    "the resend flag outside operation_transition",
+    "packages/db/migrations/9991_x.sql",
+    `CREATE FUNCTION app.other() RETURNS void AS $$ BEGIN PERFORM ${SET_CONFIG}('app.idempotent_resend', 'true', true); END $$;\n`,
+  ],
+  [
+    "the resend flag set from a value inside operation_transition",
+    "packages/db/migrations/9990_x.sql",
+    `CREATE FUNCTION app.operation_transition(a text) RETURNS void AS $$ BEGIN PERFORM ${SET_CONFIG}('app.idempotent_resend', a, true); END $$;\n`,
+  ],
   ["ALTER ROLE", "packages/db/migrations/9997_x.sql", "ALTER ROLE shoutory_app SET app.job_purpose = 'x';\n"],
   [
     "ALTER DATABASE",
@@ -93,6 +117,11 @@ const SPARED = [
     "a migration setting the job purpose through the function",
     "packages/db/migrations/9995_x.sql",
     `SELECT ${SET_CONFIG}('app.job_purpose', 'x', true);\n`,
+  ],
+  [
+    "the resend flag with literals inside operation_transition",
+    "packages/db/migrations/9992_x.sql",
+    `CREATE OR REPLACE FUNCTION app.operation_transition(a uuid) RETURNS void AS $$ BEGIN\n  PERFORM ${SET_CONFIG}('app.idempotent_resend',\n    CASE WHEN a IS NULL THEN 'true' ELSE 'false' END, true);\n  PERFORM ${SET_CONFIG}('app.idempotent_resend', 'false', true);\nEND $$;\n`,
   ],
   [
     "a migration with SET LOCAL of the job purpose",

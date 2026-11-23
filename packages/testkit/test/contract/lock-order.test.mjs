@@ -74,6 +74,22 @@ const FIXTURES = [
     true,
   ],
 ];
+// A trigger on operations that writes the post: its write counts for every function that updates operations, so a definer
+// that ends an operation must have locked the post and the variant (rank 3) before the operation (rank 6) itself.
+const ROLLUP = `CREATE FUNCTION app.rollup_fixture() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
+  BEGIN UPDATE app.posts AS p SET status = 'x' WHERE p.id = NEW.post_id; RETURN NULL; END $$;
+  CREATE TRIGGER operations_c_rollup AFTER INSERT OR UPDATE ON app.operations
+    FOR EACH ROW EXECUTE FUNCTION app.rollup_fixture();`;
+const END_OPERATION = "UPDATE app.operations AS o SET state = 'published' WHERE o.id = 1;";
+FIXTURES.push(
+  ["an operations update with no pre-lock when a trigger writes the post", END_OPERATION, [ROLLUP], true],
+  [
+    "an operations update after the post and variant locks when a trigger writes the post",
+    `${LOCK("posts")} ${LOCK("post_variants")} ${END_OPERATION}`,
+    [ROLLUP],
+    false,
+  ],
+);
 for (const [title, body, files, flagged] of FIXTURES) {
   test(`the lock-order check ${flagged ? "flags" : "passes"} ${title}`, () => {
     const found = lockOrderViolations([...files, define("fixture", body)]);

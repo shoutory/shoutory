@@ -84,6 +84,7 @@ const RETAINED = [
   ["app.idempotency_keys", "app.idempotency_keys"],
   ["app.operation_attempts", "app.operation_attempts"],
   ["app.usage_reservations", "app.usage_reservations"],
+  ["app.provider_quota_ledger", "app.provider_quota_ledger"],
   ["app.oauth_flows", "app.oauth_flows"],
   ["app.connect_challenges", "app.connect_challenges"],
   ["app.rate_buckets", "app.rate_buckets"],

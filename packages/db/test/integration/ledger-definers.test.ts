@@ -241,7 +241,7 @@ describe("a fenced write", () => {
     for (const [token, step] of [
       [2, STEP],
       [4, STEP],
-      [3, ["processing", "dispatching", "P"]],
+      [3, ["processing", "retry_wait", "P"]],
     ] as [number, Step][]) {
       const answer = await move(WORKER, id, token, step);
       expect(head(answer), `${token} ${step[0]}`).toMatchObject({ outcome: "lost_lease" });
@@ -453,7 +453,6 @@ interface Refusal {
   /** The code the refusal answers. */
   code: string;
 }
-const D = { state: "dispatching", effect: "possible" };
 const REFUSALS: Refusal[] = [
   ...["S", "U", "X", "E", "Z"].map((actor) => ({
     name: `actor ${actor}`,
@@ -475,17 +474,6 @@ const REFUSALS: Refusal[] = [
     move: ["unknown_external_state", "needs_human", "R"],
     code: "42501",
   },
-  { name: "row 19", ...D, move: ["dispatching", "retry_wait", "W"], code: "42501" },
-  { name: "row 20", ...D, move: ["dispatching", "failed", "W"], code: "42501" },
-  { name: "row 21", ...D, move: ["dispatching", "paused", "W"], code: "42501" },
-  { name: "row 24", state: "provider_accepted", move: ["provider_accepted", "failed", "P"], code: "42501" },
-  {
-    name: "row 36",
-    state: "reconciling",
-    effect: "possible",
-    move: ["reconciling", "retry_wait", "R"],
-    code: "42501",
-  },
   { name: "a move not in the table", state: "pending", move: ["pending", "dispatching", "W"], code: "SH409" },
   // A call that names the state the operation is already in changes nothing and announces nothing (R593 (1)).
   {
@@ -501,14 +489,21 @@ const REFUSALS: Refusal[] = [
     move: ["blocked_reconnect", "blocked_reconnect", "W"],
     code: "SH409",
   },
-  // The lease of a move into dispatching is the one the claim or the poll claim put on the row (R593 (3)).
-  { name: "row 9 without a lease", move: ["claimed", "dispatching", "W"], lease: false, code: "SH409" },
+  // A move into dispatching marks the effect with its attempt row, so it runs only through operation_attempt_start.
+  { name: "row 9 with its lease", move: ["claimed", "dispatching", "W"], code: "42501" },
+  { name: "row 9 without a lease", move: ["claimed", "dispatching", "W"], lease: false, code: "42501" },
+  {
+    name: "row 14 with its lease",
+    state: "processing",
+    move: ["processing", "dispatching", "P"],
+    code: "42501",
+  },
   {
     name: "row 14 without a lease",
     state: "processing",
     move: ["processing", "dispatching", "P"],
     lease: false,
-    code: "SH409",
+    code: "42501",
   },
   { name: "a job naming a workspace it does not hold", ws: WB, code: "42501" },
   { name: "the app role", pool: "app", code: "42501" },
@@ -680,31 +675,6 @@ describe("the restore reason of a blocked operation (row 13)", () => {
   );
 });
 
-describe("the move into dispatching", () => {
-  const LATER = new Date(Date.now() + 120_000).toISOString();
-  it.each([
-    ["row 9", "claimed", "W", {}],
-    ["row 14", "processing", "P", { lease_expires_at: LATER }],
-  ])(
-    "a move into dispatching sets effect possible and keeps the lease it came with: %s",
-    async (_row, from, actor, changes) => {
-      const id = await plant({ state: from, token: 3, lease: true });
-      expect(head(await move(WORKER, id, 3, [from, "dispatching", actor], changes))).toMatchObject({
-        outcome: "moved",
-      });
-      const after = await opOf(id);
-      expect(after).toMatchObject({
-        state: "dispatching",
-        effect: "possible",
-        token: 3,
-        lease_owner: "worker-a",
-      });
-      if ("lease_expires_at" in changes)
-        expect(new Date(after.lease_expires_at as string).toISOString()).toBe(LATER);
-    },
-  );
-});
-
 describe("operation_cancel", () => {
   // [who or what, caller, planted, the code it answers (absent: it cancels)]
   const CASES: [string, TenantCtx, Plant, string | undefined][] = [
@@ -863,6 +833,26 @@ describe("every ledger definer writes its outbox row", () => {
   });
 });
 
+const WRITERS = [
+  "admit_due_targets",
+  "claim_operations",
+  "claim_polls",
+  "claim_reconciles",
+  "heartbeat",
+  "ledger_add_evidence",
+  "ledger_due_move",
+  "operation_attempt_finish",
+  "operation_attempt_start",
+  "operation_cancel",
+  "operation_insert",
+  "operation_record_progress",
+  "operation_transition",
+  "operations_usage",
+  "record_evidence",
+  "resolve_operation",
+  "sweep_due_moves",
+  "sweep_expired_leases",
+];
 describe("the ledger tables are written only by ledger definers", () => {
   it("ledger tables are written only by ledger definer functions", async () => {
     const writers = await rows(
@@ -872,20 +862,7 @@ describe("the ledger tables are written only by ledger definers", () => {
           AND p.prosrc ~* '(insert\\s+into|update|delete\\s+from)\\s+(only\\s+)?(app\\.)?(operations|operation_evidence|operation_attempts|operation_resolutions|operation_media|usage_reservations)\\y'
         ORDER BY p.proname`,
     );
-    expect(writers.map((row) => row.proname)).toEqual([
-      "admit_due_targets",
-      "claim_operations",
-      "claim_polls",
-      "claim_reconciles",
-      "heartbeat",
-      "ledger_add_evidence",
-      "ledger_due_move",
-      "operation_cancel",
-      "operation_insert",
-      "operation_transition",
-      "record_evidence",
-      "sweep_expired_leases",
-    ]);
+    expect(writers.map((row) => row.proname)).toEqual(WRITERS);
     expect(writers.filter((row) => row.owner !== "shoutory_definer")).toEqual([]);
     // A worker that skips the definers is refused by the grants, not by a policy.
     const direct = await exec(WORKER, "UPDATE app.operations SET state = 'cancelled' WHERE id = $1", [
@@ -902,12 +879,14 @@ describe("the ledger tables are written only by ledger definers", () => {
     );
     expect(granted.map((row) => row.column_name)).toEqual(
       [
+        "attempt_count",
         "blocked_since",
         "effect",
         "external_id",
         "fencing_token",
         "heartbeat_at",
         "last_actor",
+        "lateness_deadline",
         "lease_expires_at",
         "lease_owner",
         "next_attempt_at",
@@ -919,6 +898,8 @@ describe("the ledger tables are written only by ledger definers", () => {
         "reason_code",
         "state",
         "step_cursor",
+        "superseded_by_operation_id",
+        "unverified_until",
       ].sort(),
     );
   });

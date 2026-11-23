@@ -207,7 +207,9 @@ describe("one failing step of the tick", () => {
     const variant = await admin((a) => seedDueTarget(a, ws));
     await admin(
       async (a) =>
-        void (await a.query("REVOKE EXECUTE ON FUNCTION app.sweep_expired_leases() FROM shoutory_worker")),
+        void (await a.query(
+          "REVOKE EXECUTE ON FUNCTION app.sweep_expired_leases(jsonb) FROM shoutory_worker",
+        )),
     );
     try {
       const tick = createLedgerTick({ pool: db.pool("worker"), boss: queue, registry, logger });
@@ -215,7 +217,9 @@ describe("one failing step of the tick", () => {
     } finally {
       await admin(
         async (a) =>
-          void (await a.query("GRANT EXECUTE ON FUNCTION app.sweep_expired_leases() TO shoutory_worker")),
+          void (await a.query(
+            "GRANT EXECUTE ON FUNCTION app.sweep_expired_leases(jsonb) TO shoutory_worker",
+          )),
       );
       await queue.stop({ graceful: true });
     }
