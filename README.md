@@ -100,8 +100,9 @@ The container runs as a non-root user with a read-only filesystem, keeps uploads
 The image carries `ffprobe` (LGPL-2.1-or-later, no GPL or nonfree options) at `/usr/local/bin/ffprobe`, to read the size,
 duration and codec of uploaded videos. It is built from the unmodified FFmpeg 9.0.2 source in the `ffprobe` stage of
 [`docker/Dockerfile`](docker/Dockerfile), which holds the tarball URL, its sha256 and the configure line; the build
-reads local files only and has no network protocol. [`docs/dependencies.md`](docs/dependencies.md) records the signature
-check and the build packages.
+reads local files only and has no network protocol. The image sets `SHOUTORY_FFPROBE_PATH` to it, so an uploaded mp4,
+QuickTime or webm video is probed (15 seconds at most) and becomes ready without being converted or copied;
+[`docs/dependencies.md`](docs/dependencies.md) records the signature check and the build packages.
 
 ### Backup and restore
 
@@ -149,8 +150,9 @@ requires `TZ=UTC`.
 | `SHOUTORY_DATA_DIR`                                                         | The absolute folder the `fs` driver stores objects in; default `/data`; it must exist and be writable (`shoutory storage check`)                                                                                                                       |
 | `SHOUTORY_S3_ENDPOINT`                                                      | With driver `s3`: the S3-compatible endpoint, `http` or `https`, no userinfo, no metadata or link-local address                                                                                                                                        |
 | `SHOUTORY_S3_PUBLIC_ENDPOINT`                                               | With driver `s3`: the address browsers upload to through presigned URLs, with the same rules as the endpoint; default the endpoint itself. Set it when the server reaches the bucket at an internal address                                           |
-| `SHOUTORY_MEDIA_SCAN`                                                       | `off` (default) or `warn`: with `warn` each uploaded image is scanned by your own ClamAV (`clamd`) and a finding or a failed scan is logged; the upload goes on either way |
+| `SHOUTORY_MEDIA_SCAN`                                                       | `off` (default) or `warn`: with `warn` each uploaded image or video is scanned by your own ClamAV (`clamd`) and a finding or a failed scan is logged; the upload goes on either way |
 | `SHOUTORY_CLAMAV_HOST`, `SHOUTORY_CLAMAV_PORT`                              | With `warn`: the `clamd` TCP address (host required; port default 3310, 1-65535). `clamd` has no authentication, so keep it on a private network                         |
+| `SHOUTORY_FFPROBE_PATH`                                                     | The absolute path of the `ffprobe` that reads uploaded videos; the image sets it to `/usr/local/bin/ffprobe`. Unset (the default outside the image) or empty turns video off, so an empty value turns it off over the image's setting: a video upload is rejected as an unsupported type. A path that is not an executable file stops the worker at start |
 | `SHOUTORY_S3_REGION`, `SHOUTORY_S3_BUCKET`                                  | With driver `s3`: the region and the bucket, which must already exist (the server never creates one)                                                                                                                                                   |
 | `SHOUTORY_S3_ACCESS_KEY_ID`, `SHOUTORY_S3_SECRET_ACCESS_KEY`                | With driver `s3`: the access key pair; secrets, never logged and never part of an answer                                                                                                                                                               |
 | `SHOUTORY_S3_FORCE_PATH_STYLE`                                              | With driver `s3`: `true` for servers that need path-style addressing; default `false`                                                                                                                                                                  |

@@ -126,12 +126,18 @@ test("every ADD of a URL carries a sha256 checksum", () => {
   for (const add of adds) assert.match(add, /^ADD --checksum=sha256:[0-9a-f]{64} https?:\/\//, add);
 });
 
-test("the nonroot and debug runtime stages copy ffprobe from the one ffprobe stage", () => {
+test("the nonroot and debug runtime stages copy ffprobe from the one ffprobe stage and tell the app where it is", () => {
   const copy = /^COPY --from=ffprobe \/usr\/local\/bin\/ffprobe \/usr\/local\/bin\/ffprobe$/m;
+  const where = /^ENV SHOUTORY_FFPROBE_PATH=\/usr\/local\/bin\/ffprobe$/m;
   const debug = lines.findIndex((line) => / AS debug$/.test(line));
   const last = lines.findLastIndex((line) => line.startsWith("FROM "));
-  assert.match(lines.slice(debug, last).join("\n"), copy, "the debug image lacks ffprobe");
-  assert.match(lines.slice(last).join("\n"), copy, "the default image lacks ffprobe");
+  for (const [name, stage] of [
+    ["debug", lines.slice(debug, last).join("\n")],
+    ["default", lines.slice(last).join("\n")],
+  ]) {
+    assert.match(stage, copy, `the ${name} image lacks ffprobe`);
+    assert.match(stage, where, `the ${name} image does not set SHOUTORY_FFPROBE_PATH`);
+  }
 });
 
 // Only the ffprobe stage installs build packages, and they never leave it: the runtime is distroless.

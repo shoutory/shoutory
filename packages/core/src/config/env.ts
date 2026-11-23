@@ -281,6 +281,21 @@ export function parseMediaScanEnv(env: Env): MediaScanConfig {
   return { mode: "warn", host: scan.SHOUTORY_CLAMAV_HOST, port: scan.SHOUTORY_CLAMAV_PORT };
 }
 
+const ffprobeSchema = z.object({
+  SHOUTORY_FFPROBE_PATH: z
+    .string()
+    .refine((value) => value === "" || isAbsolutePath(value), "must be an absolute path")
+    .optional(),
+});
+
+/**
+ * The ffprobe binary of the image pipeline, or undefined: without it a video is not probed and is refused. An empty value
+ * is unset, so an operator can turn video probing off over the image's own setting.
+ */
+export function parseFfprobeEnv(env: Env): string | undefined {
+  return parseWith(ffprobeSchema, env).SHOUTORY_FFPROBE_PATH || undefined;
+}
+
 export interface Config {
   role: ServerRole;
   /** Set for every role that serves HTTP; only a worker may lack it. */
@@ -305,6 +320,8 @@ export interface Config {
   releaseChannel: (typeof RELEASE_CHANNELS)[number];
   storage: StorageConfig;
   mediaScan: MediaScanConfig;
+  /** The absolute path of the ffprobe that reads uploaded videos; unset means video probing is off. */
+  ffprobePath: string | undefined;
   /** Only the URLs of the roles this process role connects as (`URL_ROLES`); read one through `databaseUrlOf`. */
   databaseUrls: Readonly<Partial<Record<Role, SealedSecret>>>;
 }
@@ -385,6 +402,7 @@ export function parseEnv(env: Env): Config {
     releaseChannel: http.data.SHOUTORY_RELEASE_CHANNEL,
     storage: parseStorageEnv(env),
     mediaScan: parseMediaScanEnv(env),
+    ffprobePath: parseFfprobeEnv(env),
     databaseUrls: Object.fromEntries(
       URL_ROLES[http.data.SHOUTORY_ROLE].map((r) => [r, secret(roleVariable("SHOUTORY_DATABASE_URL_", r))]),
     ),

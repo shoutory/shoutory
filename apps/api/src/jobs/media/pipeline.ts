@@ -6,16 +6,17 @@ import { join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
-import { isImageType, type RejectReason } from "@shoutory/core/media";
+import { isImageType, isVideoType, type RejectReason, type VideoType } from "@shoutory/core/media";
 import { type StorageDriver, StorageError } from "@shoutory/core/storage";
 import { type TenantTx, withTenant } from "@shoutory/db/context";
 import type { AppPool } from "@shoutory/db/pool";
 import { fileTypeFromBuffer } from "file-type";
 import type { Logger } from "../../logging/logger.js";
+import { runProbe } from "./probe-run.js";
 import type { Scan } from "./scan.js";
 import { runSharpChild } from "./sharp-run.js";
 
-// The image pipeline as the worker runs it: one asset, from `uploaded` to `ready` or `rejected`. It runs as a job of the
+// The media pipeline as the worker runs it: one image or video, from `uploaded` to `ready` or `rejected`. It runs as a job of the
 // asset's workspace and moves the asset only through the media definers. Every step is safe to run again: the state of
 // the asset and of its derivatives says where a crashed run stopped, and what it already wrote is never overwritten.
 
@@ -24,6 +25,8 @@ export interface PipelineDeps {
   readonly storage: StorageDriver;
   /** The scan hook in `warn` mode (absent: off). Its verdict never blocks an upload; a verdict that is not clean is logged. */
   readonly scan?: Scan;
+  /** The absolute path of ffprobe (absent: video probing is off and a video is refused as an unsupported type). */
+  readonly ffprobe?: string;
   readonly logger?: Pick<Logger, "warn">;
 }
 
@@ -147,8 +150,30 @@ async function warnScan(deps: PipelineDeps, ws: string, id: string, path: string
   }
 }
 
+/** Runs `use` on a temporary copy of the original (scanned first on a fresh run) in a folder that is removed after. */
+async function withOriginal<T>(
+  deps: PipelineDeps,
+  ws: string,
+  id: string,
+  asset: Asset,
+  scan: boolean,
+  use: (input: string, dir: string) => Promise<T>,
+): Promise<T> {
+  const dir = await mkdtemp(join(tmpdir(), "shoutory-media-"));
+  try {
+    const original = await deps.storage.get(asset.object_key);
+    if (original === null) throw new Error("the original of an uploaded asset is missing");
+    const input = join(dir, "input");
+    await pipeline(Readable.fromWeb(original as NodeReadableStream<Uint8Array>), createWriteStream(input));
+    if (scan) await warnScan(deps, ws, id, input);
+    return await use(input, dir);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 /** Decodes the original in the sharp child and stores both derivatives; the facts of the image, or why it is refused. */
-async function derive(
+function derive(
   deps: PipelineDeps,
   job: Job,
   ws: string,
@@ -157,21 +182,13 @@ async function derive(
   scan: boolean,
   signal?: AbortSignal,
 ) {
-  const dir = await mkdtemp(join(tmpdir(), "shoutory-media-"));
-  try {
-    const original = await deps.storage.get(asset.object_key);
-    if (original === null) throw new Error("the original of an uploaded asset is missing");
-    const input = join(dir, "input");
-    await pipeline(Readable.fromWeb(original as NodeReadableStream<Uint8Array>), createWriteStream(input));
-    if (scan) await warnScan(deps, ws, id, input);
+  return withOriginal(deps, ws, id, asset, scan, async (input, dir) => {
     const result = await runSharpChild({ inputPath: input, outputDir: dir, ...(signal ? { signal } : {}) });
     if (!result.ok) return result;
     for (const profile of PROFILES)
       await putDerivative(deps, job, ws, id, profile, result.files[profile], asset.object_key);
     return result;
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+  });
 }
 
 /** The type a sender claimed, as spelled by a browser or a script: case does not matter, and `image/jpg` is JPEG. */
@@ -181,8 +198,42 @@ const claimedType = (mime: string | null): string => {
 };
 
 type Verdict =
-  | { ok: true; facts: { width: number; height: number; mime: string } }
+  | {
+      ok: true;
+      facts: { width: number; height: number; mime: string; duration_ms?: number; codec?: { name: string } };
+    }
   | { ok: false; reason: RejectReason };
+
+// The container family ffprobe names for each video type the pipeline takes.
+const FAMILY_OF = { "video/mp4": "mov", "video/quicktime": "mov", "video/webm": "matroska" } as const;
+
+/**
+ * A video is never transcoded or copied: ffprobe reads its facts, and they must agree with what its bytes and the sender
+ * said. Without a configured ffprobe a video is not a type this server takes.
+ */
+async function judgeVideo(
+  deps: PipelineDeps,
+  ws: string,
+  id: string,
+  asset: Asset,
+  sniffed: VideoType,
+  scan: boolean,
+  signal?: AbortSignal,
+): Promise<Verdict> {
+  const ffprobePath = deps.ffprobe;
+  if (ffprobePath === undefined) return { ok: false, reason: "unsupported_type" };
+  if (sniffed !== claimedType(asset.mime)) return { ok: false, reason: "type_mismatch" };
+  const probed = await withOriginal(deps, ws, id, asset, scan, (inputPath) =>
+    runProbe({ ffprobePath, inputPath, demuxer: FAMILY_OF[sniffed], ...(signal ? { signal } : {}) }),
+  );
+  if (!probed.ok) return probed;
+  if (probed.family !== FAMILY_OF[sniffed]) return { ok: false, reason: "type_mismatch" };
+  const { width, height, durationMs, codec } = probed;
+  return {
+    ok: true,
+    facts: { width, height, mime: sniffed, duration_ms: durationMs, codec: { name: codec } },
+  };
+}
 
 /**
  * What the asset is: the type its bytes name must be one the pipeline takes and the one the sender claimed, before any
@@ -198,6 +249,8 @@ async function judge(
   signal?: AbortSignal,
 ): Promise<Verdict> {
   const sniffed = await sniff(deps.storage, asset.object_key);
+  if (sniffed !== undefined && isVideoType(sniffed))
+    return judgeVideo(deps, ws, id, asset, sniffed, scan, signal);
   if (sniffed === undefined || !isImageType(sniffed)) return { ok: false, reason: "unsupported_type" };
   if (sniffed !== claimedType(asset.mime)) return { ok: false, reason: "type_mismatch" };
   const derived = await derive(deps, job, ws, id, asset, scan, signal);

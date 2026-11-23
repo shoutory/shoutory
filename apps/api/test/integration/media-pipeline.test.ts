@@ -1,10 +1,11 @@
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { processAsset } from "../../src/jobs/media/pipeline.js";
 import { createFsDriver } from "../../src/storage/fs-driver.js";
 import { animatedGif, jpeg, png } from "../support/images.js";
@@ -228,6 +229,161 @@ describe("a pipeline that stopped part way finishes the asset once", () => {
     // Whatever is stored is what is recorded, an object the crash left included.
     const stripped = await bytesOf(`ws/${ws}/${id}/1/stripped`);
     expect(derivatives[0]?.sha256).toBe(sha(stripped));
+  });
+});
+
+// A video is judged from what ffprobe reports about its bytes. The real binary lives in the image (its own smoke test
+// runs it); here the child that would run it prints an answer recorded from that binary, through the real `runProbe`.
+const fixture = (path: string) => readFileSync(new URL(`../fixtures/${path}`, import.meta.url));
+const recorded = (name: string) => JSON.parse(fixture(`ffprobe/${name}.json`).toString("utf8")) as ProbeJson;
+interface ProbeJson {
+  streams: object[];
+  format: object;
+}
+const mp4 = fixture("h264.mp4");
+const withBrand = (brand: string) => {
+  const copy = Buffer.from(mp4);
+  copy.write(brand, 8, "latin1");
+  return copy;
+};
+// The first bytes of a webm: enough for the sniffer, which is all the pipeline reads of it before the probe.
+const WEBM = Buffer.from("1a45dfa39f4286810142f7810142f2810442f381084282847765626d42878102", "hex");
+
+async function probePrints(output: unknown, exitCode = 0) {
+  const real = await vi.importActual<typeof import("node:child_process")>("node:child_process");
+  const text = typeof output === "string" ? output : JSON.stringify(output);
+  vi.mocked(spawn).mockImplementationOnce((_command, _args, options) =>
+    real.spawn(
+      process.execPath,
+      ["-e", `process.stdout.write(${JSON.stringify(text)});process.exit(${exitCode})`],
+      options as never,
+    ),
+  );
+}
+const runVideo = (id: string, extra: object = { ffprobe: process.execPath }) =>
+  processAsset({ pool: fx.db.pool("worker"), storage, ...extra }, ws, id);
+
+// A block, not an arrow with a value: a function that a hook returns is run after the test as its cleanup.
+beforeEach(() => {
+  vi.mocked(spawn).mockClear();
+});
+
+describe("an uploaded video becomes ready", () => {
+  it.each([
+    ["an mp4", () => mp4, "video/mp4", "h264.mp4", "h264", "mov"],
+    ["a QuickTime movie", () => withBrand("qt  "), "video/quicktime", "hevc.mov", "hevc", "mov"],
+    ["a webm", () => WEBM, "video/webm", "vp9.webm", "vp9", "matroska"],
+  ])(
+    "%s becomes ready with its size, length and codec, no derivative, and a second run changes nothing",
+    async (_name, bytes, mime, file, codec, demuxer) => {
+      const id = await uploaded(bytes(), mime);
+      await probePrints(recorded(file));
+      await runVideo(id);
+      // The demuxer is the one of the type the bytes name, set before the input.
+      expect(vi.mocked(spawn).mock.calls[0]?.[1]?.slice(-3, -1)).toEqual(["-f", demuxer]);
+      const row = await fx.admin(
+        async (client) =>
+          (
+            await client.query(
+              "SELECT state, mime, width, height, duration_ms, codec_facts, byte_size::int FROM app.media_assets WHERE id = $1",
+              [id],
+            )
+          ).rows[0],
+      );
+      expect(row).toEqual({
+        state: "ready",
+        mime,
+        width: 320,
+        height: 240,
+        duration_ms: 2000,
+        codec_facts: { name: codec },
+        byte_size: bytes().length,
+      });
+      expect(await derivativesOf(id)).toEqual([]);
+      expect(await storage.head(`ws/${ws}/${id}/1/stripped`)).toBeNull();
+      await runVideo(id);
+      expect(spawn).toHaveBeenCalledTimes(1);
+    },
+  );
+});
+
+const h264 = recorded("h264.mp4");
+// [what is wrong, the bytes, what the sender claimed, what ffprobe prints (none: it is never asked), the reason]
+const REFUSED: [
+  string,
+  () => Promise<Buffer>,
+  string,
+  { out: unknown; exit?: number } | undefined,
+  string,
+][] = [
+  ["an mp4 claimed as QuickTime", async () => mp4, "video/quicktime", undefined, "type_mismatch"],
+  ["a video claimed as an image", async () => mp4, "image/png", undefined, "type_mismatch"],
+  ["an image claimed as a video", () => jpeg(), "video/mp4", undefined, "type_mismatch"],
+  [
+    "a video type outside the supported list (3GP)",
+    async () => withBrand("3gp5"),
+    "video/3gpp",
+    undefined,
+    "unsupported_type",
+  ],
+  ["a webm whose probe names the mov family", async () => WEBM, "video/webm", { out: h264 }, "type_mismatch"],
+  [
+    "an mp4 whose probe names the matroska family",
+    async () => mp4,
+    "video/mp4",
+    { out: recorded("vp9.webm") },
+    "type_mismatch",
+  ],
+  [
+    "a truncated mp4 that ffprobe cannot read",
+    async () => mp4.subarray(0, mp4.length / 2),
+    "video/mp4",
+    { out: recorded("truncated.mp4"), exit: 1 },
+    "corrupt",
+  ],
+];
+
+describe("an uploaded video the pipeline refuses", () => {
+  it.each(REFUSED)(
+    "%s is rejected with its reason and no derivative",
+    async (_name, bytes, claimed, probe, reason) => {
+      const id = await uploaded(await bytes(), claimed);
+      if (probe) await probePrints(probe.out, probe.exit);
+      await runVideo(id);
+      expect(await rowOf(id)).toEqual({ state: "rejected", reject_reason: reason, derivatives: 0 });
+      expect(spawn).toHaveBeenCalledTimes(probe ? 1 : 0);
+    },
+  );
+
+  it("is rejected as an unsupported type, with no probe, when no ffprobe is configured", async () => {
+    const id = await uploaded(mp4, "video/mp4");
+    await runVideo(id, {});
+    expect(await rowOf(id)).toEqual({ state: "rejected", reject_reason: "unsupported_type", derivatives: 0 });
+    expect(spawn).not.toHaveBeenCalled();
+  });
+});
+
+describe("the run of an uploaded video", () => {
+  it("stays processing when the probe prints no JSON, and the retry finishes it", async () => {
+    const id = await uploaded(mp4, "video/mp4");
+    await probePrints("not json");
+    await expect(runVideo(id)).rejects.toThrow();
+    expect(await rowOf(id)).toEqual({ state: "processing", reject_reason: null, derivatives: 0 });
+    await probePrints(h264);
+    await runVideo(id);
+    expect((await rowOf(id)).state).toBe("ready");
+  });
+
+  it("is seen once by the scan hook", async () => {
+    let scans = 0;
+    const scan = async () => {
+      scans += 1;
+      return "clean" as const;
+    };
+    const id = await uploaded(mp4, "video/mp4");
+    await probePrints(h264);
+    await runVideo(id, { ffprobe: process.execPath, scan });
+    expect([scans, (await rowOf(id)).state]).toEqual([1, "ready"]);
   });
 });
 

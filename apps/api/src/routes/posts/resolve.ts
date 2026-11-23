@@ -1,6 +1,6 @@
 import { type Draft, settingsIssues } from "@shoutory/core/content";
 import { buildSnapshot, type Resolved, snapshotHash } from "@shoutory/core/content/snapshot";
-import { mediaFits, type RejectReason } from "@shoutory/core/media";
+import { mediaFits, type RejectReason, VIDEO_TYPES } from "@shoutory/core/media";
 import type { TenantTx } from "@shoutory/db/context";
 import { snapshotOf } from "@shoutory/provider-sdk/snapshot";
 import type { HealthProvider } from "../../channels/health.js";
@@ -52,11 +52,16 @@ interface ReadyMedium {
   mime: string;
   width: number;
   height: number;
-  /** The size of the `stripped` copy: the bytes a provider receives. */
+  /** The size of the `stripped` copy of an image, or of the original of a video: the bytes a provider receives. */
   bytes: number;
+  /** The length of a video in milliseconds; null for an image. */
+  durationMs: number | null;
 }
 
-/** The media a draft names, each one `ready` with its `stripped` copy in this workspace; any other is unavailable. */
+/**
+ * The media a draft names, each one `ready` in this workspace with its `stripped` copy (an image) or as an original that
+ * is sent as it is (a video, which has no derivative); any other is unavailable.
+ */
 async function readyMedia(
   tx: TenantTx,
   workspaceId: string,
@@ -65,12 +70,14 @@ async function readyMedia(
   const ids = [...new Set(draft.variants.flatMap((v) => v.media.map((m) => m.media_id.toLowerCase())))];
   if (ids.length === 0) return new Map();
   const found = await tx.query<ReadyMedium>(
-    `SELECT a.id, encode(a.sha256, 'hex') AS sha256, a.mime, a.width, a.height, d.byte_size::float8 AS bytes
+    `SELECT a.id, encode(a.sha256, 'hex') AS sha256, a.mime, a.width, a.height,
+       coalesce(d.byte_size, a.byte_size)::float8 AS bytes, a.duration_ms AS "durationMs"
      FROM app.media_assets AS a
-     JOIN app.media_derivatives AS d ON d.workspace_id = a.workspace_id AND d.media_id = a.id
+     LEFT JOIN app.media_derivatives AS d ON d.workspace_id = a.workspace_id AND d.media_id = a.id
        AND d.profile = 'stripped' AND d.state = 'ready'
-     WHERE a.workspace_id = $1 AND a.id = ANY ($2::uuid[]) AND a.state = 'ready'`,
-    [workspaceId, ids],
+     WHERE a.workspace_id = $1 AND a.id = ANY ($2::uuid[]) AND a.state = 'ready'
+       AND (d.media_id IS NOT NULL OR a.mime = ANY ($3::text[]))`,
+    [workspaceId, ids, [...VIDEO_TYPES]],
   );
   if (found.rows.length !== ids.length) throw unprocessable("media_unavailable");
   return new Map(found.rows.map((row) => [row.id, row]));

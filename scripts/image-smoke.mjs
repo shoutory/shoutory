@@ -191,6 +191,33 @@ function ffprobe() {
   expect(failures.length === 0, failures.join(" || "));
 }
 
+// The app's own probe code from the shipped build runs the shipped ffprobe on a real mp4: the argv, the parse and the
+// binary are proved together, as the runtime user on a read-only root with no network.
+const VIDEO_FIXTURE = join(root, "apps/api/test/fixtures/h264.mp4");
+function probeVideo() {
+  step("the shipped probe reads a real mp4 with the production argv, read-only and offline");
+  const script = `import("/app/apps/api/dist/jobs/media/probe-run.js")
+    .then((probe) => probe.runProbe({ ffprobePath: "/usr/local/bin/ffprobe", inputPath: "/probe/input.mp4", demuxer: "mov" }))
+    .then((result) => console.log(JSON.stringify(result)));`;
+  const run = docker(
+    ["run", "--rm", "--read-only", "--network", "none", "-v", `${VIDEO_FIXTURE}:/probe/input.mp4:ro`].concat([
+      "--entrypoint",
+      NODE,
+      IMAGE,
+      "-e",
+      script,
+    ]),
+    { allowFailure: true },
+  );
+  expect(run.status === 0, `the shipped probe did not run (exit ${run.status}): ${tail(run.stderr)}`);
+  const wanted = { ok: true, width: 320, height: 240, durationMs: 2000, codec: "h264", family: "mov" };
+  const found = JSON.parse(run.stdout.trim().split("\n").at(-1) ?? "null");
+  expect(
+    Object.entries(wanted).every(([key, value]) => found?.[key] === value),
+    `the shipped probe answered ${JSON.stringify(found)}, not ${JSON.stringify(wanted)}`,
+  );
+}
+
 function startDatabase() {
   step("start PostgreSQL on a network with no way out");
   docker(["network", "create", "--internal", NETWORK]);
@@ -348,6 +375,7 @@ try {
   inspect();
   shipped();
   ffprobe();
+  probeVideo();
   startDatabase();
   startCollector();
   await migrate();

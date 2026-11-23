@@ -15,6 +15,7 @@ import { createApp } from "./app.js";
 import { createAuth } from "./auth/auth.js";
 import { RANGE_HOST } from "./auth/hibp.js";
 import { type CliIo, collectSecrets, run } from "./cli/main.js";
+import { checkFfprobePath } from "./jobs/media/probe-run.js";
 import { createClamdScan } from "./jobs/media/scan.js";
 import { startWorker } from "./jobs/worker.js";
 import { createLogger, type Logger } from "./logging/logger.js";
@@ -136,6 +137,13 @@ async function startServer(config: Config, logger: Logger): Promise<RunningServe
   }
 }
 
+/** A configured ffprobe must be a file the worker may run, else the start is refused; none says once that video is off. */
+async function checkVideoProbing(config: Config, logger: Logger): Promise<void> {
+  if (config.ffprobePath === undefined)
+    logger.info({ variable: "SHOUTORY_FFPROBE_PATH" }, "video probing is off: the variable is not set");
+  else await checkFfprobePath(config.ffprobePath);
+}
+
 /** The worker role over its own pool: the queue client, schedules, heartbeat and outbox relay (R316). */
 async function startWorkerRole(
   config: Config,
@@ -149,6 +157,7 @@ async function startWorkerRole(
   try {
     storage = createStorageDriver(config.storage);
     await assertMigrationsApplied(pool);
+    await checkVideoProbing(config, logger);
     // The worker and all roles need the sender; the configuration refuses a start without it.
     if (config.mailFrom === undefined) throw new Error("SHOUTORY_MAIL_FROM is required");
     const mail = {
@@ -168,6 +177,7 @@ async function startWorkerRole(
       media: {
         storage,
         ...(config.mediaScan.mode === "warn" ? { scan: createClamdScan(config.mediaScan) } : {}),
+        ...(config.ffprobePath === undefined ? {} : { ffprobe: config.ffprobePath }),
       },
       fetchFor: providerFetch(config),
     });

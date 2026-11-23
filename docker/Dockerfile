@@ -75,6 +75,7 @@ COPY --from=app --chown=nonroot:nonroot /data /data
 ENV TZ=UTC
 ENV SHOUTORY_RELEASE_CHANNEL=${SHOUTORY_RELEASE_CHANNEL}
 ENV SHOUTORY_WEB_ROOT=/app/apps/web/dist/client
+ENV SHOUTORY_FFPROBE_PATH=/usr/local/bin/ffprobe
 ENV NODE_ENV=production
 USER nonroot
 VOLUME /data
@@ -91,6 +92,7 @@ COPY --from=app --chown=nonroot:nonroot /data /data
 ENV TZ=UTC
 ENV SHOUTORY_RELEASE_CHANNEL=${SHOUTORY_RELEASE_CHANNEL}
 ENV SHOUTORY_WEB_ROOT=/app/apps/web/dist/client
+ENV SHOUTORY_FFPROBE_PATH=/usr/local/bin/ffprobe
 ENV NODE_ENV=production
 USER nonroot
 VOLUME /data

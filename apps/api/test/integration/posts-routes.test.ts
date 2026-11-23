@@ -24,7 +24,18 @@ import { type Fixture, PEPPER, startFixture } from "./auth/harness.js";
 
 type User = { id: string; cookie: string };
 const DEFAULTS = { max_length: 280, sensitive: false, tag: "x" };
-const manifest = manifestSchema.parse({ ...fixtureOAuthManifest, providerDefault: DEFAULTS });
+// The channel takes video too, within 10 MB, one minute and 2 MP (the image limits are the fixture's own).
+const manifest = manifestSchema.parse({
+  ...fixtureOAuthManifest,
+  capabilities: [...fixtureOAuthManifest.capabilities, "video"],
+  limits: {
+    ...fixtureOAuthManifest.limits,
+    videoMaxBytes: { ...fixtureOAuthManifest.limits.imageMaxBytes, value: 10_000_000 },
+    videoMaxDurationMs: { ...fixtureOAuthManifest.limits.imageMaxBytes, value: 60_000 },
+    videoMaxPixels: { ...fixtureOAuthManifest.limits.imageMaxBytes, value: 2_000_000 },
+  },
+  providerDefault: DEFAULTS,
+});
 const DIGEST = snapshotOf(manifest, new Date(0)).manifestDigest;
 const SEATS = ["owner", "admin", "editor", "approver", "viewer"] as const;
 let fx: Fixture;
@@ -47,15 +58,21 @@ interface Facts {
   height?: number;
   /** `false` plants a ready asset whose `stripped` derivative is missing. */
   stripped?: boolean;
+  /** A video as the pipeline leaves it: its type, the size of its original and its length; it has no derivative. */
+  video?: { bytes: number; durationMs: number };
 }
 // An asset as the pipeline leaves it: a ready one has its sniffed type, its size in pixels and a ready `stripped` derivative.
 async function plantMedia(workspace: string, state: string, facts: Facts = {}): Promise<string> {
   const id = randomUUID();
   const ready = state === "ready";
+  const kind = facts.video
+    ? { mime: "video/mp4", bytes: facts.video.bytes, durationMs: facts.video.durationMs }
+    : { mime: "image/png", bytes: null, durationMs: null };
   await fx.admin(async (client) => {
     await client.query(
-      `INSERT INTO app.media_assets (id, workspace_id, object_key, file_name, mime, width, height, source, created_by, state, sha256)
-       VALUES ($1::uuid, $2::uuid, 'ws/' || $2::text || '/' || $1::text || '/1/original', 'posts.png', 'image/png', $5, $6,
+      `INSERT INTO app.media_assets (id, workspace_id, object_key, file_name, mime, width, height, byte_size, duration_ms,
+         source, created_by, state, sha256)
+       VALUES ($1::uuid, $2::uuid, 'ws/' || $2::text || '/' || $1::text || '/1/original', 'posts.png', $7, $5, $6, $8, $9,
          'upload', $3::uuid, $4::text, CASE WHEN $4::text <> 'pending_upload' THEN sha256(convert_to($1::text, 'UTF8')) END)`,
       [
         id,
@@ -64,17 +81,28 @@ async function plantMedia(workspace: string, state: string, facts: Facts = {}): 
         state,
         ready ? (facts.width ?? 400) : null,
         ready ? (facts.height ?? 300) : null,
+        kind.mime,
+        kind.bytes,
+        kind.durationMs,
       ],
     );
-    if (ready && facts.stripped !== false)
-      await client.query(
-        `INSERT INTO app.media_derivatives (workspace_id, media_id, profile, object_key, state, sha256, byte_size)
-         VALUES ($1::uuid, $2::uuid, 'stripped', 'ws/' || $1::text || '/' || $2::text || '/1/stripped', 'ready',
-           sha256(convert_to($2::text || 'stripped', 'UTF8')), $3)`,
-        [workspace, id, facts.bytes ?? 1000],
-      );
+    if (ready && facts.stripped !== false && !facts.video) await plantStripped(client, workspace, id, facts);
   });
   return id;
+}
+type AdminClient = Parameters<Parameters<Fixture["admin"]>[0]>[0];
+async function plantStripped(
+  client: AdminClient,
+  workspace: string,
+  id: string,
+  facts: Facts,
+): Promise<void> {
+  await client.query(
+    `INSERT INTO app.media_derivatives (workspace_id, media_id, profile, object_key, state, sha256, byte_size)
+     VALUES ($1::uuid, $2::uuid, 'stripped', 'ws/' || $1::text || '/' || $2::text || '/1/stripped', 'ready',
+       sha256(convert_to($2::text || 'stripped', 'UTF8')), $3)`,
+    [workspace, id, facts.bytes ?? 1000],
+  );
 }
 
 beforeAll(async () => {
@@ -578,6 +606,29 @@ describe("only ready media is attached, and only media the channel's rule takes 
   ];
   it.each(RULES)("media %s is refused at create with the rule named", async (_name, plant, rule) => {
     const answer = await call(user("editor"), "POST", base(ws), attach(...(await plant())));
+    expect(await refusedDetails(answer)).toEqual([422, { reason: "media_unavailable", rule }]);
+  });
+});
+
+// A ready video has no derivative: it goes to the provider as it was uploaded, so its size is its original's.
+describe("a ready video is attached under the channel's video rule", () => {
+  const video = (over: { bytes?: number; durationMs?: number; width?: number; height?: number } = {}) =>
+    plantMedia(ws, "ready", {
+      width: over.width ?? 1280,
+      height: over.height ?? 720,
+      video: { bytes: over.bytes ?? 2_000_000, durationMs: over.durationMs ?? 12_000 },
+    });
+
+  it("a ready video with no stripped derivative is taken at create", async () => {
+    const answer = await call(user("editor"), "POST", base(ws), attach(await video()));
+    expect(answer.status).toBe(201);
+  });
+
+  it.each([
+    ["over videoMaxBytes, by the size of its original", { bytes: 10_000_001 }, "too_large"],
+    ["over videoMaxDurationMs", { durationMs: 60_001 }, "too_long"],
+  ])("a video %s is refused at create with the rule named", async (_name, over, rule) => {
+    const answer = await call(user("editor"), "POST", base(ws), attach(await video(over)));
     expect(await refusedDetails(answer)).toEqual([422, { reason: "media_unavailable", rule }]);
   });
 });

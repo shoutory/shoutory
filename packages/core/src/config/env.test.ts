@@ -292,6 +292,24 @@ describe("start-up: storage settings (R331, R340)", () => {
   });
 });
 
+describe("start-up: the ffprobe path", () => {
+  it("is optional (video probing is off without it, or with an empty value over the image's) and an absolute path is taken as given", () => {
+    expect(parseEnv(valid).ffprobePath).toBeUndefined();
+    expect(parseEnv(withValue("SHOUTORY_FFPROBE_PATH", "")).ffprobePath).toBeUndefined();
+    expect(parseEnv(withValue("SHOUTORY_FFPROBE_PATH", "/usr/local/bin/ffprobe")).ffprobePath).toBe(
+      "/usr/local/bin/ffprobe",
+    );
+  });
+
+  it.each([
+    ["a bare program name, which would be searched on the path", "ffprobe"],
+    ["a relative path", "bin/ffprobe"],
+    ["a URL", "https://media.example.test/ffprobe"],
+  ])("refuses %s and names the variable", (_name, value) => {
+    expect(refusedVariable(withValue("SHOUTORY_FFPROBE_PATH", value))).toBe("SHOUTORY_FFPROBE_PATH");
+  });
+});
+
 describe("start-up: the upload scan hook", () => {
   const scan = (extra: Record<string, string>) => ({ ...valid, ...extra });
 

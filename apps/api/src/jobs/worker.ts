@@ -28,8 +28,8 @@ export interface WorkerOptions {
   readonly pool: AppPool;
   readonly logger: Logger;
   readonly role: "worker" | "all";
-  /** What the image pipeline reads and writes: the same storage as the api, and the optional upload scan. */
-  readonly media: Pick<PipelineDeps, "storage" | "scan">;
+  /** What the media pipeline reads and writes: the same storage as the api, the optional upload scan and ffprobe. */
+  readonly media: Pick<PipelineDeps, "storage" | "scan" | "ffprobe">;
   /** What the mail sender needs besides the pool and the logger. */
   readonly mail: Pick<
     MailSenderOptions,
