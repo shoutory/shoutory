@@ -28,6 +28,7 @@ import { type App, type AppEnv, initRoutes } from "./routes/define-route.js";
 import { registerInstance } from "./routes/instance.js";
 import { registerInvitations } from "./routes/invitations/invitations.js";
 import { registerMembers } from "./routes/members/members.js";
+import { registerOperations } from "./routes/operations/operations.js";
 import { registerOrganizations } from "./routes/organizations/organization.js";
 import { registerPosts } from "./routes/posts/posts.js";
 import { registerProviders } from "./routes/providers/providers.js";
@@ -185,6 +186,7 @@ export function createApp(options: AppOptions): App {
   registerEntitlements(app, options.entitlements ?? selfHost);
   registerInvitations(app, options.auth);
   registerMembers(app, options.auth.ipHmac);
+  registerOperations(app, options.auth.ipHmac);
   registerAudit(app);
   registerUnsubscribe(app, options.auth, options.pool);
   registerInstance(app, options.pool, options.now ?? Date.now);

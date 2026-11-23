@@ -20,6 +20,7 @@ const DEFINERS = [
   "feature_flag_override_set",
   "instance_setting_set",
   "instance_settings_read",
+  "resolve_operation",
   // The post definers, and the principal check they share with the media definers (`media: refused`).
   "post",
   "media",
@@ -53,7 +54,13 @@ const REASONS: ReadonlySet<string> = new Set([
   "used",
   "revoked",
   "expired",
+  "channel_not_connected",
 ]);
+
+// A definer that explains its refusal in a sentence instead of a code; the sentence becomes the code a client reads.
+const SENTENCES: Readonly<Record<string, string>> = {
+  "the channel is not connected, reconnect it first": "channel_not_connected",
+};
 
 // `invitation_accept` puts "expires <timestamptz>; invited by <name>" in DETAIL (R241). Only the timestamp is read, by
 // this strict pattern; the name is never read (R263), and a DETAIL that does not match gives the reason alone.
@@ -69,15 +76,16 @@ function expiryOf(detail: unknown): string | undefined {
 }
 
 function detailsOf(state: string, message: string, detail: unknown): Record<string, string> | undefined {
-  const reason = message.split(": ")[1];
+  const said = message.split(": ")[1];
+  const reason = said === undefined ? undefined : (SENTENCES[said] ?? said);
   if (!state.startsWith("SH") || reason === undefined || !REASONS.has(reason)) return undefined;
   const expires = state === "SH410" && reason === "expired" ? expiryOf(detail) : undefined;
   return expires === undefined ? { reason } : { reason, expires_at: expires };
 }
 
-// Only the invitation, member, channel and creation definers raise the SH states; the same state under another
-// definer's name is a defect.
-const SH_DEFINERS = /^(invitation|member|channel)_|^(workspace|organization)_create:/;
+// Only the invitation, member, channel, resolution and creation definers raise the SH states; the same state under
+// another definer's name is a defect.
+const SH_DEFINERS = /^(invitation|member|channel)_|^resolve_operation:|^(workspace|organization)_create:/;
 // SH429 is the creation limit alone.
 const LIMIT_DEFINERS = /^(workspace|organization)_create:/;
 

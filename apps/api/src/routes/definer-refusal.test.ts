@@ -8,20 +8,39 @@ const EXPIRES = "2026-11-20T10:00:00.000Z";
 const ACCEPT = "invitation_accept";
 const UNUSABLE = "invitation_unusable";
 
+// state, message, DETAIL, code, details
+const MAPPED: [string, string, string | undefined, string, Record<string, string> | undefined][] = [
+  ["SH403", `${ACCEPT}: email_mismatch`, undefined, "forbidden", { reason: "email_mismatch" }],
+  ["SH403", "member_role_set: rank too low", undefined, "forbidden", undefined],
+  ["SH409", "member_remove: last_owner", undefined, "conflict", { reason: "last_owner" }],
+  ["42501", "invitation_revoke: refused", undefined, "not_found", undefined],
+  ["42501", "post: refused", undefined, "not_found", undefined],
+  ["42501", "media: refused", undefined, "not_found", undefined],
+  ["42501", "resolve_operation: refused", undefined, "not_found", undefined],
+  [
+    "22023",
+    "resolve_operation: the kind or its arguments are not valid",
+    undefined,
+    "validation_failed",
+    undefined,
+  ],
+  ["SH409", "resolve_operation: dismiss is not allowed from this state", undefined, "conflict", undefined],
+  // The channel sentence of the definer becomes the reason code the client reads (R616 (2)).
+  [
+    "SH409",
+    "resolve_operation: the channel is not connected, reconnect it first",
+    undefined,
+    "conflict",
+    { reason: "channel_not_connected" },
+  ],
+  ["SH410", `${ACCEPT}: used`, DETAIL, UNUSABLE, { reason: "used" }],
+  // The expiry only, and never the inviter's name.
+  ["SH410", `${ACCEPT}: expired`, DETAIL, UNUSABLE, { reason: "expired", expires_at: EXPIRES }],
+  ["SH410", `${ACCEPT}: expired`, "expires soon", UNUSABLE, { reason: "expired" }],
+];
+
 describe("definerRefusal", () => {
-  // state, message, DETAIL, code, details
-  it.each([
-    ["SH403", `${ACCEPT}: email_mismatch`, undefined, "forbidden", { reason: "email_mismatch" }],
-    ["SH403", "member_role_set: rank too low", undefined, "forbidden", undefined],
-    ["SH409", "member_remove: last_owner", undefined, "conflict", { reason: "last_owner" }],
-    ["42501", "invitation_revoke: refused", undefined, "not_found", undefined],
-    ["42501", "post: refused", undefined, "not_found", undefined],
-    ["42501", "media: refused", undefined, "not_found", undefined],
-    ["SH410", `${ACCEPT}: used`, DETAIL, UNUSABLE, { reason: "used" }],
-    // The expiry only, and never the inviter's name.
-    ["SH410", `${ACCEPT}: expired`, DETAIL, UNUSABLE, { reason: "expired", expires_at: EXPIRES }],
-    ["SH410", `${ACCEPT}: expired`, "expires soon", UNUSABLE, { reason: "expired" }],
-  ])("%s %s maps to %s", (state, message, detail, code, details) => {
+  it.each(MAPPED)("%s %s maps to %s", (state, message, detail, code, details) => {
     const refusal = definerRefusal(raised(state, message, detail));
     expect([refusal?.code, refusal?.details]).toEqual([code, details]);
   });
