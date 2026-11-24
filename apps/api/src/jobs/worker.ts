@@ -46,7 +46,7 @@ export interface WorkerOptions {
   /** The adapter of each registered provider, by id; a provider with none is admitted but never dispatched (its rows fail). */
   readonly adapters?: AdapterMap;
   /** The `fetch` an adapter of a provider is given; the default refuses every call. */
-  readonly fetchFor?: (manifest: Manifest) => typeof fetch;
+  readonly fetchFor?: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
   /** Beat, relay, mail and ledger tick intervals; the defaults are the production values (30 s, 1 s, 1 s, 30 s). */
   readonly heartbeatMs?: number;
   readonly relayIntervalMs?: number;
@@ -221,13 +221,11 @@ export async function startWorker({
   const handlers = { "media.uploaded": mediaUploadedHandler({ pool, logger, ...media }) };
   const relay = createOutboxRelay({ pool, handlers, logger, intervalMs: relayIntervalMs });
   const sender = createMailSender({ ...mail, pool, logger, intervalMs: mailIntervalMs });
+  // What a send and a read-back need besides the pool: the key ring of the mail sender is the instance's, and it also opens
+  // the credentials of the channels a send is for.
+  const sends = { pool, boss, registry, logger, adapters, fetchFor, keys: mail.keys };
   const ledger = createLedgerTick({
-    pool,
-    boss,
-    registry,
-    logger,
-    adapters,
-    fetchFor,
+    ...sends,
     ...(ledgerIntervalMs === undefined ? {} : { intervalMs: ledgerIntervalMs }),
   });
   // A failed start stops the client, so its pool never stays open: `start` opens the pool before it checks the schema.
@@ -236,16 +234,7 @@ export async function startWorker({
     // Idempotent: a provider added without `shoutory migrate` must not stall admission on a queue that is missing.
     for (const name of registry.allQueueNames()) await boss.createQueue(name, PROVIDER_QUEUE_OPTIONS);
     await register(boss, pool, logger, media);
-    await subscribePublish({
-      pool,
-      boss,
-      registry,
-      logger,
-      adapters,
-      fetchFor,
-      owner: `worker-${workerId}`,
-      closing: closing.signal,
-    });
+    await subscribePublish({ ...sends, owner: `worker-${workerId}`, closing: closing.signal });
     await beat();
   } catch (error) {
     await boss

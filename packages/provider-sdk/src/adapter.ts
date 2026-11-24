@@ -10,10 +10,21 @@ export interface AdapterContext {
   readonly now: () => Date;
 }
 
+/**
+ * What a call after the connect needs of the channel it is for: the access token, still sealed until the one call that
+ * puts it on the wire, and the instance host the channel stored (a provider whose accounts live on user-chosen servers).
+ * The worker fills it from the channel's own credential; an adapter that needs it refuses a call without it.
+ */
+export interface AccountAccess {
+  readonly accessToken: SealedSecret;
+  readonly instanceHost?: string;
+}
+
 /** The smallest commit input; later slices widen it without removing a field. */
 export interface CommitInput {
   readonly idempotencyKey: string;
   readonly text: string;
+  readonly account?: AccountAccess;
   readonly replyToExternalId?: string;
   readonly mediaIds?: readonly string[];
 }
@@ -93,6 +104,7 @@ export type AdapterMap = Readonly<Record<string, ProviderAdapter>>;
 export interface RemotePost {
   readonly externalId?: string;
   readonly idempotencyKey?: string;
+  readonly account?: AccountAccess;
 }
 
 /**

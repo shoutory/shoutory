@@ -8,34 +8,38 @@ const CHECKED = "2026-11-24";
 
 /**
  * The manifest of the Mastodon network. Its accounts live on user-chosen servers, so its host is the channel's own stored
- * instance (`egressHostSource`), never a list. A channel can be connected and its limits and health read, but no
- * capability is declared until publishing ships, so post validation refuses a target on it; each capability (text, media,
- * edit, threads) is declared as it ships.
+ * instance (`egressHostSource`), never a list. It declares what the adapter ships: text posts and their delete; media,
+ * edit and threads are declared as each ships.
  */
 export const mastodonManifest = manifestSchema.parse({
   id: "mastodon",
   displayName: "Mastodon",
   lifecycle: "beta",
   auth: { method: "oauth2_pkce" },
-  // read:accounts for verify_credentials, write:statuses to post and delete, write:media for uploads.
-  scopes: ["read:accounts", "write:statuses", "write:media"],
-  capabilities: [],
+  // read:accounts for verify_credentials, read:statuses so a read-back sees private and direct posts, write:statuses to
+  // post and delete, write:media for uploads.
+  scopes: ["read:accounts", "read:statuses", "write:statuses", "write:media"],
+  capabilities: ["text", "delete"],
   readBackMode: "A",
   // The native Idempotency-Key (docs.joinmastodon.org/methods/statuses/, "stored for up to 1 hour"). VERIFY: the window is
   // measured on a live instance before a resend is ever allowed (V-58), so a resend after an unknown outcome waits for a
   // read-back.
   idempotency: { mechanism: "header", keyWindowSeconds: 3600, resendAfterUnknown: "read_back_only" },
-  retrySafety: { prepare: "safe", commit: "read_back_first", readBack: "safe" },
+  // A delete whose outcome is unknown is never sent again on its own: a 404 is confirmed by a read, and a status that is
+  // still there after one is an unknown outcome for a person to decide.
+  retrySafety: { prepare: "safe", commit: "read_back_first", readBack: "safe", delete: "never" },
   // 300 calls per 5 minutes per account and 30 media uploads per 30 minutes (PF-M09; docs.joinmastodon.org/api/rate-limits/,
   // read 2026-11-24).
   rateLimits: [
     { name: "api", scope: "account", key: "account", max: 300, windowSeconds: 300 },
     { name: "media", scope: "account", key: "account", max: 30, windowSeconds: 1800 },
+    // DELETE /api/v1/statuses/:id: 30 within 30 minutes (docs.joinmastodon.org/api/rate-limits, read 2026-11-24).
+    { name: "delete", scope: "account", key: "account", max: 30, windowSeconds: 1800 },
   ],
   actionWindows: {},
   egressHostSource: "channel",
   followUpRoles: [],
-  leaseSeconds: { prepare: 60, commit: 120, readBack: 60 },
+  leaseSeconds: { prepare: 60, commit: 120, readBack: 60, delete: 60 },
   callTimeoutSeconds: 30,
   retryAfterMaxSeconds: 900,
   dispatchMarginSeconds: 300,

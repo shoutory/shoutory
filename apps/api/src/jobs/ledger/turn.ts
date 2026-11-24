@@ -1,3 +1,4 @@
+import type { KeyProvider } from "@shoutory/core/keys";
 import {
   bucketKey,
   claimOperation,
@@ -14,6 +15,7 @@ import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import type { Registry } from "@shoutory/provider-sdk/registry";
 import { pastSunset } from "@shoutory/provider-sdk/snapshot";
 import type { Logger } from "../../logging/logger.js";
+import { accountOf } from "./account.js";
 import { dispatch } from "./dispatch.js";
 import { hold } from "./heartbeat.js";
 import {
@@ -37,8 +39,10 @@ export interface TurnOptions {
   readonly registry: Registry;
   /** The adapter of each registered provider; a provider with none fails its operations. */
   readonly adapters: AdapterMap;
-  /** The `fetch` an adapter of this provider is given: the one network path of the worker. */
-  readonly fetchFor: (manifest: Manifest) => typeof fetch;
+  /** The `fetch` an adapter of this provider is given for a channel (bound to the instance host the channel stored). */
+  readonly fetchFor: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
+  /** The key ring the credentials of the claimed channels are opened with. */
+  readonly keys: KeyProvider;
   readonly queue: string;
   /** The lease owner: one value for the worker process. */
   readonly owner: string;
@@ -181,12 +185,22 @@ async function preflight(options: TurnOptions, held: Held): Promise<TurnResult> 
     options.logger.error({ provider: manifest.id }, "claimed operation has no adapter");
     return preflightMove(pool, held, { to: "failed" });
   }
+  // The channel's own credential, opened before any call: a channel with none fails its operation with no effect.
+  const account = await accountOf(options, operation, channel.instance_host);
+  if (account === null) {
+    options.logger.error(
+      { operation: claim.id, workspace: claim.workspaceId },
+      "claimed operation has no usable credential",
+    );
+    return preflightMove(pool, held, { to: "failed" });
+  }
   const deps = {
     pool,
     logger: options.logger,
     owner: options.owner,
     adapter,
-    fetch: options.fetchFor(manifest),
+    account,
+    fetch: options.fetchFor(manifest, channel.instance_host ?? undefined),
     now,
     reconcileQueue: options.registry.queueNames(manifest.id).reconcile,
     closing,

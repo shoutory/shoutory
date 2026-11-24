@@ -17,12 +17,14 @@ export type ReconcilePlan =
   | { kind: "read_back"; externalId: string }
   | { kind: "resend" }
   | { kind: "wait"; checkInSeconds: number }
-  | { kind: "needs_human" };
+  | { kind: "needs_human"; reason?: "no_remote_id" };
 
 /**
  * The next step for an unknown outcome. An id we hold is read back, never resent. A provider that cannot read back (class
  * E) goes to a person. A resend with the same key happens only for a provider whose manifest allows it and only while the
- * key's window, counted from its first committing attempt, is open; past it the row waits for a read-back and never resends.
+ * key's window, counted from its first committing attempt, is open. A provider that reads back by id (class A) and cannot
+ * resend holds nothing to read when the answer was lost, so it goes to a person at once, not after a horizon nothing will
+ * change; the other classes keep waiting, as they may read back by other means.
  */
 export function planReconcile(
   facts: ReconcileFacts,
@@ -35,6 +37,7 @@ export function planReconcile(
     facts.resendAfterUnknown === "same_key_in_window" &&
     state.firstEffectAgoSeconds <= facts.keyWindowSeconds;
   if (mayResend) return { kind: "resend" };
+  if (facts.readBackMode === "A") return { kind: "needs_human", reason: "no_remote_id" };
   return { kind: "wait", checkInSeconds: backoffSeconds((state.reads ?? 0) + 1) };
 }
 

@@ -325,7 +325,13 @@ const REASONS: Record<string, string[]> = {
   ],
   blocked_reconnect: ["pending", "provider_accepted", "unknown_external_state"],
   provider_accepted: ["awaiting_user_action"],
-  needs_human: ["past_due_after_reconnect", "awaiting_user_timeout", "media_unreachable"],
+  needs_human: [
+    "past_due_after_reconnect",
+    "awaiting_user_timeout",
+    "media_unreachable",
+    "no_remote_id",
+    "credential_unavailable",
+  ],
   cancelled: ["policy", "workspace_deleted"],
 };
 const EVERY_REASON = Object.values(REASONS).flat();

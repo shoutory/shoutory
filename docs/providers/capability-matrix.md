@@ -4,4 +4,4 @@ Generated from the provider manifests by `scripts/gen-capability-matrix.mjs`; do
 
 | Provider | Id | Lifecycle | Read-back | Capabilities |
 |---|---|---|---|---|
-| Mastodon | mastodon | beta | A |  |
+| Mastodon | mastodon | beta | A | text, delete |

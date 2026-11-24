@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
+import type { AppPool } from "@shoutory/db/pool";
 import type { withAdminClient } from "@shoutory/db/testing";
+import { connectChannel } from "./ledger-credentials.js";
 
 // The admin client of the db package's test helper (this package does not depend on the driver itself).
 type Client = Parameters<Parameters<typeof withAdminClient>[2]>[0];
@@ -71,6 +73,13 @@ export async function seedFrozenVersion(
   return made.rows[0].id as string;
 }
 
+// The pool the channels of `seedDueTarget` are connected through (the credential service and its definers), set once by a
+// test file that seeds targets; one that forgot fails here instead of planting a channel with no credential.
+let credentialPool: AppPool | undefined;
+export function connectThrough(pool: AppPool): void {
+  credentialPool = pool;
+}
+
 /** A channel of the `fixture` provider and a scheduled variant on it that was due `dueSecondsAgo` seconds ago. */
 export async function seedDueTarget(
   admin: Client,
@@ -79,13 +88,8 @@ export async function seedDueTarget(
   provider = "fixture",
 ): Promise<string> {
   const account = `ls-${randomUUID().slice(0, 8)}`;
-  const channel = (
-    await admin.query(
-      `INSERT INTO app.channels (workspace_id, provider_id, account_kind, provider_account_id, display_name, connection_state)
-       VALUES ($1, $3, 'profile', $2, $2, 'connected') RETURNING id`,
-      [workspace, account, provider],
-    )
-  ).rows[0].id;
+  if (credentialPool === undefined) throw new Error("call connectThrough(pool) before seeding a target");
+  const channel = await connectChannel(credentialPool, { workspace, provider, account });
   const post = (
     await admin.query(
       "INSERT INTO app.posts (workspace_id, author_kind, author_id, status) VALUES ($1, 'user', $2, 'scheduled') RETURNING id",

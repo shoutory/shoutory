@@ -32,17 +32,19 @@ describe("planReconcile", () => {
       { firstEffectAgoSeconds: 3_600 },
       { kind: "resend" },
     ],
+    // A read-back by id needs an id: an unknown outcome that holds none can never be read back, so it goes to a person at
+    // once instead of waiting for a horizon that nothing will change.
     [
-      "class A with the key window passed never resends; it waits for the read-back",
+      "class A with the key window passed and no id goes to a person: it cannot be read back",
       A,
       { firstEffectAgoSeconds: 3_601, reads: 1 },
-      { kind: "wait", checkInSeconds: 300 },
+      { kind: "needs_human", reason: "no_remote_id" },
     ],
     [
-      "a provider that reads back only never resends inside the window",
+      "a provider that reads back only never resends; with no id it goes to a person",
       without({ resendAfterUnknown: "read_back_only" }),
       { firstEffectAgoSeconds: 10 },
-      { kind: "wait", checkInSeconds: 60 },
+      { kind: "needs_human", reason: "no_remote_id" },
     ],
     [
       "class B and C never resend after an unknown",

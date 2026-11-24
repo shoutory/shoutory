@@ -185,6 +185,35 @@ const callOf = (definer: string, params: unknown[]): [string, unknown[]] => [
   params,
 ];
 
+// The stored credential of a channel, read as a job principal of its workspace (R537 (2)).
+async function readOpenRow(pool: AppPool, workspaceId: string, channelId: string): Promise<OpenRow> {
+  const ctx: TenantCtx = { principalKind: "job", principalId: randomUUID(), workspaceIds: [workspaceId] };
+  const found = await withTenant(pool, ctx, (tx) =>
+    tx.query(...callOf("credential_open", [workspaceId, channelId])),
+  );
+  if (!found.rows[0]) throw new CredentialError("the channel has no usable credential");
+  return openRowSchema.parse(found.rows[0]);
+}
+
+function tokenOfRow(keys: KeyProvider, row: OpenRow, workspaceId: string, channelId: string): ChannelToken {
+  const aad = aadOf(workspaceId, channelId, row.generation);
+  return channelTokenSchema.parse(JSON.parse(open(storedOf(row), aad, keys, row.salt).expose()));
+}
+
+/**
+ * The access token a channel stores, opened with the workspace's salt, for a caller that refreshes nothing (the worker's
+ * sends). A channel with no usable credential is a `CredentialError`.
+ */
+export async function openAccessToken(
+  pool: AppPool,
+  keys: KeyProvider,
+  workspaceId: string,
+  channelId: string,
+): Promise<SealedSecret> {
+  const row = await readOpenRow(pool, workspaceId, channelId);
+  return new SealedSecret(tokenOfRow(keys, row, workspaceId, channelId).access_token);
+}
+
 /** An egress client that gives every provider call its deadline (below the lease, R537 (9)). */
 export const deadlineFetch =
   (egress: typeof fetch, timeoutMs = PROVIDER_TIMEOUT_MS): typeof fetch =>
@@ -224,18 +253,12 @@ export class CredentialService {
     );
   }
 
-  async #openRow(workspaceId: string, channelId: string): Promise<OpenRow> {
-    const found = await this.#asJob(workspaceId, (tx) =>
-      tx.query(...callOf("credential_open", [workspaceId, channelId])),
-    );
-    if (!found.rows[0]) throw new CredentialError("the channel has no usable credential");
-    return openRowSchema.parse(found.rows[0]);
+  #openRow(workspaceId: string, channelId: string): Promise<OpenRow> {
+    return readOpenRow(this.#deps.pool, workspaceId, channelId);
   }
 
   #tokenOf(row: OpenRow, workspaceId: string, channelId: string): ChannelToken {
-    const aad = aadOf(workspaceId, channelId, row.generation);
-    const plain = open(storedOf(row), aad, this.#deps.keys, row.salt).expose();
-    return channelTokenSchema.parse(JSON.parse(plain));
+    return tokenOfRow(this.#deps.keys, row, workspaceId, channelId);
   }
 
   /** Stores the first or a new credential generation of a channel, in one transaction. */

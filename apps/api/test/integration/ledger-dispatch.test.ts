@@ -176,8 +176,13 @@ describe("an absence read before a resend", () => {
       expect(await opOf(id)).toMatchObject({ state: "unknown_external_state", effect: "possible" });
       await rows("UPDATE app.operations SET next_check_at = now() WHERE id = $1", [id]);
       await e.tick();
-      // No read of the old id counted for this cycle, so nothing is proven and nothing moved.
-      expect(await opOf(id)).toMatchObject({ state: "unknown_external_state", effect: "possible" });
+      // No read of the old id counted for this cycle, so nothing is proven; the resend holds no id of its own, so it goes to
+      // a person instead of waiting for a read-back nothing can make.
+      expect(await opOf(id)).toMatchObject({
+        state: "needs_human",
+        effect: "possible",
+        reason_code: "no_remote_id",
+      });
       const [reads] = await rows(
         `SELECT count(*)::int AS n FROM app.operation_attempts a
           WHERE a.operation_id = $1 AND a.step = 'read_back'
@@ -231,7 +236,12 @@ describe("the effect marker", () => {
 
 // [provider, manifest, the state the next tick leaves, whether the first notice is stamped]
 const UNKNOWN: [string, Record<string, unknown>, string, boolean][] = [
-  ["a provider that reads back only", READ_BACK_ONLY, "unknown_external_state", false],
+  [
+    "a provider that reads back only: the answer was lost, so there is no id to read",
+    READ_BACK_ONLY,
+    "needs_human",
+    true,
+  ],
   [
     "a provider that cannot read back (class E)",
     { ...READ_BACK_ONLY, readBackMode: "E" },
@@ -261,7 +271,12 @@ describe("a timeout after the send", () => {
         await rows("UPDATE app.operations SET next_check_at = now() WHERE id = $1", [id]);
         await e.tick();
         expect(e.commits.count).toBe(1);
-        expect(await opOf(id)).toMatchObject({ state: after, escalated: notice });
+        // A provider that cannot read back has no reason to give (no id is missing, no credential): the plan's reason, none.
+        expect(await opOf(id)).toMatchObject({
+          state: after,
+          escalated: notice,
+          reason_code: manifest.readBackMode === "E" ? null : "no_remote_id",
+        });
         expect(await typesOf(id)).toContain(
           `operation.${after === "needs_human" ? "needs_human" : "reconciling"}`,
         );

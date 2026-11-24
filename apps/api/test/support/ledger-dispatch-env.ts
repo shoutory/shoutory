@@ -11,6 +11,7 @@ import { createBoss } from "../../src/jobs/boss.js";
 import { createLedgerTick } from "../../src/jobs/ledger/tick.js";
 import { runTurn } from "../../src/jobs/ledger/turn.js";
 import { createLogger } from "../../src/logging/logger.js";
+import { connectChannel, ledgerKeys } from "./ledger-credentials.js";
 import { seedWorkspace } from "./ledger-seed.js";
 
 // The environment of the dispatch tests (floor and feature rows): one cloned database for the file, a workspace, the queue
@@ -34,6 +35,9 @@ export function useDispatchEnv(): void {
     await state.db.drop();
   });
 }
+
+/** The queue client of the file, for a test that builds its own tick. */
+export const queueOf = () => state.queue;
 
 export const logger = createLogger({ secrets: [], stream: { write: () => undefined } });
 export const workerPool = () => state.db.pool("worker");
@@ -127,6 +131,8 @@ export async function makeEnv(o: Options = {}) {
     registry,
     adapters,
     fetchFor,
+    // The key ring the worker opens the channel credentials with (the ones `plant` stores).
+    keys: ledgerKeys,
     ...(o.clock === undefined ? {} : { clock: o.clock }),
   };
   return {
@@ -195,6 +201,11 @@ export interface Plant {
   reason?: string;
   /** Not due for this many seconds. */
   waitSeconds?: number;
+  /** The channel stores this instance host and this access token (a provider whose accounts live on user-chosen servers). */
+  host?: string;
+  token?: string;
+  /** The channel has no stored credential at all. */
+  noCredential?: true;
 }
 // The columns a plant sets beyond the common ones.
 const plantExtras = (o: Plant): Record<string, unknown> => ({
@@ -218,15 +229,34 @@ const plantVersion = async (o: Plant, post: string, channel: string): Promise<st
       )
     )[0]?.id,
   );
-// A post with a frozen version, its target and an operation on the fixture provider in a given state.
-export async function plant(e: Env, o: Plant = {}): Promise<string> {
-  const { ws } = state;
+// The channel of a planted operation: connected through the credential service, so it holds a credential the worker opens;
+// only a row that asks for `noCredential` has a channel with none.
+async function plantChannel(providerId: string, o: Plant): Promise<{ id: string }> {
   const account = `dispatch-${randomUUID().slice(0, 8)}`;
-  const [channel] = await rows(
-    `INSERT INTO app.channels (workspace_id, provider_id, account_kind, provider_account_id, display_name, connection_state)
-     VALUES ($1, $3, 'profile', $2, $2, 'connected') RETURNING id`,
-    [ws, account, e.providerId],
-  );
+  if (o.noCredential) {
+    const [channel] = await rows(
+      `INSERT INTO app.channels (workspace_id, provider_id, account_kind, provider_account_id, display_name, connection_state)
+       VALUES ($1, $3, 'profile', $2, $2, 'connected') RETURNING id`,
+      [state.ws, account, providerId],
+    );
+    return { id: String(channel?.id) };
+  }
+  const id = await connectChannel(workerPool(), {
+    workspace: state.ws,
+    provider: providerId,
+    account,
+    ...(o.host === undefined ? {} : { host: o.host }),
+    ...(o.token === undefined ? {} : { token: o.token }),
+  });
+  return { id };
+}
+// A post with a frozen version, its target and an operation on the fixture provider in a given state.
+export async function plant(
+  e: Pick<Env, "providerId" | "queueName" | "reconcileQueue" | "lease">,
+  o: Plant = {},
+): Promise<string> {
+  const { ws } = state;
+  const channel = await plantChannel(e.providerId, o);
   const [post] = await rows(
     "INSERT INTO app.posts (workspace_id, author_kind, author_id, status) VALUES ($1, 'user', $2, 'scheduled') RETURNING id",
     [ws, randomUUID()],

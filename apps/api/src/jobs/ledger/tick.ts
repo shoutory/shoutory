@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { KeyProvider } from "@shoutory/core/keys";
 import { providersArgument, sweepArguments } from "@shoutory/core/ledger/client";
 import type { TenantTx } from "@shoutory/db/context";
 import { withSystem } from "@shoutory/db/context/system";
@@ -71,7 +72,9 @@ export interface LedgerTickOptions {
   readonly logger: Logger;
   /** The adapter of each provider the tick reads back for; a provider with none is only swept and admitted. */
   readonly adapters?: AdapterMap;
-  readonly fetchFor?: (manifest: Manifest) => typeof fetch;
+  readonly fetchFor?: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
+  /** The key ring the credentials of the channels are opened with. */
+  readonly keys: KeyProvider;
   /** The calendar time, for the sunset of an API version; the default is the real clock. */
   readonly clock?: () => Date;
   readonly intervalMs?: number;
@@ -125,6 +128,7 @@ export function createLedgerTick({
   logger,
   adapters = {},
   fetchFor = refuseEgress,
+  keys,
   clock = () => new Date(),
   intervalMs = TICK_MS,
 }: LedgerTickOptions): LedgerTick {
@@ -154,7 +158,7 @@ export function createLedgerTick({
     await step("due moves", sweep("SELECT app.sweep_due_moves($1::jsonb) AS n", sweeps.due));
     await step("admission", admitBacklog);
     await step("reconcile", () =>
-      reconcileStep({ pool, logger, registry, adapters, fetchFor, owner, closing: closing.signal }),
+      reconcileStep({ pool, logger, registry, adapters, fetchFor, keys, owner, closing: closing.signal }),
     );
     // A post is admitted up to its dispatch margin before it is due, and the wake-up of admission comes then: waking the
     // queues at the end of every tick sends it when it falls due, and covers a wake-up that was lost.

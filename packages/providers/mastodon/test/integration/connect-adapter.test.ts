@@ -2,6 +2,7 @@ import { inspect } from "node:util";
 import { SealedSecret } from "@shoutory/core/crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createMastodonAdapter } from "../../src/adapter.js";
+import { mastodonManifest } from "../../src/manifest.js";
 import { type MastodonSimulator, startMastodonSimulator } from "../../src/simulator.js";
 
 // The connect side of the adapter against the simulator of a Mastodon instance (built from docs.joinmastodon.org, each
@@ -91,6 +92,28 @@ describe("registerApp (floor)", () => {
       expect(sim.apps).toHaveLength(0);
     },
   );
+});
+
+// A read-back of a private or direct status needs read:statuses, so the scope is asked for at the authorize step and
+// declared by the manifest (docs.joinmastodon.org/methods/statuses, accessed 2026-11-24).
+describe("authorize asks for the scopes that publishing, read-back and delete need", () => {
+  it("names read:statuses, write:statuses and read:accounts in the scope of the authorization URL", async () => {
+    sim.reset();
+    const app = (await register(recorder().context)).app;
+    const connect = createMastodonAdapter().connect;
+    if (!connect?.authorize || !app)
+      throw new Error("the adapter has no authorize or the app was not registered");
+    const url = connect.authorize({
+      instanceHost: HOST,
+      app,
+      redirectUri: REDIRECT,
+      state: "state-1",
+      codeChallenge: "challenge-1",
+    });
+    const scope = new URL(url).searchParams.get("scope")?.split(" ") ?? [];
+    expect(scope).toEqual(expect.arrayContaining(["read:accounts", "read:statuses", "write:statuses"]));
+    expect(mastodonManifest.scopes).toEqual(expect.arrayContaining(scope));
+  });
 });
 
 // BG-14: the health of a channel is what `verify_credentials` says of its token. A body that is no account (a stub, a

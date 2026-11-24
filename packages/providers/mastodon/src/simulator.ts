@@ -1,4 +1,9 @@
 import { randomBytes } from "node:crypto";
+import type {
+  MatrixFault,
+  MatrixOperation,
+  StoredPost,
+} from "@shoutory/provider-sdk/conformance/fault-matrix";
 import { pkceMatches } from "@shoutory/testkit/simulator/auth";
 import {
   type Handler,
@@ -12,7 +17,11 @@ import {
 // (the discovery document at /.well-known/oauth-authorization-server with `code_challenge_methods_supported`, the
 // authorization route, PKCE S256 from 4.3.0), `methods/oauth` (POST /oauth/token answers 401 `invalid_client` for a client
 // it does not know), `methods/accounts` (GET /api/v1/accounts/verify_credentials answers 401 for a bad token) and
-// `methods/instance` (GET /api/v2/instance, `configuration.statuses` and `configuration.media_attachments`).
+// `methods/instance` (GET /api/v2/instance, `configuration.statuses` and `configuration.media_attachments`) and
+// `methods/statuses` (POST /api/v1/statuses answers the Status, takes `Idempotency-Key` and keeps it for up to 1 hour,
+// 401 `{"error":"The access token is invalid"}`, 422 `{"error":"Validation failed: ..."}`; GET /api/v1/statuses/:id
+// answers the Status, 404 `{"error":"Record not found"}`; DELETE /api/v1/statuses/:id answers the Status with its `text`,
+// 404 `{"error":"Record not found"}`).
 
 interface Limits {
   readonly maxCharacters: number;
@@ -42,8 +51,12 @@ export interface MastodonSimulator extends Simulator {
   reset(settings?: SimulatorSettings): void;
   /** From now on the instance answers 401 `invalid_client` for every app registered so far. */
   revokeApps(): void;
-  /** A token that verify_credentials accepts. */
+  /** A token that verify_credentials and the statuses routes accept. */
   issueToken(): string;
+  /** Tells the next request of an operation (commit, read-back, delete) to meet a fault; the answer is the documented one. The `edit` route does not exist yet. */
+  arm(operation: MatrixOperation, fault: MatrixFault): void;
+  /** The statuses the instance holds, in the order they were created. */
+  stored(): readonly StoredPost[];
 }
 
 const DEFAULT_LIMITS: Limits = {
@@ -79,6 +92,9 @@ interface State {
   revoked: Set<string>;
   codes: Map<string, Grant>;
   settings: SimulatorSettings;
+  statuses: Map<string, StoredPost>;
+  /** The status each Idempotency-Key made, and when. */
+  keys: Map<string, { id: string; at: number }>;
 }
 
 function discovery(state: State, host: string | undefined): SimReply {
@@ -236,6 +252,131 @@ const instance =
     };
   };
 
+const INVALID_TOKEN = "The access token is invalid";
+const NOT_FOUND = "Record not found";
+// An Idempotency-Key is kept for up to one hour (methods/statuses, accessed 2026-11-24).
+const KEY_WINDOW_MS = 3_600_000;
+
+// The token a statuses call carries: none is `undefined`, one the instance did not issue is refused with the documented 401.
+function refusedToken(
+  state: State,
+  request: { headers: Readonly<Record<string, string>> },
+): SimReply | undefined {
+  const header = request.headers.authorization;
+  if (header === undefined) return fail(401, INVALID_TOKEN);
+  return state.tokens.includes(header.replace(/^Bearer /, "")) ? undefined : fail(401, INVALID_TOKEN);
+}
+
+function statusBody(post: StoredPost, host: string | undefined) {
+  return {
+    id: post.externalId,
+    created_at: "2026-11-24T00:00:00.000Z",
+    in_reply_to_id: post.replyToExternalId ?? null,
+    visibility: "public",
+    content: `<p>${post.text}</p>`,
+    text: post.text,
+    url: `http://${host}/@sim/${post.externalId}`,
+  };
+}
+
+const jsonOrForm = (body: Buffer): Record<string, unknown> => {
+  const text = body.toString("utf8");
+  if (text.startsWith("{")) {
+    try {
+      return JSON.parse(text) as Record<string, unknown>;
+    } catch (error) {
+      if (error instanceof SyntaxError) return {};
+      throw error;
+    }
+  }
+  return formOf(body);
+};
+
+// The status an Idempotency-Key made, while its hour has not passed. VERIFY (V-58): the statuses page says only that
+// keys are "stored for up to 1 hour" (docs.joinmastodon.org/methods/statuses, accessed 2026-11-24) and gives no answer for a
+// repeated key, so answering it with 200 and the same status is this simulator's assumption, never a fact a resend may rest
+// on. Private visibility is not modelled either: a status here is readable by anyone, so `read:statuses` is unproven until
+// the live run.
+function keptFor(state: State, key: string | undefined): StoredPost | undefined {
+  const kept = key === undefined ? undefined : state.keys.get(key);
+  if (!kept || state.now().getTime() - kept.at >= KEY_WINDOW_MS) return undefined;
+  return state.statuses.get(kept.id);
+}
+
+const createStatus =
+  (state: State): Handler =>
+  (request, { effect }) => {
+    const refused = refusedToken(state, request);
+    if (refused) return refused;
+    const fields = jsonOrForm(request.body);
+    const text = typeof fields.status === "string" ? fields.status : "";
+    if (text === "") return fail(422, "Validation failed: Text can't be blank");
+    const key = request.headers["idempotency-key"];
+    const known = keptFor(state, key);
+    if (known) return { status: 200, body: statusBody(known, request.headers.host) };
+    const id = `1090000000000${String(state.statuses.size + 1).padStart(5, "0")}${randomBytes(2).toString("hex")}`;
+    const reply =
+      typeof fields.in_reply_to_id === "string" ? { replyToExternalId: fields.in_reply_to_id } : {};
+    const post = { externalId: id, text, ...reply };
+    state.statuses.set(id, post);
+    if (key !== undefined) state.keys.set(key, { id, at: state.now().getTime() });
+    effect();
+    return { status: 200, body: statusBody(post, request.headers.host) };
+  };
+
+// A status is public here, so a read needs no token; a token that is sent and is not the instance's is still refused.
+const readStatus =
+  (state: State): Handler =>
+  (request) => {
+    if (request.headers.authorization !== undefined) {
+      const refused = refusedToken(state, request);
+      if (refused) return refused;
+    }
+    const post = state.statuses.get(request.params.id ?? "");
+    return post ? { status: 200, body: statusBody(post, request.headers.host) } : fail(404, NOT_FOUND);
+  };
+
+const deleteStatus =
+  (state: State): Handler =>
+  (request, { effect }) => {
+    const refused = refusedToken(state, request);
+    if (refused) return refused;
+    const post = state.statuses.get(request.params.id ?? "");
+    if (!post) return fail(404, NOT_FOUND);
+    state.statuses.delete(post.externalId);
+    effect();
+    return { status: 200, body: statusBody(post, request.headers.host) };
+  };
+
+const ROUTES: Readonly<Record<MatrixOperation, string>> = {
+  commit: "POST /api/v1/statuses",
+  readBack: "GET /api/v1/statuses/:id",
+  delete: "DELETE /api/v1/statuses/:id",
+  edit: "PUT /api/v1/statuses/:id",
+};
+
+// A matrix fault as this instance answers it: the status' documented body, or the code the harness names as the text.
+function answerTo(fault: MatrixFault) {
+  if (fault.kind !== "respond") return fault;
+  const documented: Readonly<Record<number, string>> = {
+    401: INVALID_TOKEN,
+    404: NOT_FOUND,
+    422: "Validation failed: Text can't be blank",
+  };
+  return {
+    kind: "respond" as const,
+    status: fault.status,
+    body: {
+      error: fault.providerCode ?? documented[fault.status] ?? "Server error",
+      ...(fault.echoId === undefined ? {} : { id: fault.echoId }),
+    },
+    // `Retry-After` is a generic HTTP header the matrix plays, not a Mastodon fact: the rate-limits page documents only the
+    // X-RateLimit-* headers (accessed 2026-11-24), which a test arms directly.
+    ...(fault.retryAfter === undefined ? {} : { headers: { "retry-after": fault.retryAfter } }),
+    ...(fault.afterEffect === undefined ? {} : { afterEffect: fault.afterEffect }),
+  };
+}
+
 /** Starts the instance on a loopback port. `reset` clears what it holds and changes how it answers. */
 export async function startMastodonSimulator(options: MastodonSimulatorOptions): Promise<MastodonSimulator> {
   const state: State = {
@@ -245,6 +386,8 @@ export async function startMastodonSimulator(options: MastodonSimulatorOptions):
     revoked: new Set(),
     codes: new Map(),
     settings: {},
+    statuses: new Map(),
+    keys: new Map(),
   };
   const simulator = await startSimulator({
     "GET /.well-known/oauth-authorization-server": (request) => discovery(state, request.headers.host),
@@ -253,6 +396,9 @@ export async function startMastodonSimulator(options: MastodonSimulatorOptions):
     "POST /oauth/token": token(state),
     "GET /api/v1/accounts/verify_credentials": verifyCredentials(state),
     "GET /api/v2/instance": instance(state),
+    [ROUTES.commit]: createStatus(state),
+    [ROUTES.readBack]: readStatus(state),
+    [ROUTES.delete]: deleteStatus(state),
   });
   return {
     ...simulator,
@@ -266,14 +412,29 @@ export async function startMastodonSimulator(options: MastodonSimulatorOptions):
     },
     /** Forgets everything held and the requests seen, and sets how the instance answers from now on. */
     reset(settings: SimulatorSettings = {}): void {
-      Object.assign(state, { apps: [], tokens: [], revoked: new Set(), codes: new Map(), settings });
+      Object.assign(state, {
+        apps: [],
+        tokens: [],
+        revoked: new Set(),
+        codes: new Map(),
+        settings,
+        statuses: new Map(),
+        keys: new Map(),
+      });
       (simulator.requests as unknown[]).length = 0;
     },
     /** From now on the instance answers 401 `invalid_client` for every app registered so far. */
     revokeApps(): void {
       for (const app of state.apps) state.revoked.add(app.clientId);
     },
-    /** A token that verify_credentials accepts. */
+    /** A token that verify_credentials and the statuses routes accept. */
     issueToken: () => issue(state),
+    arm(operation, fault): void {
+      // The matrix plays "the post is not there" as a 404 on a delete: here that post is really gone, so the read that
+      // follows a 404 on a delete finds it gone too (a test that wants a 404 over a live post arms `faults` directly).
+      if (operation === "delete" && fault.kind === "respond" && fault.status === 404) state.statuses.clear();
+      simulator.faults.failNext(ROUTES[operation], answerTo(fault));
+    },
+    stored: () => [...state.statuses.values()],
   };
 }

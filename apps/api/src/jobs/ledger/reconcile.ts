@@ -1,3 +1,4 @@
+import type { KeyProvider } from "@shoutory/core/keys";
 import {
   type Claim,
   claimReconciles,
@@ -19,6 +20,7 @@ import type { AdapterMap, ProviderAdapter } from "@shoutory/provider-sdk/adapter
 import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import type { Registry } from "@shoutory/provider-sdk/registry";
 import type { Logger } from "../../logging/logger.js";
+import { accountOf, instanceHostOf } from "./account.js";
 import { type Caller, call, contextFor, timeoutOf } from "./dispatch.js";
 import { hold } from "./heartbeat.js";
 import { fencedMove, type Held, inJob, readOperation, sqlOf } from "./held.js";
@@ -32,7 +34,9 @@ export interface ReconcileOptions {
   readonly logger: Logger;
   readonly registry: Registry;
   readonly adapters: AdapterMap;
-  readonly fetchFor: (manifest: Manifest) => typeof fetch;
+  readonly fetchFor: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
+  /** The key ring the credentials of the channels are opened with. */
+  readonly keys: KeyProvider;
   /** The lease owner of the tick. */
   readonly owner: string;
   readonly closing: AbortSignal;
@@ -93,26 +97,40 @@ async function reconcileClaim(
   started: number,
 ): Promise<void> {
   const { pool, now = () => performance.now() } = options;
+  const operation = await readOperation(pool, claim);
   const holding = hold({
     pool,
     logger: options.logger,
     claim,
-    operation: await readOperation(pool, claim),
+    operation,
     manifest,
     leaseSeconds: manifest.leaseSeconds.readBack,
     owner: options.owner,
     now,
     started,
   });
-  const deps: Caller = {
-    pool,
-    logger: options.logger,
-    owner: options.owner,
-    adapter,
-    fetch: options.fetchFor(manifest),
-    now,
-  };
   try {
+    // The channel's own credential and host, as at a send. A channel that has none cannot be read, and nothing will give it
+    // one: the row goes to a person, with no call, instead of waiting for ever.
+    const host = await instanceHostOf(pool, operation);
+    const account = await accountOf(options, operation, host);
+    if (account === null) {
+      options.logger.error(
+        { operation: claim.id, workspace: claim.workspaceId },
+        "no usable credential to read back",
+      );
+      return await toPerson(pool, holding.held, "credential_unavailable");
+    }
+    const fetchOf = options.fetchFor(manifest, host ?? undefined);
+    const deps: Caller = {
+      pool,
+      logger: options.logger,
+      owner: options.owner,
+      adapter,
+      fetch: fetchOf,
+      account,
+      now,
+    };
     await reconcileHeld(deps, holding.held);
   } finally {
     await holding.stop();
@@ -157,8 +175,8 @@ async function readHistory(pool: AppPool, held: Held): Promise<History> {
 }
 
 // The row waits for its next read-back: back to unknown with the next back-off, no call made.
-async function park(deps: Caller, held: Held, seconds: number): Promise<void> {
-  await inJob(deps.pool, held.claim.workspaceId, (tx) =>
+async function park(pool: AppPool, held: Held, seconds: number): Promise<void> {
+  await inJob(pool, held.claim.workspaceId, (tx) =>
     fencedMove(tx, held, "reconciling", "unknown_external_state", { checkInSeconds: seconds }, "R"),
   );
 }
@@ -182,7 +200,10 @@ async function ask(
     startAttempt(sqlOf(tx), { ...call(deps, held), step: "read_back" }),
   );
   if (started.outcome !== "started") return null;
-  const result: CallResult = await deps.adapter.readBack(contextFor(deps, held, timeout), { externalId });
+  const result: CallResult = await deps.adapter.readBack(contextFor(deps, held, timeout), {
+    externalId,
+    account: deps.account,
+  });
   if (held.signal.aborted) return null;
   const outcome = readBackOutcome(result, factsOf(held.manifest), {
     lastEffectAgoSeconds: history.last_effect_ago ?? Number.POSITIVE_INFINITY,
@@ -190,6 +211,14 @@ async function ask(
     secondsSinceAbsentRead: history.since_absent ?? 0,
   });
   return { attemptId: started.attemptId, result, outcome };
+}
+
+// An unknown outcome nothing can settle goes to a person, with the reason (no id to read back, no credential to read with).
+async function toPerson(pool: AppPool, held: Held, reasonCode: string | undefined): Promise<void> {
+  const changes = reasonCode === undefined ? {} : { reasonCode };
+  await inJob(pool, held.claim.workspaceId, (tx) =>
+    fencedMove(tx, held, "reconciling", "needs_human", changes, "R"),
+  );
 }
 
 // A resend inside the key window goes back to retry on the publish queue with the resend flag; the next publish turn
@@ -209,9 +238,10 @@ async function reconcileHeld(deps: Caller, held: Held): Promise<void> {
     reads: history.absent_reads,
   });
   if (plan.kind === "resend") return resend(deps, held);
+  if (plan.kind === "needs_human") return toPerson(deps.pool, held, plan.reason);
   const timeout = timeoutOf(deps, held);
   const wait = plan.kind === "wait" ? plan.checkInSeconds : backoffSeconds(history.absent_reads + 1);
-  if (plan.kind !== "read_back" || timeout === null) return park(deps, held, wait);
+  if (plan.kind !== "read_back" || timeout === null) return park(deps.pool, held, wait);
   const asked = await ask(deps, held, plan.externalId, history, timeout);
   if (asked === null) return;
   await settle(deps, held, asked, history, plan.externalId);

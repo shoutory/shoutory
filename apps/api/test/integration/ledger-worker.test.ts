@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, inject, it, vi } from "vitest";
 import { startHeartbeat } from "../../src/jobs/ledger/heartbeat.js";
 import { runTurn } from "../../src/jobs/ledger/turn.js";
 import { createLogger } from "../../src/logging/logger.js";
+import { connectChannel, ledgerKeys } from "../support/ledger-credentials.js";
 import { seedFrozenVersion, seedWorkspace } from "../support/ledger-seed.js";
 
 const env = readTestEnv();
@@ -26,13 +27,15 @@ const rows = (sql: string, params: unknown[] = []) =>
 
 let ws: string;
 // The turns dispatch to the fixture provider: its adapter on its simulator, over the plain `fetch`.
-let wiring: Pick<Parameters<typeof runTurn>[0], "adapters" | "fetchFor">;
+// and open the credential of each claimed channel with the key ring the test stored them under.
+let wiring: Pick<Parameters<typeof runTurn>[0], "adapters" | "fetchFor"> & { keys: typeof ledgerKeys };
 let simulator: Awaited<ReturnType<typeof startFixtureSimulator>>;
 beforeAll(async () => {
   simulator = await startFixtureSimulator();
   wiring = {
     adapters: { fixture: createFixtureAdapter({ baseUrl: simulator.url }) },
     fetchFor: () => fetch,
+    keys: ledgerKeys,
   };
   db = await cloneTemplate(env, inject("shoutoryTemplate"));
   ws = randomUUID();
@@ -109,11 +112,13 @@ async function plant(o: Scenario = {}): Promise<Planted> {
   const account = o.account ?? `lw-${randomUUID().slice(0, 8)}`;
   const home = o.workspace ?? ws;
   const queue = o.queue ?? `publish.lw-${randomUUID().slice(0, 8)}`;
-  const [channel] = await rows(
-    `INSERT INTO app.channels (workspace_id, provider_id, account_kind, provider_account_id, display_name, connection_state)
-     VALUES ($1, 'fixture', 'profile', $2, $2, $3) RETURNING id`,
-    [home, account, o.channelState ?? "connected"],
-  );
+  // Connected through the credential service, so the channel holds a credential; a state other than connected is then set.
+  const channel = {
+    id: await connectChannel(db.pool("worker"), { workspace: home, provider: "fixture", account }),
+  };
+  if (o.channelState !== undefined && o.channelState !== "connected") {
+    await rows("UPDATE app.channels SET connection_state = $2 WHERE id = $1", [channel.id, o.channelState]);
+  }
   const [post] = await rows(
     `INSERT INTO app.posts (workspace_id, author_kind, author_id, status, deleted_at)
      VALUES ($1, 'user', $2, $3, CASE WHEN $4 THEN now() END) RETURNING id`,

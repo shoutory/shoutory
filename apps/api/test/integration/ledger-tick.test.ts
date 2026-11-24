@@ -15,7 +15,7 @@ import { runTurn } from "../../src/jobs/ledger/turn.js";
 import { startWorker } from "../../src/jobs/worker.js";
 import { createLogger } from "../../src/logging/logger.js";
 import { createFsDriver } from "../../src/storage/fs-driver.js";
-import { seedDueTarget, seedWorkspace } from "../support/ledger-seed.js";
+import { connectThrough, seedDueTarget, seedWorkspace } from "../support/ledger-seed.js";
 
 const env = readTestEnv();
 // The worker's image pipeline is not exercised here: its storage is a folder nothing writes to.
@@ -44,6 +44,7 @@ beforeAll(async () => {
   simulator = await startFixtureSimulator();
   db = await cloneTemplate(env, inject("shoutoryTemplate"));
   ws = await admin((a) => seedWorkspace(a));
+  connectThrough(db.pool("worker"));
 });
 afterAll(async () => {
   await simulator.close();
@@ -94,6 +95,8 @@ describe("the worker's ledger tick", () => {
   it("starts and admits with an empty capability snapshot table, and close() stops the tick", async () => {
     // fails first because: the worker has no tick, or a start gate waits for a capability snapshot that no channel has yet
     const before = await admin((a) => seedDueTarget(a, ws));
+    // Connecting a channel records its first snapshot; this row is about a worker that admits with none, so they go.
+    await admin((a) => a.query("DELETE FROM app.channel_capability_snapshots"));
     const worker = await startWorker({
       connectionString: db.url("worker"),
       pool: db.pool("worker"),
@@ -256,7 +259,7 @@ describe("a lost wake-up", () => {
     await queue.start();
     const variant = await admin((a) => seedDueTarget(a, ws));
     try {
-      await createLedgerTick({ pool: db.pool("worker"), boss: queue, registry, logger }).tick();
+      await createLedgerTick({ pool: db.pool("worker"), boss: queue, registry, logger, keys }).tick();
       await admin(async (a) => void (await a.query("DELETE FROM pgboss.job WHERE name = 'publish.fixture'")));
     } finally {
       await queue.stop({ graceful: true });
@@ -267,6 +270,7 @@ describe("a lost wake-up", () => {
       registry,
       adapters: { fixture: createFixtureAdapter({ baseUrl: simulator.url }) },
       fetchFor: () => fetch,
+      keys,
       queue: "publish.fixture",
       owner: "owner-w",
       closing: new AbortController().signal,
@@ -290,7 +294,7 @@ describe("a backlog larger than one admission batch", () => {
     const queue = boss();
     await queue.start();
     try {
-      await createLedgerTick({ pool: db.pool("worker"), boss: queue, registry, logger }).tick();
+      await createLedgerTick({ pool: db.pool("worker"), boss: queue, registry, logger, keys }).tick();
     } finally {
       await queue.stop({ graceful: true });
     }
@@ -314,7 +318,7 @@ describe("one failing step of the tick", () => {
         )),
     );
     try {
-      const tick = createLedgerTick({ pool: db.pool("worker"), boss: queue, registry, logger });
+      const tick = createLedgerTick({ pool: db.pool("worker"), boss: queue, registry, logger, keys });
       await expect(tick.tick()).resolves.toBeUndefined();
     } finally {
       await admin(

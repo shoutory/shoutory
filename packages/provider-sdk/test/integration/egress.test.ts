@@ -297,3 +297,30 @@ describe("egressFetch connections and retry (BG-18)", () => {
     expect([failure.class, failure.effect]).toEqual(["timeout", "possible"]);
   });
 });
+
+// A provider whose accounts live on user-chosen servers is bound to the one host its channel stored: an instance that
+// answers a redirect to another host is refused without following it, so the token is never sent there.
+describe("egressFetch bound to an instance host", () => {
+  it("refuses a redirect to another host, and the other host is never asked", async () => {
+    const dns = stubLookup({ "a.test": [["127.0.0.1"]], "b.test": [["127.0.0.1"]] });
+    const seen: string[] = [];
+    handler = (req, res) => {
+      seen.push(`${req.headers.host}:${req.headers.authorization ?? "none"}`);
+      res.writeHead(302, { location: `http://b.test:${port}/` }).end();
+    };
+    const policy = {
+      request: { kind: "instance", host: "a.test" } as const,
+      operator: createOperatorPolicy({
+        allowCidrs: ["127.0.0.0/8"],
+        ports: [port],
+        schemes: ["http:"],
+        lookup: dns.lookup,
+      }),
+    };
+    const headers = { authorization: "Bearer instance-token-1" };
+    const failure = await refusal(egressFetch({ url: `http://a.test:${port}/`, headers }, policy));
+    expect(failure.class).toBe("host_not_allowed");
+    expect(seen).toEqual([`a.test:${port}:Bearer instance-token-1`]);
+    expect(dns.calls["b.test"]).toBeUndefined();
+  });
+});

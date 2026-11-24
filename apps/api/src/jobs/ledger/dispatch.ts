@@ -14,7 +14,7 @@ import {
 } from "@shoutory/core/ledger/dispatch";
 import type { TenantTx } from "@shoutory/db/context";
 import type { AppPool } from "@shoutory/db/pool";
-import type { AdapterContext, ProviderAdapter } from "@shoutory/provider-sdk/adapter";
+import type { AccountAccess, AdapterContext, ProviderAdapter } from "@shoutory/provider-sdk/adapter";
 import { z } from "zod";
 import type { Logger } from "../../logging/logger.js";
 import {
@@ -37,6 +37,8 @@ export interface Caller {
   readonly owner: string;
   readonly adapter: ProviderAdapter;
   readonly fetch: typeof fetch;
+  /** The access of the operation's channel: its token and the instance host it stored. */
+  readonly account: AccountAccess;
   /** A monotonic clock in milliseconds. */
   readonly now: () => number;
 }
@@ -208,6 +210,7 @@ async function prepare(
   const result = await deps.adapter.prepare(contextFor(deps, held, timeout), {
     idempotencyKey: held.operation.idempotency_marker,
     text,
+    account: deps.account,
   });
   if (held.signal.aborted) return lostTurn(held);
   if (!result.ok) return settle(deps, held, channel, { id: started.attemptId, from: "claimed" }, result);
@@ -252,6 +255,7 @@ async function commit(
   const result = await deps.adapter.commit(contextFor(deps, held, timeout), {
     idempotencyKey: held.operation.idempotency_marker,
     text,
+    account: deps.account,
   });
   if (held.signal.aborted) return lostTurn(held);
   return settle(deps, held, channel, { id: started.attemptId, from: "dispatching" }, result);
