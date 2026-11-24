@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, inject, it, vi } from "vitest";
 import { startHeartbeat } from "../../src/jobs/ledger/heartbeat.js";
 import { runTurn } from "../../src/jobs/ledger/turn.js";
 import { createLogger } from "../../src/logging/logger.js";
-import { connectChannel, ledgerKeys } from "../support/ledger-credentials.js";
+import { connectChannel, ledgerCredentials } from "../support/ledger-credentials.js";
 import { seedFrozenVersion, seedWorkspace } from "../support/ledger-seed.js";
 
 const env = readTestEnv();
@@ -22,16 +22,18 @@ const rows = (sql: string, params: unknown[] = []) =>
   admin(async (a) => (await a.query(sql, params)).rows as Record<string, unknown>[]);
 
 let ws: string;
-let wiring: Pick<Parameters<typeof runTurn>[0], "adapters" | "fetchFor"> & { keys: typeof ledgerKeys };
+let wiring: Pick<Parameters<typeof runTurn>[0], "adapters" | "fetchFor" | "credentials">;
 let simulator: Awaited<ReturnType<typeof startFixtureSimulator>>;
 beforeAll(async () => {
   simulator = await startFixtureSimulator();
-  wiring = {
-    adapters: { fixture: createFixtureAdapter({ baseUrl: simulator.url }) },
-    fetchFor: () => fetch,
-    keys: ledgerKeys,
-  };
   db = await cloneTemplate(env, inject("shoutoryTemplate"));
+  const adapters = { fixture: createFixtureAdapter({ baseUrl: simulator.url }) };
+  const fetchFor = () => fetch;
+  wiring = {
+    adapters,
+    fetchFor,
+    credentials: ledgerCredentials(db.pool("worker"), { registry, adapters, fetchFor }),
+  };
   ws = randomUUID();
   const [user, org] = [randomUUID(), randomUUID()];
   await admin(async (a) => {

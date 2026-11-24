@@ -201,6 +201,17 @@ describe("the cooldown", () => {
     await backdate(channelId);
     expect((await check(user("admin"), workspace, channelId)).status).toBe(200);
   });
+
+  it("two simultaneous checks: one passes, the other is a 429, and the provider is called once", async () => {
+    const { channelId } = await channelWith();
+    const before = inspectCalls();
+    const answers = await Promise.all([
+      check(user("admin"), workspace, channelId),
+      check(user("owner"), workspace, channelId),
+    ]);
+    expect(answers.map((a) => a.status).sort()).toEqual([200, 429]);
+    expect(inspectCalls() - before).toBe(1);
+  });
 });
 
 describe("what a check does to the channel", () => {
@@ -245,25 +256,19 @@ describe("what a check does to the channel", () => {
 describe("a check of a channel whose access token is due", () => {
   const refused = (status: number, error: string) => ({ kind: "respond" as const, status, body: { error } });
   // [the setup, what the token route answers, the health, the state, whether the provider is read at all]
-  // A revocation's move to needs_reconnect belongs to the refresh service and is tested there, so that row names no state.
+  // A revocation's move to needs_reconnect belongs to the refresh service and is tested there, so that row names no state;
+  // the channel is no longer connected, so no health is written on it.
   const DUE: [
     string,
     { refresh?: boolean },
     ReturnType<typeof refused> | undefined,
-    string,
+    string | null,
     string | undefined,
     boolean,
   ][] = [
     ["a refresh that succeeds", {}, undefined, "ok", "connected", true],
     ["a refresh retried later (a 503)", {}, refused(503, "unavailable"), "degraded", "connected", false],
-    [
-      "a refresh that revokes (invalid_grant)",
-      {},
-      refused(400, "invalid_grant"),
-      "failing",
-      undefined,
-      false,
-    ],
+    ["a refresh that revokes (invalid_grant)", {}, refused(400, "invalid_grant"), null, undefined, false],
     [
       "a refresh the manifest does not map",
       {},

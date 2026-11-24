@@ -71,6 +71,12 @@ const MOVES: [string, CallResult, Partial<DispatchFacts>, object][] = [
     { row: 19, to: "retry_wait", waitSeconds: 60 },
   ],
   [
+    "a revoked grant on a call that may have sent is unknown, never a retry",
+    sent({ effect: "possible", errorClass: "auth_revoked" }),
+    {},
+    { row: 22, to: "unknown_external_state", checkInSeconds: 60, horizonDays: 30 },
+  ],
+  [
     "a permanent failure ends the operation",
     sent({ errorClass: "permanent" }),
     {},

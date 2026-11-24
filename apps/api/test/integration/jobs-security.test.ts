@@ -17,6 +17,8 @@ describe("job payloads", () => {
     ["sweep_upload_parts", {}, true],
     ["sweep_upload_parts", { role: "owner" }, false],
     ["sweep_upload_parts", { root: "/etc" }, false],
+    ["credential_refresh", {}, true],
+    ["credential_refresh", { workspaceId: WORKSPACE }, false],
     ["purge_expired", { class: "outbox", role: "owner" }, false],
     ["purge_expired", { class: "outbox", workspaceId: WORKSPACE }, false],
     ["purge_expired", { class: "outbox", scope: { workspaceIds: [WORKSPACE] } }, false],

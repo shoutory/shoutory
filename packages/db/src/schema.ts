@@ -350,6 +350,7 @@ export const channels = app.table("channels", {
   avatar: text("avatar"),
   connectionState: text("connection_state").notNull().default("needs_reconnect"),
   stateReason: text("state_reason"),
+  disabledFromState: text("disabled_from_state"),
   health: text("health"),
   healthCheckedAt: stamp("health_checked_at"),
   disconnectedAt: stamp("disconnected_at"),
@@ -453,6 +454,7 @@ export const channelCredentials = app.table("channel_credentials", {
   refreshFencing: integer("refresh_fencing").notNull().default(0),
   refreshAttemptDigest: text("refresh_attempt_digest"),
   refreshAttemptOutcome: text("refresh_attempt_outcome"),
+  refreshSweptAt: stamp("refresh_swept_at"),
 });
 
 export const oauthFlows = app.table("oauth_flows", {

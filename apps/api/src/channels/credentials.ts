@@ -3,12 +3,12 @@ import {
   adoptRefresh,
   type ChannelToken,
   channelTokenSchema,
-  type RefreshClass,
   refreshClassOf,
   refreshFailureOutcome,
 } from "@shoutory/core/channels";
 import {
   type Aad,
+  EnvelopeError,
   FORMAT_VERSION,
   open,
   SALT_BYTES,
@@ -17,11 +17,14 @@ import {
   seal,
 } from "@shoutory/core/crypto";
 import { pepperDigest } from "@shoutory/core/crypto/digest";
-import type { KeyProvider } from "@shoutory/core/keys";
+import { KeyError, type KeyProvider } from "@shoutory/core/keys";
 import { type TenantCtx, type TenantTx, withTenant } from "@shoutory/db/context";
+import { withSystem } from "@shoutory/db/context/system";
 import { withAdvisoryLock } from "@shoutory/db/locks";
 import type { AppPool } from "@shoutory/db/pool";
-import type { ProviderAdapter } from "@shoutory/provider-sdk/adapter";
+import type { AdapterMap, ProviderAdapter } from "@shoutory/provider-sdk/adapter";
+import type { Manifest } from "@shoutory/provider-sdk/manifest";
+import type { Registry } from "@shoutory/provider-sdk/registry";
 import type { ProviderResult } from "@shoutory/provider-sdk/result";
 import { z } from "zod";
 import type { Logger } from "../logging/logger.js";
@@ -31,16 +34,29 @@ const LEASE_SECONDS = 60;
 const PROVIDER_TIMEOUT_MS = 30_000;
 const REFRESH_MARGIN_MS = 5 * 60_000;
 
-interface ChannelProvider {
+export interface ChannelProvider {
   readonly adapter: ProviderAdapter;
-  readonly manifest: { readonly refreshErrorMap: Readonly<Record<string, RefreshClass>> };
+  readonly manifest: Manifest;
 }
+
+export const channelProvidersOf = (
+  registry: Registry,
+  adapters: AdapterMap,
+): Record<string, ChannelProvider> =>
+  Object.fromEntries(
+    registry.manifests.flatMap((manifest) => {
+      const adapter = adapters[manifest.id];
+      return adapter === undefined ? [] : [[manifest.id, { adapter, manifest }]];
+    }),
+  );
 
 export interface CredentialServiceDeps {
   readonly pool: AppPool;
   readonly keys: KeyProvider;
   readonly pepper: SealedSecret;
   readonly fetch: typeof fetch;
+  /** The egress client bound to a channel's own instance host; absent, every call uses `fetch`. */
+  readonly fetchFor?: ((manifest: Manifest, instanceHost: string | undefined) => typeof fetch) | undefined;
   readonly now: () => Date;
   readonly logger: Logger;
   readonly providers: Readonly<Record<string, ChannelProvider>>;
@@ -82,6 +98,12 @@ type RefreshOutcome =
   | { readonly kind: "config" }
   | { readonly kind: "no_refresh_token" }
   | { readonly kind: "needs_reconnect"; readonly reason: string };
+
+export type Usable =
+  | { readonly kind: "ok"; readonly accessToken: SealedSecret }
+  | { readonly kind: "retry" }
+  | { readonly kind: "revoked" }
+  | { readonly kind: "unavailable" };
 
 export class CredentialError extends Error {
   constructor(message: string) {
@@ -187,16 +209,6 @@ function tokenOfRow(keys: KeyProvider, row: OpenRow, workspaceId: string, channe
   return channelTokenSchema.parse(JSON.parse(open(storedOf(row), aad, keys, row.salt).expose()));
 }
 
-export async function openAccessToken(
-  pool: AppPool,
-  keys: KeyProvider,
-  workspaceId: string,
-  channelId: string,
-): Promise<SealedSecret> {
-  const row = await readOpenRow(pool, workspaceId, channelId);
-  return new SealedSecret(tokenOfRow(keys, row, workspaceId, channelId).access_token);
-}
-
 export const deadlineFetch =
   (egress: typeof fetch, timeoutMs = PROVIDER_TIMEOUT_MS): typeof fetch =>
   (input, init) =>
@@ -231,6 +243,23 @@ export class CredentialService {
       z.object({ instance_host: z.string().nullable() }).optional().parse(found.rows[0])?.instance_host ??
       undefined
     );
+  }
+
+  // Only a provider whose host is the channel's own reads the host; every other keeps its manifest's hosts.
+  async egressFor(
+    workspaceId: string,
+    channelId: string,
+    provider: ChannelProvider,
+  ): Promise<{ fetch: typeof fetch; instanceHost?: string }> {
+    const host =
+      provider.manifest.egressHostSource === "channel"
+        ? await this.instanceHostOf(workspaceId, channelId)
+        : undefined;
+    const egress = this.#deps.fetchFor?.(provider.manifest, host) ?? this.#deps.fetch;
+    return {
+      fetch: deadlineFetch(egress, this.#deps.providerTimeoutMs),
+      ...(host === undefined ? {} : { instanceHost: host }),
+    };
   }
 
   #openRow(workspaceId: string, channelId: string): Promise<OpenRow> {
@@ -304,13 +333,80 @@ export class CredentialService {
   async open(workspaceId: string, channelId: string) {
     const row = await this.#openRow(workspaceId, channelId);
     const token = this.#tokenOf(row, workspaceId, channelId);
-    const expires = row.access_expires_at?.getTime();
+    const left =
+      row.access_expires_at === null
+        ? undefined
+        : row.access_expires_at.getTime() - this.#deps.now().getTime();
     return {
       generation: row.generation,
       accessToken: new SealedSecret(token.access_token),
       refreshToken: token.refresh_token === undefined ? undefined : new SealedSecret(token.refresh_token),
-      refreshDue: expires !== undefined && expires - this.#deps.now().getTime() <= REFRESH_MARGIN_MS,
+      refreshDue: left !== undefined && left <= REFRESH_MARGIN_MS,
+      // A token with no expiry lives until the provider says otherwise.
+      alive: left === undefined || left > 0,
     };
+  }
+
+  // The token a call is made with: refreshed first when it is due. A refresh that failed for a while leaves the stored
+  // token in use while it lives; `revoked` is a confirmed revocation, and the channel has already moved.
+  async usable(workspaceId: string, channelId: string): Promise<Usable> {
+    try {
+      const opened = await this.open(workspaceId, channelId);
+      if (!opened.refreshDue) return { kind: "ok", accessToken: opened.accessToken };
+      const outcome = await this.refresh(workspaceId, channelId);
+      if (outcome.kind === "needs_reconnect") return { kind: "revoked" };
+      const current =
+        outcome.kind === "refreshed" || outcome.kind === "lost_race"
+          ? await this.open(workspaceId, channelId)
+          : opened;
+      return current.alive ? { kind: "ok", accessToken: current.accessToken } : { kind: "retry" };
+    } catch (error) {
+      // A key that is not loaded may come back; a credential that is missing or cannot be opened will not.
+      if (error instanceof KeyError) return { kind: "retry" };
+      if (error instanceof CredentialError || error instanceof EnvelopeError) return { kind: "unavailable" };
+      throw error;
+    }
+  }
+
+  // A provider answered that the grant is gone: the credential is checked again before the channel moves. With a
+  // refresh token the refresh is the check; without one the provider's credential check is, and only its own
+  // revocation answer moves the channel. A credential that cannot be opened confirms nothing.
+  async confirmRevoked(workspaceId: string, channelId: string): Promise<boolean> {
+    try {
+      return await this.#confirmRevoked(workspaceId, channelId);
+    } catch (error) {
+      if (error instanceof KeyError || error instanceof CredentialError || error instanceof EnvelopeError) {
+        this.#deps.logger.error(
+          { event: "credential_unusable", workspaceId, channelId, error: error.name },
+          "a revocation could not be checked",
+        );
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  async #confirmRevoked(workspaceId: string, channelId: string): Promise<boolean> {
+    const row = await this.#openRow(workspaceId, channelId);
+    const provider = this.#deps.providers[row.provider_id];
+    if (provider === undefined) return false;
+    const token = this.#tokenOf(row, workspaceId, channelId);
+    if (token.refresh_token !== undefined) {
+      return (await this.refresh(workspaceId, channelId)).kind === "needs_reconnect";
+    }
+    const egress = await this.egressFor(workspaceId, channelId, provider);
+    const result = await provider.adapter.inspect(
+      { fetch: egress.fetch, now: this.#deps.now },
+      {
+        accessToken: new SealedSecret(token.access_token),
+        ...(egress.instanceHost === undefined ? {} : { instanceHost: egress.instanceHost }),
+      },
+    );
+    if (result.ok || result.errorClass !== "auth_revoked") return false;
+    await this.#asJob(workspaceId, (tx) =>
+      tx.query(...callOf("channel_revoke_confirmed", [workspaceId, channelId])),
+    );
+    return true;
   }
 
   // Commits before the provider call, so the attempt marker survives a crash during it.
@@ -428,6 +524,8 @@ export class CredentialService {
     if (this.#tokenOf(first, workspaceId, channelId).refresh_token === undefined) {
       return { kind: "no_refresh_token" };
     }
+    // Resolved before the lease, so a failure here leaves no attempt marker behind.
+    const egress = await this.egressFor(workspaceId, channelId, provider);
     const lease = await this.#beginLease(workspaceId, channelId);
     if (!lease.won) return { kind: "lost_race" };
     // A commit between the open and the lease moved the generation: this refresh began from a token that is gone. The
@@ -440,7 +538,7 @@ export class CredentialService {
     const current = this.#tokenOf(row, workspaceId, channelId);
     const result = await refreshCall.call(
       provider.adapter,
-      { fetch: deadlineFetch(this.#deps.fetch, this.#deps.providerTimeoutMs), now: this.#deps.now },
+      { fetch: egress.fetch, now: this.#deps.now },
       { refreshToken: new SealedSecret(current.refresh_token ?? "") },
     );
     return (
@@ -452,3 +550,39 @@ export class CredentialService {
 
 export const createCredentialService = (deps: CredentialServiceDeps): CredentialService =>
   new CredentialService(deps);
+
+// A token due within this margin is refreshed by the sweep, ahead of the 5-minute margin of a call.
+const SWEEP_MARGIN_SECONDS = 900;
+const dueSchema = z.object({ workspace_id: z.string(), channel_id: z.string() });
+
+export interface SweepDeps {
+  readonly pool: AppPool;
+  readonly credentials: CredentialService;
+  readonly logger: Logger;
+  readonly limit: number;
+}
+
+export async function sweepCredentials({ pool, credentials, logger, limit }: SweepDeps): Promise<void> {
+  // A passed token with nothing to refresh it can send nothing more, so its channel waits for a reconnect.
+  await withSystem(pool, "credential_refresh", (tx) =>
+    tx.query("SELECT app.channels_expire_tokens($1)", [limit]),
+  );
+  const due = await withSystem(pool, "credential_refresh", (tx) =>
+    tx.query("SELECT * FROM app.due_token_refreshes($1, $2)", [limit, SWEEP_MARGIN_SECONDS]),
+  );
+  for (const { workspace_id: workspaceId, channel_id: channelId } of due.rows.map((row) =>
+    dueSchema.parse(row),
+  )) {
+    try {
+      await credentials.refresh(workspaceId, channelId);
+    } catch (error) {
+      // One channel that cannot be refreshed never stops the others; the alert names the channel and the error
+      // class only, never the message, which may quote what the provider sent.
+      if (!(error instanceof Error)) throw error;
+      logger.error(
+        { event: "credential_refresh_failed", workspaceId, channelId, error: error.name },
+        "a token refresh failed",
+      );
+    }
+  }
+}

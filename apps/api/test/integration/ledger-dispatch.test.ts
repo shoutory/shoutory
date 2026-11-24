@@ -146,6 +146,71 @@ describe("a resend after an unknown outcome", () => {
   );
 });
 
+// [case, the channel and the operation afterwards, the planted operation, the provider's answer to the credential check]
+const REVOKED: [string, string, string, Plant, number][] = [
+  ["a send refused 401, the check confirms", "needs_reconnect", "blocked_reconnect", {}, 401],
+  ["a send refused 401, the check answers 503", "connected", "retry_wait", {}, 503],
+  [
+    "a read-back refused 401, the check confirms",
+    "needs_reconnect",
+    "blocked_reconnect",
+    { state: "unknown_external_state", effect: "possible", reconcile: true },
+    401,
+  ],
+  // The revocation cannot move a channel disabled meanwhile, so the row is read back again later.
+  [
+    "a read-back refused 401 on a disabled channel, the check confirms",
+    "disabled",
+    "unknown_external_state",
+    { state: "unknown_external_state", effect: "possible", reconcile: true },
+    401,
+  ],
+];
+describe("a revoked grant (floor)", () => {
+  it.each(REVOKED)(
+    "%s: the channel is %s and the operation %s, never failed",
+    async (_name, channelState, opState, planted, check) => {
+      const e = await makeEnv();
+      try {
+        const id = await plant(e, planted);
+        e.sim.armAccount({ kind: "respond", status: check });
+        if (channelState === "disabled")
+          await rows(
+            "UPDATE app.channels c SET connection_state = 'disabled', disabled_from_state = 'connected' FROM app.operations o WHERE o.channel_id = c.id AND o.id = $1",
+            [id],
+          );
+        if (planted.reconcile) {
+          await marked(id, "post-77");
+          e.sim.arm("readBack", { kind: "respond", status: 401 });
+          await e.tick();
+        } else {
+          e.sim.arm("commit", { kind: "respond", status: 401 });
+          await e.turn();
+          expect(await opOf(id)).toMatchObject({ state: "retry_wait", effect: "none" });
+          if (channelState !== "connected") {
+            await rows("UPDATE app.operations SET next_attempt_at = now() WHERE id = $1", [id]);
+            await e.tick();
+            await e.turn();
+          }
+        }
+        const [channel] = await rows(
+          "SELECT c.connection_state, c.state_reason FROM app.channels c JOIN app.operations o ON o.channel_id = c.id WHERE o.id = $1",
+          [id],
+        );
+        expect(channel).toEqual({
+          connection_state: channelState,
+          state_reason: channelState === "needs_reconnect" ? "revoked_confirmed" : null,
+        });
+        expect((await opOf(id)).state).toBe(opState);
+        expect(e.sim.effects()).toBe(0);
+      } finally {
+        await e.close();
+      }
+    },
+    30_000,
+  );
+});
+
 describe("an absence read before a resend", () => {
   it("does not count for the cycle after it: the old id is not read again", async () => {
     const e = await makeEnv({

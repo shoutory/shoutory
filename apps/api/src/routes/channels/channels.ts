@@ -150,12 +150,6 @@ function registerMoves(app: App, ipHmac: IpHmac, check?: ChannelCheck): void {
   }
 }
 
-// The time since the last check is read from the database clock.
-const COOLDOWN_SECONDS = 60;
-const STATE = `SELECT provider_id, connection_state,
-  extract(epoch FROM clock_timestamp() - health_checked_at)::float8 AS since
-  FROM app.channels WHERE workspace_id = $1 AND id = $2`;
-
 // Short transactions around one provider read, none open while the provider answers.
 function registerCheck(app: App, { checker, providers }: ChannelCheck): void {
   defineRoute(app, {
@@ -165,14 +159,18 @@ function registerCheck(app: App, { checker, providers }: ChannelCheck): void {
     access: { workspace: "workspace_id", permission: "channels.manage", split: true },
     params: channelParams,
     handler: async ({ scoped, params }) => {
-      const found = await scoped(false, async (tx, scope) => {
-        const row = (
-          await tx.query<{ provider_id: string; connection_state: string; since: number | null }>(STATE, [
-            scope.workspaceId,
-            params.channel_id,
-          ])
-        ).rows[0];
-        if (!row) throw new Refusal("not_found", "channel row not visible");
+      // The definer takes the once-a-minute slot under the row lock, so two simultaneous checks never both call out.
+      const found = await scoped(true, async (tx, scope) => {
+        const answer = await tx
+          .query<{ provider_id: string; connection_state: string; wait_seconds: number | null }>(
+            "SELECT * FROM app.channel_check_begin($1, $2)",
+            [scope.workspaceId, params.channel_id],
+          )
+          .catch((error: unknown) => {
+            throw definerRefusal(error) ?? error;
+          });
+        const row = answer.rows[0];
+        if (!row) throw new Error("channel_check_begin answered no row");
         return { ...row, workspaceId: scope.workspaceId };
       });
       if (found.connection_state !== "connected") {
@@ -180,8 +178,8 @@ function registerCheck(app: App, { checker, providers }: ChannelCheck): void {
           details: { reason: "not_connected" },
         });
       }
-      if (found.since !== null && found.since < COOLDOWN_SECONDS) {
-        const retryAfterSeconds = Math.max(1, Math.ceil(COOLDOWN_SECONDS - found.since));
+      if (found.wait_seconds !== null) {
+        const retryAfterSeconds = Math.max(1, Math.ceil(found.wait_seconds));
         throw new Refusal("too_many_requests", "the channel was checked a moment ago", { retryAfterSeconds });
       }
       // Own keys only: a provider id read from the row is never looked up on the prototype.

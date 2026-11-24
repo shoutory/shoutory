@@ -436,6 +436,7 @@ describe("the callback's own checks", () => {
       error: "access_denied",
       error_description: `The user said no\u0007${"x".repeat(400)}`,
       state: flow.state,
+      iss: sim.url,
     });
     const answer = await callbackAs(admin, params);
     const seen = outcomeOf(answer);
@@ -455,7 +456,15 @@ const taken = async (change: (query: URLSearchParams) => void): Promise<Run> => 
 };
 const providerError = async (): Promise<Run> => {
   const flow = await begin(admin);
-  return { who: admin, params: new URLSearchParams({ error: "access_denied", state: flow.state }) };
+  return {
+    who: admin,
+    params: new URLSearchParams({ error: "access_denied", state: flow.state, iss: sim.url }),
+  };
+};
+const foreignError = async (): Promise<Run> => {
+  const run = await providerError();
+  run.params.set("iss", "http://evil.example");
+  return run;
 };
 
 // `workspace` is the flow's own workspace, never a value of the callback's query.
@@ -482,6 +491,7 @@ describe("the callback redirect carries exactly the keys of its outcome", () => 
       ["reason", "workspace"],
       "workspace",
     ],
+    ["refused (an error from another issuer)", foreignError, ["reason", "workspace"], "workspace"],
     [
       "a refused take (unknown state)",
       async () => ({ who: admin, params: unknownState() }),

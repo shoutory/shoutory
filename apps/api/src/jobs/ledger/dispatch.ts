@@ -16,6 +16,7 @@ import type { TenantTx } from "@shoutory/db/context";
 import type { AppPool } from "@shoutory/db/pool";
 import type { AccountAccess, AdapterContext, ProviderAdapter } from "@shoutory/provider-sdk/adapter";
 import { z } from "zod";
+import type { CredentialService } from "../../channels/credentials.js";
 import type { Logger } from "../../logging/logger.js";
 import {
   type ChannelFacts,
@@ -36,6 +37,7 @@ export interface Caller {
   readonly adapter: ProviderAdapter;
   readonly fetch: typeof fetch;
   readonly account: AccountAccess;
+  readonly credentials: CredentialService;
   readonly now: () => number;
 }
 export interface Dispatcher extends Caller {
@@ -163,6 +165,12 @@ async function settle(
   result: CallResult,
 ): Promise<TurnResult> {
   const outcome = resultMove(result, factsOf(held));
+  // A refused grant on a call that sent nothing is checked again first; a confirmed revocation moves the channel, and
+  // the next turn's re-read holds the row for a reconnect.
+  if (outcome.row === 19 && result.errorClass === "auth_revoked") {
+    await deps.credentials.confirmRevoked(held.claim.workspaceId, held.operation.channel_id);
+    if (held.signal.aborted) return lostTurn(held);
+  }
   const done = await inJob(deps.pool, held.claim.workspaceId, async (tx) => {
     const finished = await finishAttempt(sqlOf(tx), {
       workspaceId: held.claim.workspaceId,

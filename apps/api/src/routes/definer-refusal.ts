@@ -16,6 +16,7 @@ const DEFINERS = [
   "channel_disable",
   "channel_enable",
   "channel_connect",
+  "channel_check_begin",
   "oauth_flow_put",
   "feature_flag_override_set",
   "instance_setting_set",

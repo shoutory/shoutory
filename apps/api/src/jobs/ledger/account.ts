@@ -1,35 +1,22 @@
-import type { KeyProvider } from "@shoutory/core/keys";
-import type { AppPool } from "@shoutory/db/pool";
 import type { AccountAccess } from "@shoutory/provider-sdk/adapter";
-import { z } from "zod";
-import { CredentialError, openAccessToken } from "../../channels/credentials.js";
-import { inJob, type Operation } from "./held.js";
+import type { CredentialService, Usable } from "../../channels/credentials.js";
+import type { Operation } from "./held.js";
 
-export async function instanceHostOf(pool: AppPool, operation: Operation): Promise<string | null> {
-  const { rows } = await inJob(pool, operation.workspace_id, (tx) =>
-    tx.query("SELECT instance_host FROM app.channels WHERE workspace_id = $1 AND id = $2", [
-      operation.workspace_id,
-      operation.channel_id,
-    ]),
-  );
-  return z.object({ instance_host: z.string().nullable() }).optional().parse(rows[0])?.instance_host ?? null;
-}
+export type Access =
+  | { readonly kind: "ok"; readonly account: AccountAccess }
+  | Exclude<Usable, { readonly kind: "ok" }>;
 
-export async function accountOf(
-  options: { readonly pool: AppPool; readonly keys: KeyProvider },
+// The token is refreshed first when it is due, so a send never goes out with one the provider has already let expire.
+export async function accessOf(
+  credentials: CredentialService,
   operation: Operation,
-  instanceHost: string | null,
-): Promise<AccountAccess | null> {
-  try {
-    const accessToken = await openAccessToken(
-      options.pool,
-      options.keys,
-      operation.workspace_id,
-      operation.channel_id,
-    );
-    return { accessToken, ...(instanceHost === null ? {} : { instanceHost }) };
-  } catch (error) {
-    if (error instanceof CredentialError) return null;
-    throw error;
-  }
+  instanceHost: string | null | undefined,
+): Promise<Access> {
+  const usable = await credentials.usable(operation.workspace_id, operation.channel_id);
+  if (usable.kind !== "ok") return usable;
+  const host = instanceHost ?? undefined;
+  return {
+    kind: "ok",
+    account: { accessToken: usable.accessToken, ...(host === undefined ? {} : { instanceHost: host }) },
+  };
 }

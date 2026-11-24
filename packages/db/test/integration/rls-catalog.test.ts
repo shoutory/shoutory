@@ -296,6 +296,13 @@ const DEFINERS: Definer[] = [
     callers: APP_WORKER,
   },
   { name: "due_token_refreshes", args: "lim integer, margin_seconds integer", callers: ["shoutory_worker"] },
+  { name: "channels_expire_tokens", args: "lim integer", callers: ["shoutory_worker"] },
+  {
+    name: "channel_revoke_confirmed",
+    args: "workspace_id uuid, channel_id uuid",
+    callers: ["shoutory_worker"],
+  },
+  { name: "channel_check_begin", args: "workspace_id uuid, channel_id uuid", callers: ["shoutory_app"] },
   {
     name: "channel_health_record",
     args: "workspace_id uuid, channel_id uuid, health text, manifest_digest text, api_version text, sunset_at timestamp with time zone, capabilities jsonb, limits jsonb",

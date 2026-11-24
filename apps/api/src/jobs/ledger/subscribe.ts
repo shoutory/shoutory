@@ -1,9 +1,9 @@
-import type { KeyProvider } from "@shoutory/core/keys";
 import type { AppPool } from "@shoutory/db/pool";
 import type { AdapterMap } from "@shoutory/provider-sdk/adapter";
 import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import type { Registry } from "@shoutory/provider-sdk/registry";
 import type { PgBoss } from "pg-boss";
+import type { CredentialService } from "../../channels/credentials.js";
 import type { Logger } from "../../logging/logger.js";
 import { runTurn } from "./turn.js";
 
@@ -20,7 +20,7 @@ export interface PublishSubscription {
   readonly logger: Logger;
   readonly adapters: AdapterMap;
   readonly fetchFor: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
-  readonly keys: KeyProvider;
+  readonly credentials: CredentialService;
   readonly owner: string;
   readonly closing: AbortSignal;
 }
@@ -37,9 +37,19 @@ export async function subscribePublish(options: PublishSubscription): Promise<vo
 }
 
 async function drain(options: PublishSubscription, queue: string): Promise<void> {
-  const { pool, logger, registry, adapters, fetchFor, keys, owner, closing } = options;
+  const { pool, logger, registry, adapters, fetchFor, credentials, owner, closing } = options;
   for (let turns = 0; turns < MAX_TURNS_PER_JOB; turns++) {
-    const result = await runTurn({ pool, logger, registry, adapters, fetchFor, keys, queue, owner, closing });
+    const result = await runTurn({
+      pool,
+      logger,
+      registry,
+      adapters,
+      fetchFor,
+      credentials,
+      queue,
+      owner,
+      closing,
+    });
     if (result.kind === "idle" || result.kind === "closed") return;
   }
   // The limit was reached with work left: one more wake-up (the queue keeps at most one waiting).

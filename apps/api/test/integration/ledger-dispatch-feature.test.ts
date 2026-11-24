@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { reconcileStep } from "../../src/jobs/ledger/reconcile.js";
 import { runTurn } from "../../src/jobs/ledger/turn.js";
 import { createLogger } from "../../src/logging/logger.js";
-import { ledgerKeys } from "../support/ledger-credentials.js";
 import {
   makeEnv,
   marked,
@@ -80,7 +79,7 @@ describe("a claimed row that cannot be sent", () => {
           registry: e.registry,
           adapters: wiring === "adapter" ? e.adapters : {},
           fetchFor: e.fetchFor,
-          keys: ledgerKeys,
+          credentials: e.credentials,
           queue: e.queueName,
           owner: "owner-w",
           closing: new AbortController().signal,
@@ -170,7 +169,7 @@ describe("the tick and an unknown outcome that cannot be read", () => {
         registry: e.registry,
         adapters: e.adapters,
         fetchFor: e.fetchFor,
-        keys: ledgerKeys,
+        credentials: e.credentials,
         owner: "tick-closing",
         closing: closing.signal,
       });

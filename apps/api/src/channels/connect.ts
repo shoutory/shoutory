@@ -253,11 +253,13 @@ export class ConnectService {
   ): Promise<Outcome> {
     const { provider, connect, input } = step;
     const { query } = input;
+    // An error answer carries the issuer too (RFC 9207 section 2, https://www.rfc-editor.org/rfc/rfc9207#section-2,
+    // read 2026-11-24), so a forged error from another server is refused before its text is shown.
+    if (!issuerAccepted(connect.issuer, query.iss)) return { kind: "refused" };
     if (query.error !== undefined) {
       return { kind: "provider_error", message: providerErrorText(query.error_description ?? query.error) };
     }
     if (query.code === undefined) return this.#failed(input.providerId, "callback", "none");
-    if (!issuerAccepted(connect.issuer, query.iss)) return { kind: "refused" };
     const progress = { step: "unseal" };
     try {
       const granted = await this.#grant(principal, taken, {

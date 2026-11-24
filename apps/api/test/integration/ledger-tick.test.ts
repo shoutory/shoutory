@@ -15,6 +15,7 @@ import { runTurn } from "../../src/jobs/ledger/turn.js";
 import { startWorker } from "../../src/jobs/worker.js";
 import { createLogger } from "../../src/logging/logger.js";
 import { createFsDriver } from "../../src/storage/fs-driver.js";
+import { ledgerCredentials } from "../support/ledger-credentials.js";
 import { connectThrough, seedDueTarget, seedWorkspace } from "../support/ledger-seed.js";
 
 const env = readTestEnv();
@@ -79,6 +80,7 @@ const keys = new EnvKeyProvider({
   SHOUTORY_ACTIVE_KEY_ID: "k1",
   SHOUTORY_KEK_K1: Buffer.alloc(32, 1).toString("base64"),
 });
+const credentials = () => ledgerCredentials(db.pool("worker"));
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const operationsOf = async (variant: string) =>
   Number(
@@ -248,7 +250,13 @@ describe("a lost wake-up", () => {
     await queue.start();
     const variant = await admin((a) => seedDueTarget(a, ws));
     try {
-      await createLedgerTick({ pool: db.pool("worker"), boss: queue, registry, logger, keys }).tick();
+      await createLedgerTick({
+        pool: db.pool("worker"),
+        boss: queue,
+        registry,
+        logger,
+        credentials: credentials(),
+      }).tick();
       await admin(async (a) => void (await a.query("DELETE FROM pgboss.job WHERE name = 'publish.fixture'")));
     } finally {
       await queue.stop({ graceful: true });
@@ -259,7 +267,7 @@ describe("a lost wake-up", () => {
       registry,
       adapters: { fixture: createFixtureAdapter({ baseUrl: simulator.url }) },
       fetchFor: () => fetch,
-      keys,
+      credentials: credentials(),
       queue: "publish.fixture",
       owner: "owner-w",
       closing: new AbortController().signal,
@@ -282,7 +290,13 @@ describe("a backlog larger than one admission batch", () => {
     const queue = boss();
     await queue.start();
     try {
-      await createLedgerTick({ pool: db.pool("worker"), boss: queue, registry, logger, keys }).tick();
+      await createLedgerTick({
+        pool: db.pool("worker"),
+        boss: queue,
+        registry,
+        logger,
+        credentials: credentials(),
+      }).tick();
     } finally {
       await queue.stop({ graceful: true });
     }
@@ -305,7 +319,13 @@ describe("one failing step of the tick", () => {
         )),
     );
     try {
-      const tick = createLedgerTick({ pool: db.pool("worker"), boss: queue, registry, logger, keys });
+      const tick = createLedgerTick({
+        pool: db.pool("worker"),
+        boss: queue,
+        registry,
+        logger,
+        credentials: credentials(),
+      });
       await expect(tick.tick()).resolves.toBeUndefined();
     } finally {
       await admin(

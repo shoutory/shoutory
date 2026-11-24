@@ -121,5 +121,6 @@ export async function startFixtureSimulator(options: SimulatorOptions = {}) {
     requestCount: () => simulator.requests.length,
     arm: (operation: MatrixOperation, fault: MatrixFault) =>
       simulator.faults.failNext(ROUTES[operation], toFault(fault)),
+    armAccount: (fault: MatrixFault) => simulator.faults.failNext("GET /v1/account", toFault(fault)),
   };
 }

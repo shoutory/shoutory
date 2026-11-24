@@ -80,23 +80,18 @@ function channelServices(options: AppOptions): { check: ChannelCheck; connect: C
   const { channels } = options;
   if (!channels) return undefined;
   const now = () => new Date();
-  const { providers, pepper } = channels;
+  const { providers, pepper, fetchFor } = channels;
   const credentials = createCredentialService({
     pool: options.pool,
     keys: options.keys,
     pepper,
     fetch: channels.fetch,
+    fetchFor,
     now,
     logger: options.logger,
     providers,
   });
-  const { fetchFor } = channels;
-  const checker = createHealthChecker({
-    credentials,
-    fetch: channels.fetch,
-    ...(fetchFor === undefined ? {} : { fetchFor }),
-    now,
-  });
+  const checker = createHealthChecker({ credentials, now });
   const connect = createConnectService({
     pool: options.pool,
     keys: options.keys,

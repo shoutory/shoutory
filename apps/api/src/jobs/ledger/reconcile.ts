@@ -1,4 +1,3 @@
-import type { KeyProvider } from "@shoutory/core/keys";
 import {
   type Claim,
   claimReconciles,
@@ -19,8 +18,9 @@ import type { AppPool } from "@shoutory/db/pool";
 import type { AdapterMap, ProviderAdapter } from "@shoutory/provider-sdk/adapter";
 import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import type { Registry } from "@shoutory/provider-sdk/registry";
+import type { CredentialService } from "../../channels/credentials.js";
 import type { Logger } from "../../logging/logger.js";
-import { accountOf, instanceHostOf } from "./account.js";
+import { accessOf } from "./account.js";
 import { type Caller, call, contextFor, timeoutOf } from "./dispatch.js";
 import { hold } from "./heartbeat.js";
 import { fencedMove, type Held, inJob, readOperation, sqlOf } from "./held.js";
@@ -35,7 +35,7 @@ export interface ReconcileOptions {
   readonly registry: Registry;
   readonly adapters: AdapterMap;
   readonly fetchFor: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
-  readonly keys: KeyProvider;
+  readonly credentials: CredentialService;
   readonly owner: string;
   readonly closing: AbortSignal;
   readonly now?: () => number;
@@ -104,31 +104,44 @@ async function reconcileClaim(
     started,
   });
   try {
-    // A channel with no usable credential cannot be read and nothing will give it one: the row goes to a person
-    // instead of waiting for ever.
-    const host = await instanceHostOf(pool, operation);
-    const account = await accountOf(options, operation, host);
-    if (account === null) {
-      options.logger.error(
-        { operation: claim.id, workspace: claim.workspaceId },
-        "no usable credential to read back",
-      );
-      return await toPerson(pool, holding.held, "credential_unavailable");
-    }
-    const fetchOf = options.fetchFor(manifest, host ?? undefined);
+    const host = await options.credentials.instanceHostOf(operation.workspace_id, operation.channel_id);
+    const access = await accessOf(options.credentials, operation, host);
+    if (holding.held.signal.aborted) return;
+    if (access.kind !== "ok") return await withoutAccess(options, holding.held, access.kind);
+    const fetchOf = options.fetchFor(manifest, host);
     const deps: Caller = {
       pool,
       logger: options.logger,
       owner: options.owner,
       adapter,
       fetch: fetchOf,
-      account,
+      account: access.account,
+      credentials: options.credentials,
       now,
     };
     await reconcileHeld(deps, holding.held);
   } finally {
     await holding.stop();
   }
+}
+
+// A revoked grant waits for a reconnect and a passing failure is read again later. A credential that cannot be
+// opened will not open by itself, so that row goes to a person instead of waiting for ever.
+async function withoutAccess(
+  options: ReconcileOptions,
+  held: Held,
+  kind: "retry" | "revoked" | "unavailable",
+): Promise<void> {
+  if (kind === "revoked") {
+    await inJob(options.pool, held.claim.workspaceId, (tx) => toReconnect(tx, held));
+    return;
+  }
+  options.logger.error(
+    { event: "credential_unusable", operation: held.claim.id, workspace: held.claim.workspaceId, kind },
+    "no usable credential to read back",
+  );
+  if (kind === "retry") return park(options.pool, held, backoffSeconds(1));
+  return toPerson(options.pool, held, "credential_unavailable");
 }
 
 interface History {
@@ -229,7 +242,34 @@ async function reconcileHeld(deps: Caller, held: Held): Promise<void> {
   if (plan.kind !== "read_back" || timeout === null) return park(deps.pool, held, wait);
   const asked = await ask(deps, held, plan.externalId, history, timeout);
   if (asked === null) return;
-  await settle(deps, held, asked, history, plan.externalId);
+  // A refused grant is checked again first: a confirmed revocation holds the row for a reconnect instead of reading on.
+  const revoked =
+    asked.result.errorClass === "auth_revoked" &&
+    (await deps.credentials.confirmRevoked(held.claim.workspaceId, held.operation.channel_id));
+  if (held.signal.aborted) return;
+  await settle(deps, held, asked, history, plan.externalId, revoked);
+}
+
+const BLOCKED = ["needs_reconnect", "disconnected", "revoked_by_provider"];
+
+// A revocation has moved the channel unless a disable moved it first; a row whose channel is not waiting for a reconnect
+// is read back again later.
+async function toReconnect(tx: TenantTx, held: Held): Promise<void> {
+  const channel = await tx.query<{ connection_state: string }>(
+    "SELECT connection_state FROM app.channels WHERE id = $1",
+    [held.operation.channel_id],
+  );
+  if (BLOCKED.includes(channel.rows[0]?.connection_state ?? ""))
+    await fencedMove(tx, held, "reconciling", "blocked_reconnect", {}, "R");
+  else
+    await fencedMove(
+      tx,
+      held,
+      "reconciling",
+      "unknown_external_state",
+      { checkInSeconds: backoffSeconds(1) },
+      "R",
+    );
 }
 
 // One transaction, so a crash cannot leave a finished attempt without its move. Nothing is written when the lease is lost.
@@ -239,6 +279,7 @@ async function settle(
   { attemptId, result, outcome }: Asked,
   history: History,
   externalId: string | undefined,
+  revoked: boolean,
 ): Promise<void> {
   const absent = ["absent_once", "absent_proven", "needs_human"].includes(outcome.kind);
   const errorClass = absent ? "absent" : result.errorClass;
@@ -253,7 +294,9 @@ async function settle(
         ...(errorClass === undefined ? {} : { error_class: errorClass }),
       },
     });
-    if (finished === "finished") await moveFor(tx, held, outcome, history, externalId);
+    if (finished !== "finished") return;
+    if (revoked) await toReconnect(tx, held);
+    else await moveFor(tx, held, outcome, history, externalId);
   });
 }
 

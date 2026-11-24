@@ -11,7 +11,7 @@ import { createBoss } from "../../src/jobs/boss.js";
 import { createLedgerTick } from "../../src/jobs/ledger/tick.js";
 import { runTurn } from "../../src/jobs/ledger/turn.js";
 import { createLogger } from "../../src/logging/logger.js";
-import { connectChannel, ledgerKeys } from "./ledger-credentials.js";
+import { connectChannel, ledgerCredentials } from "./ledger-credentials.js";
 import { seedWorkspace } from "./ledger-seed.js";
 
 const env = readTestEnv();
@@ -121,7 +121,7 @@ export async function makeEnv(o: Options = {}) {
     registry,
     adapters,
     fetchFor,
-    keys: ledgerKeys,
+    credentials: ledgerCredentials(workerPool(), { registry, adapters, fetchFor }),
     ...(o.clock === undefined ? {} : { clock: o.clock }),
   };
   return {
@@ -137,6 +137,7 @@ export async function makeEnv(o: Options = {}) {
     registry,
     adapters,
     fetchFor,
+    credentials: common.credentials,
     lease,
     providerId,
     queueName,

@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import type { KeyProvider } from "@shoutory/core/keys";
 import { providersArgument, sweepArguments } from "@shoutory/core/ledger/client";
 import type { TenantTx } from "@shoutory/db/context";
 import { withSystem } from "@shoutory/db/context/system";
@@ -9,6 +8,7 @@ import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import type { Registry } from "@shoutory/provider-sdk/registry";
 import { pastSunset } from "@shoutory/provider-sdk/snapshot";
 import type { PgBoss } from "pg-boss";
+import type { CredentialService } from "../../channels/credentials.js";
 import type { Logger } from "../../logging/logger.js";
 import { type IntervalLoop, intervalLoop } from "../outbox-relay.js";
 import { refuseEgress } from "./held.js";
@@ -65,7 +65,7 @@ export interface LedgerTickOptions {
   readonly logger: Logger;
   readonly adapters?: AdapterMap;
   readonly fetchFor?: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
-  readonly keys: KeyProvider;
+  readonly credentials: CredentialService;
   readonly clock?: () => Date;
   readonly intervalMs?: number;
 }
@@ -116,7 +116,7 @@ export function createLedgerTick({
   logger,
   adapters = {},
   fetchFor = refuseEgress,
-  keys,
+  credentials,
   clock = () => new Date(),
   intervalMs = TICK_MS,
 }: LedgerTickOptions): LedgerTick {
@@ -145,7 +145,16 @@ export function createLedgerTick({
     await step("due moves", sweep("SELECT app.sweep_due_moves($1::jsonb) AS n", sweeps.due));
     await step("admission", admitBacklog);
     await step("reconcile", () =>
-      reconcileStep({ pool, logger, registry, adapters, fetchFor, keys, owner, closing: closing.signal }),
+      reconcileStep({
+        pool,
+        logger,
+        registry,
+        adapters,
+        fetchFor,
+        credentials,
+        owner,
+        closing: closing.signal,
+      }),
     );
     // A post is admitted before it is due, so the wake-up of admission can come early: waking the queues at the end of
     // every tick sends it when it falls due, and covers a wake-up that was lost.

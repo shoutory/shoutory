@@ -1,4 +1,3 @@
-import type { KeyProvider } from "@shoutory/core/keys";
 import {
   bucketKey,
   claimOperation,
@@ -8,14 +7,16 @@ import {
   rereadOutcome,
   takeBucket,
 } from "@shoutory/core/ledger/client";
+import { backoffSeconds } from "@shoutory/core/ledger/dispatch";
 import { withSystem } from "@shoutory/db/context/system";
 import type { AppPool } from "@shoutory/db/pool";
 import type { AdapterMap } from "@shoutory/provider-sdk/adapter";
 import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import type { Registry } from "@shoutory/provider-sdk/registry";
 import { pastSunset } from "@shoutory/provider-sdk/snapshot";
+import type { CredentialService } from "../../channels/credentials.js";
 import type { Logger } from "../../logging/logger.js";
-import { accountOf } from "./account.js";
+import { accessOf } from "./account.js";
 import { dispatch } from "./dispatch.js";
 import { hold } from "./heartbeat.js";
 import {
@@ -39,7 +40,7 @@ export interface TurnOptions {
   readonly registry: Registry;
   readonly adapters: AdapterMap;
   readonly fetchFor: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
-  readonly keys: KeyProvider;
+  readonly credentials: CredentialService;
   readonly queue: string;
   readonly owner: string;
   readonly closing: AbortSignal;
@@ -145,6 +146,32 @@ async function takeLimits(
   return null;
 }
 
+// A revoked grant has moved the channel unless a disable or disconnect moved it first, so the row follows the channel
+// as it is now. Any other credential failure is the operator's to fix: the row waits and comes back, and is never
+// failed for it.
+async function afterRevocation(options: TurnOptions, held: Held): Promise<TurnResult> {
+  const { channel, targetLive } = await readTarget(options.pool, held.operation);
+  if (channel === undefined) return preflightMove(options.pool, held, { to: "failed" });
+  const outcome = rereadOutcome({ channelState: channel.connection_state, targetLive });
+  const waitSeconds = backoffSeconds(held.operation.attempt_count);
+  return preflightMove(options.pool, held, outcome ?? { to: "retry_wait", waitSeconds });
+}
+
+function withoutAccess(
+  options: TurnOptions,
+  held: Held,
+  kind: "retry" | "revoked" | "unavailable",
+): Promise<TurnResult> {
+  if (kind === "revoked") return afterRevocation(options, held);
+  const { claim, operation } = held;
+  options.logger.error(
+    { event: "credential_unusable", operation: claim.id, workspace: claim.workspaceId, kind },
+    "claimed operation has no usable credential",
+  );
+  const waitSeconds = backoffSeconds(operation.attempt_count);
+  return preflightMove(options.pool, held, { to: "retry_wait", waitSeconds });
+}
+
 // Every write is fenced by the turn's token, so a turn whose lease moved writes nothing more and ends `lost`.
 async function preflight(options: TurnOptions, held: Held): Promise<TurnResult> {
   const { pool, closing, now = () => performance.now() } = options;
@@ -171,20 +198,16 @@ async function preflight(options: TurnOptions, held: Held): Promise<TurnResult> 
     options.logger.error({ provider: manifest.id }, "claimed operation has no adapter");
     return preflightMove(pool, held, { to: "failed" });
   }
-  const account = await accountOf(options, operation, channel.instance_host);
-  if (account === null) {
-    options.logger.error(
-      { operation: claim.id, workspace: claim.workspaceId },
-      "claimed operation has no usable credential",
-    );
-    return preflightMove(pool, held, { to: "failed" });
-  }
+  const access = await accessOf(options.credentials, operation, channel.instance_host);
+  if (signal.aborted) return lost;
+  if (access.kind !== "ok") return withoutAccess(options, held, access.kind);
   const deps = {
     pool,
     logger: options.logger,
     owner: options.owner,
     adapter,
-    account,
+    account: access.account,
+    credentials: options.credentials,
     fetch: options.fetchFor(manifest, channel.instance_host ?? undefined),
     now,
     reconcileQueue: options.registry.queueNames(manifest.id).reconcile,

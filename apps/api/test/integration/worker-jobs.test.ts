@@ -64,7 +64,7 @@ const queueClientGone = async (database: TestDatabase) => {
 };
 
 describe("the scheduled upkeep of the worker role", () => {
-  it("registers ensure_partitions once, media_gc once, purge_expired once per retention class and sweep_upload_parts once", async () => {
+  it("registers credential_refresh, ensure_partitions, media_gc and sweep_upload_parts once and purge_expired once per retention class", async () => {
     const worker = await startWorker(options(db));
     try {
       const { schedules, classes } = await admin(async (a) => ({
@@ -73,6 +73,7 @@ describe("the scheduled upkeep of the worker role", () => {
       }));
       const wanted = classes.map(({ class: name }) => ({ name: "purge_expired", key: name }));
       expect(schedules).toEqual([
+        { name: "credential_refresh", key: "" },
         { name: "ensure_partitions", key: "" },
         { name: "media_gc", key: "" },
         ...wanted,
@@ -131,7 +132,7 @@ describe("the part sweep is the filesystem's alone", () => {
         async (a) => (await a.query("SELECT DISTINCT name FROM pgboss.schedule ORDER BY name")).rows,
       );
       await worker.close();
-      expect(names).toEqual([{ name: "ensure_partitions" }, { name: "media_gc" }, { name: "purge_expired" }]);
+      expect(names.map((row) => row.name)).not.toContain("sweep_upload_parts");
     } finally {
       await fresh.drop();
     }

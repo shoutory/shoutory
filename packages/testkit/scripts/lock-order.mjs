@@ -112,6 +112,16 @@ function writes(text, raw, triggerMap) {
   return found;
 }
 
+// `FOR UPDATE OF a, b` locks only the rows of those aliases; without OF every table the statement reads is locked.
+const LOCKED_OF = new RegExp(`${LOCKING.source}\\s+OF\\s+(\\w+(?:\\s*,\\s*\\w+)*)`, "i");
+function lockedTables(statement) {
+  const of = LOCKED_OF.exec(statement);
+  const only = of ? new Set(of[1].split(",").map((alias) => alias.trim().toLowerCase())) : null;
+  return [...statement.matchAll(/\b(?:FROM|JOIN)\s+(?:\w+\.)?(\w+)(?:\s+(?:AS\s+)?(\w+))?/gi)]
+    .filter((match) => !only || only.has(match[1].toLowerCase()) || only.has(match[2]?.toLowerCase()))
+    .map((match) => match[1].toLowerCase());
+}
+
 function events(body, names, triggerMap) {
   const text = withoutText(body);
   const found = writes(text, withoutComments(body), triggerMap);
@@ -122,11 +132,7 @@ function events(body, names, triggerMap) {
     if (insert && /\bON\s+CONFLICT\b/i.test(statement))
       found.push([from + insert.index, insert[1].toLowerCase()]);
     const lock = LOCKING.exec(statement);
-    if (lock) {
-      for (const match of statement.matchAll(/\b(?:FROM|JOIN)\s+(?:\w+\.)?(\w+)/gi)) {
-        found.push([from + lock.index, match[1].toLowerCase()]);
-      }
-    }
+    if (lock) for (const table of lockedTables(statement)) found.push([from + lock.index, table]);
     from += statement.length + 1;
   }
   for (const match of text.matchAll(/\b(?:\w+\.)?(\w+)\s*\(/g)) {

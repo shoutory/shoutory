@@ -7,6 +7,12 @@ import type { AdapterMap } from "@shoutory/provider-sdk/adapter";
 import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import { createRegistry, type Registry } from "@shoutory/provider-sdk/registry";
 import type { PgBoss } from "pg-boss";
+import {
+  type CredentialService,
+  channelProvidersOf,
+  createCredentialService,
+  sweepCredentials,
+} from "../channels/credentials.js";
 import type { Logger } from "../logging/logger.js";
 import { sweepStaleFiles } from "../storage/fs-sweep.js";
 import { createBoss } from "./boss.js";
@@ -59,6 +65,8 @@ const STOP_TIMEOUT_MS = 10_000;
 // A purge call removes at most this many rows; the job calls again while one comes back full, and stops after
 // MAX_PURGE_CALLS so one run cannot hold a connection for ever: the next night continues.
 const PURGE_BATCH = 5_000;
+// A run refreshes at most this many channels; the sweep's order makes the next run start where this one stopped.
+const REFRESH_BATCH = 100;
 const MAX_PURGE_CALLS = 1_000;
 
 // One instance-wide key for every statement that takes ACCESS EXCLUSIVE on a partitioned parent.
@@ -143,6 +151,21 @@ async function scheduleSweep(boss: PgBoss, logger: Logger, partsRoot: string | u
   await boss.schedule("sweep_upload_parts", JOB_QUEUES.sweep_upload_parts.cron, {}, { missed: "once" });
 }
 
+async function scheduleRefresh(
+  boss: PgBoss,
+  pool: AppPool,
+  logger: Logger,
+  credentials: CredentialService,
+): Promise<void> {
+  await boss.work("credential_refresh", { pollingIntervalSeconds: POLL_SECONDS }, (jobs) =>
+    logged(logger, "credential_refresh", async () => {
+      for (const job of jobs) parseJobPayload("credential_refresh", job.data);
+      await sweepCredentials({ pool, credentials, logger, limit: REFRESH_BATCH });
+    }),
+  );
+  await boss.schedule("credential_refresh", JOB_QUEUES.credential_refresh.cron, {}, { missed: "once" });
+}
+
 async function register(
   boss: PgBoss,
   pool: AppPool,
@@ -208,7 +231,17 @@ export async function startWorker({
   const relay = createOutboxRelay({ pool, handlers, logger, intervalMs: relayIntervalMs });
   const sender = createMailSender({ ...mail, pool, logger, intervalMs: mailIntervalMs });
   // The mail sender's key ring is the instance's, and it also opens the credentials of the channels a send is for.
-  const sends = { pool, boss, registry, logger, adapters, fetchFor, keys: mail.keys };
+  const credentials = createCredentialService({
+    pool,
+    keys: mail.keys,
+    pepper: mail.pepper,
+    fetch: refuseEgress(),
+    fetchFor,
+    now: () => new Date(),
+    logger,
+    providers: channelProvidersOf(registry, adapters),
+  });
+  const sends = { pool, boss, registry, logger, adapters, fetchFor, credentials };
   const ledger = createLedgerTick({
     ...sends,
     ...(ledgerIntervalMs === undefined ? {} : { intervalMs: ledgerIntervalMs }),
@@ -219,6 +252,7 @@ export async function startWorker({
     // Idempotent: a provider added without `shoutory migrate` must not stall admission on a queue that is missing.
     for (const name of registry.allQueueNames()) await boss.createQueue(name, PROVIDER_QUEUE_OPTIONS);
     await register(boss, pool, logger, media);
+    await scheduleRefresh(boss, pool, logger, credentials);
     await subscribePublish({ ...sends, owner: `worker-${workerId}`, closing: closing.signal });
     await beat();
   } catch (error) {

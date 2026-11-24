@@ -66,6 +66,18 @@ const FIXTURES = [
     true,
   ],
   [
+    "a join locked only OF its higher table, then a lower-table lock",
+    `PERFORM 1 FROM app.channels AS c JOIN app.operations AS o ON o.id = c.id FOR UPDATE OF o; ${LOCK("channels")}`,
+    [],
+    true,
+  ],
+  [
+    "a join of a higher table locked only OF the lower table",
+    "PERFORM 1 FROM app.operations AS o JOIN app.channels AS c ON c.id = o.id FOR UPDATE OF c;",
+    [],
+    false,
+  ],
+  [
     "a called helper that locks a channel after operations",
     `${LOCK("operations")} PERFORM app.take_channel();`,
     [define("take_channel", LOCK("channels"))],

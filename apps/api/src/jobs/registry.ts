@@ -9,6 +9,7 @@ export const JOB_QUEUES = {
   media_gc: { payload: z.strictObject({}), cron: "11 3 * * *" },
   // Scheduled only for the filesystem driver.
   sweep_upload_parts: { payload: z.strictObject({}), cron: "23 3 * * *" },
+  credential_refresh: { payload: z.strictObject({}), cron: "* * * * *" },
 } as const;
 export type JobQueue = keyof typeof JOB_QUEUES;
 

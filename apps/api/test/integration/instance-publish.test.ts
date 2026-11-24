@@ -7,7 +7,7 @@ import { createLedgerTick } from "../../src/jobs/ledger/tick.js";
 import { runTurn } from "../../src/jobs/ledger/turn.js";
 import { createLogger } from "../../src/logging/logger.js";
 import { leaks } from "../support/canary.js";
-import { ledgerKeys } from "../support/ledger-credentials.js";
+import { ledgerCredentials } from "../support/ledger-credentials.js";
 import {
   marked,
   opOf,
@@ -59,6 +59,7 @@ const fetchFor = (_given: unknown, host: string | undefined): typeof fetch => {
 
 const registry = createRegistry([manifest]);
 const adapters = { [manifest.id]: createMastodonAdapter() };
+const credentials = () => ledgerCredentials(workerPool(), { registry, adapters, fetchFor });
 const turn = () =>
   runTurn({
     pool: workerPool(),
@@ -66,7 +67,7 @@ const turn = () =>
     registry,
     adapters,
     fetchFor,
-    keys: ledgerKeys,
+    credentials: credentials(),
     queue: provider.queueName,
     owner: "owner-instance",
     closing: new AbortController().signal,
@@ -78,7 +79,7 @@ const tick = () =>
     registry,
     adapters,
     fetchFor,
-    keys: ledgerKeys,
+    credentials: credentials(),
     logger,
   }).tick();
 const reset = () => {
@@ -120,11 +121,12 @@ describe("an operation on an instance is sent with its channel's token and host 
     expect(sim.stored()).toEqual([]);
   });
 
-  it("a channel with no stored credential fails before any call, effect none", async () => {
+  it("a channel with no stored credential waits with an operator alert before any call, never failed", async () => {
     reset();
     const id = await plant(provider, { host: HOST_A, noCredential: true });
     await turn();
-    expect(await opOf(id)).toMatchObject({ state: "failed", effect: "none" });
+    expect(await opOf(id)).toMatchObject({ state: "retry_wait", effect: "none" });
+    expect(lines.some((line) => line.includes("credential_unusable") && line.includes(id))).toBe(true);
     expect(hostsAsked).toEqual([]);
     expect(requests).toEqual([]);
   });

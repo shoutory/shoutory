@@ -71,7 +71,8 @@ interface Planted {
   digest?: string | null;
   generation?: number;
   state?: string;
-  accessExpiresIn?: string;
+  /** null plants a token with no expiry. */
+  accessExpiresIn?: string | null;
   refreshExpiresIn?: string | null;
   keyId?: string;
 }
@@ -95,7 +96,7 @@ async function plantCredential(workspace: string, channel: string, o: Planted = 
       wrapIv,
       wrapTag,
       dek,
-      o.accessExpiresIn ?? "1 hour",
+      o.accessExpiresIn === undefined ? "1 hour" : o.accessExpiresIn,
       o.refreshExpiresIn ?? null,
       o.digest === undefined ? "digest-1" : o.digest,
       o.state ?? "active",
@@ -184,6 +185,7 @@ const job = (workspaces: string[]): TenantCtx => ({
   principalId: randomUUID(),
   workspaceIds: workspaces,
 });
+const SWEEP: TenantCtx = { principalKind: "job", jobPurpose: "credential_refresh" };
 const PRINCIPALS: [string, () => TenantCtx, "app" | "worker", boolean][] = [
   ["a user Admin of the workspace", () => asUser(U.admin), "app", true],
   ["a job principal of the workspace", () => job([WA]), "worker", true],
@@ -618,7 +620,87 @@ describe("channel_enable restores connected only with a usable credential", () =
   });
 });
 
+describe("channel_enable restores the state the channel had before it was disabled", () => {
+  it.each([
+    ["connected", "connected"],
+    ["needs_reconnect", "needs_reconnect"],
+  ])("a channel disabled from %s returns %s, with a usable credential", async (from, state) => {
+    const channel = await plantChannel(WA, from);
+    await plantCredential(WA, channel);
+    for (const definer of ["channel_disable", "channel_enable"]) {
+      await commitAs(db.pool("app"), U.admin, `SELECT app.${definer}($1, $2, 'req-d', NULL)`, [WA, channel]);
+    }
+    expect((await channelOf(channel))?.connection_state).toBe(state);
+  });
+});
+
+describe("channels_expire_tokens", () => {
+  const expire = () => run(SWEEP, call("channels_expire_tokens", [500]), "worker");
+
+  it.each([
+    [
+      "a passed token with no refresh token",
+      { accessExpiresIn: "-1 minute", digest: null },
+      "needs_reconnect",
+    ],
+    ["a passed token with a refresh token", { accessExpiresIn: "-1 minute" }, "connected"],
+    ["a token ahead with no refresh token", { accessExpiresIn: "1 hour", digest: null }, "connected"],
+    ["a token with no expiry and no refresh token", { accessExpiresIn: null, digest: null }, "connected"],
+  ] as const)("%s leaves the channel %s", async (_name, planted, state) => {
+    const channel = await plantChannel(WA);
+    await plantCredential(WA, channel, planted);
+    await expire();
+    const after = await channelOf(channel);
+    expect(after?.connection_state).toBe(state);
+    if (state === "needs_reconnect") {
+      expect(after?.state_reason).toBe("token_expired");
+      expect(after?.reconnect_deadline).not.toBeNull();
+    }
+  });
+
+  it.each([
+    ["the expiry", () => attempt(db.pool("worker"), job([WA]), ...call("channels_expire_tokens", [10]))],
+    [
+      "the expiry as a user",
+      () => attempt(db.pool("app"), asUser(U.admin), ...call("channels_expire_tokens", [10])),
+    ],
+  ])("refuses %s outside the sweep purpose", async (_name, go) => {
+    expect((await go()).error).toMatchObject({ code: "42501" });
+  });
+});
+
+describe("channel_revoke_confirmed", () => {
+  it("moves a connected channel to needs_reconnect and audits it; another workspace's job cannot", async () => {
+    const channel = await plantChannel(WA);
+    await plantCredential(WA, channel, { digest: null });
+    const foreign = await attempt(
+      db.pool("worker"),
+      job([WB]),
+      ...call("channel_revoke_confirmed", [WA, channel]),
+    );
+    expect(foreign.error).toMatchObject({ code: "42501" });
+    await run(job([WA]), call("channel_revoke_confirmed", [WA, channel]), "worker");
+    expect(await channelOf(channel)).toMatchObject({
+      connection_state: "needs_reconnect",
+      state_reason: "revoked_confirmed",
+    });
+    expect((await channelOf(channel))?.reconnect_deadline).not.toBeNull();
+    const audited = await rows("SELECT action FROM app.audit_logs WHERE resource_id = $1", [channel]);
+    expect(audited.map((r) => r.action)).toContain("channel.reconnect_needed");
+  });
+});
+
 describe("channel_health_record", () => {
+  it("writes no health on a channel that is not connected", async () => {
+    const channel = await plantChannel(WA, "disabled");
+    await run(
+      job([WA]),
+      call("channel_health_record", [WA, channel, "ok", "digest-h", "v1", null, "{}", "{}"]),
+      "worker",
+    );
+    expect((await channelOf(channel))?.health).toBeNull();
+  });
+
   const record = (channel: string, n: number) =>
     run(
       job([WA]),
@@ -650,17 +732,19 @@ describe("channel_health_record", () => {
   });
 });
 
-describe("sealed_key_ids and due_token_refreshes", () => {
-  it("sealed_key_ids lists the key ids of credential rows", async () => {
+describe("sealed_key_ids", () => {
+  it("lists the key ids of credential rows", async () => {
     const channel = await plantChannel(WA);
     await plantCredential(WA, channel, { keyId: "cred-key-7" });
     const listed = await db.pool("app").query("SELECT key_id FROM app.sealed_key_ids()");
     expect(listed.rows.map((r) => r.key_id)).toContain("cred-key-7");
   });
+});
 
-  const due = (lim = 100, ctx: TenantCtx = job([WA]), pool: "app" | "worker" = "worker", margin = 300) =>
-    attempt(db.pool(pool), ctx, ...call("due_token_refreshes", [lim, margin]));
+const due = (lim = 100, ctx: TenantCtx = SWEEP, pool: "app" | "worker" = "worker", margin = 300) =>
+  attempt(db.pool(pool), ctx, ...call("due_token_refreshes", [lim, margin]));
 
+describe("due_token_refreshes", () => {
   it("returns only connected channels whose active token is due and unleased, with workspace and channel ids", async () => {
     const dueChannel = await plantChannel(WA);
     await plantCredential(WA, dueChannel, { accessExpiresIn: "1 minute" });
@@ -670,6 +754,8 @@ describe("sealed_key_ids and due_token_refreshes", () => {
       [await plantChannel(WA), { accessExpiresIn: "-1 minute", state: "read_only" }],
       // A credential with no refresh token (a NULL digest) never reaches the provider, so the sweep never lists it.
       [await plantChannel(WA), { accessExpiresIn: "-1 minute", digest: null }],
+      // A token with no expiry lives until the provider says otherwise, so it is never due.
+      [await plantChannel(WA), { accessExpiresIn: null }],
     ] as const;
     for (const [channel, planted] of others) await plantCredential(WA, channel, planted);
     const leased = await plantChannel(WA);
@@ -681,16 +767,51 @@ describe("sealed_key_ids and due_token_refreshes", () => {
     );
     expect(mine).toEqual([{ workspace_id: WA, channel_id: dueChannel }]);
   });
+});
 
-  // The sweep crosses no workspace the job principal does not hold, until the system purpose of the sweep job exists.
-  it("a job principal of another workspace is told of none of this workspace's channels", async () => {
-    const dueChannel = await plantChannel(WA);
-    await plantCredential(WA, dueChannel, { accessExpiresIn: "-1 minute" });
-    const result = await due(500, job([WB]));
-    expect((result.rows ?? []).map((r) => r.channel_id)).not.toContain(dueChannel);
+describe("due_token_refreshes across workspaces", () => {
+  it("lists due channels of every workspace, and a call starts with those the last calls listed least recently", async () => {
+    await rows("UPDATE app.channel_credentials SET refresh_swept_at = now()");
+    const failing: string[] = [];
+    for (const workspace of [WA, WB]) {
+      const channel = await plantChannel(workspace);
+      await plantCredential(workspace, channel, { accessExpiresIn: "-2 days" });
+      failing.push(channel);
+    }
+    await rows(
+      `INSERT INTO app.channels (id, workspace_id, provider_id, account_kind, provider_account_id, display_name,
+         connection_state)
+       SELECT g, $1, 'fixture_oauth', 'profile', g::text, 'sweep channel', 'connected'
+         FROM (SELECT uuidv7() AS g FROM generate_series(1, 499)) AS s`,
+      [WA],
+    );
+    await rows(
+      `INSERT INTO app.channel_credentials (workspace_id, channel_id, generation, kind, format_version, key_id, iv,
+         ciphertext, auth_tag, wrap_iv, wrap_tag, wrapped_dek, access_expires_at, refresh_token_digest)
+       SELECT c.workspace_id, c.id, 1, 'channel_token', k.format_version, k.key_id, k.iv, k.ciphertext, k.auth_tag,
+           k.wrap_iv, k.wrap_tag, k.wrapped_dek, now() - interval '1 day', 'digest-1'
+         FROM app.channels AS c CROSS JOIN app.channel_credentials AS k
+         WHERE c.display_name = 'sweep channel' AND k.channel_id = $1`,
+      [failing[0]],
+    );
+    const healthy = await plantChannel(WA);
+    await plantCredential(WA, healthy, { accessExpiresIn: "1 minute" });
+    const first = await run(SWEEP, call("due_token_refreshes", [500, 300]), "worker");
+    expect(first).toHaveLength(500);
+    expect(first.map((r) => r.channel_id)).toEqual(expect.arrayContaining(failing));
+    expect(first.map((r) => r.channel_id)).not.toContain(healthy);
+    const second = await run(SWEEP, call("due_token_refreshes", [500, 300]), "worker");
+    expect(second.map((r) => r.channel_id)).toContain(healthy);
   });
+});
 
+describe("due_token_refreshes refusals", () => {
   it.each([
+    ["a job principal of the workspace with no sweep purpose", () => due(10, job([WA]))],
+    [
+      "a job principal with another system purpose",
+      () => due(10, { principalKind: "job", jobPurpose: "ledger" }),
+    ],
     ["the app role", () => due(10, asUser(U.admin), "app")],
     ["a user principal through the worker role", () => due(10, asUser(U.admin), "worker")],
     [

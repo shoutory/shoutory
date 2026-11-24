@@ -3,11 +3,12 @@ import { inspect } from "node:util";
 import { SealedSecret } from "@shoutory/core/crypto";
 import type { TenantCtx } from "@shoutory/db/context";
 import { withAdvisoryLock } from "@shoutory/db/locks";
+import { manifestSchema } from "@shoutory/provider-sdk/manifest";
 import { fixtureOAuthManifest } from "@shoutory/testkit/fixture-oauth/manifest";
 import { startFixtureOAuthSimulator } from "@shoutory/testkit/fixture-oauth/simulator";
 import { createFixtureAdapter } from "@shoutory/testkit/fixture-provider/adapter";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { createCredentialService } from "../../src/channels/credentials.js";
+import { createCredentialService, sweepCredentials } from "../../src/channels/credentials.js";
 import { createLogger } from "../../src/logging/logger.js";
 import { leaks } from "../support/canary.js";
 import { FAKE_CLIENT as CLIENT, mintTokens } from "../support/oauth-fake.js";
@@ -18,6 +19,7 @@ let fx: Fixture;
 let sim: Awaited<ReturnType<typeof startFixtureOAuthSimulator>>;
 let workspace: string;
 const logged: string[] = [];
+const log = createLogger({ secrets: [], stream: { write: (line: string) => void logged.push(line) } });
 
 const service = (egress: typeof fetch = fetch) =>
   createCredentialService({
@@ -26,12 +28,12 @@ const service = (egress: typeof fetch = fetch) =>
     pepper: new SealedSecret(PEPPER),
     fetch: egress,
     now: () => new Date(),
-    logger: createLogger({ secrets: [], stream: { write: (line: string) => void logged.push(line) } }),
+    logger: log,
     providerTimeoutMs: 400,
     providers: {
       fixture_oauth: {
         adapter: createFixtureAdapter({ baseUrl: sim.url, clientId: CLIENT }),
-        manifest: { refreshErrorMap: fixtureOAuthManifest.refreshErrorMap },
+        manifest: manifestSchema.parse(fixtureOAuthManifest),
       },
     },
   });
@@ -43,14 +45,14 @@ const principal = (): TenantCtx => ({
 
 const mint = () => mintTokens(sim.url);
 
-async function connected(tokens?: {
-  access_token: string;
-  refresh_token?: string;
-}): Promise<{ channelId: string; minted: { access_token: string; refresh_token?: string } }> {
+async function connected(
+  tokens?: { access_token: string; refresh_token?: string },
+  { into = workspace, expiresInMs = -1000 }: { into?: string; expiresInMs?: number } = {},
+): Promise<{ channelId: string; minted: { access_token: string; refresh_token?: string } }> {
   const minted = tokens ?? (await mint());
   const made = await service().connect({
-    principal: principal(),
-    workspaceId: workspace,
+    principal: { principalKind: "job", principalId: randomUUID(), workspaceIds: [into] },
+    workspaceId: into,
     identity: {
       providerId: "fixture_oauth",
       accountKind: "profile",
@@ -61,7 +63,7 @@ async function connected(tokens?: {
       access_token: minted.access_token,
       ...(minted.refresh_token === undefined ? {} : { refresh_token: minted.refresh_token }),
     },
-    accessExpiresAt: new Date(Date.now() - 1000),
+    accessExpiresAt: new Date(Date.now() + expiresInMs),
     snapshot: {
       manifestDigest: "digest-a",
       apiVersion: "v1",
@@ -394,4 +396,110 @@ describe("a reconnect", () => {
       holder.release();
     }
   }, 30_000);
+});
+
+describe("a token is refreshed before it is used", () => {
+  it("an expired token is refreshed first and the new one is used", async () => {
+    const { channelId, minted } = await connected();
+    const usable = await service().usable(workspace, channelId);
+    expect(usable.kind).toBe("ok");
+    if (usable.kind === "ok") expect(usable.accessToken.expose()).not.toBe(minted.access_token);
+    expect((await markerOf(channelId)).generation).toBe(2);
+  });
+
+  it.each([
+    ["a transient failure, the token still alive", "ok", 120_000, FAULT(503)],
+    ["a transient failure, the token passed", "retry", -1000, FAULT(503)],
+    ["a confirmed revocation", "revoked", -1000, FAULT(400, "invalid_grant")],
+  ] as const)("%s gives %s", async (_name, kind, expiresInMs, fault) => {
+    const { channelId, minted } = await connected(undefined, { expiresInMs });
+    sim.faults.failNext("POST /token", fault);
+    const usable = await service().usable(workspace, channelId);
+    expect(usable.kind).toBe(kind);
+    if (usable.kind === "ok") expect(usable.accessToken.expose()).toBe(minted.access_token);
+  });
+
+  it("a refresh held elsewhere is not repeated: the stored token is used while it lives", async () => {
+    const { channelId, minted } = await connected(undefined, { expiresInMs: 120_000 });
+    await fx.admin((c) =>
+      c.query(
+        "UPDATE app.channel_credentials SET refreshing_until = clock_timestamp() + interval '60 seconds', refresh_owner = 'other', refresh_fencing = 5 WHERE channel_id = $1",
+        [channelId],
+      ),
+    );
+    const before = tokenCalls();
+    const usable = await service().usable(workspace, channelId);
+    expect(tokenCalls()).toBe(before);
+    expect(usable.kind === "ok" && usable.accessToken.expose()).toBe(minted.access_token);
+  });
+});
+
+describe("a revocation is confirmed before the channel is moved", () => {
+  it.each([
+    [
+      "a credential check answering 401",
+      "needs_reconnect",
+      { kind: "respond" as const, status: 401, body: { error: { code: "grant_revoked" } } },
+    ],
+    ["a credential check answering 503", "connected", FAULT(503)],
+  ])("with no refresh token, %s leaves the channel %s", async (_name, state, fault) => {
+    const { channelId } = await connected(
+      { access_token: (await mint()).access_token },
+      { expiresInMs: 3_600_000 },
+    );
+    sim.faults.failNext("GET /v1/account", fault);
+    await service().confirmRevoked(workspace, channelId);
+    expect((await stateOf(channelId)).connection_state).toBe(state);
+  });
+
+  it("with a refresh token, a transient or operator failure of the refresh leaves the channel connected", async () => {
+    for (const fault of [FAULT(503), FAULT(400, "invalid_client")]) {
+      const { channelId } = await connected();
+      sim.faults.failNext("POST /token", fault);
+      expect(await service().confirmRevoked(workspace, channelId)).toBe(false);
+      expect((await stateOf(channelId)).connection_state).toBe("connected");
+    }
+  });
+});
+
+describe("the refresh sweep", () => {
+  it("refreshes due channels of two workspaces, one failing channel never stops the rest, and a run is bounded by its limit", async () => {
+    const other = await seedWorkspace(
+      fx,
+      await seedOrganization(fx, (await signedUser(fx, "cred-other")).id),
+    );
+    const mine = await connected();
+    const theirs = await connected(undefined, { into: other });
+    const broken = await connected();
+    await fx.admin((c) =>
+      c.query("UPDATE app.channel_credentials SET auth_tag = $2 WHERE channel_id = $1", [
+        broken.channelId,
+        Buffer.alloc(16),
+      ]),
+    );
+    const sweep = (limit: number) =>
+      sweepCredentials({ pool: fx.db.pool("worker"), credentials: service(), logger: log, limit });
+    const before = tokenCalls();
+    await sweep(1);
+    expect(tokenCalls() - before).toBeLessThanOrEqual(1);
+    await sweep(500);
+    expect((await markerOf(mine.channelId)).generation).toBeGreaterThan(1);
+    expect((await markerOf(theirs.channelId)).generation).toBeGreaterThan(1);
+    expect(logged.join("\n")).toContain(broken.channelId);
+    const secrets = [mine.minted, theirs.minted, broken.minted].flatMap((m) => [
+      m.access_token,
+      m.refresh_token ?? "",
+    ]);
+    expect(leaks(logged.join("\n"), secrets)).toEqual([]);
+  });
+
+  it("a refresh of one workspace never touches another's credential", async () => {
+    const other = await seedWorkspace(
+      fx,
+      await seedOrganization(fx, (await signedUser(fx, "cred-third")).id),
+    );
+    const theirs = await connected(undefined, { into: other });
+    await expect(service().refresh(workspace, theirs.channelId)).rejects.toThrow();
+    expect((await markerOf(theirs.channelId)).generation).toBe(1);
+  });
 });
