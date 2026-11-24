@@ -6,6 +6,7 @@ import type { Logger } from "../../logging/logger.js";
 import type { S3Multipart, S3Presigner } from "../../storage/s3-driver.js";
 import { type App, defineRoute } from "../define-route.js";
 import { finishFsParts, registerFsParts } from "./fs-parts.js";
+import { type ImportFetch, registerImport } from "./import.js";
 import {
   finishMultipart,
   MAX_MULTIPART_BYTES,
@@ -21,6 +22,7 @@ import {
   conflict,
   EDIT_SPLIT,
   LIVE,
+  MAX_UPLOAD_BYTES,
   markUploaded,
   mediaParams,
   OCTET_STREAM,
@@ -37,9 +39,6 @@ import {
 // for the object (the URL signs the declared sha256, so storage refuses other bytes); the client's claim is never read
 // back as the digest. A file above the single-PUT size goes in parts (multipart.ts). A member with library.edit uploads
 // and library.view reads.
-
-/** The largest single upload (one PUT; larger files go to storage in parts). */
-const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
 
 const registerBody = z.strictObject({
   file_name: z
@@ -329,7 +328,13 @@ function registerPut(app: App, storage: StorageDriver, now: () => Date): void {
 export function registerMedia(
   app: App,
   storage: StorageDriver,
-  s3: { presigner?: S3Presigner | undefined; multipart?: S3Multipart | undefined; logger: Logger },
+  s3: {
+    presigner?: S3Presigner | undefined;
+    multipart?: S3Multipart | undefined;
+    /** The egress fetch of the import by URL; the import route exists only when it is given. */
+    mediaImportFetch?: ImportFetch | undefined;
+    logger: Logger;
+  },
   now: () => Date = () => new Date(),
 ): void {
   const { presigner, multipart, logger } = s3;
@@ -339,5 +344,6 @@ export function registerMedia(
   if ((presigner && multipart) || fs) registerParts(app, presigner);
   if (!presigner) registerPut(app, storage, now);
   if (fs) registerFsParts(app, storage);
+  if (s3.mediaImportFetch) registerImport(app, storage, s3.mediaImportFetch, logger);
   registerRead(app, storage);
 }

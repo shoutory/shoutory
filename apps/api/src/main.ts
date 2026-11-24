@@ -67,6 +67,13 @@ function boundEgress(config: Config) {
   return (req: EgressRequest) => egressFetch(req, { request, operator });
 }
 
+/** The fetch of the import of media by URL: the same operator policy, for any URL a member names. */
+function importFetch(config: Config) {
+  const operator = createOperatorPolicy({ allowCidrs: config.egressAllowCidrs });
+  const request = { kind: "user_url" } as const;
+  return (req: EgressRequest) => egressFetch(req, { request, operator });
+}
+
 /** The `fetch` of a provider adapter: the same operator policy, narrowed to the hosts its manifest names. */
 function providerFetch(config: Config) {
   const operator = createOperatorPolicy({ allowCidrs: config.egressAllowCidrs });
@@ -121,7 +128,7 @@ async function startServer(config: Config, logger: Logger): Promise<RunningServe
     });
     // The library starts asynchronously; a bad configuration refuses the start here, not on the first request.
     await auth.library.$context;
-    const stores = storageOptions(config.storage);
+    const stores = { ...storageOptions(config.storage), mediaImportFetch: importFetch(config) };
     opened = stores.storage;
     const app = createApp({
       publicOrigin,

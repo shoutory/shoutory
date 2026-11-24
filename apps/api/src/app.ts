@@ -27,6 +27,7 @@ import { registerConnect } from "./routes/connect/connect.js";
 import { type App, type AppEnv, initRoutes } from "./routes/define-route.js";
 import { registerInstance } from "./routes/instance.js";
 import { registerInvitations } from "./routes/invitations/invitations.js";
+import type { ImportFetch } from "./routes/media/import.js";
 import { registerMedia, sandboxDownloads } from "./routes/media/media.js";
 import { registerMembers } from "./routes/members/members.js";
 import { registerOperations } from "./routes/operations/operations.js";
@@ -59,6 +60,8 @@ export interface AppOptions {
   readonly presigner?: S3Presigner;
   /** The server side of S3 multipart uploads (the S3 driver only); absent, a file above 64 MiB is refused. */
   readonly multipart?: S3Multipart;
+  /** The egress fetch of the import of media by URL (a user URL under the operator policy); absent, there is no import route. */
+  readonly mediaImportFetch?: ImportFetch;
   /** The folder of the built web app; when set, the app serves it after every other route. */
   readonly webRoot?: string | undefined;
   /** The release channel of this build (`stable`, `beta`, `nightly`); `stable` when absent. */

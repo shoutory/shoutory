@@ -19,6 +19,9 @@ export const EDIT_SPLIT = { ...EDIT, split: true } as const;
 export const VIEW_SPLIT = { workspace: "workspace_id", permission: "library.view", split: true } as const;
 export const LIVE = ["uploaded", "scanning", "processing", "ready"];
 
+/** The largest single upload (one PUT, or one import by URL); larger files go to storage in parts. */
+export const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
+
 /** The content type of every upload body: the type of the file comes from its bytes, never from the sender. */
 export const OCTET_STREAM = /^application\/octet-stream\s*(;|$)/i;
 

@@ -216,6 +216,22 @@ aws s3api put-bucket-lifecycle-configuration --bucket <bucket> --lifecycle-confi
 
 `shoutory storage check` reads the bucket's rules (it never writes one) and warns when none does this.
 
+A member who may edit the library can also import one image or video by URL: `POST /api/v1/workspaces/{workspace_id}/media/import`
+with `{ "url": "https://…", "file_name": "optional" }` answers `201 { id }`. The server fetches the URL itself, through the
+same network policy as every outbound request: https on port 443 only, no user name or password in the URL, no private,
+loopback, link-local or metadata address (a redirect is checked the same way, at most 3), unless the operator allows a range
+with `SHOUTORY_EGRESS_ALLOW_CIDRS`. A file is at most 64 MiB (a larger one goes up as an upload in parts), the whole fetch takes
+at most 60 seconds, and an encoded response is refused. The type is the one the bytes have, whatever the host says, and only
+an image or a video is kept; the asset is named after the last part of the path (never the query) unless a name is given, and
+remembers only the origin of the URL. A refusal answers 422 with one reason. `address_not_allowed` means the
+policy refused the URL or a redirect of it before any request was made (a private range is reachable only when the operator
+lists it in `SHOUTORY_EGRESS_ALLOW_CIDRS`, and a cloud instance never allows one); `fetch_failed` means the request went out and
+failed or the host answered anything but 200, of whatever kind, so the route cannot be used to probe a network; `too_large`
+means the file is over 64 MiB; and `unsupported_type` means a 200 whose bytes are not an image or a video, or that is encoded.
+These are three different answers: refused, failed, and answered but not media. The same
+bytes imported twice answer the first asset. An import holds its file in memory while it runs, so a server process runs at
+most 2 at once and answers 429 with `Retry-After` beyond that (with several instances the limit is 2 for each of them).
+
 A completed upload is checked, stripped of its metadata and resized by the `worker` role (so also by `all`), which
 therefore needs the same storage settings as the `api`: with driver `fs`, the same `SHOUTORY_DATA_DIR` (mount the one
 volume in both containers), and with driver `s3`, the same endpoint, bucket and keys. A worker whose storage cannot be

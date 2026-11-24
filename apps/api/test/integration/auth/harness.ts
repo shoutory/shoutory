@@ -55,7 +55,14 @@ export interface Fixture {
   readonly auth: AuthService;
   request(
     path: string,
-    init?: { method?: string; body?: unknown; headers?: Record<string, string>; peer?: string },
+    init?: {
+      method?: string;
+      body?: unknown;
+      headers?: Record<string, string>;
+      peer?: string;
+      /** Aborts the request, as a client that disconnects does. */
+      signal?: AbortSignal;
+    },
     app?: ReturnType<typeof createApp>,
   ): Promise<Response>;
   /** The mails queued for `recipient`, newest first, with the sealed link opened. */
@@ -194,6 +201,7 @@ const send = (app: ReturnType<typeof createApp>, path: string, init: RequestInit
         method: init.method ?? (init.body === undefined ? "GET" : "POST"),
         headers: { ...WEB, ...init.headers },
         ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+        ...(init.signal === undefined ? {} : { signal: init.signal }),
       },
       remote(init.peer ?? freshPeer()),
     ),
@@ -258,6 +266,8 @@ export interface FixtureOptions {
   readonly presigner?: AppOptions["presigner"];
   /** The server side of S3 multipart uploads; absent, a file above 64 MiB is refused. */
   readonly multipart?: AppOptions["multipart"];
+  /** The egress fetch of the import of media by URL; absent, the app has no import route. */
+  readonly mediaImportFetch?: AppOptions["mediaImportFetch"];
   /** The plan limits of the app; absent, the app answers the core self-host value. */
   readonly entitlements?: Entitlements;
   /** The providers and egress client of the channel check; absent, the app has no check route. */
@@ -351,6 +361,7 @@ function buildOn({ logger, hibp, authPool, appPool, options }: Parts, libraryPoo
   const storage = options.storage ? { storage: options.storage } : {};
   const signer = options.presigner ? { presigner: options.presigner } : {};
   const parts = options.multipart ? { multipart: options.multipart } : {};
+  const imports = options.mediaImportFetch ? { mediaImportFetch: options.mediaImportFetch } : {};
   const limits = options.entitlements ? { entitlements: options.entitlements } : {};
   const channels = options.channels ? { channels: options.channels } : {};
   const app = createApp({
@@ -364,6 +375,7 @@ function buildOn({ logger, hibp, authPool, appPool, options }: Parts, libraryPoo
     ...storage,
     ...signer,
     ...parts,
+    ...imports,
     ...limits,
     ...channels,
   });
