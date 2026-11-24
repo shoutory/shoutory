@@ -122,6 +122,10 @@ export async function resolveDraft(
   now: Date,
 ) {
   const channels = await providersOfChannels(tx, workspaceId, draft, providers);
+  // A provider that declares no capability at all (its publishing has not shipped) can take no post.
+  if ([...channels.values()].some((provider) => provider.manifest.capabilities.length === 0)) {
+    throw unprocessable("capability_missing");
+  }
   const ready = await readyMedia(tx, workspaceId, draft);
   checkMediaRules(draft, ready, channels);
   const media = Object.fromEntries([...ready.values()].map((medium) => [medium.id, medium.sha256]));

@@ -323,6 +323,17 @@ const DEFINERS: Definer[] = [
     args: "state_digest bytea, want_provider text, want_host text, request_id text, ip_hmac bytea",
     callers: ["shoutory_app"],
   },
+  // 0027: the per-instance app of a provider is stored and read by a signed-in user only, so the app role alone may call them.
+  {
+    name: "instance_app_put",
+    args: `p_id uuid, p_ws uuid, p_provider text, p_host text, p_client_id text, ${SEALED_FIELDS}, p_replaces text`,
+    callers: ["shoutory_app"],
+  },
+  {
+    name: "instance_app_get",
+    args: "p_ws uuid, p_provider text, p_host text",
+    callers: ["shoutory_app"],
+  },
   // A job principal (the Telegram poller) or an Admin user takes a connect word, like the credential definers.
   {
     name: "connect_challenge_take",

@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
-import { loadFounder } from "../support/journey";
-import { newRecoveryCodes } from "../support/quality";
+import { loadFounder, loadMember, memberStatePath, signInWithCode } from "../support/journey";
+import { inPage, newRecoveryCodes } from "../support/quality";
+import { waitForFreshCode } from "../support/restore";
 
 // Where a screen says focus goes, checked in a real browser: the library may drop an attribute a unit test cannot see.
 // Focus moves after the page has changed, so each check waits for it instead of reading it once.
@@ -27,13 +28,21 @@ test("the palette, a dialog and a route change put focus where the screen says",
   await expect(page.locator("h1")).toBeFocused();
 });
 
+// A member of its own, not the founder: the server takes a code once per person (one per ninety seconds) and ten checks per
+// person every fifteen minutes (`totp_code` and `two_factor` in the throttle table), and every other spec that uses the
+// founder spends those. This member's codes are used only here and at enrolment, and the sign-in with a code makes the
+// session's identity check fresh, so no second code is spent.
 test("new recovery codes take focus when they appear, and the security heading takes it back when saved", async ({
-  page,
+  browser,
 }) => {
-  const { account, secret } = await loadFounder();
-  await newRecoveryCodes(page, account.password, secret);
-  await expect(page.getByTestId("recovery-codes").locator("h2")).toBeFocused();
-  await page.getByTestId("recovery-saved").click();
-  await expect(page.getByTestId("recovery-codes")).toHaveCount(0);
-  await expect(page.locator("h2:focus")).toHaveCount(1);
+  const { account, secret } = loadMember("keyboard");
+  await waitForFreshCode(memberStatePath("keyboard"));
+  await inPage(browser, { audience: "signed-out", locale: "en", theme: "light" }, async (page) => {
+    await signInWithCode(page, account, secret);
+    await newRecoveryCodes(page, account.password, secret, false);
+    await expect(page.getByTestId("recovery-codes").locator("h2")).toBeFocused();
+    await page.getByTestId("recovery-saved").click();
+    await expect(page.getByTestId("recovery-codes")).toHaveCount(0);
+    await expect(page.locator("h2:focus")).toHaveCount(1);
+  });
 });

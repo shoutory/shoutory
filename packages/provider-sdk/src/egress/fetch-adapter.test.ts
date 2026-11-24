@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EgressRequest, EgressResponse } from "./client.js";
-import { EgressError, type EgressErrorClass } from "./errors.js";
+import { EgressError, type EgressErrorClass, isPolicyRefusal } from "./errors.js";
 import { fetchOf } from "./fetch-adapter.js";
 
 const body = (text: string) => new TextEncoder().encode(text);
@@ -74,4 +74,24 @@ describe("fetchOf failures", () => {
       expect((error as Error).message).not.toContain("api.fixture.example");
     },
   );
+
+  // The one thing besides the code that travels on: whether the operator policy refused the address, so a connect can
+  // answer "address not allowed" for it and nothing more specific than that for an unreachable host.
+  it.each([
+    ["blocked_address", true],
+    ["blocked_url", true],
+    ["host_not_allowed", true],
+    ["connect", false],
+    ["dns", false],
+    ["timeout", false],
+  ] as [EgressErrorClass, boolean][])("an egress %s is a policy refusal: %s", async (klass, refused) => {
+    const send = fetchOf(async () => {
+      throw new EgressError({
+        class: klass,
+        host: "social.example",
+        effect: klass === "timeout" ? "possible" : "none",
+      });
+    });
+    expect(isPolicyRefusal(await send("https://social.example/").catch((e: unknown) => e))).toBe(refused);
+  });
 });

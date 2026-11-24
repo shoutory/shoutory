@@ -1,0 +1,17 @@
+{
+  "name": "@shoutory/provider-registry",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@shoutory/provider-mastodon": "workspace:*",
+    "@shoutory/provider-sdk": "workspace:*"
+  }
+}

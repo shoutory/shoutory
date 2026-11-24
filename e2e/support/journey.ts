@@ -138,6 +138,9 @@ export async function inviteMember(page: Page, workspaceId: string, email: strin
   await expect(field(page, "invite-email")).toBeHidden();
 }
 
+/** The file a member's facts are kept in; its time is when the member's last code was used (enrolment). */
+export const memberStatePath = (label: string): string => `${STATE_DIR}/member-${label}.json`;
+
 /**
  * A new person with the second factor on: `inviter` (a signed-in administrator's page) invites them to every
  * workspace, they sign up through the first invitation, accept each one (unless `accept` is false: the invitation stays
@@ -171,7 +174,7 @@ export async function createMember(options: {
     }
     const made = { account, secret: await enrolTotp(page, account) };
     mkdirSync(STATE_DIR, { recursive: true });
-    writeFileSync(`${STATE_DIR}/member-${options.label}.json`, JSON.stringify(made));
+    writeFileSync(memberStatePath(options.label), JSON.stringify(made));
     return made;
   } finally {
     // A step that fails must not leave the browser context open.
@@ -181,7 +184,7 @@ export async function createMember(options: {
 
 /** A member `createMember` made earlier in this run, by its label; later specs reuse it instead of signing up again. */
 export function loadMember(label: string): { account: Account; secret: string } {
-  const file = `${STATE_DIR}/member-${label}.json`;
+  const file = memberStatePath(label);
   if (!existsSync(file)) {
     throw new Error(`no member "${label}" was made: the founder project's specs make it, and they run first`);
   }

@@ -5,6 +5,7 @@ import { type Entitlements, entitlements as selfHost } from "@shoutory/core/enti
 import type { KeyProvider } from "@shoutory/core/keys";
 import type { StorageDriver } from "@shoutory/core/storage";
 import type { AppPool } from "@shoutory/db/pool";
+import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import type { MiddlewareHandler } from "hono";
 import { secureHeaders } from "hono/secure-headers";
 import type { AuthService } from "./auth/auth.js";
@@ -77,6 +78,11 @@ export interface AppOptions {
   readonly channels?: {
     readonly providers: Readonly<Record<string, HealthProvider>>;
     readonly fetch: typeof fetch;
+    /**
+     * The egress client bound to the one instance host a channel stored, for a provider whose accounts live on
+     * user-chosen servers; absent, every provider's calls use `fetch`.
+     */
+    readonly fetchFor?: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
     readonly pepper: SealedSecret;
   };
 }
@@ -98,11 +104,18 @@ function channelServices(options: AppOptions): { check: ChannelCheck; connect: C
     logger: options.logger,
     providers,
   });
-  const checker = createHealthChecker({ credentials, fetch: channels.fetch, now });
+  const { fetchFor } = channels;
+  const checker = createHealthChecker({
+    credentials,
+    fetch: channels.fetch,
+    ...(fetchFor === undefined ? {} : { fetchFor }),
+    now,
+  });
   const connect = createConnectService({
     pool: options.pool,
     keys: options.keys,
     fetch: channels.fetch,
+    ...(fetchFor === undefined ? {} : { fetchFor }),
     now,
     publicOrigin: options.publicOrigin,
     providers,

@@ -20,6 +20,7 @@
     "@opentelemetry/sdk-trace": "3.0.0",
     "@shoutory/core": "workspace:*",
     "@shoutory/db": "workspace:*",
+    "@shoutory/provider-registry": "workspace:*",
     "@shoutory/provider-sdk": "workspace:*",
     "better-auth": "1.7.16",
     "file-type": "22.3.0",
@@ -31,6 +32,7 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@shoutory/provider-mastodon": "workspace:*",
     "@shoutory/testkit": "workspace:*"
   }
 }

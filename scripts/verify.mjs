@@ -174,7 +174,8 @@ export const STEPS = [
     // The typecheck step (or `tsc -b`) builds the registry the generator reads.
     name: "capability-matrix",
     globs: [
-      "packages/provider-sdk/src/registry.ts",
+      "packages/provider-registry/src/index.ts",
+      "packages/providers/*/src/manifest.ts",
       "packages/provider-sdk/src/manifest/manifest.ts",
       "docs/providers/capability-matrix.md",
     ],

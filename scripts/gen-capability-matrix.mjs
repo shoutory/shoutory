@@ -28,10 +28,14 @@ function renderMatrix(manifests) {
 async function loadManifests(argv) {
   const at = argv.indexOf("--manifests");
   if (at >= 0) return JSON.parse(readFileSync(argv[at + 1], "utf8"));
-  const dist = join(root, "packages/provider-sdk/dist/registry.js");
-  if (!existsSync(dist))
-    throw new Error("packages/provider-sdk/dist is missing; run `pnpm exec tsc -b` first");
-  const { builtInManifests, createRegistry } = await import(pathToFileURL(dist).href);
+  const [registryDist, sdkDist] = [
+    join(root, "packages/provider-registry/dist/index.js"),
+    join(root, "packages/provider-sdk/dist/registry.js"),
+  ];
+  if (!existsSync(registryDist) || !existsSync(sdkDist))
+    throw new Error("the provider registry's dist is missing; run `pnpm exec tsc -b` first");
+  const { builtInManifests } = await import(pathToFileURL(registryDist).href);
+  const { createRegistry } = await import(pathToFileURL(sdkDist).href);
   return createRegistry(builtInManifests).manifests;
 }
 

@@ -53,8 +53,11 @@ const user = (name: string): User => {
   if (!found) throw new Error(`no user ${name}`);
   return found;
 };
+// A provider that declares no capability at all yet (one whose publishing has not shipped): nothing can be scheduled on it.
+const bareManifest: typeof manifest = { ...manifest, id: "fixture_bare", capabilities: [] };
 let c1: string;
 let cOther: string;
+let cBare: string;
 const media = { ready: "", pending: "", foreign: "" };
 
 interface Facts {
@@ -119,6 +122,10 @@ beforeAll(async () => {
           adapter: createFixtureAdapter({ baseUrl: "http://127.0.0.1:1", clientId: "c" }),
           manifest,
         },
+        fixture_bare: {
+          adapter: createFixtureAdapter({ baseUrl: "http://127.0.0.1:1", clientId: "c" }),
+          manifest: bareManifest,
+        },
       },
       fetch,
       pepper: new SealedSecret(PEPPER),
@@ -132,6 +139,7 @@ beforeAll(async () => {
   await addWorkspaceMember(fx, other, user("foreign").id, "owner");
   c1 = await seedChannel(fx, ws, "connected", "posts-c1", "fixture_oauth");
   cOther = await seedChannel(fx, other, "connected", "posts-other", "fixture_oauth");
+  cBare = await seedChannel(fx, ws, "connected", "posts-bare", "fixture_bare");
   media.ready = await plantMedia(ws, "ready");
   media.pending = await plantMedia(ws, "pending_upload");
   media.foreign = await plantMedia(other, "ready");
@@ -565,6 +573,13 @@ const REFUSAL_ROWS: [string, () => unknown, number, string | undefined, string][
     () => draftBody(variant(cOther)),
     422,
     "unknown_channel",
+    "unprocessable_content",
+  ],
+  [
+    "a channel whose provider declares no capability",
+    () => draftBody(variant(cBare)),
+    422,
+    "capability_missing",
     "unprocessable_content",
   ],
   [

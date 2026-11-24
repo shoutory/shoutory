@@ -1,0 +1,29 @@
+{
+  "name": "@shoutory/provider-mastodon",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "exports": {
+    "./manifest": {
+      "source": "./src/manifest.ts",
+      "default": "./dist/manifest.js"
+    },
+    "./adapter": {
+      "source": "./src/adapter.ts",
+      "default": "./dist/adapter.js"
+    },
+    "./simulator": {
+      "source": "./src/simulator.ts",
+      "default": "./dist/simulator.js"
+    }
+  },
+  "dependencies": {
+    "@shoutory/core": "workspace:*",
+    "@shoutory/provider-sdk": "workspace:*",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@shoutory/testkit": "workspace:*"
+  }
+}

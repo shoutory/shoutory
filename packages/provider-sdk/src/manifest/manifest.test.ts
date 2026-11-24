@@ -275,6 +275,43 @@ describe("manifestSchema", () => {
     expect(paths).toContain(path);
   });
 
+  // A provider whose accounts live on user-chosen servers names no hosts: its host is the channel's stored instance, one
+  // closed alternative to the list (never a wildcard), so exactly one of the two is declared.
+  it("accepts egressHostSource channel in place of the egressHosts list", () => {
+    const manifest = fixtureManifest();
+    delete manifest.egressHosts;
+    manifest.egressHostSource = "channel";
+    expect(manifestSchema.safeParse(manifest).success).toBe(true);
+  });
+
+  it.each([
+    [
+      "both the list and the channel source",
+      (m: Record<string, unknown>) => (m.egressHostSource = "channel"),
+    ],
+    ["neither the list nor the channel source", (m: Record<string, unknown>) => delete m.egressHosts],
+    [
+      "a channel source other than channel",
+      (m: Record<string, unknown>) => {
+        delete m.egressHosts;
+        m.egressHostSource = "any";
+      },
+    ],
+  ])("refuses %s", (_title, damage) => {
+    const manifest = fixtureManifest();
+    damage(manifest);
+    const result = manifestSchema.safeParse(manifest);
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((issue) => issue.path.join("."))).toContain("egressHostSource");
+  });
+
+  // A provider whose publishing has not shipped declares no capability; post validation refuses a target on it.
+  it("accepts an empty capability list", () => {
+    const manifest = fixtureManifest();
+    manifest.capabilities = [];
+    expect(manifestSchema.safeParse(manifest).success).toBe(true);
+  });
+
   it("gives a manifest that declares no quota an empty list", () => {
     expect(manifestSchema.parse(fixtureManifest()).quotas).toEqual([]);
   });

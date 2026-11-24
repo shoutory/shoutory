@@ -62,7 +62,8 @@ const manifestShape = z.strictObject({
     method: z.enum(["oauth2", "oauth2_pkce", "api_key", "bot_token", "app_password", "webhook_url"]),
   }),
   scopes: z.array(name).max(64),
-  capabilities: z.array(z.enum(CAPABILITIES)).min(1).max(CAPABILITIES.length),
+  // None yet for a provider whose publishing has not shipped: post validation refuses a target on it.
+  capabilities: z.array(z.enum(CAPABILITIES)).max(CAPABILITIES.length),
   readBackMode: z.enum(["A", "B", "C", "D", "E"]),
   idempotency: z.strictObject({
     mechanism: z.enum(["header", "nonce", "natural_key", "none"]),
@@ -88,7 +89,10 @@ const manifestShape = z.strictObject({
     )
     .max(32),
   actionWindows: z.strictObject({ edit: seconds.optional(), delete: seconds.optional() }),
-  egressHosts: z.array(z.string().max(253).refine(isEgressHost, "not a host name")).min(1).max(32),
+  // The hosts a provider's calls may reach: a closed list, or (accounts on user-chosen servers) the channel's own stored
+  // instance host, never a wildcard. Exactly one of the two is declared.
+  egressHosts: z.array(z.string().max(253).refine(isEgressHost, "not a host name")).min(1).max(32).optional(),
+  egressHostSource: z.literal("channel").optional(),
   sunset: date.optional(),
   // Whole numbers only: a default is merged into the settings a post stores, and those hold safe integers alone.
   providerDefault: z
@@ -194,8 +198,23 @@ function resendIssues({ idempotency, readBackMode, retrySafety }: ManifestShape)
   return issues;
 }
 
+// A provider names its hosts as a list or as the channel's instance, not both and not neither.
+function hostSourceIssues({ egressHosts, egressHostSource }: ManifestShape): CrossFieldIssue[] {
+  if ((egressHosts === undefined) === (egressHostSource === undefined)) {
+    return [
+      { path: ["egressHostSource"], message: "declare exactly one of egressHosts and egressHostSource" },
+    ];
+  }
+  return [];
+}
+
 export const manifestSchema = manifestShape.superRefine((manifest, context) => {
-  for (const issue of [...declaredActionIssues(manifest), ...resendIssues(manifest)]) {
+  const issues = [
+    ...declaredActionIssues(manifest),
+    ...resendIssues(manifest),
+    ...hostSourceIssues(manifest),
+  ];
+  for (const issue of issues) {
     context.addIssue({ code: "custom", ...issue });
   }
 });

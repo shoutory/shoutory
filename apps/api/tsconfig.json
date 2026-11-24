@@ -6,6 +6,7 @@
   "references": [
     { "path": "../../packages/core" },
     { "path": "../../packages/db" },
+    { "path": "../../packages/provider-registry" },
     { "path": "../../packages/provider-sdk" }
   ]
 }

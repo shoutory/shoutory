@@ -45,13 +45,14 @@ function registerStart(app: App, auth: AuthService, connect: ConnectService): vo
     method: "post",
     path: "/api/v1/workspaces/{workspace_id}/connect/{provider_id}/start",
     policy: "session",
-    access: { workspace: "workspace_id", permission: "channels.manage" },
+    // Split: the registration of an app on an instance is an outbound call, which never runs inside a transaction.
+    access: { workspace: "workspace_id", permission: "channels.manage", split: true },
     params: z.strictObject({ workspace_id: uuid, provider_id: providerId }),
     body: z.strictObject({ instance_host: instanceHost.optional(), channel_id: uuid.optional() }),
-    handler: async ({ c, tx, scope, params, body }) => {
+    handler: async ({ c, scoped, params, body }) => {
       await auth.throttle.spend("connect_start", c.get("session").userId);
-      const authorizeUrl = await connect.start(tx, {
-        workspaceId: scope.workspaceId,
+      const authorizeUrl = await connect.start(scoped, {
+        workspaceId: params.workspace_id,
         providerId: params.provider_id,
         instanceHost: body.instance_host,
         channelId: body.channel_id,

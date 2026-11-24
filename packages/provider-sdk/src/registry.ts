@@ -11,9 +11,6 @@ export interface Registry {
   allQueueNames(): string[];
 }
 
-// Each provider slice adds its manifest here.
-export const builtInManifests: readonly unknown[] = [];
-
 /**
  * Validates every manifest and derives the provider queue names from the manifest ids alone, so the core never names a
  * provider and an id the schema refuses can never become a queue name.

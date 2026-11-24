@@ -49,6 +49,23 @@ const AFTER_SENDING: Readonly<Record<string, EgressErrorClass>> = {
   UND_ERR_RES_EXCEEDED_MAX_SIZE: "size_exceeded",
 };
 
+// The classes where the operator policy or the request's host binding refused the call before anything was sent.
+const POLICY_REFUSALS: ReadonlySet<EgressErrorClass> = new Set([
+  "invalid_url",
+  "blocked_url",
+  "blocked_address",
+  "host_not_allowed",
+  "too_many_redirects",
+  "redirect_refused",
+]);
+
+/** Whether an error an adapter's `fetch` threw is the egress policy refusing the address (see `fetchOf`). */
+export function isPolicyRefusal(error: unknown): boolean {
+  const egress =
+    error instanceof Error ? (error.cause as { egress?: EgressErrorClass } | undefined)?.egress : undefined;
+  return egress !== undefined && POLICY_REFUSALS.has(egress);
+}
+
 /** The error code on an error or on its cause chain; the text of an error is never read. */
 function codeOf(error: unknown): string | undefined {
   for (let current = error, depth = 0; current instanceof Error && depth < 4; depth += 1) {

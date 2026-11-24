@@ -5,6 +5,14 @@
   "type": "module",
   "license": "AGPL-3.0-only",
   "exports": {
+    "./simulator/server": {
+      "source": "./src/simulator/server.ts",
+      "default": "./dist/simulator/server.js"
+    },
+    "./simulator/auth": {
+      "source": "./src/simulator/auth.ts",
+      "default": "./dist/simulator/auth.js"
+    },
     "./fixture-oauth/manifest": {
       "source": "./src/fixture-oauth/manifest.ts",
       "default": "./dist/fixture-oauth/manifest.js"

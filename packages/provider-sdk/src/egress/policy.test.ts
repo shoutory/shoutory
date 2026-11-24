@@ -34,6 +34,24 @@ describe("the egress URL check (NFR-SEC-11, SSRF-04, SSRF-07)", () => {
   });
 });
 
+// A provider whose accounts live on user-chosen servers is bound to exactly the one host a channel stored: nothing the
+// instance answers (a redirect, a discovery document) can widen it, and the operator policy still applies to that host.
+describe("an instance request reaches only the channel's own stored host", () => {
+  const own = { kind: "instance", host: "social.example" } as const;
+
+  it("accepts its own host", () => {
+    expect(checkUrl("https://social.example/api/v2/instance", own, strict).hostname).toBe("social.example");
+  });
+
+  it.each([
+    ["another host", "https://other.example/api/v2/instance"],
+    ["a sub-domain of its own host", "https://evil.social.example/"],
+    ["its own host as a sub-domain of another", "https://social.example.evil.test/"],
+  ])("refuses %s with host_not_allowed", (_name, url) => {
+    expect(() => checkUrl(url, own, strict)).toThrow(expect.objectContaining({ class: "host_not_allowed" }));
+  });
+});
+
 describe("the operator allowlist (one policy for every user URL)", () => {
   const selfHost = createOperatorPolicy({ allowCidrs: ["10.0.0.0/8", "127.0.0.1/32"] });
 

@@ -141,11 +141,12 @@ export function secretsCheck(ring: "saved" | "without-the-saved-id"): Ran {
 /**
  * The server accepts each code once (the `used` map in totp.ts only knows the codes of its own process), and the first
  * journey's second code is the next step's, so the last step the server saw can be one ahead of that journey's clock.
- * A code is fresh once two whole steps have passed since the journey saved its session. The wait is a protocol fact, so
+ * A code is fresh once two whole steps have passed since the journey saved its session (or, for a member of its own,
+ * since the member's last code, the file `savedFile` names). The wait is a protocol fact, so
  * it extends the running test's timeout by the time it sleeps (it must be called inside a test).
  */
-export async function waitForFreshCode(): Promise<void> {
-  const savedAt = statSync(FOUNDER_STATE).mtimeMs;
+export async function waitForFreshCode(savedFile: string = FOUNDER_STATE): Promise<void> {
+  const savedAt = statSync(savedFile).mtimeMs;
   const fresh = (Math.floor(savedAt / STEP_MS) + 2) * STEP_MS;
   const waitMs = fresh - Date.now();
   if (waitMs <= 0) return;

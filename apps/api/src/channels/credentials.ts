@@ -68,7 +68,8 @@ interface ConnectInput {
   /** The channel being reconnected, when there is one: another account on it is refused. */
   readonly reconnectChannelId?: string | undefined;
   readonly tokens: ChannelToken;
-  readonly accessExpiresAt: Date;
+  /** When the access token stops working; none for a token the provider never expires (it is never due for a refresh). */
+  readonly accessExpiresAt: Date | null;
   readonly refreshExpiresAt?: Date | undefined;
   readonly snapshot: {
     readonly manifestDigest: string;
@@ -152,6 +153,10 @@ export async function ensureSalt(tx: TenantTx, workspaceId: string): Promise<Buf
   return saltSchema.parse(salted.rows[0]).salt;
 }
 
+/** The moment a token granted at `now` for `seconds` stops working; none when the provider states no lifetime. */
+export const expiryOf = (now: Date, seconds: number | undefined): Date | null =>
+  seconds === undefined ? null : new Date(now.getTime() + seconds * 1000);
+
 export const sealedParams = (s: StoredSecret) => [
   s.formatVersion,
   s.keyId,
@@ -203,6 +208,20 @@ export class CredentialService {
   #asJob<T>(workspaceId: string, fn: (tx: TenantTx) => Promise<T>): Promise<T> {
     const ctx: TenantCtx = { principalKind: "job", principalId: randomUUID(), workspaceIds: [workspaceId] };
     return withTenant(this.#deps.pool, ctx, fn);
+  }
+
+  /** The instance host a channel stored (a provider whose accounts live on user-chosen servers), or none. */
+  async instanceHostOf(workspaceId: string, channelId: string): Promise<string | undefined> {
+    const found = await this.#asJob(workspaceId, (tx) =>
+      tx.query("SELECT instance_host FROM app.channels WHERE workspace_id = $1 AND id = $2", [
+        workspaceId,
+        channelId,
+      ]),
+    );
+    return (
+      z.object({ instance_host: z.string().nullable() }).optional().parse(found.rows[0])?.instance_host ??
+      undefined
+    );
   }
 
   async #openRow(workspaceId: string, channelId: string): Promise<OpenRow> {
@@ -322,7 +341,7 @@ export class CredentialService {
     const generation = row.generation + 1;
     const aad = aadOf(workspaceId, channelId, generation);
     const stored = seal(JSON.stringify(adopted), aad, this.#deps.keys, row.salt);
-    const expiresAt = new Date(this.#deps.now().getTime() + fresh.expiresInSeconds * 1000);
+    const expiresAt = expiryOf(this.#deps.now(), fresh.expiresInSeconds);
     const landed = await this.#asJob(workspaceId, (tx) =>
       tx.query(
         ...callOf("credential_refresh_commit", [

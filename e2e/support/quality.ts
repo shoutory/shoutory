@@ -115,9 +115,15 @@ export async function refreshStepUp(page: Page, secret: string): Promise<void> {
  * New recovery codes for the founder, as the security screen offers them; returns the codes shown. This replaces the
  * codes made at enrolment, which no other spec uses.
  */
-export async function newRecoveryCodes(page: Page, password: string, secret: string): Promise<string[]> {
+export async function newRecoveryCodes(
+  page: Page,
+  password: string,
+  secret: string,
+  /** False for a session that has just signed in with a code, whose identity check is fresh already. */
+  refresh = true,
+): Promise<string[]> {
   await page.goto("/account/security");
-  await refreshStepUp(page, secret);
+  if (refresh) await refreshStepUp(page, secret);
   await page.getByTestId("codes-new").click();
   await page.getByTestId("codes-password").fill(password);
   await page.getByTestId("codes-generate").click();

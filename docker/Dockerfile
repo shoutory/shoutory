@@ -60,6 +60,12 @@ COPY --from=build /app/packages/db/node_modules /app/packages/db/node_modules
 COPY --from=build /app/packages/provider-sdk/package.json /app/packages/provider-sdk/package.json
 COPY --from=build /app/packages/provider-sdk/dist /app/packages/provider-sdk/dist
 COPY --from=build /app/packages/provider-sdk/node_modules /app/packages/provider-sdk/node_modules
+COPY --from=build /app/packages/provider-registry/package.json /app/packages/provider-registry/package.json
+COPY --from=build /app/packages/provider-registry/dist /app/packages/provider-registry/dist
+COPY --from=build /app/packages/provider-registry/node_modules /app/packages/provider-registry/node_modules
+COPY --from=build /app/packages/providers/mastodon/package.json /app/packages/providers/mastodon/package.json
+COPY --from=build /app/packages/providers/mastodon/dist /app/packages/providers/mastodon/dist
+COPY --from=build /app/packages/providers/mastodon/node_modules /app/packages/providers/mastodon/node_modules
 COPY --from=build /data /data
 
 # The debug image, for support only (a release builds it with `--target debug`): the same files on the distroless

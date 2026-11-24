@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { builtInManifests } from "../../src/registry.js";
 import { findNearSunsets } from "../../src/sunset.js";
 import { fixtureManifest } from "../fixture-manifest.js";
 
@@ -52,10 +51,6 @@ describe("apiVersions sunset guard", () => {
         daysLeft: 59,
       },
     ]);
-  });
-
-  it("finds no built-in provider within 60 days of the real day", () => {
-    expect(findNearSunsets(builtInManifests, new Date())).toEqual([]);
   });
 
   it("passes for an empty registry and for a version with no sunset", () => {

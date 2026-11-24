@@ -1,5 +1,6 @@
 import { migrateDatabase } from "@shoutory/db/migrate";
-import { builtInManifests, createRegistry } from "@shoutory/provider-sdk/registry";
+import { builtInManifests } from "@shoutory/provider-registry";
+import { createRegistry } from "@shoutory/provider-sdk/registry";
 import { installJobs } from "../jobs/install.js";
 
 /** `shoutory migrate`: applies every pending migration as the owner role, then installs the job queues. */

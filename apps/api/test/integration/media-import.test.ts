@@ -385,14 +385,19 @@ describe("an import holds its file in memory, so only two run at once (floor)", 
     const first = importUrl(user("editor"), at("/held-1.png"));
     const second = importUrl(user("editor"), at("/held-2.png"));
     await until(() => held.length === 2);
-    const third = await importUrl(user("editor"), at("/third.png"));
-    expect(third.status).toBe(429);
-    expect(Number(third.headers.get("retry-after"))).toBeGreaterThan(0);
-    expect(asked.map((row) => row.path)).toEqual(["/held-1.png", "/held-2.png"]);
-    for (const [n, res] of held.entries()) {
-      const body = await png(17 + n, 17 + n);
-      res.writeHead(200, { "content-type": "image/png" });
-      res.end(body);
+    // The held answers are always ended, so a failing assertion cannot leave the two slots taken for the rows after it.
+    try {
+      const third = await importUrl(user("editor"), at("/third.png"));
+      expect(third.status).toBe(429);
+      expect(Number(third.headers.get("retry-after"))).toBeGreaterThan(0);
+      // The two imports run at once and reach the server in either order: what was asked is a set.
+      expect(asked.map((row) => row.path).sort()).toEqual(["/held-1.png", "/held-2.png"]);
+    } finally {
+      for (const [n, res] of held.entries()) {
+        const body = await png(17 + n, 17 + n);
+        res.writeHead(200, { "content-type": "image/png" });
+        res.end(body);
+      }
     }
     expect([(await first).status, (await second).status]).toEqual([201, 201]);
     // Imports that end in a refusal or a failure hand their slot back as well: more of them than there are slots.

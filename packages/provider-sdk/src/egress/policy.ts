@@ -9,9 +9,13 @@ import {
 } from "@shoutory/core/net";
 import { EgressError } from "./errors.js";
 
-/** The request part of the policy: a provider's manifest hosts, or a user-supplied URL. */
+/**
+ * The request part of the policy: a provider's manifest hosts, the one instance host a channel stored (a provider whose
+ * accounts live on user-chosen servers), or a user-supplied URL.
+ */
 export type RequestPolicy =
   | { readonly kind: "provider"; readonly egressHosts: readonly string[] }
+  | { readonly kind: "instance"; readonly host: string }
   | { readonly kind: "user_url" };
 
 interface ResolvedAddress {
@@ -85,6 +89,7 @@ export function checkUrl(input: string, request: RequestPolicy, operator: Operat
   if (!operator.schemes.includes(url.protocol) || url.username || url.password) throw fail("blocked_url");
   if (!operator.ports.includes(Number(url.port || DEFAULT_PORTS[url.protocol]))) throw fail("blocked_url");
   if (request.kind === "provider" && !request.egressHosts.includes(host)) throw fail("host_not_allowed");
+  if (request.kind === "instance" && request.host !== host) throw fail("host_not_allowed");
   if (isIP(host) > 0 && !operator.allows(host)) throw fail("blocked_address");
   return url;
 }

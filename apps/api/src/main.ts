@@ -7,14 +7,18 @@ import { assertKeyIdsLoaded } from "@shoutory/core/keys";
 import type { StorageDriver } from "@shoutory/core/storage";
 import { createAppPool, createAuthDb } from "@shoutory/db/pool";
 import { assertMigrationsApplied, sealedKeyIds } from "@shoutory/db/startup";
+import { builtInManifests, createBuiltInAdapters } from "@shoutory/provider-registry";
 import { type EgressRequest, egressFetch } from "@shoutory/provider-sdk/egress";
 import { fetchOf } from "@shoutory/provider-sdk/egress/fetch-adapter";
 import { createOperatorPolicy } from "@shoutory/provider-sdk/egress/policy";
 import type { Manifest } from "@shoutory/provider-sdk/manifest";
+import { createRegistry } from "@shoutory/provider-sdk/registry";
 import { createApp } from "./app.js";
 import { createAuth } from "./auth/auth.js";
 import { RANGE_HOST } from "./auth/hibp.js";
+import type { HealthProvider } from "./channels/health.js";
 import { type CliIo, collectSecrets, run } from "./cli/main.js";
+import { refuseEgress } from "./jobs/ledger/held.js";
 import { checkFfprobePath } from "./jobs/media/probe-run.js";
 import { createClamdScan } from "./jobs/media/scan.js";
 import { startWorker } from "./jobs/worker.js";
@@ -74,13 +78,53 @@ function importFetch(config: Config) {
   return (req: EgressRequest) => egressFetch(req, { request, operator });
 }
 
-/** The `fetch` of a provider adapter: the same operator policy, narrowed to the hosts its manifest names. */
+/**
+ * The `fetch` of a provider adapter: the same operator policy, narrowed to the hosts its manifest names or, for a
+ * provider whose accounts live on user-chosen servers, to the one instance host the channel stored. With no host for
+ * such a provider every call is refused.
+ */
 function providerFetch(config: Config) {
   const operator = createOperatorPolicy({ allowCidrs: config.egressAllowCidrs });
-  return (manifest: Manifest) =>
-    fetchOf((req) =>
-      egressFetch(req, { request: { kind: "provider", egressHosts: manifest.egressHosts }, operator }),
-    );
+  return (manifest: Manifest, instanceHost?: string): typeof fetch => {
+    const request = manifest.egressHosts
+      ? ({ kind: "provider", egressHosts: manifest.egressHosts } as const)
+      : instanceHost !== undefined
+        ? ({ kind: "instance", host: instanceHost } as const)
+        : undefined;
+    if (request === undefined) return refuseEgress();
+    return fetchOf((req) => egressFetch(req, { request, operator }));
+  };
+}
+
+/** The built-in providers by id, each with its validated manifest and its adapter; one without an adapter refuses the start. */
+function builtInProviders(): Record<string, HealthProvider> {
+  const adapters = createBuiltInAdapters();
+  return Object.fromEntries(
+    createRegistry(builtInManifests).manifests.map((manifest) => {
+      const adapter = adapters[manifest.id];
+      if (!adapter) throw new Error(`no adapter is built in for provider "${manifest.id}"`);
+      return [manifest.id, { manifest, adapter }];
+    }),
+  );
+}
+
+/**
+ * What the app is given from the configuration beside its pools and stores. The channel routes run on the built-in
+ * providers, and every provider call is bound to its manifest's hosts or to its channel's instance host (`fetchFor`), so
+ * no unbound fetch exists.
+ */
+function appSettingsOf(config: Config) {
+  return {
+    webRoot: config.webRoot,
+    mail: { from: config.mailFrom, dkimSelector: config.mailDkimSelector },
+    releaseChannel: config.releaseChannel,
+    channels: {
+      providers: builtInProviders(),
+      fetch: refuseEgress(),
+      fetchFor: providerFetch(config),
+      pepper: config.hmacPepper,
+    },
+  };
 }
 
 /**
@@ -138,9 +182,7 @@ async function startServer(config: Config, logger: Logger): Promise<RunningServe
       logger,
       auth,
       ...stores,
-      webRoot: config.webRoot,
-      mail: { from: config.mailFrom, dkimSelector: config.mailDkimSelector },
-      releaseChannel: config.releaseChannel,
+      ...appSettingsOf(config),
     });
     const server = await listen(app.fetch, config.port, config.host);
     logger.info({ port: server.port, role: config.role }, "listening");
@@ -203,6 +245,7 @@ async function startWorkerRole(
         ...(config.mediaScan.mode === "warn" ? { scan: createClamdScan(config.mediaScan) } : {}),
         ...(config.ffprobePath === undefined ? {} : { ffprobe: config.ffprobePath }),
       },
+      adapters: createBuiltInAdapters(),
       fetchFor: providerFetch(config),
     });
     logger.info({ role }, "worker started");

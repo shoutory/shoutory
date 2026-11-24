@@ -45,7 +45,10 @@ export type Access =
  * transaction (read, or write), authorized like the single one, so the handler may call outside the database between
  * them (AGENTS 3.7). A denial of the scope is an answer, and the callback does not run.
  */
-type Scoped = <T>(write: boolean, run: (tx: TenantTx, scope: AuthorizedScope) => Promise<T>) => Promise<T>;
+export type Scoped = <T>(
+  write: boolean,
+  run: (tx: TenantTx, scope: AuthorizedScope) => Promise<T>,
+) => Promise<T>;
 
 export interface RegisteredRoute {
   readonly method: string;

@@ -23,9 +23,19 @@ export interface RefreshInput {
   readonly refreshToken: SealedSecret;
 }
 
-/** What a channel health read sends: the access token in use, still sealed until the one call that puts it on the wire. */
+/**
+ * What a channel health read sends: the access token in use, still sealed until the one call that puts it on the wire, and
+ * the instance host the channel stored (a provider whose accounts live on user-chosen servers).
+ */
 export interface InspectInput {
   readonly accessToken: SealedSecret;
+  readonly instanceHost?: string;
+}
+
+/** The app of the provider on one instance: its client id and the secret, still sealed. */
+export interface AppCredentials {
+  readonly clientId: string;
+  readonly clientSecret: SealedSecret;
 }
 
 /** What the authorization URL of a connect is built from; `redirectUri` already carries any instance host. */
@@ -34,6 +44,7 @@ export interface AuthorizeInput {
   readonly codeChallenge: string;
   readonly redirectUri: string;
   readonly instanceHost?: string;
+  readonly app?: AppCredentials;
 }
 
 /** What the code exchange sends: the code and the verifier, still sealed until the one call that puts it on the wire. */
@@ -42,6 +53,13 @@ export interface ExchangeInput {
   readonly codeVerifier: SealedSecret;
   readonly redirectUri: string;
   readonly instanceHost?: string;
+  readonly app?: AppCredentials;
+}
+
+/** What the registration of the provider's app on an instance sends. */
+export interface RegisterAppInput {
+  readonly instanceHost: string;
+  readonly redirectUri: string;
 }
 
 /** What the identity read sends: the new access token, still sealed. */
@@ -57,6 +75,12 @@ export interface IdentityInput {
  */
 export interface ConnectAdapter {
   readonly issuer?: string;
+  /**
+   * Only for a provider whose accounts live on user-chosen servers: checks that the instance can take part in a connect
+   * and registers the provider's app there (`app` on success; an instance that cannot take part is a result with the
+   * code `instance_unsupported`). The caller stores the app and passes it to `authorize` and `exchangeCode`.
+   */
+  registerApp?(context: AdapterContext, input: RegisterAppInput): Promise<ProviderResult>;
   authorize(input: AuthorizeInput): string;
   exchangeCode(context: AdapterContext, input: ExchangeInput): Promise<ProviderResult>;
   identity(context: AdapterContext, input: IdentityInput): Promise<ProviderResult>;

@@ -260,6 +260,9 @@ importers:
       '@shoutory/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@shoutory/provider-registry':
+        specifier: workspace:*
+        version: link:../../packages/provider-registry
       '@shoutory/provider-sdk':
         specifier: workspace:*
         version: link:../../packages/provider-sdk
@@ -288,6 +291,9 @@ importers:
         specifier: 4.6.7
         version: 4.6.7
     devDependencies:
+      '@shoutory/provider-mastodon':
+        specifier: workspace:*
+        version: link:../../packages/providers/mastodon
       '@shoutory/testkit':
         specifier: workspace:*
         version: link:../../packages/testkit
@@ -393,6 +399,15 @@ importers:
         specifier: 8.23.1
         version: 8.23.1
 
+  packages/provider-registry:
+    dependencies:
+      '@shoutory/provider-mastodon':
+        specifier: workspace:*
+        version: link:../providers/mastodon
+      '@shoutory/provider-sdk':
+        specifier: workspace:*
+        version: link:../provider-sdk
+
   packages/provider-sdk:
     dependencies:
       '@shoutory/core':
@@ -404,6 +419,22 @@ importers:
       zod:
         specifier: 4.6.7
         version: 4.6.7
+
+  packages/providers/mastodon:
+    dependencies:
+      '@shoutory/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@shoutory/provider-sdk':
+        specifier: workspace:*
+        version: link:../../provider-sdk
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@shoutory/testkit':
+        specifier: workspace:*
+        version: link:../../testkit
 
   packages/testkit:
     dependencies:

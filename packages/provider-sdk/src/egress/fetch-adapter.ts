@@ -7,7 +7,9 @@ const NO_BODY = new Set([101, 204, 205, 304]);
 /** What an egress failure is to an adapter: the error codes it already classifies, and nothing of the original. */
 function adapterError(error: unknown): unknown {
   if (!(error instanceof EgressError)) return error;
-  if (error.effect === "none") return new TypeError("fetch failed", { cause: { code: "ECONNREFUSED" } });
+  // The class (never the host) rides along, so a caller can tell a refused address from an unreachable one (`isPolicyRefusal`).
+  if (error.effect === "none")
+    return new TypeError("fetch failed", { cause: { code: "ECONNREFUSED", egress: error.class } });
   if (error.class === "timeout") return new DOMException("the call timed out", "TimeoutError");
   return new TypeError("fetch failed", { cause: { code: "ECONNRESET" } });
 }
