@@ -142,7 +142,8 @@ export const STEPS = [
       "SHOUTORY_TEST_S3_URL",
       ...["OWNER", "APP", "WORKER", "AUTH", "READONLY"].map((role) => `SHOUTORY_DATABASE_URL_${role}`),
     ],
-    ...vitest("integration", "integration"),
+    // The files that read the cluster's visibility horizon run after the others, one at a time (vitest.config.ts).
+    ...vitest("integration", "integration", "integration-horizon"),
   },
   {
     name: "contract",

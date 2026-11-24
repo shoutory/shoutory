@@ -45,6 +45,23 @@ const workspaceSources = globSync("{apps,packages,packages/providers}/*/package.
 );
 const webResolve = { alias: workspaceSources };
 
+// The integration files, and what both integration projects share. The files named `*.horizon.test.ts` read the cluster's
+// visibility horizon and run in their own group (see the project below).
+const horizonFiles = "{apps,packages}/*/test/integration/**/*.horizon.test.ts";
+const integrationInclude = [
+  "{apps,packages}/*/test/integration/**/*.test.ts",
+  "packages/providers/*/test/integration/**/*.test.ts",
+];
+const integration = {
+  // The migrated template database is built once; hooks that clone it get a longer limit than a test.
+  // The second file installs the job queue's schema into that template (the db package never imports the api).
+  globalSetup: ["packages/db/test/global-setup.ts", "apps/api/test/global-setup.ts"],
+  // Vitest 5.0.5 hands Vite a Buffer for modules read from its cache, which crashes the printing of any
+  // global-setup error (vitest-dev/vitest#11682). Remove when the pinned Vitest includes that fix.
+  fsModuleCache: false,
+  hookTimeout: 30_000,
+};
+
 export default defineConfig({
   test: {
     projects: [
@@ -79,22 +96,29 @@ export default defineConfig({
       {
         ssr,
         test: {
+          ...integration,
           name: "integration",
-          // The migrated template database is built once; hooks that clone it get a longer limit than a test.
-          // The second file installs the job queue's schema into that template (the db package never imports the api).
-          globalSetup: ["packages/db/test/global-setup.ts", "apps/api/test/global-setup.ts"],
-          // Vitest 5.0.5 hands Vite a Buffer for modules read from its cache, which crashes the printing of any
-          // global-setup error (vitest-dev/vitest#11682). Remove when the pinned Vitest includes that fix.
-          fsModuleCache: false,
-          hookTimeout: 30_000,
           // The sign-in tests run a dozen memory-hard password hashes each, and the database container shares the host's
           // cores: with every core busy a test of 1.9 s alone took 4.5 s (a hash 90 ms alone, 200 ms loaded) and met its
           // 5 s limit. Three files at a time keep it near 2 s, for a suite about 20 s longer.
           maxWorkers: 3,
-          include: [
-            "{apps,packages}/*/test/integration/**/*.test.ts",
-            "packages/providers/*/test/integration/**/*.test.ts",
-          ],
+          include: integrationInclude,
+          exclude: [...exclude, horizonFiles],
+        },
+      },
+      {
+        ssr,
+        test: {
+          ...integration,
+          name: "integration-horizon",
+          // `outbox_claim` offers a row only once no transaction older than it is running anywhere in the cluster (the
+          // visibility horizon), so a file that reads it must not share the server with another file's open transaction:
+          // some files hold one for seconds on purpose. These files are group 1 (`sequence.groupOrder`: Vitest runs group 0,
+          // the other integration files, to its end first) and run one at a time.
+          sequence: { groupOrder: 1 },
+          maxWorkers: 1,
+          fileParallelism: false,
+          include: [horizonFiles],
           exclude,
         },
       },
