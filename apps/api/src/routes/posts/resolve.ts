@@ -1,4 +1,4 @@
-import { type Draft, settingsIssues } from "@shoutory/core/content";
+import { type Draft, settingsIssues, supportsVariant } from "@shoutory/core/content";
 import { buildSnapshot, type Resolved, snapshotHash } from "@shoutory/core/content/snapshot";
 import { mediaFits, type RejectReason, VIDEO_TYPES } from "@shoutory/core/media";
 import type { TenantTx } from "@shoutory/db/context";
@@ -114,6 +114,11 @@ export async function resolveDraft(
   // A provider that declares no capability at all (its publishing has not shipped) can take no post.
   if ([...channels.values()].some((provider) => provider.manifest.capabilities.length === 0)) {
     throw unprocessable("capability_missing");
+  }
+  for (const variant of draft.variants) {
+    const provider = channels.get(variant.channel_id.toLowerCase());
+    if (!provider || !supportsVariant(variant, provider.manifest))
+      throw unprocessable("post_type_unsupported");
   }
   const ready = await readyMedia(tx, workspaceId, draft);
   checkMediaRules(draft, ready, channels);

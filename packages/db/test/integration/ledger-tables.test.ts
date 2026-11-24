@@ -696,6 +696,7 @@ const POLICIES = [
   "purge_expired_select on operation_attempts",
   "purge_expired_select on operations",
   "purge_expired_select on outbox",
+  "purge_expired_select on post_variants",
   "purge_expired_select on usage_reservations",
 ];
 

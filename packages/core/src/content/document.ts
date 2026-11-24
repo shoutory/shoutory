@@ -101,6 +101,19 @@ const json: z.ZodType<Json> = z.lazy(() =>
 );
 const jsonObject = z.record(cleanText, json);
 
+// Stored in the case RFC 5646 section 2.1.1 gives, so one channel cannot hold "en-us" and "en-US" as two targets.
+const languageTag = cleanText
+  .transform((tag, ctx) => {
+    try {
+      return Intl.getCanonicalLocales(tag)[0] ?? tag;
+    } catch (error) {
+      if (!(error instanceof RangeError)) throw error;
+      ctx.addIssue({ code: "custom", message: "a BCP 47 language tag" });
+      return z.NEVER;
+    }
+  })
+  .pipe(chars(2, 35));
+
 const partSchema = z.strictObject({ kind: z.enum(["thread_reply", "first_comment"]), text: cleanText });
 const mediumSchema = z.strictObject({
   media_id: z.guid(),
@@ -109,10 +122,10 @@ const mediumSchema = z.strictObject({
 });
 const variantSchema = z.strictObject({
   channel_id: z.guid(),
-  locale: chars(2, 35).nullable(),
+  locale: languageTag.nullable(),
   post_type: z.enum(POST_TYPES),
   text: chars(0, 100000),
-  parts: withinBytes(z.array(partSchema).max(25), 262144),
+  parts: withinBytes(z.array(partSchema), 262144),
   settings: withinBytes(jsonObject, 65536),
   media: z.array(mediumSchema).max(32),
 });
@@ -130,6 +143,29 @@ export const draftSchema = z
 
 export type Draft = z.infer<typeof draftSchema>;
 export type Variant = Draft["variants"][number];
+
+// The capability a post type needs; a type no capability covers yet is taken by no channel.
+const TYPE_CAPABILITY: Record<(typeof POST_TYPES)[number], string | null> = {
+  text: "text",
+  image: "image",
+  multi_image: "image",
+  video: "video",
+  document: null,
+  article: null,
+  reel: null,
+  story: null,
+  event: null,
+  offer: null,
+};
+
+export function supportsVariant(
+  variant: Variant,
+  rules: { capabilities: readonly string[]; followUpRoles: readonly string[] },
+): boolean {
+  const needed = TYPE_CAPABILITY[variant.post_type];
+  if (needed === null || !rules.capabilities.includes(needed)) return false;
+  return variant.parts.every((part) => rules.followUpRoles.includes(part.kind));
+}
 
 export interface SettingsIssue {
   variant: number;

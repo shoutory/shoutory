@@ -620,6 +620,13 @@ const REFUSAL_ROWS: [string, () => unknown, number, string | undefined, string][
     "unprocessable_content",
   ],
   [
+    "a post type the channel's manifest does not cover",
+    () => draftBody(variant(c1, { post_type: "document" })),
+    422,
+    "post_type_unsupported",
+    "unprocessable_content",
+  ],
+  [
     "media of another workspace",
     () => draftBody(variant(c1, { media: [{ media_id: media.foreign, alt_text: null, crop: null }] })),
     422,
@@ -800,7 +807,7 @@ const snapshotBytes = (variants: ReturnType<typeof variant>[]) =>
   ) as number;
 const manyVariants = (target: number) => {
   const slots = 11;
-  const build = (pads: string[]) => pads.map((pad, i) => variant(c1, { locale: `l${i}`, text: pad }));
+  const build = (pads: string[]) => pads.map((pad, i) => variant(c1, { locale: `en-x-l${i}`, text: pad }));
   const base = snapshotBytes(build(Array(slots).fill("")));
   const each = Math.floor((target - base) / slots);
   const extra = (target - base) % slots;
@@ -945,5 +952,55 @@ describe("the versions of a post", () => {
     ]);
     const rest = await call(user("viewer"), "GET", `${url}/versions?limit=2&cursor=${body.meta.next_cursor}`);
     expect(((await rest.json()) as { data: { id: string }[] }).data.map((v) => v.id)).toEqual([version]);
+  });
+});
+
+describe("the autosave limit", () => {
+  const drain = (who: User, times: number) =>
+    fx.admin(async (client) => {
+      const key = fx.auth.bucketKey("post_autosave", who.id);
+      for (let i = 0; i < times; i++)
+        await client.query("SELECT app.bucket_take($1, 'post_autosave')", [key]);
+    });
+  // The bucket refills two tokens a second, so it is set to zero right before the call that must be refused.
+  const empty = (who: User) =>
+    fx.admin((client) =>
+      client.query(
+        "UPDATE app.rate_buckets SET tokens = 0, refilled_at = clock_timestamp() WHERE scope = 'post_autosave' AND key = $1",
+        [fx.auth.bucketKey("post_autosave", who.id)],
+      ),
+    );
+  const forget = () =>
+    fx.admin((client) => client.query("DELETE FROM app.rate_buckets WHERE scope = 'post_autosave'"));
+  const autosave = (who: User, url: string, text: string, version: string) =>
+    call(who, "PATCH", url, draftBody(variant(c1, { text })), match(version));
+
+  it("the 120th autosave of a user in 60 s passes and one past the limit answers 429 with Retry-After and writes nothing; save and another user go on", async () => {
+    try {
+      const { post, version } = await plant();
+      const url = `${base(ws)}/${post}`;
+      await forget();
+      await drain(user("editor"), 119);
+      const last = await autosave(user("editor"), url, "a", version);
+      expect(last.status).toBe(200);
+      const current = (await dataOf(last)).version_id as string;
+      await empty(user("editor"));
+      const refused = await autosave(user("editor"), url, "b", current);
+      expect(refused.status).toBe(429);
+      expect(Number(refused.headers.get("retry-after"))).toBeGreaterThan(0);
+      expect(await versionsOf(post)).toHaveLength(2);
+      const saved = await call(
+        user("editor"),
+        "POST",
+        `${url}/save`,
+        draftBody(variant(c1, { text: "c" })),
+        match(current),
+      );
+      expect(saved.status).toBe(200);
+      const other = await autosave(user("admin"), url, "d", (await dataOf(saved)).version_id as string);
+      expect(other.status).toBe(200);
+    } finally {
+      await forget();
+    }
   });
 });

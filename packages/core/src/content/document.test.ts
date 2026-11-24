@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type Draft, draftSchema, settingsIssues } from "./document.js";
+import { type Draft, draftSchema, settingsIssues, supportsVariant } from "./document.js";
 
 const CH = "00000000-0000-4000-8000-0000000000a1";
 const MEDIA = "00000000-0000-4000-8000-0000000000b1";
@@ -30,7 +30,7 @@ const asDraft = (...variants: object[]): Draft => draft(...variants) as Draft;
 const part = (text = "x") => ({ kind: "thread_reply", text });
 const medium = (change: object = {}) => ({ media_id: MEDIA, alt_text: null, crop: null, ...change });
 const locales = (n: number) =>
-  Array.from({ length: n }, (_, i) => variant({ locale: `l${String(i).padStart(2, "0")}` }));
+  Array.from({ length: n }, (_, i) => variant({ locale: `en-x-l${String(i).padStart(2, "0")}` }));
 // Postgres renders jsonb as text with `": "` and `", "` separators, and the limits are on those bytes.
 const pgText = (value: unknown): string => {
   if (Array.isArray(value)) return `[${value.map(pgText).join(", ")}]`;
@@ -65,8 +65,7 @@ const BOUNDS: [string, unknown, boolean][] = [
   ["text of 100001 code points", draft(variant({ text: "😀".repeat(100001) })), false],
   ["100 variants", draft(...locales(100)), true],
   ["101 variants", draft(...locales(101)), false],
-  ["25 parts", draft(variant({ parts: Array(25).fill(part()) })), true],
-  ["26 parts", draft(variant({ parts: Array(26).fill(part()) })), false],
+  ["61 parts, bounded by bytes alone", draft(variant({ parts: Array(61).fill(part()) })), true],
   ["a part of an unknown kind", draft(variant({ parts: [{ kind: "reply_all", text: "x" }] })), false],
   ["parts of 262144 bytes", draft(variant({ parts: sizedParts(262144) })), true],
   ["parts of 262145 bytes", draft(variant({ parts: sizedParts(262145) })), false],
@@ -127,9 +126,15 @@ const BOUNDS: [string, unknown, boolean][] = [
   ["a crop that is not an object", draft(variant({ media: [medium({ crop: "x" })] })), false],
   ["a locale of 1 character", draft(variant({ locale: "a" })), false],
   ["a locale of 2 characters", draft(variant({ locale: "ar" })), true],
-  ["a locale of 35 characters", draft(variant({ locale: "a".repeat(35) })), true],
-  ["a locale of 36 characters", draft(variant({ locale: "a".repeat(36) })), false],
+  ["a locale of 35 characters", draft(variant({ locale: "en-x-aaaaaaaa-bbbbbbbb-cccccccc-ddd" })), true],
+  ["a locale of 36 characters", draft(variant({ locale: "en-x-aaaaaaaa-bbbbbbbb-cccccccc-dddd" })), false],
   ["an empty locale", draft(variant({ locale: "" })), false],
+  ["a locale that is not a language tag", draft(variant({ locale: "xx!!" })), false],
+  [
+    "two variants of one channel whose locales differ only in case",
+    draft(variant({ locale: "en-us" }), variant({ locale: "en-US" })),
+    false,
+  ],
   ["a post type outside the list", draft(variant({ post_type: "bogus" })), false],
   ["a media id that is not a uuid", draft(variant({ media: [medium({ media_id: "m1" })] })), false],
   ["a channel id that is not a uuid", draft(variant({ channel_id: "c1" })), false],
@@ -186,6 +191,37 @@ const UNSTORABLE: [string, unknown][] = [
 describe("strings the database cannot store", () => {
   it.each(UNSTORABLE)("refuses %s", (_what, value) => {
     expect(draftSchema.safeParse(value).success).toBe(false);
+  });
+});
+
+describe("a language tag is stored in its canonical case", () => {
+  it.each([
+    ["en-us", "en-US"],
+    ["zh-hant-tw", "zh-Hant-TW"],
+    ["AR", "ar"],
+  ])("%s becomes %s", (given, canonical) => {
+    expect(draftSchema.parse(draft(variant({ locale: given }))).variants[0]?.locale).toBe(canonical);
+  });
+});
+
+describe("supportsVariant", () => {
+  const RULES = { capabilities: ["text", "image"], followUpRoles: ["first_comment"] };
+  const comment = { kind: "first_comment", text: "x" };
+  const ROWS: [string, object, boolean][] = [
+    ["text on a channel that takes text", {}, true],
+    ["multi_image on a channel that takes images", { post_type: "multi_image" }, true],
+    ["video on a channel without video", { post_type: "video" }, false],
+    ...["document", "article", "reel", "story", "event", "offer"].map((type): [string, object, boolean] => [
+      `${type}, which no capability covers`,
+      { post_type: type },
+      false,
+    ]),
+    ["a first comment the channel takes", { parts: [comment] }, true],
+    ["a thread reply the channel does not take", { parts: [comment, part()] }, false],
+  ];
+  it.each(ROWS)("%s", (_what, change, supported) => {
+    const [checked] = asDraft(variant(change)).variants;
+    expect(checked && supportsVariant(checked, RULES)).toBe(supported);
   });
 });
 

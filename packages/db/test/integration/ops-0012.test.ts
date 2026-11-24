@@ -76,6 +76,7 @@ const RETAINED = [
   ["app.invitations", "app.invitations"],
   ["app.media_uploads", "app.media_uploads"],
   ["app.idempotency_keys", "app.idempotency_keys"],
+  ["app.post_versions", "app.post_versions_autosave"],
   ["app.operation_attempts", "app.operation_attempts"],
   ["app.usage_reservations", "app.usage_reservations"],
   ["app.provider_quota_ledger", "app.provider_quota_ledger"],

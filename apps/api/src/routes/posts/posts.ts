@@ -3,6 +3,7 @@ import { draftSchema } from "@shoutory/core/content";
 import type { TenantTx } from "@shoutory/db/context";
 import type { Context } from "hono";
 import { z } from "zod";
+import type { Throttle } from "../../auth/throttle.js";
 import type { HealthProvider } from "../../channels/health.js";
 import { Refusal } from "../../errors/refusal.js";
 import { type App, type AppEnv, defineRoute } from "../define-route.js";
@@ -164,7 +165,13 @@ const CHANGES = {
   save: "SELECT * FROM app.post_save($1, $2, $3, $4::jsonb, $5)",
 } as const;
 
-function registerChange(app: App, providers: Providers, now: () => Date, kind: keyof typeof CHANGES): void {
+function registerChange(
+  app: App,
+  providers: Providers,
+  now: () => Date,
+  kind: keyof typeof CHANGES,
+  throttle: Throttle,
+): void {
   defineRoute(app, {
     method: kind === "autosave" ? "patch" : "post",
     path: kind === "autosave" ? `${BASE}/{post_id}` : `${BASE}/{post_id}/save`,
@@ -174,6 +181,7 @@ function registerChange(app: App, providers: Providers, now: () => Date, kind: k
     body: draftBody,
     handler: async ({ c, tx, scope, params, body }) => {
       const expected = expectedVersion(c);
+      if (kind === "autosave") await throttle.spend("post_autosave", c.get("session").userId);
       const { snapshot, hash } = await resolveDraft(tx, scope.workspaceId, body.draft, providers, now());
       const outcome = await callDefiner(tx, CHANGES[kind], [
         scope.workspaceId,
@@ -228,11 +236,17 @@ function registerRestore(app: App, providers: Providers, now: () => Date): void 
   });
 }
 
-export function registerPosts(app: App, providers: Providers, now: () => Date): void {
+export function registerPosts(
+  app: App,
+  providers: Providers,
+  options: { now?: () => number; auth: { throttle: Throttle } },
+): void {
+  const now = () => new Date(options.now?.() ?? Date.now());
+  const { throttle } = options.auth;
   registerCreate(app, providers, now);
   registerGet(app);
   registerVersions(app);
-  registerChange(app, providers, now, "autosave");
-  registerChange(app, providers, now, "save");
+  registerChange(app, providers, now, "autosave", throttle);
+  registerChange(app, providers, now, "save", throttle);
   registerRestore(app, providers, now);
 }

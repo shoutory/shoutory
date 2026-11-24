@@ -1,7 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import type { TenantCtx } from "../../src/context/with-tenant.js";
+import { migrationsDir } from "../../src/migrate/runner.js";
 import {
   cloneTemplate,
   readTestEnv,
@@ -380,7 +383,7 @@ describe("restore refusals", () => {
   });
 
   it.each(["shoutory_definer", "shoutory_app", "shoutory_worker"])(
-    "an UPDATE or DELETE of a version is refused for %s",
+    "an UPDATE or DELETE of a version changes nothing for %s outside the purge",
     async (role) => {
       const { post } = await createPost();
       await admin(async (client) => {
@@ -391,7 +394,12 @@ describe("restore refusals", () => {
           await client.query("BEGIN");
           await client.query(`SET LOCAL ROLE ${role}`);
           await client.query("SELECT set_config('app.job_purpose', 'post_restore', true)");
-          await expect(client.query(statement, [post])).rejects.toMatchObject({ code: "42501" });
+          // The purge needs DELETE on the table, so for it the row policy is what keeps every other purpose out.
+          if (role === "shoutory_definer" && statement.startsWith("DELETE")) {
+            expect((await client.query(statement, [post])).rowCount).toBe(0);
+          } else {
+            await expect(client.query(statement, [post])).rejects.toMatchObject({ code: "42501" });
+          }
           await client.query("ROLLBACK");
         }
       });
@@ -402,7 +410,13 @@ describe("restore refusals", () => {
 
 const DUE = new Date("2030-01-02T03:04:05Z");
 
-async function plantOperation(ws: string, variantId: string, channel: string, state: string): Promise<void> {
+async function plantOperation(
+  ws: string,
+  variantId: string,
+  channel: string,
+  state: string,
+  extra: Record<string, unknown> = {},
+): Promise<void> {
   const given: Record<string, unknown> = {
     workspace_id: ws,
     variant_id: variantId,
@@ -417,6 +431,7 @@ async function plantOperation(ws: string, variantId: string, channel: string, st
     idempotency_marker: `guard-${randomUUID()}`,
     requested_by: U.editor,
     ...(state === "published" ? { effect: "confirmed", settled_at: DUE } : {}),
+    ...extra,
   };
   const names = Object.keys(given);
   await admin(async (client) => {
@@ -686,11 +701,12 @@ describe("keys and bounds", () => {
     expect(channel.error).toMatchObject({ code: "23503" });
   });
 
+  it("a draft of 61 parts is stored: the parts are bounded by their bytes alone", async () => {
+    const parts = Array.from({ length: 61 }, () => ({ kind: "thread_reply", text: "x" }));
+    expect((await run(EDITOR, create([variant(CH1, { parts })]))).error).toBeUndefined();
+  });
+
   it.each([
-    [
-      "26 parts",
-      [variant(CH1, { parts: Array.from({ length: 26 }, () => ({ kind: "thread_reply", text: "x" })) })],
-    ],
     ["an unknown post type", [variant(CH1, { post_type: "bogus" })]],
     ["a 36 character locale", [variant(CH1, { locale: "x".repeat(36) })]],
     ["33 media in one variant", [variant(CH1, { media: Array.from({ length: 33 }, () => medium(MED1)) })]],
@@ -719,5 +735,86 @@ describe("the idempotency key table", () => {
       "live",
       "recent",
     ]);
+  });
+});
+
+describe("autosave retention", () => {
+  const purge = async () =>
+    Number(
+      (await db.pool("worker").query("SELECT removed FROM app.purge_expired('app.post_versions_autosave')"))
+        .rows[0]?.removed,
+    );
+
+  // Versions 2-56 are autosaves and 57 is a save; 2, 10 and 57 are 40 days old. The newest 50 autosaves are 7-56.
+  it("removes autosaves older than 30 days or beyond the newest 50, never a named version or another kind", async () => {
+    const made = await createPost([variant(CH1)], "retained");
+    const planted = await rows(
+      `INSERT INTO app.post_versions (workspace_id, post_id, version_no, kind, snapshot, snapshot_hash, created_by,
+         created_at)
+       SELECT $1, $2::uuid, n, CASE WHEN n = 57 THEN 'save' ELSE 'autosave' END, '{}'::jsonb,
+         sha256(convert_to($2::text || n, 'UTF8')), $3,
+         CASE WHEN n IN (2, 10, 57) THEN now() - interval '40 days' ELSE now() END
+       FROM generate_series(2, 57) AS n RETURNING id, version_no`,
+      [WA, made.post, U.editor],
+    );
+    const id = (n: number) => planted.find((row) => row.version_no === n)?.id as string;
+    const target = (await variantsOf(made.post))[0]?.id as string;
+    await rows(
+      "UPDATE app.post_variants SET schedule_state = 'scheduled', due_at = $2, frozen_version_id = $3 WHERE id = $1",
+      [target, DUE, id(3)],
+    );
+    await plantOperation(WA, target, CH1, "pending", {
+      frozen_version_id: id(4),
+      frozen_snapshot_hash: digest("frozen"),
+    });
+    await rows("UPDATE app.posts SET current_version_id = $2 WHERE id = $1", [made.post, id(5)]);
+    expect(await purge()).toBe(3);
+    expect(await purge()).toBe(0);
+    const kept = Array.from({ length: 57 }, (_, i) => i + 1).filter((n) => ![2, 6, 10].includes(n));
+    expect((await versionsOf(made.post)).map((row) => row.version_no)).toEqual(kept);
+  });
+});
+
+describe("the language tag migration", () => {
+  const MIGRATION = join(migrationsDir, "0033_variant_locale_case.sql");
+  const apply = async () => {
+    const sql = await readFile(MIGRATION, "utf8");
+    await admin((client) => client.query(sql));
+  };
+  const plantLocales = async (locales: string[]) => {
+    const { post } = await plantPost();
+    for (const locale of locales) {
+      await rows(
+        "INSERT INTO app.post_variants (workspace_id, post_id, channel_id, locale) VALUES ($1, $2, $3, $4)",
+        [WA, post, CH2, locale],
+      );
+    }
+    return post;
+  };
+
+  it("rewrites every stored tag to the case Intl.getCanonicalLocales gives", async () => {
+    const given = ["en-us", "zh-hant-tw", "AR", "en-x-PRIV", "sr-latn-rs-u-CA-gregory"];
+    const post = await plantLocales(given);
+    await apply();
+    const stored = await rows("SELECT locale FROM app.post_variants WHERE post_id = $1 AND channel_id = $2", [
+      post,
+      CH2,
+    ]);
+    expect(stored.map((row) => row.locale).sort()).toEqual(Intl.getCanonicalLocales(given).sort());
+  });
+
+  it("fails loudly when two tags of one channel differ only in case", async () => {
+    await plantLocales(["en-us", "en-US"]);
+    await expect(apply()).rejects.toMatchObject({ code: "23505" });
+  });
+
+  it("fails loudly on a stored tag that is not well formed and rewrites nothing", async () => {
+    const post = await plantLocales(["fr-ca", "fr_CA!"]);
+    await expect(apply()).rejects.toMatchObject({ code: "23514" });
+    const stored = await rows("SELECT locale FROM app.post_variants WHERE post_id = $1 AND channel_id = $2", [
+      post,
+      CH2,
+    ]);
+    expect(stored.map((row) => row.locale).sort()).toEqual(["fr-ca", "fr_CA!"]);
   });
 });

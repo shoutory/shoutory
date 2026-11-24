@@ -30,6 +30,7 @@ export const RETENTION_CLASSES = [
   "app.connect_challenges",
   "app.media_uploads",
   "app.idempotency_keys",
+  "app.post_versions_autosave",
   "app.operation_attempts",
   "app.usage_reservations",
   "app.provider_quota_ledger",

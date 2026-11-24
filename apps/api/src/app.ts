@@ -186,7 +186,7 @@ export function createApp(options: AppOptions): App {
   registerWorkspaces(app, options.auth);
   const channelRoutes = channelServices(options);
   registerChannels(app, options.auth.ipHmac, channelRoutes?.check);
-  registerPosts(app, channelRoutes?.check.providers ?? {}, () => new Date(options.now?.() ?? Date.now()));
+  registerPosts(app, channelRoutes?.check.providers ?? {}, options);
   if (channelRoutes) {
     registerConnect(app, options.auth, channelRoutes.connect);
     registerProviders(app, channelRoutes.check.providers);
