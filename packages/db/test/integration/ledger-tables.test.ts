@@ -665,7 +665,7 @@ describe("the purge of expired ledger rows", () => {
 // Nothing else.
 const GRANTS: Record<string, string[]> = {
   operations: ["INSERT", "SELECT"],
-  operation_media: ["SELECT"],
+  operation_media: ["INSERT", "SELECT"],
   operation_attempts: ["DELETE", "INSERT", "SELECT"],
   operation_evidence: ["INSERT", "SELECT"],
   operation_resolutions: ["INSERT"],
@@ -676,6 +676,11 @@ const POLICIES = [
   "media_gc_candidates_select on operation_media",
   "media_gc_candidates_select on operations",
   "media_gc_candidates_select on post_media",
+  "operation_media_lock_select on operations",
+  "operation_media_lock_select on post_variants",
+  "operation_media_pin_insert on operation_media",
+  "operation_media_pin_select on operations",
+  "operation_media_pin_select on post_variants",
   "ledger_guard_select on ledger_transitions",
   "ledger_guard_select on post_variants",
   "operation_cancel_insert on outbox",

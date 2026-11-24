@@ -387,6 +387,9 @@ const DEFINERS: Definer[] = [
     callers: ["shoutory_worker"],
   },
   { name: "media_gc_due", args: "workspaces uuid[], only_asset uuid", callers: [], helper: true },
+  // 0026: the one writer of `operation_media`, called inside admission and `resolve_operation`; no runtime role calls it.
+  { name: "operation_media_lock", args: "p_ws uuid, p_version uuid, p_op uuid", callers: [] },
+  { name: "operation_media_pin", args: "p_ws uuid, p_op uuid, p_version uuid", callers: [] },
   { name: "post_media_guard", args: "", callers: [] },
   // 0019: the two trigger functions of the ledger. They run for whoever writes an operation, and no role calls them.
   { name: "ledger_guard", args: "", callers: [] },

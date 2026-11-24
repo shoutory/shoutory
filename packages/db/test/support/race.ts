@@ -39,8 +39,8 @@ export async function openTx(pool: Pool, ctx: TenantCtx | null): Promise<PoolCli
   return client;
 }
 
-async function waitsForLock(rows: Rows, pid: number): Promise<void> {
-  const deadline = Date.now() + 10_000;
+async function waitsForLock(rows: Rows, pid: number, waitMs: number): Promise<void> {
+  const deadline = Date.now() + waitMs;
   while (Date.now() < deadline) {
     if ((await rows("SELECT 1 FROM pg_locks WHERE pid = $1 AND NOT granted", [pid])).length) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
@@ -56,12 +56,15 @@ export interface RaceOutcome {
 /**
  * tx1 writes and holds, tx2 starts its write and is seen waiting in pg_locks (`rows` runs as the superuser), then tx1
  * commits and tx2 finishes. A refused second writer is rolled back and reported, never thrown. Both clients are released.
+ * The second writer has `waitMs` (10 s by default) to be seen waiting; a test whose own limit is shorter passes less, so
+ * that a writer that never waits fails with this error and not with the test's timeout.
  */
 export async function holdThenRace(
   rows: Rows,
   first: PoolClient,
   second: PoolClient,
   write: (client: PoolClient, n: 1 | 2) => Promise<unknown>,
+  waitMs = 10_000,
 ): Promise<RaceOutcome> {
   try {
     await write(first, 1);
@@ -70,7 +73,7 @@ export async function holdThenRace(
       () => undefined,
       (error: unknown) => ({ error }),
     );
-    await waitsForLock(rows, pid);
+    await waitsForLock(rows, pid, waitMs);
     await first.query("COMMIT");
     const refused = await pending;
     await second.query(refused ? "ROLLBACK" : "COMMIT");

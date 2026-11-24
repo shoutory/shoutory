@@ -845,6 +845,7 @@ const WRITERS = [
   "operation_attempt_start",
   "operation_cancel",
   "operation_insert",
+  "operation_media_pin",
   "operation_record_progress",
   "operation_transition",
   "operations_usage",
