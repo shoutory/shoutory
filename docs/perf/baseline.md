@@ -1,4 +1,4 @@
-# M0 performance baseline
+# Performance baseline
 
 What an idle install costs and how fast the first screens answer, measured once on one machine. The numbers are a
 starting point for the budgets of later releases. They are not a promise, and a number from a hosted runner is never
@@ -16,8 +16,8 @@ compared with them.
   PostgreSQL is never limited. "Unconstrained" means the whole VM.
 
 ```
-node perf/m0/api-latency.mjs                 # 300 s idle, 500 workspaces, three sizes (about 40 minutes)
-SHOUTORY_PERF_DATABASE_URL=postgres://… node perf/m0/pgboss-idle.mjs    # against a scratch database, nothing else on it
+node perf/baseline/api-latency.mjs           # 300 s idle, 500 workspaces, three sizes (about 40 minutes)
+SHOUTORY_PERF_DATABASE_URL=postgres://… node perf/baseline/pgboss-idle.mjs    # against a scratch database, nothing else on it
 ```
 
 The queue run used a throwaway `postgres:18.6-alpine` container with a scratch database.
@@ -62,7 +62,7 @@ committed, 2.54 per second (about 1.9 per poll).
 - **Sign-in samples.** One address holds 60 sign-in tokens and gets one back every 15 s, so one machine takes at most
   60 sign-ins in a burst. The script takes 50 on one account and waits 11 minutes before each further size.
 - **Organizations.** An organization holds at most 100 workspaces, so 500 workspaces are 5 organizations.
-- **Not measured.** Page-load and server-sent-event latency (there is no event stream in M0) and the database under a
+- **Not measured.** Page-load and server-sent-event latency (there is no event stream yet) and the database under a
   size limit.
 - **One run.** There is no repetition and no confidence interval; a difference of a few milliseconds between sizes
   is noise.

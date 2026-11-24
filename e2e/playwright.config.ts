@@ -4,7 +4,7 @@ import { FOUNDER_STATE } from "./support/journey";
 import { APP_ORIGIN } from "./support/stack";
 import { VISUAL_SNAPSHOT_PATH } from "./support/visual";
 
-const A11Y = "a11y-m0.spec.ts";
+const A11Y = "a11y.spec.ts";
 const QUALITY = [A11Y, ...["reflow", "focus", "recovery-download"].map((name) => `${name}.spec.ts`)];
 const UX = "ux-acceptance.spec.ts";
 const VISUAL = "rtl-visual.spec.ts";
@@ -12,7 +12,7 @@ const VISUAL = "rtl-visual.spec.ts";
 // and that run has no other.
 const RESTORE = "restore-drill.spec.ts";
 const RESTORE_RUN = process.env.SHOUTORY_E2E_RESTORE === "true";
-const JOURNEY = { name: "journey", testMatch: "j1-onboarding.spec.ts" };
+const JOURNEY = { name: "journey", testMatch: "onboarding.spec.ts" };
 // Screenshots differ between platforms, so baselines are made and compared on Linux only. A listing runs nothing, so it
 // may show the visual cells on any machine for the contract tests.
 const LINUX = process.platform === "linux" || process.argv.includes("--list");
@@ -31,7 +31,7 @@ const FULL = [
   JOURNEY,
   {
     name: "founder",
-    testIgnore: ["j1-onboarding.spec.ts", "no-telemetry.spec.ts", UX, VISUAL, RESTORE, ...QUALITY],
+    testIgnore: ["onboarding.spec.ts", "no-telemetry.spec.ts", UX, VISUAL, RESTORE, ...QUALITY],
     dependencies: ["journey"],
     use: { storageState: FOUNDER_STATE },
   },

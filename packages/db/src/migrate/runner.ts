@@ -63,7 +63,12 @@ export const ACCEPTED_REVISIONS: readonly AcceptedRevision[] = [
   {
     name: "0008_audit.sql",
     from: "45631fe6c7775eae3770972358a82fddb18c233da34b4ba26796febed2790a20",
-    to: "7cc65597d5dbdf43d170377046392a5f8b06a74d6a019604ee586424d5b5f91b",
+    to: "f7b9514a29150355fcdff643adf3b84279fae99e7dece75d93e9a78d15ce6327",
+  },
+  {
+    name: "0008_audit.sql",
+    from: "7cc65597d5dbdf43d170377046392a5f8b06a74d6a019604ee586424d5b5f91b",
+    to: "f7b9514a29150355fcdff643adf3b84279fae99e7dece75d93e9a78d15ce6327",
   },
   {
     name: "0009_access_definers.sql",
@@ -88,7 +93,12 @@ export const ACCEPTED_REVISIONS: readonly AcceptedRevision[] = [
   {
     name: "0013_channels.sql",
     from: "e03d43637c322c1f44d075622a1eea50a5c2c03f7190011fcde2f4811804322c",
-    to: "5f6399c3999bbb26cb7350334f64ae322178ed567f96d5f53590eef38b7f1c32",
+    to: "f03ab6761e57ee9f4e0eaea40673c71deca35e0dc2f3371e4f6d81d4926ef46d",
+  },
+  {
+    name: "0013_channels.sql",
+    from: "5f6399c3999bbb26cb7350334f64ae322178ed567f96d5f53590eef38b7f1c32",
+    to: "f03ab6761e57ee9f4e0eaea40673c71deca35e0dc2f3371e4f6d81d4926ef46d",
   },
   {
     name: "0014_credentials.sql",

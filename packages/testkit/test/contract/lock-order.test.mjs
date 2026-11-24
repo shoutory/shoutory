@@ -96,7 +96,7 @@ for (const [title, body, files, flagged] of FIXTURES) {
 }
 
 const AFTER_AUDIT = "PERFORM app.audit_append(); UPDATE app.idempotency_keys SET state = 'x' WHERE id = 1;";
-test("the lock-order check permits idem_finish as the only rank-10-after-11 write", () => {
+test("the lock-order check permits idem_finish as the only write to a lower table after the audit head", () => {
   assert.deepEqual(ALLOWED, ["idem_finish"]);
   assert.deepEqual(lockOrderViolations([AUDIT, define("idem_finish", AFTER_AUDIT)]), []);
   assert.equal(lockOrderViolations([AUDIT, define("idem_finish_again", AFTER_AUDIT)]).length, 1);

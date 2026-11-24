@@ -28,6 +28,10 @@ export const PATTERNS = [
   { name: "slice id", regex: new RegExp(["\\bM", "\\d+[a-z]?", "-\\d{2}\\b"].join("")) },
   { name: "plan label", regex: new RegExp(["\\bOD", "-M"].join("")) },
   { name: "plan label", regex: new RegExp(["\\bA", "-M\\d+-"].join("")) },
+  { name: "milestone prefix in a file name", regex: new RegExp(["(?:^|[/\\s])m", "\\d+-[a-z]"].join("")) },
+  { name: "milestone suffix in a file name", regex: new RegExp(["-m", "\\d+\\.[a-z]"].join("")) },
+  { name: "milestone folder", regex: new RegExp(["\\bperf/m", "\\d+/"].join("")) },
+  { name: "journey id in a file name", regex: new RegExp(["(?:^|/)j", "\\d+-"].join("")) },
 ];
 
 // Citations of planning documents and their ids: ruling ids, rule numbers, verification ids, requirement ids, open
@@ -50,8 +54,11 @@ export const CITATION_PATTERNS = [
   { name: "case id", regex: new RegExp(["\\bE", "-\\d+\\b"].join("")) },
   { name: "security set name", regex: new RegExp(["\\bH", "3\\b"].join("")) },
   { name: "ledger spec term", regex: new RegExp(["\\bO", "L transition"].join("")) },
-  { name: "policy template name", regex: new RegExp(["\\btemplate ", "U\\b"].join("")) },
-  { name: "provider class name", regex: new RegExp(["\\bclass ", "E\\b"].join("")) },
+  { name: "policy template name", regex: new RegExp(["\\btemplate ", "[WODU]\\b"].join("")) },
+  { name: "provider class name", regex: new RegExp(["\\bclass ", "[A-E]\\b"].join("")) },
+  { name: "spike id", regex: new RegExp(["\\bSP", "-\\d+\\b"].join("")) },
+  { name: "milestone token", regex: new RegExp(["\\bM", "\\d+[a-z]?\\b(?! ?\\d)"].join("")) },
+  { name: "journey id", regex: new RegExp(["\\bJ", "\\d+\\b"].join("")) },
   { name: "planning document", regex: new RegExp(["data", " model"].join("")) },
   { name: "open question id", regex: new RegExp(["\\bQ", "-[A-Z]+\\d*\\b"].join("")) },
   { name: "planning document", regex: new RegExp(["\\bflows? ", "\\d+(?:\\.\\d+)?"].join("")) },

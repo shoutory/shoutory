@@ -11,19 +11,9 @@ const exceptionIds: string[] = (
   ) as { id: string }[]
 ).map((row) => row.id);
 
-const H3_IDS = [
+const FIELD_IDS = [
   "server-instance-url",
-  "identity-server-url",
-  "identity-handle",
-  "site-url",
-  "oidc-issuer",
-  "cimd",
-  "webhook-target",
-  "notification-webhook",
-  "ai-base-url",
-  "shortener-host",
   "media-import",
-  "rss",
   "s3-endpoint",
   "s3-public-endpoint",
   "clamav-host",
@@ -44,22 +34,19 @@ function problems(fields: readonly Partial<UrlField>[], knownExceptionIds: reado
       found.push(`${id}: exception id missing from the exceptions list`);
     if (field.route === "egress" && field.exceptionId !== undefined)
       found.push(`${id}: egress row with an exception id`);
-    if (!field.milestone) found.push(`${id}: no milestone`);
     return found;
   });
 }
 
 describe("every URL field names a guard route", () => {
   it("lists the whole set of URL fields, each with a route, and each exception id is in the exceptions list", () => {
-    expect(URL_FIELDS.map((field) => field.id).sort()).toEqual([...H3_IDS].sort());
+    expect(URL_FIELDS.map((field) => field.id).sort()).toEqual([...FIELD_IDS].sort());
     expect(problems(URL_FIELDS, exceptionIds)).toEqual([]);
   });
 
   it("routes the user-supplied fields through egress and the operator-configured drivers to exception rows", () => {
     const route = (id: string) => URL_FIELDS.find((field) => field.id === id)?.route;
-    expect(
-      ["server-instance-url", "webhook-target", "media-import", "rss", "ai-base-url"].map(route),
-    ).toEqual(Array(5).fill("egress"));
+    expect(["server-instance-url", "media-import"].map(route)).toEqual(["egress", "egress"]);
     expect(
       ["s3-endpoint", "s3-public-endpoint", "clamav-host", "smtp-url", "otlp-endpoint", "mail-check-dns"].map(
         route,
@@ -68,18 +55,17 @@ describe("every URL field names a guard route", () => {
   });
 
   it.each([
-    ["a field with no route", [{ id: "x", milestone: "M9" }], ["x: no guard route"]],
+    ["a field with no route", [{ id: "x" }], ["x: no guard route"]],
     [
       "an exception id missing from the list",
-      [{ id: "x", route: "operator_exception", exceptionId: "nope", milestone: "M9" }],
+      [{ id: "x", route: "operator_exception", exceptionId: "nope" }],
       ["x: exception id missing from the exceptions list"],
     ],
     [
       "an exception row with no exception id",
-      [{ id: "x", route: "operator_exception", milestone: "M9" }],
+      [{ id: "x", route: "operator_exception" }],
       ["x: exception id missing from the exceptions list"],
     ],
-    ["a field with no milestone", [{ id: "x", route: "egress" }], ["x: no milestone"]],
   ] as const)("fails for %s", (_name, fields, expected) => {
     expect(problems(fields, exceptionIds)).toEqual(expected);
   });

@@ -161,7 +161,7 @@ jobs:
           -e SHOUTORY_DATABASE_PASSWORD_READONLY
           "$PG_ID" psql -U postgres -d shoutory -v ON_ERROR_STOP=1 < docker/postgres/init.sql
       # A service container cannot pass the command arguments the S3 gateway needs, so a step starts it. The image is the
-      # one the SP-11 spike chose; its keys are throwaway test values that the tests carry too.
+      # one the tests were built against; its keys are throwaway test values that the tests carry too.
       - name: start the S3 simulator
         run: >-
           docker run -d --name shoutory-s3 -p 127.0.0.1:7070:7070 --tmpfs /data

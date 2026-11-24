@@ -265,7 +265,7 @@ SELECT app.apply_rls_template('app.provider_instance_apps'::regclass, 'I');
 CREATE POLICY provider_instance_apps_deny_runtime ON app.provider_instance_apps FOR ALL
   TO shoutory_app, shoutory_worker USING (false) WITH CHECK (false);
 
--- Locks are taken in rank order: the tenancy locks, then the channel row, then the audit head inside audit_append.
+-- Locks are taken in the lock order: the tenancy locks, then the channel row, then the audit head inside audit_append.
 -- The caller needs channels.manage (the admin rank). A caller outside the workspace, a channel of another workspace
 -- and a missing channel all get the same 42501.
 GRANT SELECT ON app.channels TO shoutory_definer;

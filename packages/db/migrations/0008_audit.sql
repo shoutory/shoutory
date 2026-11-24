@@ -142,7 +142,7 @@ BEGIN
 END
 $$;
 
--- Takes the chain's head row FOR UPDATE (the last lock rank of a transaction), then reads the clock, so the order
+-- Takes the chain's head row FOR UPDATE (the last lock a transaction takes), then reads the clock, so the order
 -- of `at` inside a chain is the order of the chain. If the UTC day moved in between, the new day's head is locked
 -- and the clock read again: a row's day is always the UTC day of its `at`. The genesis hash is 32 zero bytes.
 -- Internal: no runtime role may execute it; the other definers call it.

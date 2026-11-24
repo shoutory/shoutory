@@ -96,6 +96,16 @@ describe("migration runner: accepted revisions", () => {
     expect(await stored()).toEqual([sum(V2)]);
   });
 
+  it.each([V1, V2])("passes from either of two earlier sums when both are listed", async (start) => {
+    const V3 = "-- third wording\nCREATE TABLE public.widgets (id int);";
+    await box.write(NAME, start);
+    await box.migrate();
+    await box.write(NAME, V3);
+    const listed = [V1, V2].map((from) => ({ name: NAME, from: sum(from), to: sum(V3) }));
+    expect(await box.migrate(undefined, listed)).toEqual([]);
+    expect(await stored()).toEqual([sum(V3)]);
+  });
+
   it("is refused when the file no longer holds the listed new sum", async () => {
     await box.write(NAME, V1);
     await box.migrate();

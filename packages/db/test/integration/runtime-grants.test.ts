@@ -198,7 +198,7 @@ describe("runtime role grants: a planted table grant is reported", () => {
     await admin.query("GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON app.fx_grants TO shoutory_app");
   });
 
-  it("TRUNCATE beyond the W template is a violation", async () => {
+  it("TRUNCATE beyond the workspace-table grants is a violation", async () => {
     expect(await grantViolations(clone().pool("owner"))).toContain("app.fx_grants shoutory_app TRUNCATE");
   });
 });

@@ -1,6 +1,6 @@
 // Build first (`pnpm build`), then run alone from the repository root, on the database the integration tests use:
 //
-//   node perf/m1/dispatch.mjs [targets for the delay run, default 200] [seconds they are spread over, default 120]
+//   node perf/dispatch.mjs [targets for the delay run, default 200] [seconds they are spread over, default 120]
 //
 // The batch cost is measured against the 64-subtransaction cache of PostgreSQL 18 (`PGPROC_MAX_CACHED_SUBXIDS`).
 // The delay of a post is `operation_attempts.effect_started_at - operations.due_at` of its committing attempt: the

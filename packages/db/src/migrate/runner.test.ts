@@ -8,9 +8,9 @@ describe("the accepted revisions of applied migrations", () => {
     expect(stale.map(({ name }) => name)).toEqual([]);
   });
 
-  it("list each file at most once and never from a sum to itself", () => {
-    const names = ACCEPTED_REVISIONS.map(({ name }) => name);
-    expect(new Set(names).size).toBe(names.length);
+  it("list each file and old sum at most once and never from a sum to itself", () => {
+    const pairs = ACCEPTED_REVISIONS.map(({ name, from }) => `${name} ${from}`);
+    expect(new Set(pairs).size).toBe(pairs.length);
     expect(ACCEPTED_REVISIONS.filter(({ from, to }) => from === to)).toEqual([]);
   });
 });

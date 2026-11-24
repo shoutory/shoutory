@@ -268,7 +268,7 @@ export class CredentialService {
         await this.#put(tx, input, channelId, generation, salt);
         return { channelId, generation };
       };
-      // A reconnect names its channel, so two of them are ordered by its advisory lock (the first rank of the lock order).
+      // A reconnect names its channel, so two of them are ordered by its advisory lock (the first lock in the lock order).
       // A connect that names none takes no advisory lock, also when its identity turns out to match an existing channel
       // and reuses it: it relies on the identity key and the channel row lock.
       return input.reconnectChannelId === undefined

@@ -12,7 +12,7 @@ import {
 } from "../support/journey";
 import { waitForLink } from "../support/mail";
 
-test("J1: sign up, confirm by mail, enrol TOTP, sign in with a code, create a workspace, invite, the member accepts and sees it", async ({
+test("the onboarding journey: sign up, confirm by mail, enrol TOTP, sign in with a code, create a workspace, invite, the member accepts and sees it", async ({
   page,
   browser,
 }) => {

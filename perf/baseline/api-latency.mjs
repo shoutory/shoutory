@@ -1,6 +1,6 @@
 // Run alone after a build, from the repository root (needs Docker; refuses to start when another container runs):
 //
-//   node perf/m0/api-latency.mjs [idle seconds, default 300]
+//   node perf/baseline/api-latency.mjs [idle seconds, default 300]
 //
 // An organization holds at most 100 workspaces and the per-address sign-in bucket holds 60 tokens and refills
 // one every 15 s, so there are 5 organizations and each size waits for the bucket before its 50 sign-ins.

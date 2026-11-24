@@ -1,6 +1,6 @@
 // Run alone after a build:
 //
-//   SHOUTORY_PERF_DATABASE_URL=postgres://owner:...@localhost:5432/scratch node perf/m0/pgboss-idle.mjs [queues] [poll s] [seconds]
+//   SHOUTORY_PERF_DATABASE_URL=postgres://owner:...@localhost:5432/scratch node perf/baseline/pgboss-idle.mjs [queues] [poll s] [seconds]
 //
 // The database must be a scratch one with nothing else connected: the count is the whole database's.
 import { createRequire } from "node:module";
