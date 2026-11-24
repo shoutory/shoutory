@@ -13,6 +13,7 @@ import { refuseEgress } from "./ledger/held.js";
 import { subscribePublish } from "./ledger/subscribe.js";
 import { createLedgerTick } from "./ledger/tick.js";
 import { createMailSender, type MailSenderOptions } from "./mail-sender.js";
+import { collectMedia } from "./media/gc.js";
 import type { PipelineDeps } from "./media/pipeline.js";
 import { mediaUploadedHandler } from "./media/uploaded.js";
 import { createOutboxRelay } from "./outbox-relay.js";
@@ -153,8 +154,19 @@ async function scheduleSweep(boss: PgBoss, logger: Logger, partsRoot: string | u
   await boss.schedule("sweep_upload_parts", JOB_QUEUES.sweep_upload_parts.cron, {}, { missed: "once" });
 }
 
-async function register(boss: PgBoss, pool: AppPool, logger: Logger, partsRoot?: string): Promise<void> {
+async function register(
+  boss: PgBoss,
+  pool: AppPool,
+  logger: Logger,
+  media: WorkerOptions["media"],
+): Promise<void> {
   const options = { pollingIntervalSeconds: POLL_SECONDS };
+  await boss.work("media_gc", options, (jobs) =>
+    logged(logger, "media_gc", async () => {
+      for (const job of jobs) parseJobPayload("media_gc", job.data);
+      await collectMedia({ pool, storage: media.storage, logger });
+    }),
+  );
   await boss.work("ensure_partitions", options, (jobs) =>
     logged(logger, "ensure_partitions", async () => {
       for (const job of jobs) parseJobPayload("ensure_partitions", job.data);
@@ -169,6 +181,7 @@ async function register(boss: PgBoss, pool: AppPool, logger: Logger, partsRoot?:
   );
   const missed = { missed: "once" } as const;
   await boss.schedule("ensure_partitions", JOB_QUEUES.ensure_partitions.cron, {}, missed);
+  await boss.schedule("media_gc", JOB_QUEUES.media_gc.cron, {}, missed);
   for (const name of RETENTION_CLASSES) {
     await boss.schedule(
       "purge_expired",
@@ -177,7 +190,7 @@ async function register(boss: PgBoss, pool: AppPool, logger: Logger, partsRoot?:
       { ...missed, key: name },
     );
   }
-  await scheduleSweep(boss, logger, partsRoot);
+  await scheduleSweep(boss, logger, media.partsRoot);
 }
 
 /**
@@ -221,7 +234,7 @@ export async function startWorker({
     await boss.start();
     // Idempotent: a provider added without `shoutory migrate` must not stall admission on a queue that is missing.
     for (const name of registry.allQueueNames()) await boss.createQueue(name, PROVIDER_QUEUE_OPTIONS);
-    await register(boss, pool, logger, media.partsRoot);
+    await register(boss, pool, logger, media);
     await subscribePublish({
       pool,
       boss,

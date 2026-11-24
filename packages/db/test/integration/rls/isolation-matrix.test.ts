@@ -223,8 +223,10 @@ REGISTRY["app.sync_cursors"] = {
 const MA = randomUUID();
 const MB = randomUUID();
 const assetRow = (id: string, workspace: string) =>
-  `INSERT INTO app.media_assets (id, workspace_id, object_key, file_name, source, created_by)
-   VALUES ('${id}', '${workspace}', 'ws/${workspace}/${id}/1/original', 'matrix.png', 'upload', '${UA}')`;
+  // Ready, because a post names only a ready medium.
+  `INSERT INTO app.media_assets (id, workspace_id, object_key, file_name, source, created_by, state, sha256)
+   VALUES ('${id}', '${workspace}', 'ws/${workspace}/${id}/1/original', 'matrix.png', 'upload', '${UA}', 'ready',
+     sha256(convert_to('${id}', 'UTF8')))`;
 REGISTRY["app.media_assets"] = {
   key: "workspace_id",
   a: WA,

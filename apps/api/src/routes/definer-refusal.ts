@@ -43,6 +43,7 @@ const DEFINER_STATES: Readonly<Record<string, ErrorCode>> = {
   SH403: "forbidden",
   SH409: "conflict",
   SH410: "invitation_unusable",
+  SH422: "unprocessable_content",
   SH429: "too_many_requests",
 };
 
@@ -59,6 +60,7 @@ const REASONS: ReadonlySet<string> = new Set([
   "revoked",
   "expired",
   "channel_not_connected",
+  "media_unavailable",
 ]);
 
 // A definer that explains its refusal in a sentence instead of a code; the sentence becomes the code a client reads.
@@ -87,10 +89,10 @@ function detailsOf(state: string, message: string, detail: unknown): Record<stri
   return expires === undefined ? { reason } : { reason, expires_at: expires };
 }
 
-// Only the invitation, member, channel, resolution and creation definers raise the SH states; the same state under
-// another definer's name is a defect.
+// Only the invitation, member, channel, resolution and creation definers raise the SH states, and the attach guard of a
+// post (a medium that is no longer ready); the same state under another definer's name is a defect.
 const SH_DEFINERS =
-  /^(invitation|member|channel)_|^resolve_operation:|^(workspace|organization)_create:|^media_(mark_uploaded|set_multipart):/;
+  /^(invitation|member|channel)_|^resolve_operation:|^(workspace|organization)_create:|^media_(mark_uploaded|set_multipart):|^post: media_unavailable$/;
 // SH429 is the creation limit alone.
 const LIMIT_DEFINERS = /^(workspace|organization)_create:/;
 

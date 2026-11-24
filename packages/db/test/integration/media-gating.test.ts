@@ -127,11 +127,18 @@ async function plantTarget(o: Target): Promise<{ variant: string; provider: stri
       [WA, post, channel, o.dueAgo ?? 30, version],
     )
   )[0]?.id as string;
+  // The live rows are planted with the triggers off: the attach guard would refuse a medium that is not ready, and the row
+  // is about a live row that names one.
   for (const [position, id] of (o.live ?? []).entries())
-    await rows(
-      "INSERT INTO app.post_media (workspace_id, variant_id, position, media_id) VALUES ($1, $2, $3, $4)",
-      [WA, variant, position, id],
-    );
+    await admin(async (client) => {
+      await client.query("BEGIN");
+      await client.query("SET LOCAL session_replication_role = replica");
+      await client.query(
+        "INSERT INTO app.post_media (workspace_id, variant_id, position, media_id) VALUES ($1, $2, $3, $4)",
+        [WA, variant, position, id],
+      );
+      await client.query("COMMIT");
+    });
   return { variant, provider, media };
 }
 

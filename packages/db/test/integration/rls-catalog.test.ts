@@ -374,7 +374,20 @@ const DEFINERS: Definer[] = [
     callers: ["shoutory_app"],
   },
   { name: "media_object_removed", args: "workspace_id uuid, asset_id uuid", callers: ["shoutory_worker"] },
-  { name: "media_gc_candidates", args: "lim integer", callers: ["shoutory_worker"] },
+  {
+    name: "media_gc_candidates",
+    args: "lim integer, after_asset uuid",
+    callers: ["shoutory_worker"],
+  },
+  // 0025: the one move of an asset to deleted by the collection, after the arm's rule is read again under the row lock;
+  // the rule both it and the candidate list read; the guard that lets a post name only a ready medium.
+  {
+    name: "media_gc_take",
+    args: "workspace_id uuid, asset_id uuid, arm text",
+    callers: ["shoutory_worker"],
+  },
+  { name: "media_gc_due", args: "workspaces uuid[], only_asset uuid", callers: [], helper: true },
+  { name: "post_media_guard", args: "", callers: [] },
   // 0019: the two trigger functions of the ledger. They run for whoever writes an operation, and no role calls them.
   { name: "ledger_guard", args: "", callers: [] },
   { name: "ledger_settled_guard", args: "", callers: [] },

@@ -279,6 +279,14 @@ uploads), `abort_rule_too_long` (the fastest rule that covers the app's keys wai
 `ws/`) and `abort_rule_unreadable` (the server refused the read or has no lifecycle API, as some S3-compatible servers do:
 check the rule by hand). The admin screen's storage test returns the same `warnings`.
 
+The `worker` role (so also `all`) removes the objects of media nobody needs, every night, with either driver. It collects a
+pending upload 24 hours after it was registered (an upload in parts included, however far it got), a ready or a rejected asset 30 days after it was created, and a deleted
+asset 30 days after its deletion, with the original and every derivative. It never collects an asset that a post names,
+that an operation which can still send it names, that is in the library, or that is the avatar of its workspace; a saved
+version of a post does not keep its media, so restoring a version whose media was collected is refused as unavailable. An
+object whose delete fails is logged by the asset's id (never its key or path) and tried again 30 days after the deletion,
+and a run that outlasts its 10 minutes stops and leaves the rest for the next night.
+
 ### Logs and telemetry
 
 Logs are JSON lines on standard output. Secrets, tokens, cookies and credentials in URLs are removed before a line is

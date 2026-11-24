@@ -17,6 +17,8 @@ const MAPPED: [string, string, string | undefined, string, Record<string, string
   ["42501", "post: refused", undefined, "not_found", undefined],
   ["42501", "media: refused", undefined, "not_found", undefined],
   ["SH409", "media_set_multipart: the asset is not a pending upload", undefined, "conflict", undefined],
+  // A post that names a medium collected or removed meanwhile: the draft no longer resolves, like an autosave of it.
+  ["SH422", "post: media_unavailable", undefined, "unprocessable_content", { reason: "media_unavailable" }],
   ["42501", "resolve_operation: refused", undefined, "not_found", undefined],
   [
     "22023",

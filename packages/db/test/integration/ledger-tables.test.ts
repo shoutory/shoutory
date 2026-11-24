@@ -518,7 +518,20 @@ const COLLECTED: [string, () => Promise<string>, string | undefined][] = [
     },
     undefined,
   ],
-  ...["unverified"].map((state): [string, () => Promise<string>, string | undefined] => [
+  ...[
+    "pending",
+    "claimed",
+    "processing",
+    "dispatching",
+    "provider_accepted",
+    "retry_wait",
+    "paused",
+    "blocked_reconnect",
+    "unknown_external_state",
+    "reconciling",
+    "needs_human",
+    "unverified",
+  ].map((state): [string, () => Promise<string>, string | undefined] => [
     `a ready asset pinned by a ${state} operation`,
     async () => {
       const id = await plantAsset({});

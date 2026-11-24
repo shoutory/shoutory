@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { jsonbBytes } from "@shoutory/core/content";
 import { snapshotHash } from "@shoutory/core/content/snapshot";
 import { SealedSecret } from "@shoutory/core/crypto";
@@ -7,6 +10,9 @@ import { snapshotOf } from "@shoutory/provider-sdk/snapshot";
 import { fixtureOAuthManifest } from "@shoutory/testkit/fixture-oauth/manifest";
 import { createFixtureAdapter } from "@shoutory/testkit/fixture-provider/adapter";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { collectMedia } from "../../src/jobs/media/gc.js";
+import { createLogger } from "../../src/logging/logger.js";
+import { createFsDriver } from "../../src/storage/fs-driver.js";
 import { leaks } from "../support/canary.js";
 import {
   addWorkspaceMember,
@@ -418,6 +424,45 @@ describe("restore of a draft that no longer resolves", () => {
     ]);
     expect(await versionsOf(id as string)).toHaveLength(2);
     expect(await currentOf(id as string)).toBe(head);
+  });
+});
+
+// A saved version's snapshot is not a use of its media: once no post names the medium and it is old enough, the
+// collection removes it, and restoring the version is refused like an autosave of that draft.
+describe("restore of a draft whose medium the collection removed", () => {
+  it("restoring a version whose medium the media collection removed answers 422 media_unavailable", async () => {
+    const gone = await plantMedia(ws, "ready");
+    await fx.admin((client) =>
+      client.query("UPDATE app.media_assets SET created_at = now() - interval '31 days' WHERE id = $1", [
+        gone,
+      ]),
+    );
+    const who = user("editor");
+    const medium = { media_id: gone, alt_text: null, crop: null };
+    const made = await call(who, "POST", base(ws), draftBody(variant(c1, { media: [medium] })));
+    const { id, version_id: first } = await dataOf(made);
+    const url = `${base(ws)}/${id}`;
+    const edited = await call(who, "PATCH", url, draftBody(variant(c1)), match(first as string));
+    const head = (await dataOf(edited)).version_id as string;
+    const dir = await mkdtemp(join(tmpdir(), "shoutory-posts-gc-"));
+    try {
+      const sink = createLogger({ secrets: [], stream: { write: () => undefined } });
+      await collectMedia({ pool: fx.db.pool("worker"), storage: createFsDriver(dir), logger: sink });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+    expect(
+      (await fx.admin((client) => client.query("SELECT state FROM app.media_assets WHERE id = $1", [gone])))
+        .rows[0].state,
+    ).toBe("deleted");
+    const restored = await call(who, "POST", `${url}/versions/${first}/restore`, undefined, match(head));
+    const error = await errorOf(restored);
+    expect([restored.status, error.code, error.details]).toEqual([
+      422,
+      "unprocessable_content",
+      { reason: "media_unavailable" },
+    ]);
+    expect(await versionsOf(id as string)).toHaveLength(2);
   });
 });
 
