@@ -475,6 +475,14 @@ const DEFINERS: Definer[] = [
     callers: [],
     helper: true,
   },
+  { name: "post_variant_body", args: "element jsonb", callers: [], helper: true },
+  { name: "post_variant_stored", args: "workspace_id uuid, variant_id uuid", callers: [], helper: true },
+  {
+    name: "post_guard_variant",
+    args: "workspace_id uuid, variant_id uuid, dropped boolean",
+    callers: [],
+    helper: true,
+  },
   {
     name: "post_write_version",
     args: "workspace_id uuid, post_id uuid, expected_version uuid, snapshot jsonb, snapshot_hash bytea, kind text",

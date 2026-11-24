@@ -7,7 +7,13 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 
-const FOLDERS = ["content", "time", "ledger"];
+const FOLDERS = [
+  "packages/core/src/content",
+  "packages/core/src/time",
+  "packages/core/src/ledger",
+  "apps/api/src/jobs/ledger",
+  "apps/api/src/routes/posts",
+];
 // Each rule is read over the whole file text, so a call split over several lines is still seen; the optional third
 // member decides from the match whether it is a violation (a call is allowed when its arguments name a time zone).
 const NAMES_A_ZONE = (match) => !/timeZone/.test(match[1]);
@@ -78,22 +84,24 @@ const PLANTED = [
   ],
 ];
 
-test("the scanner flags each zone-less pattern in a planted fixture and lets the zoned forms through", () => {
-  const base = mkdtempSync(join(tmpdir(), "zone-less-"));
-  try {
-    mkdirSync(join(base, "time"), { recursive: true });
-    writeFileSync(join(base, "time/planted.ts"), PLANTED.map(([, source]) => source).join("\n"));
-    const flagged = new Set(findings(base).map((found) => Number(found.split(":")[1])));
-    let start = 1;
-    for (const [what, source, bad] of PLANTED) {
-      assert.equal(flagged.has(start), bad, `${what}: ${bad ? "must be flagged" : "must pass"}`);
-      start += source.split("\n").length;
+for (const folder of FOLDERS) {
+  test(`the scanner flags each zone-less pattern planted in ${folder} and lets the zoned forms through`, () => {
+    const base = mkdtempSync(join(tmpdir(), "zone-less-"));
+    try {
+      mkdirSync(join(base, folder), { recursive: true });
+      writeFileSync(join(base, folder, "planted.ts"), PLANTED.map(([, source]) => source).join("\n"));
+      const flagged = new Set(findings(base).map((found) => Number(found.split(":")[1])));
+      let start = 1;
+      for (const [what, source, bad] of PLANTED) {
+        assert.equal(flagged.has(start), bad, `${what}: ${bad ? "must be flagged" : "must pass"}`);
+        start += source.split("\n").length;
+      }
+    } finally {
+      rmSync(base, { recursive: true, force: true });
     }
-  } finally {
-    rmSync(base, { recursive: true, force: true });
-  }
-});
+  });
+}
 
-test("no zone-less Date in content, time and ledger code", () => {
-  assert.deepEqual(findings(join(root, "packages/core/src")), []);
+test("no zone-less Date in the content, time, ledger and post code", () => {
+  assert.deepEqual(findings(root), []);
 });

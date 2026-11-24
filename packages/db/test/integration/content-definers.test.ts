@@ -400,6 +400,240 @@ describe("restore refusals", () => {
   );
 });
 
+const DUE = new Date("2030-01-02T03:04:05Z");
+
+async function plantOperation(ws: string, variantId: string, channel: string, state: string): Promise<void> {
+  const given: Record<string, unknown> = {
+    workspace_id: ws,
+    variant_id: variantId,
+    channel_id: channel,
+    provider_id: "fixture-oauth",
+    queue: "publish.fixture-oauth",
+    kind: "publish",
+    state,
+    last_actor: "S",
+    due_at: DUE,
+    lateness_deadline: new Date(DUE.getTime() + 7_200_000),
+    idempotency_marker: `guard-${randomUUID()}`,
+    requested_by: U.editor,
+    ...(state === "published" ? { effect: "confirmed", settled_at: DUE } : {}),
+  };
+  const names = Object.keys(given);
+  await admin(async (client) => {
+    await client.query("BEGIN");
+    await client.query("SET LOCAL session_replication_role = replica");
+    await client.query(
+      `INSERT INTO app.operations (${names.join(", ")}) VALUES (${names.map((_, i) => `$${i + 1}`).join(", ")})`,
+      Object.values(given),
+    );
+    await client.query("COMMIT");
+  });
+}
+
+interface Stage {
+  state: string;
+  op?: string;
+  published?: boolean;
+  postStatus?: string;
+}
+interface TwoVersions extends Made {
+  first: string;
+}
+// Two versions, "one" then "two"; a frozen variant is frozen on the current one, so every call below changes it.
+async function twoVersions(): Promise<TwoVersions> {
+  const one = await createPost([variant(CH1, { text: "one" })], "one");
+  const [two] = await commit(
+    EDITOR,
+    write("post_autosave", one.post, one.version, [variant(CH1, { text: "two" })], "two"),
+  );
+  return { post: one.post, version: two?.version_id as string, first: one.version };
+}
+async function stage(made: Made, s: Stage): Promise<string> {
+  const id = (await variantsOf(made.post))[0]?.id as string;
+  await rows(
+    `UPDATE app.post_variants SET schedule_state = $2, due_at = $3, frozen_version_id = $4, published_at = $5
+     WHERE id = $1`,
+    [id, s.state, DUE, s.state === "draft" ? null : made.version, s.published ? DUE : null],
+  );
+  if (s.postStatus) await rows("UPDATE app.posts SET status = $2 WHERE id = $1", [made.post, s.postStatus]);
+  if (s.op) await plantOperation(WA, id, CH1, s.op);
+  return id;
+}
+const variantState = async (id: string) =>
+  (
+    await rows("SELECT schedule_state, due_at, frozen_version_id FROM app.post_variants WHERE id = $1", [id])
+  )[0];
+
+const CALLS: [string, (m: TwoVersions) => Call][] = [
+  ["autosave", (m) => write("post_autosave", m.post, m.version, [variant(CH1, { text: "three" })], "three")],
+  ["save", (m) => write("post_save", m.post, m.version, [variant(CH1, { text: "three" })], "three")],
+  ["restore", (m) => restore(m.post, m.version, m.first)],
+];
+const WRITTEN: [string, Stage, string, boolean][] = [
+  ["draft", { state: "draft" }, "draft", false],
+  ["needs_approval", { state: "needs_approval" }, "needs_approval", true],
+  ["approved", { state: "approved" }, "approved", true],
+  ["scheduled", { state: "scheduled" }, "scheduled", true],
+  ["failed", { state: "settled", op: "failed", postStatus: "failed" }, "draft", false],
+];
+const REFUSED: [string, Stage, string][] = [
+  ["held", { state: "held", op: "needs_human", postStatus: "needs_attention" }, "post_in_flight"],
+  ["in_progress", { state: "in_progress", op: "pending", postStatus: "scheduled" }, "post_in_flight"],
+  ["published", { state: "settled", op: "published", published: true, postStatus: "published" }, "use_edit"],
+  ["archived", { state: "draft", postStatus: "archived" }, "post_archived"],
+];
+const refusal = (reason: string) => ({ code: "SH409", message: `post: ${reason}` });
+
+describe("the state guard on a changed variant", () => {
+  it.each(
+    CALLS.flatMap(([how, call]) =>
+      WRITTEN.map(([what, s, after, pending]) => [what, how, s, after, pending, call] as const),
+    ),
+  )(
+    "%s: a variant changed by %s is written; a frozen one keeps its state, time and frozen version",
+    async (_what, _how, s, after, pending, call) => {
+      const made = await twoVersions();
+      const id = await stage(made, s);
+      const [answer] = await commit(EDITOR, call(made));
+      expect(answer).toMatchObject({ outcome: "ok", pending_changes: pending ? [id] : [] });
+      expect(await variantState(id)).toEqual({
+        schedule_state: after,
+        due_at: DUE,
+        frozen_version_id: after === "draft" ? null : made.version,
+      });
+      expect((await postOf(made.post))?.status).toBe("draft");
+    },
+  );
+
+  it.each(
+    CALLS.flatMap(([how, call]) => REFUSED.map(([what, s, reason]) => [what, how, s, reason, call] as const)),
+  )(
+    "%s: a variant changed by %s is refused with its reason and nothing is written",
+    async (_what, _how, s, reason, call) => {
+      const made = await twoVersions();
+      const id = await stage(made, s);
+      const before = [await versionsOf(made.post), await variantState(id), await postOf(made.post)];
+      expect((await run(EDITOR, call(made))).error).toMatchObject(refusal(reason));
+      expect([await versionsOf(made.post), await variantState(id), await postOf(made.post)]).toEqual(before);
+    },
+  );
+});
+
+describe("the state guard is per variant", () => {
+  it("an unchanged variant passes while a changed sibling is refused, and only frozen variants are listed", async () => {
+    const one = await createPost([variant(CH1, { text: "a" }), variant(CH2, { text: "b" })], "pair");
+    const ids = Object.fromEntries((await variantsOf(one.post)).map((v) => [v.channel_id, v.id as string]));
+    const [busy, frozen] = [ids[CH1] as string, ids[CH2] as string];
+    await rows("UPDATE app.post_variants SET schedule_state = 'in_progress' WHERE id = $1", [busy]);
+    await plantOperation(WA, busy, CH1, "pending");
+    await rows(
+      "UPDATE app.post_variants SET schedule_state = 'scheduled', due_at = $2, frozen_version_id = $3 WHERE id = $1",
+      [frozen, DUE, one.version],
+    );
+    const pair = (a: string, b: string) => [variant(CH1, { text: a }), variant(CH2, { text: b })];
+    const [ok] = await commit(EDITOR, write("post_save", one.post, one.version, pair("a", "b2"), "sibling"));
+    expect(ok).toMatchObject({ outcome: "ok", pending_changes: [frozen] });
+    const late = write("post_save", one.post, ok?.version_id as string, pair("a2", "b2"), "busy");
+    expect((await run(EDITOR, late)).error).toMatchObject(refusal("post_in_flight"));
+  });
+
+  it.each(["failed", "published"])(
+    "dropping a variant with a %s operation answers variant_has_history, and one without is dropped",
+    async (op) => {
+      const one = await createPost([variant(CH1), variant(CH2)], "drop");
+      const ids = Object.fromEntries((await variantsOf(one.post)).map((v) => [v.channel_id, v.id as string]));
+      await rows("UPDATE app.post_variants SET schedule_state = 'settled', published_at = $2 WHERE id = $1", [
+        ids[CH1],
+        op === "published" ? DUE : null,
+      ]);
+      await plantOperation(WA, ids[CH1] as string, CH1, op);
+      const history = write("post_save", one.post, one.version, [variant(CH2)], "drop history");
+      expect((await run(EDITOR, history)).error).toMatchObject(refusal("variant_has_history"));
+      const [ok] = await commit(
+        EDITOR,
+        write("post_save", one.post, one.version, [variant(CH1)], "drop clean"),
+      );
+      expect(ok).toMatchObject({ outcome: "ok" });
+      expect((await variantsOf(one.post)).map((v) => v.id)).toEqual([ids[CH1]]);
+    },
+  );
+});
+
+describe("the state guard sees every bound field", () => {
+  const BASE = variant(CH1, {
+    text: "one",
+    parts: [{ text: "part" }],
+    settings: { mode: "a" },
+    media: [medium(MED1, "alt"), medium(MED2)],
+  });
+  const reordered = Object.fromEntries(
+    Object.entries({
+      ...BASE,
+      media: [{ crop: null, alt_text: "alt", media_id: MED1.toUpperCase() }, medium(MED2)],
+    }).reverse(),
+  );
+  const EDITS: [string, Row, boolean][] = [
+    ["nothing (keys reordered, a media id in upper case)", reordered, false],
+    ["the text", { ...BASE, text: "two" }, true],
+    ["the parts", { ...BASE, parts: [{ text: "other" }] }, true],
+    ["the settings", { ...BASE, settings: { mode: "b" } }, true],
+    ["the post type", { ...BASE, post_type: "image" }, true],
+    ["the media order", { ...BASE, media: [medium(MED2), medium(MED1, "alt")] }, true],
+    ["a medium removed", { ...BASE, media: [medium(MED1, "alt")] }, true],
+    ["an alt text", { ...BASE, media: [medium(MED1, "other"), medium(MED2)] }, true],
+    ["a crop", { ...BASE, media: [{ ...medium(MED1, "alt"), crop: { x: 1 } }, medium(MED2)] }, true],
+  ];
+  it.each(EDITS)(
+    "a save changing %s on a running variant is refused only when changed",
+    async (_what, edit, changed) => {
+      const made = await createPost([BASE], "fields");
+      await stage(made, { state: "in_progress", op: "pending" });
+      const { error } = await run(EDITOR, write("post_save", made.post, made.version, [edit], "edited"));
+      expect(error ?? null).toEqual(changed ? expect.objectContaining(refusal("post_in_flight")) : null);
+    },
+  );
+});
+
+describe("the state guard leaves the record and other workspaces alone", () => {
+  it("a write to a frozen variant changes no version row and no frozen hash", async () => {
+    const made = await twoVersions();
+    await stage(made, { state: "scheduled" });
+    const before = await versionsOf(made.post);
+    await commit(
+      EDITOR,
+      write("post_save", made.post, made.version, [variant(CH1, { text: "three" })], "three"),
+    );
+    const after = await versionsOf(made.post);
+    expect(after.slice(0, before.length)).toEqual(before);
+    expect(after).toHaveLength(before.length + 1);
+  });
+
+  it.each(REFUSED)(
+    "%s: a stale expected version answers stale before any refusal and writes nothing",
+    async (_what, s) => {
+      const made = await twoVersions();
+      const id = await stage(made, s);
+      const before = [await versionsOf(made.post), await variantState(id)];
+      const late = write("post_save", made.post, made.first, [variant(CH1, { text: "late" })], "late");
+      expect((await commit(EDITOR, late))[0]).toMatchObject({ outcome: "stale", version_id: made.version });
+      expect([await versionsOf(made.post), await variantState(id)]).toEqual(before);
+    },
+  );
+
+  it("a post of another workspace is refused as unknown, whatever its variant's state", async () => {
+    const { post, variant: theirs } = await plantPost(WB, CHB);
+    await rows("UPDATE app.post_variants SET schedule_state = 'in_progress' WHERE id = $1", [theirs]);
+    await plantOperation(WB, theirs, CHB, "pending");
+    for (const ws of [WA, WB]) {
+      const call: Call = [
+        "SELECT * FROM app.post_save($1, $2, $3, $4::jsonb, $5)",
+        [ws, post, randomUUID(), snapshot([variant(CH1)], "foreign"), digest("foreign")],
+      ];
+      expect((await run(EDITOR, call)).error).toMatchObject({ code: "42501" });
+    }
+  });
+});
+
 describe("the purpose setting", () => {
   const CASES: [string, (made: Made) => Call, boolean][] = [
     ["an ok write", (m) => write("post_autosave", m.post, m.version, [variant(CH1)], "purpose ok"), false],

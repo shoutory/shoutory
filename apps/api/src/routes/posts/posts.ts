@@ -145,7 +145,8 @@ function expectedVersion(c: Context<AppEnv>): string {
   return (found[1] as string).toLowerCase();
 }
 
-function settled(outcome: Record<string, string>, c: Context<AppEnv>, status: 200 | 201, postId: string) {
+// The pending variants are scheduled or approved ones whose change publishes only once they are scheduled again.
+function settled(outcome: Record<string, unknown>, c: Context<AppEnv>, status: 200 | 201, postId: string) {
   const version = outcome.version_id as string;
   if (outcome.outcome === "stale") {
     throw new Refusal("precondition_failed", "the post has moved on", {
@@ -153,7 +154,8 @@ function settled(outcome: Record<string, string>, c: Context<AppEnv>, status: 20
       etag: `"${version}"`,
     });
   }
-  return answer(c, status, { id: postId, version_id: version }, version);
+  const data = { id: postId, version_id: version, pending_changes: outcome.pending_changes };
+  return answer(c, status, data, version);
 }
 
 // The two definers, by fixed text: the path decides which one runs, never a value the client sent.

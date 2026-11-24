@@ -386,6 +386,50 @@ describe("If-Match on autosave, save and restore", () => {
   });
 });
 
+describe("the state guard over the routes", () => {
+  it("a save to a scheduled variant answers 200 and lists the variant under pending_changes", async () => {
+    const { post, version } = await plant();
+    const frozen = await fx.admin(
+      async (client) =>
+        (
+          await client.query(
+            `UPDATE app.post_variants SET schedule_state = 'scheduled', due_at = now() + interval '1 day',
+             frozen_version_id = $2 WHERE post_id = $1 RETURNING id`,
+            [post, version],
+          )
+        ).rows[0].id as string,
+    );
+    const answer = await call(
+      user("editor"),
+      "POST",
+      `${base(ws)}/${post}/save`,
+      draftBody(variant(c1, { text: "changed" })),
+      match(version),
+    );
+    expect(answer.status).toBe(200);
+    expect((await dataOf(answer)).pending_changes).toEqual([frozen]);
+  });
+
+  it("an archived post answers 409 post_archived and keeps its versions", async () => {
+    const { post, version } = await plant();
+    await fx.admin((client) =>
+      client.query("UPDATE app.posts SET status = 'archived' WHERE id = $1", [post]),
+    );
+    const refused = await call(
+      user("editor"),
+      "PATCH",
+      `${base(ws)}/${post}`,
+      draftBody(variant(c1, { text: "late" })),
+      match(version),
+    );
+    expect([refused.status, await errorOf(refused)]).toEqual([
+      409,
+      expect.objectContaining({ code: "conflict", details: { reason: "post_archived" } }),
+    ]);
+    expect(await versionsOf(post)).toHaveLength(1);
+  });
+});
+
 describe("a double submit", () => {
   it("of one autosave: one 200, one 412, one new version", async () => {
     const { post, version } = await plant();
