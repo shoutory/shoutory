@@ -307,6 +307,44 @@ describe("a backlog larger than one admission batch", () => {
   }, 30_000);
 });
 
+describe("a post held while its channel is away", () => {
+  it("is held by the tick when its channel needs a reconnect and resumes on the tick after the reconnect", async () => {
+    const queue = boss();
+    await queue.start();
+    const variant = await admin((a) => seedDueTarget(a, ws));
+    const channelTo = (state: string) =>
+      admin((a) =>
+        a.query(
+          "UPDATE app.channels SET connection_state = $1 WHERE id = (SELECT channel_id FROM app.post_variants WHERE id = $2)",
+          [state, variant],
+        ),
+      );
+    const state = async () =>
+      (
+        await admin((a) => a.query("SELECT state FROM app.operations WHERE variant_id = $1", [variant]))
+      ).rows.map((row) => row.state as string);
+    try {
+      const tick = createLedgerTick({
+        pool: db.pool("worker"),
+        boss: queue,
+        registry,
+        logger,
+        credentials: credentials(),
+      });
+      await tick.tick();
+      expect(await state()).toEqual(["pending"]);
+      await channelTo("needs_reconnect");
+      await tick.tick();
+      expect(await state()).toEqual(["blocked_reconnect"]);
+      await channelTo("connected");
+      await tick.tick();
+      expect(await state()).toEqual(["pending"]);
+    } finally {
+      await queue.stop({ graceful: true });
+    }
+  });
+});
+
 describe("one failing step of the tick", () => {
   it("is logged and does not stop the sweep of due moves or the admission", async () => {
     const queue = boss();

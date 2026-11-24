@@ -690,6 +690,186 @@ describe("the pause of a disabled channel", () => {
   );
 });
 
+const sweepBlocked = () => ledger("SELECT app.sweep_blocked_moves() AS n");
+const heldFor = async (id: string) =>
+  Number(
+    (await rows("SELECT extract(epoch FROM blocked_total) AS s FROM app.operations WHERE id = $1", [id]))[0]
+      ?.s,
+  );
+const BLOCKED = (reason: string, at: Record<string, number> = {}, effect?: string): Plant => ({
+  state: "blocked_reconnect",
+  ...(effect ? { effect } : {}),
+  at: { blocked_since: -3600, ...at },
+  extra: { reason_code: reason },
+});
+
+describe("posts held for a reconnect", () => {
+  const ENTER: [string, string, string, Plant][] = [
+    ["needs_reconnect", "pending", "blocked_reconnect", { state: "pending" }],
+    [
+      "disconnected",
+      "retry_wait",
+      "blocked_reconnect",
+      { state: "retry_wait", at: { next_attempt_at: 600 } },
+    ],
+    [
+      "revoked_by_provider",
+      "paused",
+      "blocked_reconnect",
+      { state: "paused", extra: { reason_code: "quota" } },
+    ],
+    ["disabled", "pending", "pending", { state: "pending" }],
+    ["connected", "pending", "pending", { state: "pending" }],
+  ];
+  it.each(ENTER)(
+    "on a %s channel a %s row is %s after the sweep, and a held one is held from now with reason pending",
+    async (channelState, _from, after, planted) => {
+      const p = await newProvider(channelState);
+      const id = await plant(p, planted);
+      expect((await sweepBlocked()).error).toBeUndefined();
+      const [op] = await rows(
+        "SELECT state, reason_code, extract(epoch FROM now() - blocked_since) AS since FROM app.operations WHERE id = $1",
+        [id],
+      );
+      expect(op?.state).toBe(after);
+      if (after !== "blocked_reconnect") return;
+      expect(op?.reason_code).toBe("pending");
+      expect(Math.abs(Number(op?.since))).toBeLessThan(5);
+      expect(await outboxTypes(id)).toEqual(["operation.blocked_reconnect"]);
+    },
+  );
+
+  it("a held row stays held while its channel is still away and its deadline is ahead", async () => {
+    const p = await newProvider("needs_reconnect");
+    await rows("UPDATE app.channels SET reconnect_deadline = now() + interval '1 day' WHERE id = $1", [
+      p.channel,
+    ]);
+    const id = await plant(p, BLOCKED("pending"));
+    expect((await sweepBlocked()).error).toBeUndefined();
+    expect((await opOf(id)).state).toBe("blocked_reconnect");
+  });
+});
+
+describe("held posts after a reconnect", () => {
+  const LEAVE: [string, string, string | null, Plant][] = [
+    [
+      "effect none blocked before its lateness ended",
+      "pending",
+      null,
+      BLOCKED("pending", { lateness_deadline: -600 }),
+    ],
+    [
+      "effect none blocked after its lateness ended",
+      "needs_human",
+      "past_due_after_reconnect",
+      BLOCKED("pending", { lateness_deadline: -7200, blocked_since: -600 }),
+    ],
+    [
+      "an outcome that may have happened",
+      "unknown_external_state",
+      null,
+      BLOCKED("unknown_external_state", {}, "possible"),
+    ],
+    [
+      "an accepted post",
+      "provider_accepted",
+      null,
+      BLOCKED("provider_accepted", { poll_deadline: 600 }, "confirmed"),
+    ],
+  ];
+  it.each(LEAVE)(
+    "after a reconnect, %s goes to %s with the held time added to its lateness",
+    async (_name, after, reason, planted) => {
+      const p = await newProvider();
+      const id = await plant(p, { ...planted, queue: `reconcile.${p.provider}` });
+      expect((await sweepBlocked()).error).toBeUndefined();
+      const op = await opOf(id);
+      expect([op.state, op.reason_code]).toEqual([after, reason]);
+      expect(await heldFor(id)).toBeGreaterThan(planted.at?.blocked_since === -600 ? 595 : 3595);
+      if (after === "pending") expect(op.queue).toBe(`publish.${p.provider}`);
+      if (after !== "pending" && after !== "needs_human") expect(Number(op.check_in)).toBeLessThan(5);
+      const types = await outboxTypes(id);
+      expect((await sweepBlocked()).error).toBeUndefined();
+      expect(await outboxTypes(id)).toEqual(types);
+    },
+  );
+});
+
+describe("held posts after the reconnect deadline", () => {
+  it.each([
+    ["none", "pending", "cancelled", "draft"],
+    ["possible", "unknown_external_state", "needs_human", "held"],
+    ["confirmed", "provider_accepted", "needs_human", "held"],
+  ])(
+    "after the reconnect deadline a row with effect %s held as %s goes to %s and its variant is %s",
+    async (effect, reason, after, variantAfter) => {
+      const p = await newProvider("needs_reconnect");
+      await rows("UPDATE app.channels SET reconnect_deadline = now() - interval '1 second' WHERE id = $1", [
+        p.channel,
+      ]);
+      const id = await plant(p, BLOCKED(reason, {}, effect));
+      expect((await sweepBlocked()).error).toBeUndefined();
+      expect([(await opOf(id)).state, (await opOf(id)).reason_code]).toEqual([after, null]);
+      const [variant] = await rows("SELECT variant_id FROM app.operations WHERE id = $1", [id]);
+      expect(await variantState(variant?.variant_id as string)).toBe(variantAfter);
+    },
+  );
+});
+
+describe("held posts are moved once", () => {
+  it("a reconnect that lands while the sweep runs is never overtaken by the deadline: the held post resumes", async () => {
+    const p = await newProvider("needs_reconnect");
+    await rows("UPDATE app.channels SET reconnect_deadline = now() - interval '1 second' WHERE id = $1", [
+      p.channel,
+    ]);
+    const id = await plant(p, BLOCKED("pending", { lateness_deadline: -600 }));
+    await admin(async (reconnect) => {
+      await reconnect.query("BEGIN");
+      await reconnect.query(
+        "UPDATE app.channels SET connection_state = 'connected', reconnect_deadline = NULL WHERE id = $1",
+        [p.channel],
+      );
+      expect((await sweepBlocked()).error).toBeUndefined();
+      expect((await opOf(id)).state).toBe("blocked_reconnect");
+      await reconnect.query("COMMIT");
+    });
+    expect((await sweepBlocked()).error).toBeUndefined();
+    expect((await opOf(id)).state).toBe("pending");
+  });
+
+  it("a held post resumes as the same operation after a reconnect and admission adds none", async () => {
+    const p = await newProvider("needs_reconnect");
+    const variant = await newTarget(p);
+    expect((await admit(p)).error).toBeUndefined();
+    await rows("UPDATE app.channels SET connection_state = 'connected' WHERE id = $1", [p.channel]);
+    expect((await sweepBlocked()).error).toBeUndefined();
+    expect((await admit(p)).rows).toEqual([]);
+    expect((await opsOf(variant)).map((op) => op.state)).toEqual(["pending"]);
+    const claimed = await ledger("SELECT * FROM app.claim_operations($1, 5, 'w1')", [
+      `publish.${p.provider}`,
+    ]);
+    expect(claimed.rows?.length).toBe(1);
+  });
+
+  it("a row whose post another transaction holds is skipped, and moved by the next sweep", async () => {
+    const p = await newProvider();
+    const id = await plant(p, BLOCKED("pending", { lateness_deadline: -600 }));
+    await admin(async (holder) => {
+      await holder.query("BEGIN");
+      await holder.query(
+        `SELECT 1 FROM app.posts p JOIN app.post_variants v ON v.post_id = p.id JOIN app.operations o ON o.variant_id = v.id
+         WHERE o.id = $1 FOR NO KEY UPDATE OF p`,
+        [id],
+      );
+      expect((await sweepBlocked()).error).toBeUndefined();
+      await holder.query("ROLLBACK");
+    });
+    expect((await opOf(id)).state).toBe("blocked_reconnect");
+    expect((await sweepBlocked()).error).toBeUndefined();
+    expect((await opOf(id)).state).toBe("pending");
+  });
+});
+
 describe("sweep isolation", () => {
   // Each sweep takes its rows one at a time: the move the guard refuses for one row leaves the others moved. The refused
   // move is made by removing its row of the transition table for the test and putting it back.
@@ -700,6 +880,13 @@ describe("sweep isolation", () => {
       ["paused", "missed", "S"],
       { state: "paused", at: { lateness_deadline: -10 }, extra: { reason_code: "quota" } },
       { state: "pending", at: { lateness_deadline: -10 } },
+    ],
+    [
+      "sweep_blocked_moves",
+      "SELECT app.sweep_blocked_moves() AS n",
+      ["blocked_reconnect", "pending", "S"],
+      BLOCKED("pending"),
+      BLOCKED("unknown_external_state", {}, "possible"),
     ],
     [
       "sweep_expired_leases",
@@ -891,6 +1078,7 @@ const CALLS: [string, string, unknown[]][] = [
   ["heartbeat", `SELECT * FROM app.heartbeat('${randomUUID()}', 1, 'w', 60)`, []],
   ["sweep_expired_leases", "SELECT app.sweep_expired_leases()", []],
   ["sweep_due_moves", "SELECT app.sweep_due_moves()", []],
+  ["sweep_blocked_moves", "SELECT app.sweep_blocked_moves()", []],
   [
     "bucket_take_scoped",
     `SELECT * FROM app.bucket_take_scoped('${"a".repeat(64)}', 'account', 2, 60, 1)`,

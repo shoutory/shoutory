@@ -839,6 +839,7 @@ const WRITERS = [
   "operations_usage",
   "record_evidence",
   "resolve_operation",
+  "sweep_blocked_moves",
   "sweep_due_moves",
   "sweep_expired_leases",
 ];
@@ -870,6 +871,7 @@ describe("the ledger tables are written only by ledger definers", () => {
       [
         "attempt_count",
         "blocked_since",
+        "blocked_total",
         "effect",
         "external_id",
         "fencing_token",

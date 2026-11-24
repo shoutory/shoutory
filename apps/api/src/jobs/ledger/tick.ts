@@ -126,9 +126,10 @@ export function createLedgerTick({
   const wake = () => wakePublish(step, boss, registry, adapters);
   // A sweep that put rows back in play wakes the publish queues at once: a shortcut for latency, since the wake at the
   // end of the tick sends them anyway.
-  const sweep = (sql: string, argument: Record<string, unknown>) => async () => {
+  const sweep = (sql: string, argument?: Record<string, unknown>) => async () => {
+    const params = argument === undefined ? [] : [JSON.stringify(argument)];
     const moved = await withSystem(pool, "ledger", async (tx) =>
-      Number((await tx.query<{ n: number }>(sql, [JSON.stringify(argument)])).rows[0]?.n ?? 0),
+      Number((await tx.query<{ n: number }>(sql, params)).rows[0]?.n ?? 0),
     );
     if (moved > 0) await wake();
   };
@@ -143,6 +144,7 @@ export function createLedgerTick({
     const sweeps = sweepsAt(registry, clock());
     await step("expired leases", sweep("SELECT app.sweep_expired_leases($1::jsonb) AS n", sweeps.leases));
     await step("due moves", sweep("SELECT app.sweep_due_moves($1::jsonb) AS n", sweeps.due));
+    await step("reconnect holds", sweep("SELECT app.sweep_blocked_moves() AS n"));
     await step("admission", admitBacklog);
     await step("reconcile", () =>
       reconcileStep({

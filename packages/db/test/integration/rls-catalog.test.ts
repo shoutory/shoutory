@@ -422,6 +422,7 @@ const DEFINERS: Definer[] = [
   },
   { name: "sweep_expired_leases", args: "p_providers jsonb", callers: ["shoutory_worker"] },
   { name: "sweep_due_moves", args: "p_live_providers jsonb", callers: ["shoutory_worker"] },
+  { name: "sweep_blocked_moves", args: "", callers: ["shoutory_worker"] },
   { name: "ledger_due_move", args: "p_ws uuid, p_id uuid", callers: [], helper: true },
   { name: "ledger_prelock", args: "p_ws uuid, p_op uuid", callers: [], helper: true },
   {
