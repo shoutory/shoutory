@@ -1,5 +1,4 @@
-// A complete manifest for the provider named `fixture`, the only provider name the SDK tests use. Each test copies it
-// and changes the one field under test.
+// `fixture` is the only provider name the SDK tests use.
 export function fixtureManifest(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     id: "fixture",

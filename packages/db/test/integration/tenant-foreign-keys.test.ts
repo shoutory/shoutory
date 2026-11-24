@@ -9,10 +9,8 @@ import {
 
 const env = readTestEnv();
 
-// Security floor: a row can never point at another workspace's row, even through a coding bug or a definer. Every
-// foreign key between two tenant tables (an app table with a w_select or o_select policy) is composite and holds
-// workspace_id on both sides. Exempt by name: a reference to the workspace or the organization itself, the member's
-// role, whose built-in rows have no workspace, and the workspace's avatar (its key is the workspace's own id).
+// Exempt by name: a reference to the workspace or the organization itself, the member's role, whose built-in rows
+// have no workspace, and the workspace's avatar (its key is the workspace's own id).
 interface ForeignKey {
   name: string;
   child: string;

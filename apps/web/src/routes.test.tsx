@@ -53,7 +53,7 @@ async function visit(path: string, answer?: () => Promise<Response>) {
   return { router, host };
 }
 
-describe("the session guard (R378)", () => {
+describe("the session guard", () => {
   // The shell loader asks for the organizations and workspaces too, so each path has its own answer (the harness).
   it("lets a signed-in visitor in: `/` opens the first workspace in the shell", async () => {
     stubApi();
@@ -87,7 +87,6 @@ describe("the session guard (R378)", () => {
   });
 });
 
-// X-07: each failure has its own page, with its own words and no status code, stack trace or server text.
 describe("system pages", () => {
   it.each([
     [

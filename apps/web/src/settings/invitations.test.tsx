@@ -108,7 +108,6 @@ describe("revoking a pending invitation", () => {
     return opened;
   };
 
-  // The second read of the list never answers: the table stays, and focus is on the section heading.
   it("names the invitee and sends nothing until confirmed, then reads the list again and keeps the table", async () => {
     let reads = 0;
     const list = pageOf(INVITATIONS);

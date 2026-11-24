@@ -9,7 +9,6 @@ const email = z.email().max(320);
 const password = z.string().min(1).max(128);
 const userOut = z.object({ name: z.string(), email: z.string(), emailVerified: z.boolean() });
 const status = z.object({ status: z.boolean() });
-// A person's name, as sign-up and the profile take it: the shared name rule, up to 100 characters.
 const personName = nameOf(100);
 const code = z.string().regex(/^\d{6}$/);
 
@@ -17,16 +16,13 @@ type AuthPolicy = "public" | "session" | "step_up";
 
 export interface AuthPath {
   readonly method: "GET" | "POST";
-  /** The mounted path, with the base. */
   readonly path: string;
   readonly policy: AuthPolicy;
   /** Our own handler: the library's route of this name (if any) is disabled and the library is called in process. */
   readonly ours: boolean;
-  /** Strict body of a POST. */
   readonly body?: z.ZodType<Record<string, unknown>>;
   /** Allowlist of the library's 2xx answer: unknown keys, `token` among them, are dropped. */
   readonly answer?: z.ZodType<unknown>;
-  /** Fields set on the library's request whatever the client sent. */
   readonly forced?: Readonly<Record<string, unknown>>;
 }
 
@@ -94,7 +90,6 @@ const PASSWORD_PATHS: readonly AuthPath[] = [
   ),
 ];
 
-/** Every route the mount registers. A path of the library that is not here is in `DISABLED_PATHS`. */
 export const AUTH_PATHS: readonly AuthPath[] = [
   {
     method: "POST",
@@ -163,10 +158,8 @@ export const AUTH_PATHS: readonly AuthPath[] = [
   },
 ];
 
-/**
- * Every other path of the pinned library (1.7.16), by its name under the base path. The library answers these with a
- * plain 404 even if a request reaches it; the app never forwards them. The second-factor slice moves its rows out.
- */
+// Every other path of the pinned library: it answers these with a plain 404 even if a request reaches it,
+// and the app never forwards them.
 export const DISABLED_PATHS: readonly string[] = [
   "/get-session",
   "/verify-email",

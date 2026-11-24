@@ -1,8 +1,7 @@
 import type { AppPool } from "@shoutory/db/pool";
 import { isUnavailable, Refusal } from "../errors/refusal.js";
 
-// Defaults to confirm against OPS-012 in the baseline run (R304), not promises. A worker counts as stale after 90 s inside
-// `app.worker_status()`.
+// A worker counts as stale after 90 s inside `app.worker_status()`.
 const OUTBOX_LAG_SECONDS = 60;
 const JOB_LAG_SECONDS = 120;
 
@@ -21,11 +20,7 @@ async function ask<R extends object>(pool: AppPool, sql: string): Promise<R[]> {
 const notReady = (cause: string, message: string) =>
   new Refusal("service_unavailable", message, { details: { cause } });
 
-/**
- * Not ready when the oldest undispatched outbox event or the oldest due job is past its limit, when the queue library
- * is not installed, or when no worker has beaten within 90 s. A stale row beside a fresh one is ignored: worker ids are
- * per process and a dead worker's row stays for days (R315). Three definer calls, none of them a fixed answer.
- */
+// A stale worker row beside a fresh one is ignored: worker ids are per process and a dead worker's row stays for days.
 export async function assertJobsHealthy(pool: AppPool): Promise<void> {
   const [outbox] = await ask<{ lag: number }>(pool, "SELECT app.outbox_lag() AS lag");
   if ((outbox?.lag ?? 0) > OUTBOX_LAG_SECONDS) throw notReady("outbox_lag", "the outbox relay is behind");

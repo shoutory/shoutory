@@ -11,7 +11,6 @@ const spellings = [
   JSON.stringify(CANARY).slice(1, -1),
 ];
 
-/** An undici-like failure that carries the full URL, the request headers and a nested cause. */
 function leakyError(): Error {
   const inner = new Error(`connect ECONNREFUSED https://example.com/v1/post?token=${CANARY}`);
   const outer = new TypeError(`fetch failed: https://example.com/v1/post?token=${CANARY}`, { cause: inner });
@@ -22,7 +21,7 @@ function leakyError(): Error {
   return outer;
 }
 
-describe("EgressError safe wrapping (review M8, LOG-04)", () => {
+describe("EgressError safe wrapping", () => {
   it("never carries the original error: the canary is absent in every spelling and place", () => {
     const wrapped = wrapNetworkError(leakyError(), "example.com");
     expect(wrapped).toBeInstanceOf(EgressError);
@@ -37,7 +36,7 @@ describe("EgressError safe wrapping (review M8, LOG-04)", () => {
     for (const spelling of spellings) expect(shown).not.toContain(spelling);
   });
 
-  // A reset can arrive after the request was written, so it must never read as "nothing was sent" (AGENTS 3.7).
+  // A reset can arrive after the request was written, so it must never read as "nothing was sent" (an unconfirmed outcome is unknown, never a plain failure).
   it.each([
     ["ECONNREFUSED", "connect", "none"],
     ["UND_ERR_CONNECT_TIMEOUT", "connect_timeout", "none"],

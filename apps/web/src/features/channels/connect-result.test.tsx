@@ -15,12 +15,6 @@ import {
 
 afterEach(closeApp);
 
-// The connect result page: where the OAuth callback sends the browser. It reads only the parameters the server writes
-// (`reason`, `channel`, `workspace`, and `message` for a provider's error), says "connected" only after its own read of
-// the channel says so, and shows a provider's words as text in Details, never as markup and never as the headline.
-// Elements are selected by test id (`connect-outcome` with `data-outcome`, `outcome-heading`, `connect-meaning`,
-// `connect-link`, `provider-message`, `expected-handle`, `connected-name`, `channel-state`, `connect-live`).
-
 type Pairs = Array<[string, string]>;
 const OTHER_WS = "0190a000-0000-7000-8000-0000000000c2";
 const WORDS = "the provider's own words";
@@ -45,7 +39,6 @@ function deferred() {
 
 const WS: [string, string] = ["workspace", CONNECT_WS];
 const CH: [string, string] = ["channel", CONNECT_CHANNEL];
-// The key set the server writes for each reason (a refusal of the flow's own take carries no workspace).
 const REASONS: Array<[reason: string, pairs: Pairs, reads: number]> = [
   ["start_again", [["reason", "start_again"]], 0],
   ["refused", [["reason", "refused"], WS], 0],
@@ -83,7 +76,6 @@ describe("each reason of the redirect", () => {
   });
 });
 
-// Security floor: anything the server does not write is the generic failure, never success, and costs no read.
 describe("a redirect the server would not write is the generic failure", () => {
   it.each<[string, Pairs]>([
     ["an unknown reason", [["reason", "bogus"], WS]],
@@ -224,7 +216,6 @@ describe("a wrong account", () => {
   });
 });
 
-// Security floor: the one link is built from the shell's workspace list, and a workspace that is not listed is never read.
 describe("the link and the reads follow the shell's workspace list", () => {
   const upper = CONNECT_WS.toUpperCase();
   it.each<[string, Pairs, string]>([
@@ -305,7 +296,7 @@ describe("what a person is told after the read", () => {
     pending.release(json({ data: channelRow() }));
     await settle();
     expect(byId(host, "connect-live")).toBe(region);
-    // The focused heading says the headline, the region the meaning: a success is announced once, in different words.
+    // The focused heading says the headline and the region the meaning, so a success is not announced twice.
     expect(region?.textContent?.length).toBeGreaterThan(0);
     expect(region?.textContent).toBe(byId(host, "connect-meaning")?.textContent);
     expect(region?.textContent).not.toContain("Acme Page");

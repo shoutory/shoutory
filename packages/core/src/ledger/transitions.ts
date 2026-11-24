@@ -1,7 +1,4 @@
-// The publishing ledger's states, the actors that move them and every move the ledger allows. The database refuses any other
-// (from, to, actor); its seed must equal this table, which a test compares. A move names the operation's previous state
-// (`none` for an insert), the new state and who makes it, with a short key for the guard the move needs and whether the move
-// raises the fencing token so that a worker holding the old one loses its next write.
+// The database refuses any move not in this table; its seed must equal it, which a test compares.
 
 export const LEDGER_STATES = [
   "pending",
@@ -24,11 +21,11 @@ export const LEDGER_STATES = [
 ] as const;
 export type LedgerState = (typeof LEDGER_STATES)[number];
 
-/** Scheduler, worker, poller, reconciler, evidence, user, sweeper. */
+// Scheduler, worker, poller, reconciler, evidence, user, sweeper.
 export const LEDGER_ACTORS = ["S", "W", "P", "R", "E", "U", "X"] as const;
 export type LedgerActor = (typeof LEDGER_ACTORS)[number];
 
-/** A state that releases the target: no further move leaves it (the operation's slot is free again). */
+// A terminal state frees the target's slot for the next operation.
 export const TERMINAL_STATES: readonly LedgerState[] = [
   "published",
   "failed",
@@ -38,7 +35,6 @@ export const TERMINAL_STATES: readonly LedgerState[] = [
 ];
 
 export interface LedgerTransition {
-  /** The row of the transition table this move belongs to (1 to 51). */
   readonly row: number;
   readonly from: LedgerState | "none";
   readonly to: LedgerState;
@@ -62,8 +58,8 @@ type Spec = readonly [
 const CANCELLABLE: Moving = ["pending", "claimed", "processing", "retry_wait", "paused", "blocked_reconnect"];
 const HELD: Moving = ["claimed", "processing", "provider_accepted", "unknown_external_state", "reconciling"];
 
-// One entry per row, in the order of the table: a row that lists several from-states, to-states or actors makes one move
-// for every combination (any listed actor may make the move). `bumpedBy` names the actors whose move raises the token.
+// A row that lists several from-states, to-states or actors makes one move for every combination. `bumpedBy` names the
+// actors whose move raises the fencing token, so a worker holding the old one loses its next write.
 const ROWS: readonly Spec[] = [
   [1, ["none"], ["pending"], ["S"], "admit_free_slot"],
   [2, ["none"], ["missed"], ["S"], "late_at_admission"],

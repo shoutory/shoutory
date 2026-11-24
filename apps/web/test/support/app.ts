@@ -6,7 +6,6 @@ import { createMemoryRouter, type RouteObject, RouterProvider } from "react-rout
 import { vi } from "vitest";
 import { routes } from "../../src/routes";
 
-// One harness for the screens under the shell: the real routes in a memory router, with the api answered per path.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const catalogs = import.meta.glob<{ messages: Messages }>("../../src/messages/*.po", { eager: true });
@@ -52,9 +51,7 @@ export const refusal = (code: string, status: number, details?: Record<string, s
   );
 const page = (rows: unknown[]) => json({ data: rows, meta: { next_cursor: null } });
 
-/** An answer that lists `rows` as one page. */
 export const pageOf = (rows: unknown[]) => () => page(rows);
-/** Lets pending calls and renders finish. */
 export const settle = () => act(async () => undefined);
 
 type Answer = () => Response | Promise<Response>;
@@ -87,7 +84,6 @@ export interface Api {
   changePassword?: Answer;
   twoFactorStatus?: Answer;
   generateCodes?: Answer;
-  /** The members page of workspace w1: both lists, and each change (the id in the path is any member or invitation). */
   members?: Answer;
   invitations?: Answer;
   changeRole?: Answer;
@@ -95,7 +91,6 @@ export interface Api {
   leave?: Answer;
   invite?: Answer;
   revokeInvitation?: Answer;
-  /** The operator screens: whether the caller is an instance admin, the flags, the settings and their two writes. */
   admin?: Answer;
   adminFlags?: Answer;
   overrideFlag?: Answer;
@@ -106,31 +101,23 @@ export interface Api {
   mailCheck?: Answer;
   mailTest?: Answer;
   adminSystem?: Answer;
-  /** The one-channel read of any workspace and any channel id (the connect result page reads it). */
   channel?: Answer;
-  /** The channel list of any workspace; it gets the query and the workspace id, so a test can answer by either. */
   channelList?: (query: URLSearchParams, workspace: string) => Response | Promise<Response>;
-  /** The providers read of any workspace. */
   providers?: Answer;
-  /** "Check now" on any channel of any workspace. */
   check?: Answer;
-  /** "Start the connection" of any provider in any workspace; the answer carries the authorize URL. */
   connectStart?: Answer;
 }
 
-/** The address the start answers by default: where a browser would be sent. */
 export const START_URL = "https://provider.example.test/authorize?state=flow-state-1";
 
-/** Workspace and channel ids in the form the server writes (lower-case UUIDs); the older fixtures use `w1`. */
+// Ids in the form the server writes (lower-case UUIDs); the older fixtures use `w1`.
 export const CONNECT_WS = "0190a000-0000-7000-8000-0000000000c1";
 export const CONNECT_CHANNEL = "0190a000-0000-7000-8000-0000000000d1";
-/** A workspace list whose one entry has a UUID id: what the connect result page matches its `workspace` against. */
 export const uuidWorkspaces = () =>
   pageOf([
     { id: CONNECT_WS, organization_id: "o1", name: "Acme Connect", slug: "acme-connect", role: "owner" },
   ]);
 
-/** A channel as the one-channel read answers it (the server's allowlist); `change` overrides fields. */
 export const channelRow = (change: Record<string, unknown> = {}) => ({
   id: CONNECT_CHANNEL,
   provider_id: "fixture_oauth",
@@ -150,13 +137,11 @@ export const channelRow = (change: Record<string, unknown> = {}) => ({
   ...change,
 });
 
-// The one-channel read: any workspace id and any channel id in the path.
 function channelAnswers(api: Api, pathname: string, method: string): Answer | undefined {
   const matches = /^\/api\/v1\/workspaces\/[^/]+\/channels\/[^/]+$/.test(pathname);
   return matches && method === "GET" ? (api.channel ?? (() => json({ data: channelRow() }))) : undefined;
 }
 
-/** The providers a workspace can connect, as the providers route answers them. */
 export const PROVIDERS = [
   {
     id: "fixture_oauth",
@@ -167,14 +152,12 @@ export const PROVIDERS = [
   },
 ];
 
-/** One page of the channel list as the server answers it; `actions` is the page-level `meta.actions`. */
 export const channelPage = (
   rows: unknown[],
   nextCursor: string | null = null,
   actions: string[] = ["connect"],
 ) => json({ data: rows, meta: { next_cursor: nextCursor, actions } });
 
-// The hub's calls: the list (with its query), the providers and "Check now", for any workspace and channel id.
 function hubAnswers(api: Api, url: URL, method: string): Answer | undefined {
   const [, workspace = "", rest = ""] = /^\/api\/v1\/workspaces\/([^/]+)\/(.*)$/.exec(url.pathname) ?? [];
   if (workspace === "") return undefined;
@@ -191,7 +174,6 @@ function hubAnswers(api: Api, url: URL, method: string): Answer | undefined {
   return undefined;
 }
 
-/** The queue health of the instance: a running worker, a silent one, and the lag of the outbox and the job queue. */
 export const QUEUE = {
   workers: [
     {
@@ -213,14 +195,12 @@ export const QUEUE = {
   jobs: { installed: true, lag_seconds: 3 },
 };
 
-/** The release information: version, channel and the migrations applied against those shipped. */
 export const SYSTEM = {
   version: "1.2.3",
   channel: "stable",
   migrations: { applied: 12, shipped: 12, pending: [] as string[] },
 };
 
-/** The flags of the instance as the admin list answers them: one off, one forced off, one past its removal date. */
 export const FLAGS = [
   {
     key: "new-composer",
@@ -251,7 +231,6 @@ export const FLAGS = [
   },
 ];
 
-// The operator screens' calls; a flag key in the override path is any key.
 function adminAnswers(api: Api, pathname: string, method: string): Answer | undefined {
   const route = pathname.replace(/\/flags\/[^/]+\/override$/, "/flags/*/override");
   const answers: Record<string, Answer> = {
@@ -277,7 +256,6 @@ function adminAnswers(api: Api, pathname: string, method: string): Answer | unde
   return answers[`${route}:${method}`];
 }
 
-/** The members of w1 as the caller sees them: the others, plus the caller (u1) in `role`; below an Owner caller sits an Owner. */
 export function membersFor(role: string) {
   const row = (id: string, name: string, as: string, status = "active") => ({
     user_id: id,
@@ -300,7 +278,6 @@ export const INVITATIONS = [
   { id: "i2", email: "old@example.test", role_key: "viewer", expires_at: "2026-11-01T10:00:00.000Z" },
 ];
 
-// The members and invitations calls of workspace w1; the changes to one member or invitation match by method.
 function membersAnswers(api: Api, pathname: string, method: string): Answer | undefined {
   const base = "/api/v1/workspaces/w1";
   // A member or an invitation id in the path is any id: `*`.
@@ -345,7 +322,6 @@ export const DEVICES = [
 export const NEW_ORG = "0190a000-0000-7000-8000-0000000000a1";
 export const NEW_WORKSPACE = "0190a000-0000-7000-8000-0000000000b1";
 
-/** The profile of workspace w1 as GET and PATCH answer it. */
 export const PROFILE = {
   id: "w1",
   organization_id: "o1",
@@ -355,7 +331,6 @@ export const PROFILE = {
   default_tz: "Africa/Cairo",
 };
 
-// The settings calls of workspace w1: its profile (read and changed) and its plan limits.
 function settingsAnswers(api: Api): Record<string, Answer> {
   return {
     "/api/v1/workspaces/w1": api.workspaceProfile ?? (() => json({ data: PROFILE })),
@@ -366,7 +341,6 @@ function settingsAnswers(api: Api): Record<string, Answer> {
   };
 }
 
-// The create calls of the onboarding: an organization, then its first workspace (both answer 201 with the row).
 function onboardingAnswers(api: Api): Record<string, Answer> {
   return {
     "/api/v1/organizations:POST":
@@ -391,7 +365,6 @@ function onboardingAnswers(api: Api): Record<string, Answer> {
   };
 }
 
-// The answers of the security page's calls (the sessions, the password change, the two-factor status and codes).
 function securityAnswers(api: Api): Record<string, Answer> {
   return {
     ...onboardingAnswers(api),
@@ -408,10 +381,9 @@ function securityAnswers(api: Api): Record<string, Answer> {
 }
 
 export const USER = { id: "u1", name: "Person Sample", email: "person@example.test", emailVerified: true };
-// What the server answers to a second-factor code: its allowlist has no id (apps/api auth paths).
+// The server's answer to a second-factor code has no id in its user.
 const CHALLENGE_USER = { name: USER.name, email: USER.email, emailVerified: true };
 
-// The answers of the sign-up, link, setup, invitation and profile calls (the rest are in `stubApi`).
 function moreAnswers(api: Api): Record<string, Answer> {
   return {
     "/api/auth/two-factor/enable":
@@ -430,7 +402,6 @@ function moreAnswers(api: Api): Record<string, Answer> {
   };
 }
 
-/** The fetch stub: each api path has its answer, signed in with `ORGS` and `WORKSPACES` unless a test says otherwise. */
 export function stubApi(api: Api = {}) {
   const answers: Record<string, Answer> = {
     "/api/auth/get-session": api.session ?? (() => json(SESSION)),
@@ -473,7 +444,6 @@ export const SESSION = {
 
 let root: Root | undefined;
 
-/** Opens the real routes at `path` in `locale`; the stub must be set first (`stubApi`). */
 export async function openApp(path: string, locale: "en" | "ar" = "en") {
   i18n.load(locale, catalogs[`../../src/messages/${locale}.po`]?.messages ?? {});
   i18n.activate(locale);
@@ -486,7 +456,6 @@ export async function openApp(path: string, locale: "en" | "ar" = "en") {
   return { router, host };
 }
 
-/** Opens some routes of the test's own (a provider or a component under test) in a memory router. */
 export async function mountRouted(routeObjects: RouteObject[], path: string, locale: "en" | "ar" = "en") {
   i18n.load(locale, catalogs[`../../src/messages/${locale}.po`]?.messages ?? {});
   i18n.activate(locale);
@@ -499,7 +468,6 @@ export async function mountRouted(routeObjects: RouteObject[], path: string, loc
   return { router, host };
 }
 
-/** Renders one element under the i18n provider (the kit parts need no router or api). */
 export function mount(element: React.ReactElement, locale: "en" | "ar" = "en") {
   i18n.load(locale, catalogs[`../../src/messages/${locale}.po`]?.messages ?? {});
   i18n.activate(locale);
@@ -520,7 +488,6 @@ export function closeApp() {
 
 export const WORKSPACE_KEY = "shoutory.workspace";
 
-/** The first button, link or menu item whose text contains `text`. */
 export function byText<T extends Element = HTMLElement>(host: ParentNode, selector: string, text: string) {
   const found = [...host.querySelectorAll<T>(selector)].find((element) =>
     element.textContent?.includes(text),
@@ -529,7 +496,6 @@ export function byText<T extends Element = HTMLElement>(host: ParentNode, select
   return found;
 }
 
-/** The search box of the switcher whose label is `name`. */
 export function combobox(host: ParentNode, name: string) {
   const input = [...host.querySelectorAll<HTMLInputElement>('input[role="combobox"]')].find((element) => {
     const label = (element.getAttribute("aria-labelledby") ?? "")
@@ -561,11 +527,9 @@ export const press = (element: Element, key: string, modifiers: KeyboardEventIni
 
 export const click = (element: HTMLElement) => act(() => element.click());
 
-/** The workspace list with the caller's own role in w1 set to `role`. */
 export const roleOf = (role: string) =>
   pageOf(WORKSPACES.map((workspace) => (workspace.id === "w1" ? { ...workspace, role } : workspace)));
 
-/** The table row whose text contains `text`. */
 export function rowOf(host: ParentNode, text: string) {
   const row = [...host.querySelectorAll<HTMLElement>("tr")].find((candidate) =>
     candidate.textContent?.includes(text),
@@ -574,7 +538,6 @@ export function rowOf(host: ParentNode, text: string) {
   return row;
 }
 
-/** The trigger of the Select inside `scope` whose label contains `label`. */
 export function selectTrigger(scope: ParentNode, label: string) {
   const trigger = [...scope.querySelectorAll<HTMLElement>('button[aria-haspopup="listbox"]')].find((button) =>
     (button.getAttribute("aria-labelledby") ?? "")
@@ -585,11 +548,9 @@ export function selectTrigger(scope: ParentNode, label: string) {
   return trigger;
 }
 
-/** The texts of the options of the open list, in order. */
 export const optionTexts = () =>
   [...document.body.querySelectorAll('[role="option"]')].map((option) => option.textContent);
 
-/** Opens the Select labelled `label` in `scope` and chooses the option whose text is exactly `option`. */
 export function pick(scope: ParentNode, label: string, option: string) {
   click(selectTrigger(scope, label));
   const found = [...document.body.querySelectorAll<HTMLElement>('[role="option"]')].find(
@@ -599,21 +560,18 @@ export function pick(scope: ParentNode, label: string, option: string) {
   click(found);
 }
 
-/** Opens the members page of w1 as a caller whose role there is `role`; `api` overrides any answer. */
 export async function openMembers(role: string, api: Api = {}) {
   const stub = stubApi({ workspaces: roleOf(role), members: pageOf(membersFor(role)), ...api });
   const opened = await openApp("/w/w1/settings/members");
   return { stub, ...opened };
 }
 
-/** Opens an operator screen as an instance admin (the shell's admin read answers true); `api` overrides any answer. */
 export async function openAdmin(path: string, api: Api = {}) {
   const stub = stubApi({ admin: () => json({ data: { admin: true } }), ...api });
   const opened = await openApp(path);
   return { stub, ...opened };
 }
 
-/** A sensitive call that is refused with step_up_required until the password was verified, then answers `ok`. */
 export function needsPassword(key: keyof Api, ok: () => Response): Api {
   let verified = false;
   return {
@@ -625,7 +583,6 @@ export function needsPassword(key: keyof Api, ok: () => Response): Api {
   };
 }
 
-/** Types the password into the open password dialog and confirms. */
 export async function confirmPassword() {
   const field = document.querySelector<HTMLInputElement>('[role="dialog"] input[name="password"]');
   if (!field) throw new Error("no password dialog is open");
@@ -634,6 +591,5 @@ export async function confirmPassword() {
   await settle();
 }
 
-/** The calls to a path (a part of it) with a method. */
 export const callsTo = (stub: ReturnType<typeof stubApi>, method: string, part: string) =>
   stub.mock.calls.filter(([url, init]) => url.includes(part) && (init?.method ?? "GET") === method);

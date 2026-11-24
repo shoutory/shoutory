@@ -12,8 +12,6 @@ import { HASH_BAD, holdThenRace, openTx } from "../support/race.js";
 
 const env = readTestEnv();
 
-// The access definers of migration 0009: the only read and create paths of the tenancy tables. A caller is always
-// the signed-in user of the session context; no workspace list or write workspace in that context changes a result.
 type Rows = Record<string, unknown>[];
 interface Fixture {
   db: () => TestDatabase;
@@ -21,7 +19,6 @@ interface Fixture {
   app: () => Pool;
 }
 
-/** One clone, seeded as the superuser. */
 function useDatabase(seed: (admin: Client) => Promise<void>): Fixture {
   let db: TestDatabase;
   beforeAll(async () => {
@@ -58,14 +55,11 @@ const NOTHING = {
 };
 
 interface Footprint {
-  /** The change in the row counts of the tenancy and audit tables that `act` leaves behind. */
   delta: Record<string, number>;
-  /** What `act` threw, or undefined: the caller asserts the outcome it expects. */
   error: unknown;
   value: unknown;
 }
 
-/** Runs `act` once and measures what it left behind; the error is reported, never discarded. */
 async function footprint(t: Fixture, act: () => Promise<unknown>): Promise<Footprint> {
   const before = (await t.rows(COUNTS))[0] as Record<string, number>;
   let error: unknown;
@@ -82,7 +76,6 @@ async function footprint(t: Fixture, act: () => Promise<unknown>): Promise<Footp
   return { delta, error, value };
 }
 
-/** Calls the definer, reads the new row back through `seen` in the same transaction, then rolls back. */
 async function createThenRollBack(
   t: Fixture,
   user: string,
@@ -98,8 +91,6 @@ async function createThenRollBack(
     client.release();
   }
 }
-
-// ---- R196: the caller must be a signed-in user ------------------------------------------------------------------
 
 const U1 = randomUUID();
 const UM = randomUUID();
@@ -117,11 +108,10 @@ const WA1 = randomUUID();
 const WA2 = randomUUID();
 const WB = randomUUID();
 
-/**
- * OA: UOA owner (no workspace row); U1 member; UM admin (and stored viewer in WA1); US member (stored, suspended editor in WA1); UN admin (stored,
- * suspended in WA1); UD admin (no stored row). WA2 has U1 as stored editor. UOA is also the suspended stored Owner of
- * WA1 and WA2 (the Owner guard wants one; a suspended row reaches nothing). OB holds UB alone. OE has no workspace.
- */
+// OA: UOA owner (no workspace row); U1 member; UM admin (and stored viewer in WA1); US member (stored, suspended
+// editor in WA1); UN admin (stored, suspended in WA1); UD admin (no stored row). WA2 has U1 as stored editor. UOA is
+// also the suspended stored Owner of WA1 and WA2 (the owner guard wants one; a suspended row reaches nothing).
+// OB holds UB alone. OE has no workspace.
 async function seedAccess(admin: Client): Promise<void> {
   await admin.query(
     [
@@ -177,7 +167,7 @@ const NOT_A_USER: [string, TenantCtx][] = [
   ["a user kind with no id", { principalKind: "user" }],
 ];
 
-describe("every access definer refuses a caller that is not a signed-in user (R196)", () => {
+describe("every access definer refuses a caller that is not a signed-in user", () => {
   const t = useDatabase(seedAccess);
 
   it.each(
@@ -189,9 +179,7 @@ describe("every access definer refuses a caller that is not a signed-in user (R1
   });
 });
 
-// ---- resolve_workspace_access, my_workspaces, my_organizations ------------------------------------------------------
-
-describe("resolve_workspace_access (R197)", () => {
+describe("resolve_workspace_access", () => {
   const t = useDatabase(seedAccess);
   const resolve = (user: string, ctx: Partial<TenantCtx> = {}) =>
     run(
@@ -246,7 +234,7 @@ describe("resolve_workspace_access (R197)", () => {
   });
 });
 
-describe("my_workspaces and my_organizations (R198)", () => {
+describe("my_workspaces and my_organizations", () => {
   const t = useDatabase(seedAccess);
   const page = (user: string, sql: string, after: string | null) => run(t, asUser(user), sql, [after]);
   const WORKSPACES = "SELECT * FROM app.my_workspaces(1, $1::uuid)";
@@ -281,7 +269,7 @@ describe("my_workspaces and my_organizations (R198)", () => {
   });
 });
 
-describe("my_organizations and the page bounds (R198, R195)", () => {
+describe("my_organizations and the page bounds", () => {
   const t = useDatabase(seedAccess);
   const page = (user: string, sql: string, after: string | null) => run(t, asUser(user), sql, [after]);
   const ORGANIZATIONS = "SELECT * FROM app.my_organizations(1, $1::uuid)";
@@ -301,7 +289,6 @@ describe("my_organizations and the page bounds (R198, R195)", () => {
     expect(third).toEqual([]);
   });
 
-  // R195: input validation, not a floor row.
   it.each(
     [
       "SELECT * FROM app.my_workspaces($1::int, NULL)",
@@ -318,7 +305,7 @@ describe("my_organizations and the page bounds (R198, R195)", () => {
   });
 });
 
-describe("member_directory (R198)", () => {
+describe("member_directory", () => {
   const t = useDatabase(seedAccess);
   const list = (workspace: string, lim = 100, after: string | null = null, user = U1) =>
     run(t, asUser(user), "SELECT * FROM app.member_directory($1::uuid, $2::int, $3::uuid)", [
@@ -360,9 +347,7 @@ describe("member_directory (R198)", () => {
   });
 });
 
-// ---- the 500 limit ------------------------------------------------------------------------------------------------
-
-describe("resolve_workspace_access never truncates (R197)", () => {
+describe("resolve_workspace_access never truncates", () => {
   const U501 = randomUUID();
   const U500 = randomUUID();
   const O501 = randomUUID();
@@ -401,9 +386,6 @@ describe("resolve_workspace_access never truncates (R197)", () => {
   );
 });
 
-// ---- organization_create ------------------------------------------------------------------------------------------
-
-/** n organizations of which the user is the owner, in one statement. */
 const seedOwned = (user: string, tag: string, n: number) => (admin: Client) =>
   admin
     .query(
@@ -417,7 +399,7 @@ const seedOwned = (user: string, tag: string, n: number) => (admin: Client) =>
 const CREATE_ORGANIZATION = `SELECT app.organization_create('new-org', 'team', 'req-1', NULL, ${FRESH_KEY}) AS id`;
 const CREATE_WORKSPACE = `SELECT app.workspace_create($1::uuid, 'new-ws', $2::text, 'Europe/Paris', 'req-2', NULL, ${FRESH_KEY}) AS id`;
 
-describe("organization_create (R192, R194, R195, R176)", () => {
+describe("organization_create", () => {
   const UC = randomUUID();
   const t = useDatabase((admin) => admin.query(addUser(UC, "create-uc")).then(() => undefined));
 
@@ -462,7 +444,7 @@ describe("organization_create (R192, R194, R195, R176)", () => {
   });
 });
 
-describe("organization_create bound of 20 owned organizations (R194)", () => {
+describe("organization_create bound of 20 owned organizations", () => {
   const U20 = randomUUID();
   const UADM = randomUUID();
   const UKEEP = randomUUID();
@@ -501,7 +483,7 @@ describe("organization_create bound of 20 owned organizations (R194)", () => {
   });
 });
 
-describe("organization_create race at 19 owned organizations (R194)", () => {
+describe("organization_create race at 19 owned organizations", () => {
   const U19 = randomUUID();
   const t = useDatabase(async (admin) => {
     await admin.query(addUser(U19, "create-u19"));
@@ -521,8 +503,6 @@ describe("organization_create race at 19 owned organizations (R194)", () => {
   });
 });
 
-// ---- workspace_create ---------------------------------------------------------------------------------------------
-
 const OW = randomUUID();
 const OZ = randomUUID();
 const WZ = randomUUID();
@@ -532,7 +512,7 @@ const UW3 = randomUUID();
 const UW4 = randomUUID();
 const UWX = randomUUID();
 
-/** OW: UW1 owner, UW2 admin, UW3 member, UW4 billing. OZ: UWX owner, with the workspace WZ. */
+// OW: UW1 owner, UW2 admin, UW3 member, UW4 billing. OZ: UWX owner, with the workspace WZ.
 async function seedWorkspaceCreate(admin: Client): Promise<void> {
   await admin.query([UW1, UW2, UW3, UW4, UWX].map((id, n) => addUser(id, `create-w${n}`)).join(";"));
   await admin.query(
@@ -545,13 +525,12 @@ async function seedWorkspaceCreate(admin: Client): Promise<void> {
   );
 }
 
-/** One workspace_create call as `user`; `ctx` adds settings to the context. */
 const createWorkspace =
   (t: Fixture) =>
   (user: string, organization: string, slug: string, ctx: Partial<TenantCtx> = {}) =>
     run(t, { ...asUser(user), ...ctx }, CREATE_WORKSPACE, [organization, slug]);
 
-describe("workspace_create (R192, R193)", () => {
+describe("workspace_create", () => {
   const t = useDatabase(seedWorkspaceCreate);
   const create = createWorkspace(t);
 
@@ -600,7 +579,7 @@ describe("workspace_create (R192, R193)", () => {
   );
 });
 
-describe("workspace_create refusals (R193)", () => {
+describe("workspace_create refusals", () => {
   const t = useDatabase(seedWorkspaceCreate);
   const create = createWorkspace(t);
 
@@ -651,7 +630,7 @@ describe("workspace_create refusals (R193)", () => {
   });
 });
 
-describe("workspace_create ignores the workspace settings of the context (R193)", () => {
+describe("workspace_create ignores the workspace settings of the context", () => {
   const t = useDatabase(seedWorkspaceCreate);
   const create = createWorkspace(t);
 

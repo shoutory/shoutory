@@ -3,8 +3,6 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { SWATCHES } from "./swatches";
 
-// The colours a workspace can take: eight named swatches, each with the colour of its label. A swatch is a boundary
-// against the page (3:1, WCAG 1.4.11) and its label is text on the swatch (4.5:1, WCAG 1.4.3), in light and dark.
 const tokens = readFileSync(join(import.meta.dirname, "../tokens/tokens.css"), "utf8");
 const surface = (block: string | undefined) =>
   /--color-surface:\s*(#[0-9a-f]{6})/.exec(block ?? "")?.[1] ?? "";

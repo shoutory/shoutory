@@ -18,12 +18,8 @@ import { createFsDriver } from "../../src/storage/fs-driver.js";
 import { connectThrough, seedDueTarget, seedWorkspace } from "../support/ledger-seed.js";
 
 const env = readTestEnv();
-// The worker's image pipeline is not exercised here: its storage is a folder nothing writes to.
 const media = { storage: createFsDriver(join(tmpdir(), "shoutory-ledger-tick-unused")) };
 
-// The tick of the ledger: admission sends its wake-up in its own transaction, at most one wake-up waits for a queue, and
-// a step of the tick that fails does not stop the others. Each row says what it fails against once the module exists;
-// today every row fails first because the module does not exist.
 let db: TestDatabase;
 let ws: string;
 const lines: string[] = [];
@@ -53,7 +49,6 @@ afterAll(async () => {
 
 describe("admission and its wake-up", () => {
   it("a rolled-back admission leaves no job, a committed one leaves one per queue, and a second wake-up is not stored", async () => {
-    // fails first because: the wake-up goes out after the commit or outside the transaction, or two targets store two jobs
     await admin(async (a) => void (await a.query("DELETE FROM pgboss.job WHERE name = 'publish.fixture'")));
     const queue = boss();
     await queue.start();
@@ -93,9 +88,8 @@ const operationsOf = async (variant: string) =>
 
 describe("the worker's ledger tick", () => {
   it("starts and admits with an empty capability snapshot table, and close() stops the tick", async () => {
-    // fails first because: the worker has no tick, or a start gate waits for a capability snapshot that no channel has yet
     const before = await admin((a) => seedDueTarget(a, ws));
-    // Connecting a channel records its first snapshot; this row is about a worker that admits with none, so they go.
+    // Connecting a channel records a snapshot; this row is about a worker that admits with none.
     await admin((a) => a.query("DELETE FROM app.channel_capability_snapshots"));
     const worker = await startWorker({
       connectionString: db.url("worker"),
@@ -127,7 +121,6 @@ describe("the worker's ledger tick", () => {
 
 describe("the publish subscription", () => {
   it("dispatches an admitted target from the wake-up of its queue, for a provider that has an adapter", async () => {
-    // fails first because: the worker admits the target and wakes its queue, but nothing takes the wake-up
     const wired = createRegistry([{ ...fixtureManifest, id: "subscribed" }]);
     const target = await admin((a) => seedDueTarget(a, ws, 30, "subscribed"));
     const worker = await startWorker({
@@ -161,7 +154,6 @@ describe("the publish subscription", () => {
 
 describe("a post admitted ahead of its time", () => {
   it("sends a post admitted ahead of its due time when it falls due, with no other row admitted or moved", async () => {
-    // fails first because: only an admission or a sweep wakes the queue, so the one wake-up came before the post was due
     const wired = createRegistry([{ ...fixtureManifest, id: "aheadoftime" }]);
     const target = await admin((a) => seedDueTarget(a, ws, -4, "aheadoftime"));
     const worker = await startWorker({
@@ -191,7 +183,6 @@ describe("a post admitted ahead of its time", () => {
             ),
           )
         ).rows[0] as { state: string; early: boolean } | undefined;
-      // One cap for the whole row (the post is due after 4 s); the poll ends as soon as the state is what it waits for.
       const deadline = Date.now() + 15_000;
       const until = async (done: (found: Awaited<ReturnType<typeof read>>) => boolean) => {
         let found = await read();
@@ -213,7 +204,6 @@ describe("a post admitted ahead of its time", () => {
 
 describe("a provider added without a migrate", () => {
   it("has its queues created when the worker starts, so admission can wake it", async () => {
-    // fails first because: the queues exist only after `shoutory migrate`, and a wake-up for a missing queue stalls admission
     const added = createRegistry([{ ...fixtureManifest, id: "addedlate" }]);
     const worker = await startWorker({
       connectionString: db.url("worker"),
@@ -246,7 +236,6 @@ describe("a provider added without a migrate", () => {
 
 describe("a lost wake-up", () => {
   it("loses nothing: the operation the tick admitted is claimed by a turn that no job woke", async () => {
-    // fails first because: a turn waits for its job, or the claim cannot see an operation whose wake-up is gone
     await admin(async (a) => {
       await a.query("DELETE FROM app.usage_reservations");
       await a.query("DELETE FROM app.operations");
@@ -286,7 +275,6 @@ describe("a lost wake-up", () => {
 
 describe("a backlog larger than one admission batch", () => {
   it("is admitted by one tick, batch after batch", async () => {
-    // fails first because: one tick admits one batch, so a backlog of more than 100 waits for the next tick
     const home = await admin((a) => seedWorkspace(a));
     await admin(async (a) => {
       for (let n = 0; n < 105; n++) await seedDueTarget(a, home);
@@ -307,7 +295,6 @@ describe("a backlog larger than one admission batch", () => {
 
 describe("one failing step of the tick", () => {
   it("is logged and does not stop the sweep of due moves or the admission", async () => {
-    // fails first because: the first failing step throws out of the tick and the steps after it never run
     const queue = boss();
     await queue.start();
     const variant = await admin((a) => seedDueTarget(a, ws));

@@ -2,9 +2,6 @@ import { EgressError, type EgressErrorClass } from "@shoutory/provider-sdk/egres
 import { describe, expect, it } from "vitest";
 import { fileNameOf, reasonOf } from "./import.js";
 
-// The two pure rules of the import: what an egress failure is called to the member (one fixed reason per class, never
-// the class, the host or the URL), and the name an imported file gets.
-
 describe("the reason the member is told", () => {
   // Only the classes that no row of the route test reaches: that file reaches the blocked address, the blocked URL, the
   // invalid URL and the size, and the stalled body that times out.

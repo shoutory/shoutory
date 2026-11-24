@@ -13,17 +13,12 @@ import { holdThenRace, openTx } from "../support/race.js";
 
 const env = readTestEnv();
 
-// Security floor of migration 0018 (R574, R575): the content tables are written only by the four post definers, a
-// caller needs the Editor rank of the workspace (no viewer, approver, service, portal principal, job or foreign
-// editor), a stale autosave changes nothing, an old version is never edited, and every row stays in its own
-// workspace. The snapshot carries the draft the definers rebuild the variants and media from. Rows that must be seen
-// are planted as the superuser; nothing sleeps. The argument lists and outcome names are the contract of the migration.
+// Rows that must be seen are planted as the superuser; nothing sleeps.
 let db: TestDatabase;
 const admin = <T>(run: (client: Client) => Promise<T>) => withAdminClient(env, db.name, run);
 const rows = (sql: string, params: unknown[] = []) =>
   admin(async (client) => (await client.query(sql, params)).rows);
 
-// Two channels and two assets of workspace A, and one of each in workspace B.
 const CH1 = randomUUID();
 const CH2 = randomUUID();
 const CHB = randomUUID();
@@ -79,7 +74,6 @@ const reader = (user: string, workspace: string): TenantCtx => ({
 });
 const poolOf = (ctx: TenantCtx) => db.pool(ctx.principalKind === "job" ? "worker" : "app");
 
-// The draft shape the write definers rebuild variants and media from, inside the snapshot under the key `draft`.
 type Row = Record<string, unknown>;
 const variant = (channel: string, change: Row = {}) => ({
   channel_id: channel,
@@ -149,7 +143,6 @@ const variantsOf = (post: string) =>
 const mediaOf = (variant_id: string) =>
   rows("SELECT media_id, position FROM app.post_media WHERE variant_id = $1 ORDER BY position", [variant_id]);
 
-// A post and its variant planted directly as the superuser, for the rows that need a post without a definer call.
 async function plantPost(ws = WA, channel = CH1): Promise<{ post: string; variant: string }> {
   const [post] = await rows(
     "INSERT INTO app.posts (workspace_id, author_kind, author_id) VALUES ($1, 'user', $2) RETURNING id",

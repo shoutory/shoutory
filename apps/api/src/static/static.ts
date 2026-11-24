@@ -28,7 +28,6 @@ const cacheOf = (file: string): string => (basename(file) === "index.html" ? SHE
 const ASSET_DIR = "assets";
 const API_PREFIX = "api";
 
-/** The decoded path segments, or null when the path could leave the root (`..`, backslash, NUL, bad encoding). */
 function segmentsOf(url: string): string[] | null {
   let path: string;
   try {
@@ -59,7 +58,6 @@ async function serve(file: string, cache: string): Promise<Response> {
   return new Response(await readFile(file), { headers: { "Content-Type": type, "Cache-Control": cache } });
 }
 
-/** The request's path segments and the file they name under `base`; a path that is not ours to serve is refused. */
 function locate(base: string, url: string): { segments: string[]; file: string } {
   const segments = segmentsOf(url);
   if (!segments) throw new Refusal("validation_failed", "the path is not allowed");
@@ -71,14 +69,10 @@ function locate(base: string, url: string): { segments: string[]; file: string }
   return { segments, file };
 }
 
-/**
- * Our own static handler for the SPA build (Hono's serveStatic is banned): a file under `root`, else the shell for a
- * client-side route. A missing asset, an API path or a path with a file extension is a 404, never the shell.
- */
+// A missing asset, an API path or a path with a file extension is a 404, never the shell.
 function handler(root: string, shell: string | undefined) {
   const base = resolve(root);
   const indexFile = join(base, "index.html");
-  // The shell given at registration is the copy read at start; it is served for the page and for `/index.html`.
   const shellResponse = async () =>
     shell === undefined
       ? serve(indexFile, SHELL_CACHE)
@@ -96,7 +90,7 @@ function handler(root: string, shell: string | undefined) {
   };
 }
 
-/** The shell page, read once at start: it is hashed and served from this copy, never read again (R387). */
+// Read once at start: the page is hashed and served from this copy, never read again.
 export function readShell(webRoot: string): string {
   try {
     return readFileSync(join(resolve(webRoot), "index.html"), "utf8");
@@ -108,12 +102,9 @@ export function readShell(webRoot: string): string {
   }
 }
 
-/**
- * The CSP source of the shell's one inline script (V-76). The browser hashes the script's text after the HTML parser
- * has turned CRLF and lone CR into LF, so the same normalization is applied here. Anything but exactly one inline
- * script (a script element with no `src`) refuses the start: the page would otherwise be blocked, or an unhashed
- * script would need `unsafe-inline`.
- */
+// The browser hashes the script's text after the HTML parser has turned CRLF and lone CR into LF, so the same
+// normalization is applied here. Anything but exactly one inline script refuses the start: the page would otherwise be
+// blocked, or an unhashed script would need `unsafe-inline`.
 export function inlineScriptSource(html: string): string {
   const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)]
     .filter(([, attributes]) => !/\ssrc\s*=/.test(attributes ?? ""))
@@ -129,7 +120,6 @@ export function inlineScriptSource(html: string): string {
     .digest("base64")}'`;
 }
 
-/** `shell` is the page text read at start (`readShell`); without it the page is read from the folder per request. */
 export function registerStatic(app: App, root: string, shell?: string): void {
   // The static route ignores the query (a campaign tag on the shell must not fail), so it is the one loose schema.
   defineRoute(app, {

@@ -9,8 +9,6 @@ import {
 
 const env = readTestEnv();
 
-// Security floor, read from the catalog: no function is callable by PUBLIC, every helper is a pinned, invoker,
-// stable function granted to exactly the roles that run policies, and no default can widen any of it later.
 const HELPERS = [
   "ws_ids",
   "write_ws",
@@ -33,7 +31,6 @@ const GRANTEES = `
   LEFT JOIN pg_roles r ON r.oid = a.grantee
   WHERE n.nspname = $1 AND a.privilege_type = 'EXECUTE'`;
 
-// One clone per describe; the owner pool reads the catalog.
 function useOwnerPool(): () => Pool {
   let db: TestDatabase;
   beforeAll(async () => {
@@ -46,7 +43,6 @@ function useOwnerPool(): () => Pool {
 describe("row security catalog: PUBLIC", () => {
   const owner = useOwnerPool();
 
-  // The functions of schema app are checked one by one below (helpers, definers, the template function).
   it("no function in schema auth grants EXECUTE to PUBLIC", async () => {
     const open = await owner().query(`${GRANTEES} AND r.rolname IS NULL`, ["auth"]);
     expect(open.rows).toEqual([]);
@@ -110,14 +106,12 @@ describe("row security catalog: helpers", () => {
   });
 });
 
-// The definer matrix: every function of schema app owned by the definer role, with the roles that may call it. A
-// later migration adds its definers here; a function not listed fails the first test by name.
+// A function of schema app owned by the definer role that is not listed here fails the first test by name.
 interface Definer {
   name: string;
   /** The identity arguments, so an added overload of the same name is caught. */
   args: string;
   callers: string[];
-  /** Not SECURITY DEFINER: an internal helper that only the definers call. */
   helper?: true;
 }
 const AUTH_APP_WORKER = ["shoutory_auth", "shoutory_app", "shoutory_worker"];
@@ -178,7 +172,6 @@ const DEFINERS: Definer[] = [
   {
     name: "audit_insert",
     args: "action text, resource_kind text, resource_id text, request_id text, ip_hmac bytea, metadata jsonb",
-    // No code calls it from the worker; a later slice that needs it grants it with its own test (R532 (2)).
     callers: ["shoutory_app"],
   },
   {
@@ -241,7 +234,6 @@ const DEFINERS: Definer[] = [
     args: "workspace_id uuid, user_id uuid, request_id text, ip_hmac bytea",
     callers: ["shoutory_app"],
   },
-  // 0012
   { name: "signup_gate", args: "email text", callers: ["shoutory_auth"] },
   { name: "signup_open", args: "", callers: ["shoutory_auth", "shoutory_app"] },
   { name: "instance_settings_read", args: "", callers: ["shoutory_app"] },
@@ -265,7 +257,6 @@ const DEFINERS: Definer[] = [
   { name: "outbox_lag", args: "", callers: ["shoutory_app"] },
   { name: "worker_status", args: "", callers: ["shoutory_app"] },
   { name: "job_lag", args: "", callers: ["shoutory_app"] },
-  // 0013
   {
     name: "channel_disable",
     args: "workspace_id uuid, channel_id uuid, request_id text, ip_hmac bytea",
@@ -276,8 +267,6 @@ const DEFINERS: Definer[] = [
     args: "workspace_id uuid, channel_id uuid, request_id text, ip_hmac bytea",
     callers: ["shoutory_app"],
   },
-  // 0014: the credential definers run for the app role (a user with channels.manage) and the worker (a job principal);
-  // the helper carries the one principal check (R537 (2), R539 (10)).
   { name: "credential_caller", args: "workspace_id uuid", callers: [], helper: true },
   { name: "workspace_salt_ensure", args: "workspace_id uuid, salt bytea", callers: APP_WORKER },
   {
@@ -312,7 +301,6 @@ const DEFINERS: Definer[] = [
     args: "workspace_id uuid, channel_id uuid, health text, manifest_digest text, api_version text, sunset_at timestamp with time zone, capabilities jsonb, limits jsonb",
     callers: APP_WORKER,
   },
-  // 0015: the connect state is written and taken by a signed-in user only, so the app role alone may call them.
   {
     name: "oauth_flow_put",
     args: `flow_id uuid, workspace_id uuid, provider_id text, state_hash bytea, channel_id uuid, instance_host text, ${SEALED_FIELDS}, request_uri text`,
@@ -323,7 +311,6 @@ const DEFINERS: Definer[] = [
     args: "state_digest bytea, want_provider text, want_host text, request_id text, ip_hmac bytea",
     callers: ["shoutory_app"],
   },
-  // 0027: the per-instance app of a provider is stored and read by a signed-in user only, so the app role alone may call them.
   {
     name: "instance_app_put",
     args: `p_id uuid, p_ws uuid, p_provider text, p_host text, p_client_id text, ${SEALED_FIELDS}, p_replaces text`,
@@ -334,13 +321,11 @@ const DEFINERS: Definer[] = [
     args: "p_ws uuid, p_provider text, p_host text",
     callers: ["shoutory_app"],
   },
-  // A job principal (the Telegram poller) or an Admin user takes a connect word, like the credential definers.
   {
     name: "connect_challenge_take",
     args: "workspace_id uuid, provider_id text, code_hash bytea",
     callers: APP_WORKER,
   },
-  // 0016 (R551): the media writers. One principal helper (a rank argument, no lock) and the immutability guard.
   {
     name: "media_caller",
     args: "workspace_id uuid, min_rank integer, job_ok boolean",
@@ -378,7 +363,6 @@ const DEFINERS: Definer[] = [
     args: "workspace_id uuid, asset_id uuid, file_name text, tags text[], in_library boolean",
     callers: ["shoutory_app"],
   },
-  // 0024: the storage upload id of a large upload, recorded once with its declared digest and size; an Editor user only.
   {
     name: "media_set_multipart",
     args: "workspace_id uuid, asset_id uuid, upload_id text, digest bytea, byte_size bigint",
@@ -390,23 +374,17 @@ const DEFINERS: Definer[] = [
     args: "lim integer, after_asset uuid",
     callers: ["shoutory_worker"],
   },
-  // 0025: the one move of an asset to deleted by the collection, after the arm's rule is read again under the row lock;
-  // the rule both it and the candidate list read; the guard that lets a post name only a ready medium.
   {
     name: "media_gc_take",
     args: "workspace_id uuid, asset_id uuid, arm text",
     callers: ["shoutory_worker"],
   },
   { name: "media_gc_due", args: "workspaces uuid[], only_asset uuid", callers: [], helper: true },
-  // 0026: the one writer of `operation_media`, called inside admission and `resolve_operation`; no runtime role calls it.
   { name: "operation_media_lock", args: "p_ws uuid, p_version uuid, p_op uuid", callers: [] },
   { name: "operation_media_pin", args: "p_ws uuid, p_op uuid, p_version uuid", callers: [] },
   { name: "post_media_guard", args: "", callers: [] },
-  // 0019: the two trigger functions of the ledger. They run for whoever writes an operation, and no role calls them.
   { name: "ledger_guard", args: "", callers: [] },
   { name: "ledger_settled_guard", args: "", callers: [] },
-  // 0020 (R590, R591): the writers of the ledger. The insert has no runtime caller (admission and the resolutions call it
-  // as the definer role); the fenced move is the worker's; the helper stores evidence inside its callers' purposes.
   {
     name: "ledger_add_evidence",
     args: "workspace_id uuid, operation_id uuid, part integer, kind text, level text, outcome_kind text, refs jsonb",
@@ -418,7 +396,6 @@ const DEFINERS: Definer[] = [
     args: "workspace_id uuid, operation_id uuid, kind text, level text, outcome_kind text, refs jsonb",
     callers: ["shoutory_worker"],
   },
-  // 0021: the runtime of the ledger. Each runs for a worker job under the ledger purpose; the helper is their caller check.
   { name: "ledger_caller", args: "", callers: [], helper: true },
   { name: "admit_due_targets", args: "p_limit integer, p_providers jsonb", callers: ["shoutory_worker"] },
   {
@@ -439,8 +416,6 @@ const DEFINERS: Definer[] = [
   { name: "sweep_expired_leases", args: "p_providers jsonb", callers: ["shoutory_worker"] },
   { name: "sweep_due_moves", args: "p_live_providers jsonb", callers: ["shoutory_worker"] },
   { name: "ledger_due_move", args: "p_ws uuid, p_id uuid", callers: [], helper: true },
-  // 0022: the effect SQL. The lock helpers, the rollup and the two triggers are called by the definers and by the
-  // table's own triggers; the attempt writers are the worker's, the resolution is a signed-in person's.
   { name: "ledger_prelock", args: "p_ws uuid, p_op uuid", callers: [], helper: true },
   {
     name: "ledger_lock_target",
@@ -494,15 +469,12 @@ const DEFINERS: Definer[] = [
     args: "workspace_id uuid, operation_id uuid, token bigint, from_state text, to_state text, actor text, changes jsonb",
     callers: ["shoutory_worker"],
   },
-  // 0018 (R574, R575): the post writers, for a signed-in Editor or above through the app role only, and the internal
-  // helper that rebuilds the variants and media from a draft (no runtime role runs it).
   {
     name: "post_apply_draft",
     args: "workspace_id uuid, post_id uuid, draft jsonb",
     callers: [],
     helper: true,
   },
-  // The helper the autosave, save and restore definers share: lock, compare, version, draft and pointer move.
   {
     name: "post_write_version",
     args: "workspace_id uuid, post_id uuid, expected_version uuid, snapshot jsonb, snapshot_hash bytea, kind text",
@@ -613,7 +585,6 @@ describe("row security catalog: definers", () => {
     },
   );
 
-  // One definer policy per table, purpose and command: a purpose opens exactly the access its function needs.
   it("every policy of the definer role names a purpose, once per table and command", async () => {
     const found = await owner().query(
       `SELECT c.relname AS tbl, p.polname AS policy, p.polcmd AS cmd,
@@ -629,8 +600,8 @@ describe("row security catalog: definers", () => {
 describe("row security catalog: what the definer role may do to the tenancy tables", () => {
   const owner = useOwnerPool();
 
-  // R199, R240: the definers read and create rows. The only table-level DELETE is a member's removal; an UPDATE is a
-  // column grant (a member's role, and the id column that the rank 1a row lock needs), never table-wide.
+  // The definers read and create rows. The only table-level DELETE is a member's removal; an UPDATE is a
+  // column grant (a member's role, and the id column that the organization row lock needs), never table-wide.
   it.each([
     ["UPDATE", []],
     ["DELETE", ["workspace_members"]],
@@ -667,9 +638,8 @@ describe("row security catalog: tables and roles", () => {
   });
 });
 
-// R499, R532 (1): a leaf read by name never passes through the parent's policies (PostgreSQL ddl-inherit), so each
-// leaf has row security enabled and forced and, with no policy of its own, denies a direct read to every role. The
-// leaves of 0008 and the one `ensure_partitions` makes are both covered; the parent's own path must keep working.
+// A leaf read by name never passes through the parent's policies, so each leaf must have row security enabled
+// and forced and no policy of its own, which denies a direct read to every role.
 describe("row security catalog: audit_logs leaves", () => {
   let db: TestDatabase;
   beforeAll(async () => {

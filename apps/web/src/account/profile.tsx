@@ -31,7 +31,6 @@ function NameForm({ current }: { current: string }) {
         method: "POST",
         body: { name: name.trim() },
       });
-      // The field shows what the server kept (trimmed).
       setName(answer.name);
       setDone(true);
       await revalidator.revalidate();
@@ -85,10 +84,8 @@ function useLanguage() {
     const chosen: Locale = next === "ar" ? "ar" : "en";
     setFailed(false);
     storeLocale(chosen);
-    // Language and direction change at once; the page's words follow when the catalog has loaded.
     applyLocale(chosen);
     activateLocale(chosen).catch(() => {
-      // The catalog did not load: the page keeps the language it had, and says so.
       storeLocale(locale);
       applyLocale(locale);
       setFailed(true);
@@ -97,7 +94,6 @@ function useLanguage() {
   return { locale, failed, choose };
 }
 
-// These three stay in this browser and apply at once; the language also loads its catalog.
 function Settings() {
   const { locale, failed, choose } = useLanguage();
   const [theme, setThemeState] = useState<Theme>(readTheme);
@@ -157,7 +153,6 @@ function Settings() {
   );
 }
 
-// The zone stays in this browser too; it starts as the browser's own.
 function ZoneField() {
   const { t } = useLingui();
   const [zone, setZoneState] = useState(readZone);
@@ -173,7 +168,6 @@ function ZoneField() {
   );
 }
 
-/** A-06 (`/account/profile`): the name is the server's; language, theme, digits and zone stay in this browser. */
 export function ProfilePage() {
   const session = useRouteLoaderData<Session>(SESSION_ROUTE_ID);
   return (

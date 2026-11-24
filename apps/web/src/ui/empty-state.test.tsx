@@ -5,7 +5,6 @@ import { EmptyState } from "./empty-state";
 
 afterEach(closeApp);
 
-// ux-spec 2.1 E: first-use has one primary action, filtered-out offers Clear filters, cleared has no action.
 describe("EmptyState", () => {
   it.each([
     ["first-use", ["Create a workspace"]],

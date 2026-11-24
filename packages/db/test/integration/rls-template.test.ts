@@ -10,9 +10,7 @@ import {
 
 const env = readTestEnv();
 
-// Security floor: a table under the W template must show a session only its read set, let it write only its one
-// write workspace, and fail closed for every other principal. Settings are planted raw on purpose: the invariant
-// scanner exempts test files, and a raw value is the only way to try a context withTenant would refuse.
+// Settings are planted raw on purpose: a raw value is the only way to try a context withTenant would refuse.
 const A = randomUUID();
 const B = randomUUID();
 const C = randomUUID();
@@ -56,7 +54,7 @@ const update = (where: string) => `UPDATE app.fx SET label = 'x' WHERE ${where}`
 const all = "SELECT * FROM app.fx";
 const wipe = "DELETE FROM app.fx";
 
-// Rows: title, settings (undefined = no context at all), statement, what the caller must see.
+// A settings value of undefined plants no context at all.
 const ROWS: [string, Settings | undefined, string, Expected][] = [
   ["a user reads its own workspaces (positive control)", ctx([A, B], A), all, { rows: 2 }],
   ["a job reads its own workspace (positive control)", ctx([A], A, "job"), own(A), { rows: 1 }],
@@ -207,8 +205,7 @@ describe("apply_rls_template refuses hostile input", () => {
   });
 });
 
-// Templates U, I and D (security floor). Real tables, seeded as the superuser because a runtime role cannot write
-// them. U shows a user only their own rows; I and D answer a runtime role "permission denied", for reads and writes.
+// Seeded as the superuser because a runtime role cannot write these tables.
 const U1 = randomUUID();
 const U2 = randomUUID();
 const KEY = "a".repeat(64);
@@ -236,7 +233,6 @@ async function seedAuthData(admin: Client): Promise<void> {
   await admin.query("INSERT INTO app.rate_buckets (scope, key, tokens) VALUES ('login_ip', $1, 1)", [KEY]);
 }
 
-/** One clone per describe, seeded as the superuser; the returned function reads a role's answer. */
 function useSeeded(plant?: string): (role: Runtime, settings: Settings, sql: string) => Promise<QueryResult> {
   let db: TestDatabase;
   beforeAll(async () => {
@@ -250,12 +246,12 @@ function useSeeded(plant?: string): (role: Runtime, settings: Settings, sql: str
   return (role, settings, sql) => inTransaction(db.pool(role), settings, (query) => query(sql));
 }
 
-describe("template U on user_profiles and session_step_ups", () => {
+describe("the own-rows policy on user_profiles and session_step_ups", () => {
   const read = useSeeded();
 
   it.each(
     RUNTIME.flatMap((role) => ["user_profiles", "session_step_ups"].map((table) => [role, table] as const)),
-  )("template U: %s sees a user's own %s rows and no other user's", async (role, table) => {
+  )("%s sees a user's own %s rows and no other user's", async (role, table) => {
     const own = await read(role, user(U1), `SELECT user_id FROM app.${table}`);
     expect(own.rows).toEqual([{ user_id: U1 }]);
   });
@@ -265,7 +261,7 @@ describe("template U on user_profiles and session_step_ups", () => {
     ["a service principal with the user's id", user(U1, "service")],
     ["a portal principal with the user's id", user(U1, "portal")],
     ["a user principal with an id that owns nothing", user(randomUUID())],
-  ] as [string, Settings][])("template U: %s reads 0 rows", async (_title, settings) => {
+  ] as [string, Settings][])("own-rows policy: %s reads 0 rows", async (_title, settings) => {
     for (const table of ["user_profiles", "session_step_ups"]) {
       expect((await read("app", settings, `SELECT 1 FROM app.${table}`)).rows).toHaveLength(0);
     }
@@ -281,7 +277,7 @@ describe("template U on user_profiles and session_step_ups", () => {
     ],
     ["UPDATE", "UPDATE app.session_step_ups SET method = 'totp'"],
     ["DELETE", "DELETE FROM app.session_step_ups"],
-  ])("template U: a runtime role cannot %s directly (permission denied): %s", async (_verb, sql) => {
+  ])("the own-rows policy: a runtime role cannot %s directly (permission denied): %s", async (_verb, sql) => {
     for (const role of RUNTIME)
       await expect(read(role, user(U1), sql)).rejects.toMatchObject({ code: "42501" });
   });
@@ -303,7 +299,7 @@ describe("templates I and D on instance_admins and rate_buckets", () => {
 });
 
 // Template U carries no write policy of its own: a write grant planted by mistake still writes nothing.
-describe("template U holds even if a write grant is planted", () => {
+describe("the own-rows policy holds even if a write grant is planted", () => {
   const read = useSeeded("GRANT INSERT, UPDATE, DELETE ON app.user_profiles TO shoutory_app");
 
   it.each([

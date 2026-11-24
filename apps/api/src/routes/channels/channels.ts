@@ -9,23 +9,17 @@ import { type App, defineRoute } from "../define-route.js";
 import { definerRefusal } from "../definer-refusal.js";
 import { pageAnswer, pageQuery } from "../input.js";
 
-// The connected accounts of one workspace: list, detail, rename (the nickname only), disable and enable. A member with
-// channels.view reads; channels.manage changes. The state moves are the definers of migration 0013, which check the
-// caller again and write the audit row. The answer is an allowlist of columns: no credential or provider secret is
-// ever a field of it.
-
 const uuid = z.uuid().transform((id) => id.toLowerCase());
 const workspaceParams = z.strictObject({ workspace_id: uuid });
 const channelParams = z.strictObject({ workspace_id: uuid, channel_id: uuid });
-// The nickname is the user's label (null clears it); the provider's display name is never written here.
 const rename = z.strictObject({ nickname: nameOf(200).nullable() });
 
+// An allowlist of columns: no credential or provider secret is ever a field of the answer.
 const ANSWER = `id, provider_id, account_kind, display_name, handle, nickname, avatar, connection_state, state_reason,
   health, health_checked_at, token_expires_at, reconnect_deadline, capability_epoch`;
 
-// What the caller may do, said by the server so a screen never derives it: `connect` for the list, `reconnect` and
-// `check` for a row. All three need channels.manage and a provider the app holds; `reconnect` also needs a provider with
-// a connect side (start refuses one without), and `check` a connected channel. A disabled channel offers none.
+// What the caller may do, said by the server so a screen never derives it. `reconnect` also needs a provider with a
+// connect side (start refuses one without), and `check` a connected channel.
 const ACTION = z.enum(["connect", "reconnect", "check"]);
 type Action = z.infer<typeof ACTION>;
 const connectionState = z.enum(CONNECTION_STATES);
@@ -37,7 +31,6 @@ const RECONNECTABLE: ReadonlySet<ConnectionState> = new Set([
 
 interface Viewer {
   readonly canManage: boolean;
-  /** The provider registry and the check wiring; absent when the app has neither. */
   readonly check: ChannelCheck | undefined;
 }
 
@@ -157,14 +150,13 @@ function registerMoves(app: App, ipHmac: IpHmac, check?: ChannelCheck): void {
   }
 }
 
-// A second check of the same channel within a minute is refused (R532 (13)); the time is read from the database clock.
+// The time since the last check is read from the database clock.
 const COOLDOWN_SECONDS = 60;
 const STATE = `SELECT provider_id, connection_state,
   extract(epoch FROM clock_timestamp() - health_checked_at)::float8 AS since
   FROM app.channels WHERE workspace_id = $1 AND id = $2`;
 
-// "Check now": short transactions around one provider read, none open while the provider answers (AGENTS 3.7). A check
-// of a channel that is not connected, or too soon after the last, is refused before the provider is called.
+// Short transactions around one provider read, none open while the provider answers.
 function registerCheck(app: App, { checker, providers }: ChannelCheck): void {
   defineRoute(app, {
     method: "post",
@@ -217,7 +209,6 @@ function registerCheck(app: App, { checker, providers }: ChannelCheck): void {
   });
 }
 
-/** What the check route needs: the checker and the providers a channel's `provider_id` can name. */
 export interface ChannelCheck {
   readonly checker: HealthChecker;
   readonly providers: Readonly<Record<string, HealthProvider>>;

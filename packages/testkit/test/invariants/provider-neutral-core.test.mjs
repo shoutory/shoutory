@@ -10,7 +10,7 @@ const ROOTS = ["apps/api/src", "apps/web/src/messages", "packages/core/src", "pa
 const SKIPPED = new Set(["node_modules", "dist", ".git", ".artifacts", ".turbo"]);
 const EXTENSIONS = ["ts", "tsx", "mts", "js", "cjs", "mjs", "json", "po", "md"];
 
-// The distinctive names of the planned provider portfolio (PRD 01 and 02). Names that are ordinary words (Meta, X,
+// The distinctive names of the planned provider portfolio. Names that are ordinary words (Meta, X,
 // Threads, Medium, Slack) are left out: `import.meta` and plain prose would fire on them, and review catches those.
 const NAMES = [
   "Bluesky",

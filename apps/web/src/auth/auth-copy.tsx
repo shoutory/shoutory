@@ -8,8 +8,7 @@ interface Words {
   meaning: ReactNode;
 }
 
-// The error-to-copy table: what happened and what it means, chosen by the answer's `code`, never by its
-// status. The wrong-credentials copy names no lock and no time (A-01), and no answer reads Retry-After.
+// Copy is chosen by the answer's `code`, never by its status. The wrong-credentials copy names no lock and no time.
 const TOO_MANY: Words = {
   what: <Trans id="auth.copy.too_many.what">Too many attempts</Trans>,
   meaning: <Trans id="auth.copy.too_many.meaning">Try again in a few minutes.</Trans>,
@@ -30,7 +29,6 @@ const EXPIRED: Words = {
   meaning: <Trans id="auth.copy.expired.meaning">Start again from the sign-in page.</Trans>,
 };
 
-// A refused new password (too weak, common or breached) is told apart from a dead link by its code.
 const PASSWORD_REFUSED: Words = {
   what: <Trans id="auth.copy.password_refused.what">That password is not accepted</Trans>,
   meaning: <Trans id="auth.copy.password_refused.meaning">Choose a longer or less common password.</Trans>,
@@ -63,8 +61,7 @@ const BY_CODE: Record<Screen, Record<string, Words>> = {
     unauthenticated: EXPIRED,
     validation_failed: EXPIRED,
   },
-  // The step-up dialog's code mode: a well-formed wrong code is 401 `invalid_credentials`, one that is not six digits
-  // is 400 `validation_failed`; both are a code that is not right.
+  // A well-formed wrong code is 401 `invalid_credentials`, one that is not six digits is 400 `validation_failed`.
   "step-up-code": {
     invalid_credentials: WRONG_CODE,
     validation_failed: WRONG_CODE,

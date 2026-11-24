@@ -1,13 +1,9 @@
 import { backoffSeconds, type CallResult } from "./dispatch.js";
 
-// The rules of a reconcile turn (OL 7, 8): what to do with an operation whose outcome is unknown. No I/O.
-
 export interface ReconcileFacts {
   readonly readBackMode: string;
   readonly resendAfterUnknown: "same_key_in_window" | "read_back_only";
-  /** How long a provider honours an idempotency key, counted from the key's first committing attempt. */
   readonly keyWindowSeconds: number;
-  /** How long a sent call may still land. */
   readonly maxInFlightSeconds: number;
   readonly readBackGapSeconds: number;
   readonly absentAnswers: readonly { readonly status?: number }[];
@@ -19,13 +15,9 @@ export type ReconcilePlan =
   | { kind: "wait"; checkInSeconds: number }
   | { kind: "needs_human"; reason?: "no_remote_id" };
 
-/**
- * The next step for an unknown outcome. An id we hold is read back, never resent. A provider that cannot read back (class
- * E) goes to a person. A resend with the same key happens only for a provider whose manifest allows it and only while the
- * key's window, counted from its first committing attempt, is open. A provider that reads back by id (class A) and cannot
- * resend holds nothing to read when the answer was lost, so it goes to a person at once, not after a horizon nothing will
- * change; the other classes keep waiting, as they may read back by other means.
- */
+// An id we hold is read back, never resent. A provider that reads back only by id and cannot resend holds nothing to read
+// when the answer was lost, so it goes to a person at once; the other classes keep waiting, as they may read back by
+// other means.
 export function planReconcile(
   facts: ReconcileFacts,
   state: { externalId?: string | undefined; firstEffectAgoSeconds: number; reads?: number | undefined },
@@ -58,11 +50,8 @@ const isAbsent = (result: CallResult, facts: ReconcileFacts): boolean =>
   (result.httpStatus !== undefined &&
     facts.absentAnswers.some((answer) => answer.status === result.httpStatus));
 
-/**
- * What one read-back proves. A found post is published on read-back evidence. An absence is proven only by the provider's
- * own absent answer (a refusal is not one), read after the latest send can no longer land, and read twice a gap apart. The
- * state is that of the cycle since the latest committing attempt: an absence read before a resend does not count.
- */
+// An absence is proven only by the provider's own absent answer (a refusal is not one), read after the latest send can no
+// longer land, and read twice a gap apart. An absence read before a resend does not count.
 export function readBackOutcome(
   result: CallResult,
   facts: ReconcileFacts,
@@ -82,6 +71,6 @@ export function readBackOutcome(
     return { kind: "inconclusive" };
   const second = state.absentReads > 0 && state.secondsSinceAbsentRead >= facts.readBackGapSeconds;
   if (!second) return { kind: "absent_once" };
-  // A proven absence goes back to retry only where the manifest allows a resend; otherwise a person decides (row 38).
+  // A proven absence goes back to retry only where the manifest allows a resend; otherwise a person decides.
   return { kind: facts.resendAfterUnknown === "same_key_in_window" ? "absent_proven" : "needs_human" };
 }

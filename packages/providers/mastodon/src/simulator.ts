@@ -31,9 +31,7 @@ interface Limits {
 }
 
 export interface SimulatorSettings {
-  /** The discovery document: absent (404), without S256, or naming the endpoints of another host. */
   readonly discovery?: "ok" | "missing" | "no_s256" | "foreign_endpoints";
-  /** What verify_credentials answers: the account, a 401, an object with no account, or a body that is no JSON. */
   readonly verify?: "ok" | "revoked" | "stub" | "not_json";
   readonly limits?: Partial<Limits>;
 }
@@ -43,19 +41,12 @@ export interface MastodonSimulatorOptions {
 }
 
 export interface MastodonSimulator extends Simulator {
-  /** The apps registered, oldest first, with their secrets (a test's canary). */
   readonly apps: readonly { readonly clientId: string; readonly clientSecret: string }[];
-  /** The access tokens issued, oldest first. */
   readonly tokens: readonly string[];
-  /** Forgets everything held and the requests seen, and sets how the instance answers from now on. */
   reset(settings?: SimulatorSettings): void;
-  /** From now on the instance answers 401 `invalid_client` for every app registered so far. */
   revokeApps(): void;
-  /** A token that verify_credentials and the statuses routes accept. */
   issueToken(): string;
-  /** Tells the next request of an operation (commit, read-back, delete) to meet a fault; the answer is the documented one. The `edit` route does not exist yet. */
   arm(operation: MatrixOperation, fault: MatrixFault): void;
-  /** The statuses the instance holds, in the order they were created. */
   stored(): readonly StoredPost[];
 }
 
@@ -93,7 +84,6 @@ interface State {
   codes: Map<string, Grant>;
   settings: SimulatorSettings;
   statuses: Map<string, StoredPost>;
-  /** The status each Idempotency-Key made, and when. */
   keys: Map<string, { id: string; at: number }>;
 }
 
@@ -143,7 +133,6 @@ const registerApp =
     };
   };
 
-// The instance approves at once: the redirect carries the code and the state back to the redirect URI as sent.
 const authorize =
   (state: State): Handler =>
   (request) => {
@@ -173,7 +162,6 @@ const authorize =
 const INVALID_CLIENT =
   "Client authentication failed due to unknown client, no client authentication included, or unsupported authentication method.";
 
-// A client the instance does not know (never registered, or forgotten) is refused before the grant is looked at.
 const token =
   (state: State): Handler =>
   (request) => {
@@ -257,7 +245,6 @@ const NOT_FOUND = "Record not found";
 // An Idempotency-Key is kept for up to one hour (methods/statuses, accessed 2026-11-24).
 const KEY_WINDOW_MS = 3_600_000;
 
-// The token a statuses call carries: none is `undefined`, one the instance did not issue is refused with the documented 401.
 function refusedToken(
   state: State,
   request: { headers: Readonly<Record<string, string>> },
@@ -292,11 +279,10 @@ const jsonOrForm = (body: Buffer): Record<string, unknown> => {
   return formOf(body);
 };
 
-// The status an Idempotency-Key made, while its hour has not passed. VERIFY (V-58): the statuses page says only that
-// keys are "stored for up to 1 hour" (docs.joinmastodon.org/methods/statuses, accessed 2026-11-24) and gives no answer for a
-// repeated key, so answering it with 200 and the same status is this simulator's assumption, never a fact a resend may rest
-// on. Private visibility is not modelled either: a status here is readable by anyone, so `read:statuses` is unproven until
-// the live run.
+// VERIFY: the statuses page says only that keys are "stored for up to 1 hour" (docs.joinmastodon.org/methods/statuses,
+// accessed 2026-11-24) and gives no answer for a repeated key, so answering it with 200 and the same status is this
+// simulator's assumption, never a fact a resend may rest on. Private visibility is not modelled either, so
+// `read:statuses` is unproven until the live run.
 function keptFor(state: State, key: string | undefined): StoredPost | undefined {
   const kept = key === undefined ? undefined : state.keys.get(key);
   if (!kept || state.now().getTime() - kept.at >= KEY_WINDOW_MS) return undefined;
@@ -355,7 +341,6 @@ const ROUTES: Readonly<Record<MatrixOperation, string>> = {
   edit: "PUT /api/v1/statuses/:id",
 };
 
-// A matrix fault as this instance answers it: the status' documented body, or the code the harness names as the text.
 function answerTo(fault: MatrixFault) {
   if (fault.kind !== "respond") return fault;
   const documented: Readonly<Record<number, string>> = {
@@ -377,7 +362,6 @@ function answerTo(fault: MatrixFault) {
   };
 }
 
-/** Starts the instance on a loopback port. `reset` clears what it holds and changes how it answers. */
 export async function startMastodonSimulator(options: MastodonSimulatorOptions): Promise<MastodonSimulator> {
   const state: State = {
     now: options.now,
@@ -402,15 +386,12 @@ export async function startMastodonSimulator(options: MastodonSimulatorOptions):
   });
   return {
     ...simulator,
-    /** The apps registered, oldest first, with their secrets (a test's canary). */
     get apps(): readonly App[] {
       return state.apps;
     },
-    /** The access tokens issued, oldest first. */
     get tokens(): readonly string[] {
       return state.tokens;
     },
-    /** Forgets everything held and the requests seen, and sets how the instance answers from now on. */
     reset(settings: SimulatorSettings = {}): void {
       Object.assign(state, {
         apps: [],
@@ -423,11 +404,9 @@ export async function startMastodonSimulator(options: MastodonSimulatorOptions):
       });
       (simulator.requests as unknown[]).length = 0;
     },
-    /** From now on the instance answers 401 `invalid_client` for every app registered so far. */
     revokeApps(): void {
       for (const app of state.apps) state.revoked.add(app.clientId);
     },
-    /** A token that verify_credentials and the statuses routes accept. */
     issueToken: () => issue(state),
     arm(operation, fault): void {
       // The matrix plays "the post is not there" as a 404 on a delete: here that post is really gone, so the read that

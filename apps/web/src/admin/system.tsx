@@ -26,8 +26,6 @@ const dnsSchema = z.object({
 });
 const queuedSchema = z.object({ queued: z.boolean() });
 
-// One check: it runs on a press, is busy while it runs, ignores a second press, and keeps its own result. A check that
-// writes (the storage probe, the test message) runs under the password check.
 function useCheck<T>(schema: ZodType<T>, path: string, needsPassword: boolean) {
   const stepUp = useStepUp();
   const [result, setResult] = useState<T | null>(null);
@@ -165,7 +163,6 @@ function TestMessage() {
   );
 }
 
-/** Z-06: the storage test, the sending-domain check and the test message, and the note on backups. */
 export function SystemPage() {
   return (
     <>

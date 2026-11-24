@@ -3,9 +3,6 @@ import type { AuthService } from "../../auth/auth.js";
 import { type App, defineRoute } from "../define-route.js";
 import { nameSchema, pageAnswer, pageQuery } from "../input.js";
 
-// The organizations of the signed-in user, and the create path of UX 3.1 step 1. Both reach the database only through
-// the definers of migration 0009, so no row is read or written here directly (R226).
-
 const create = z.strictObject({ name: nameSchema, type: z.enum(["agency", "team", "personal"]) });
 
 export function registerOrganizations(app: App, auth: Pick<AuthService, "ipHmac" | "bucketKey">): void {
@@ -47,8 +44,7 @@ export function registerOrganizations(app: App, auth: Pick<AuthService, "ipHmac"
         );
         const id = made.rows[0]?.id;
         if (!id) throw new Error("organization_create returned no id");
-        // The row is not readable here (no organization context yet); the definer derives the slug from the id, and
-        // the feature test holds this line to the stored value.
+        // The row is not readable here (no organization context yet); the definer derives the slug from the id.
         return { id, name: body.name, slug: `o-${id.replaceAll("-", "")}`, type: body.type };
       }),
   });

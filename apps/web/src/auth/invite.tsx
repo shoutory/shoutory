@@ -11,14 +11,13 @@ import { ErrorPanel } from "../ui/error-panel";
 import { authCopy } from "./auth-copy";
 import { AuthFrame, SubmitButton, useAction } from "./auth-frame";
 
-// The token is 32 random bytes in base64url; anything else is no invitation and is never sent to the server.
+// The token is 32 random bytes in base64url; anything else is never sent to the server.
 const TOKEN_SHAPE = /^[A-Za-z0-9_-]{43}$/;
-// The id goes into a path, so it is checked to be an id before it is used.
 const joined = z.object({ workspace_id: z.uuid() });
 const status = z.object({ status: z.boolean() });
 const signedOutAnswer = z.object({ success: z.boolean() });
 
-/** The route's loader: the session if there is one. A visitor with no session sees the page, not a redirect. */
+// A visitor with no session sees the page, not a redirect.
 export async function inviteLoader(): Promise<Session | null> {
   try {
     return await readSession();
@@ -30,7 +29,6 @@ export async function inviteLoader(): Promise<Session | null> {
 
 type Outcome = "expired" | "used" | "revoked" | "unknown" | "member" | "unverified" | "mismatch";
 
-// The refusal code and its reason, as the server gives them, to the state the page shows.
 const BY_REASON: Record<string, Record<string, Outcome>> = {
   invitation_unusable: { expired: "expired", used: "used", revoked: "revoked" },
   conflict: { already_member: "member" },
@@ -43,7 +41,6 @@ function outcomeOf(error: ApiError): Outcome | null {
   return found ?? (error.code === "invitation_unusable" ? "unknown" : null);
 }
 
-// None of these names who sent the invitation: the server never sends it.
 const COPY: Record<Outcome, { what: ReactNode; meaning: ReactNode }> = {
   expired: {
     what: <Trans id="auth.invite.expired.what">This invitation has expired</Trans>,
@@ -114,7 +111,6 @@ function ResendButton({ email }: { email: string }) {
   );
 }
 
-// Signing out ends the session of the wrong address; then sign-in brings the person back to this page.
 function SignOutButton({ path }: { path: string }) {
   const navigate = useNavigate();
   const signOut = useAction(async () => {
@@ -182,7 +178,6 @@ function SignedOut({ path }: { path: string }) {
   );
 }
 
-// The press is the only call that uses the token; a refusal with a reason of its own swaps the form for its notice.
 function AcceptForm({ token, onEnded }: { token: string; onEnded: (outcome: Outcome) => void }) {
   const navigate = useNavigate();
   const accept = useAction(
@@ -193,7 +188,6 @@ function AcceptForm({ token, onEnded }: { token: string; onEnded: (outcome: Outc
     (error) => {
       const outcome = outcomeOf(error);
       if (outcome) onEnded(outcome);
-      // The session ended while the page was open: sign in, then come back to this invitation.
       if (error.state === "session_expired") {
         void navigate(`/sign-in?return-to=${encodeURIComponent(`/invite/${token}`)}`);
       }
@@ -216,10 +210,8 @@ function AcceptForm({ token, onEnded }: { token: string; onEnded: (outcome: Outc
   );
 }
 
-/** A-05 (`/invite/:token`): opening the link changes nothing; the Accept press is the one call that uses the token. */
 export function InvitePage() {
   const { token = "" } = useParams();
-  // Keyed by the token: another link starts with a clean state.
   return <InviteBody key={token} token={token} />;
 }
 

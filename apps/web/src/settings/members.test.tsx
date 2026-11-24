@@ -31,8 +31,6 @@ const hasSelect = (row: HTMLElement) => row.querySelector('button[aria-haspopup=
 const hasRemove = (row: HTMLElement) =>
   [...row.querySelectorAll("button")].some((b) => b.textContent === "Remove");
 
-// A role change and a removal are both sensitive: a refused check asks for the password once and replays once, a
-// cancelled check changes nothing, and a refused rank reads every list again.
 const sensitive: Array<[string, (host: HTMLElement) => Promise<void>, keyof Api, string]> = [
   [
     "a role change",
@@ -67,7 +65,6 @@ describe("the members page", () => {
     expect([callsTo(stub, "GET", "/members").length, callsTo(stub, "GET", "/invitations").length]).toEqual([
       1, 1,
     ]);
-    // Both lists ask for the largest page: the server's default of 20 would hide the rest from every action.
     for (const part of ["/members", "/invitations"])
       expect(callsTo(stub, "GET", part)[0]?.[0]).toContain("limit=100");
   });
@@ -81,7 +78,6 @@ describe("the members page", () => {
     expect(failed.host.querySelector("nav")).not.toBeNull();
   });
 
-  // Below Admin the list cannot be read: the page says so, makes no members or invitations call, and offers Leave.
   it.each(["editor", "approver", "viewer"])(
     "a %s sees the page unavailable, no list call, and can leave",
     async (role) => {
@@ -93,7 +89,6 @@ describe("the members page", () => {
     },
   );
 
-  // Own row, an equal or higher rank and a suspended member carry no role control; the server stays the guard.
   it.each([
     ["owner", "Person Sample", false, false],
     ["owner", "Admin Two", true, true],
@@ -138,7 +133,6 @@ describe("changing a role", () => {
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 
-  // The role may have changed under the page: the shell lists, the members and the invitations are all read again.
   it.each(sensitive)("a refused rank on %s reads every list again", async (_name, act, key) => {
     const { stub, host } = await openMembers("admin", { [key]: () => refusal("forbidden", 403) });
     await act(host);
@@ -149,8 +143,6 @@ describe("changing a role", () => {
     ]);
   });
 
-  // While the change runs its list is unavailable, and a replay after the password check sends the role that was
-  // chosen, not another.
   it("a role list is unavailable while its change runs, and the replay sends the confirmed role", async () => {
     let verified = false;
     const { stub, host } = await openMembers("admin", {
@@ -215,7 +207,6 @@ describe("the password check on a sensitive change", () => {
 });
 
 describe("removing a member", () => {
-  // The second read of the list never answers: the table stays, and focus is on the page heading.
   it("names the member and sends nothing until confirmed, then reads the lists, keeps the table and closes", async () => {
     let reads = 0;
     const list = pageOf(membersFor("admin"));
@@ -256,7 +247,6 @@ describe("removing a member", () => {
 });
 
 describe("leaving a workspace", () => {
-  // After the leave the lists no longer hold w1: the person lands in another workspace and w1 is gone.
   it.each([["admin"], ["viewer"]])("a %s confirms, leaves and lands in another workspace", async (role) => {
     let left = false;
     const before = roleOf(role);

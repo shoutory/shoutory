@@ -6,9 +6,8 @@ const ROLES = ["owner", "app", "worker", "auth", "readonly"] as const;
 type DbRole = (typeof ROLES)[number];
 
 export interface TestEnv {
-  /** Bootstrap superuser URL. Cloning a template needs more than the owner role holds, so only tests use it. */
+  /** Cloning a template needs more than the owner role holds, so only tests use this superuser URL. */
   adminUrl: string;
-  /** One URL per login role; the database name in each is replaced for every clone. */
   roleUrls: Record<DbRole, string>;
 }
 
@@ -21,7 +20,7 @@ export interface TestDatabase {
 
 const CONNECT_TIMEOUT_MS = 5_000;
 
-/** Reads the test connection settings. A missing one fails the run: database tests are never skipped. */
+// A missing setting fails the run: database tests are never skipped.
 export function readTestEnv(env: NodeJS.ProcessEnv = process.env): TestEnv {
   const need = (name: string): string => {
     const value = env[name];
@@ -61,16 +60,12 @@ async function createDatabase(env: TestEnv, source?: string): Promise<string> {
 }
 
 export interface RoleLogin {
-  /** The URL of `database` for this login. */
   url(database: string): string;
   drop(): Promise<void>;
 }
 
-/**
- * A login with the privileges of `shoutory_app` (or another runtime role) under a password that start-up accepts: the
- * development password of the role itself is a known example value, which the API refuses, so a start-up test needs
- * another one.
- */
+// The development password of a role is a known example value that the API refuses at start-up, so a start-up test
+// needs a login with another password.
 export async function createRoleLogin(env: TestEnv, role: "app" | "worker" = "app"): Promise<RoleLogin> {
   const id = randomUUID().replaceAll("-", "_");
   const name = `shoutory_login_${id}`;
@@ -89,10 +84,8 @@ export async function createRoleLogin(env: TestEnv, role: "app" | "worker" = "ap
   };
 }
 
-/**
- * Runs `run` as the bootstrap superuser inside one test database. Seeding rows the runtime roles cannot write and
- * moving time need it: the migration owner sees no rows of a FORCE table without a policy.
- */
+// Seeding rows the runtime roles cannot write and moving time need the superuser: the migration owner sees no rows
+// of a FORCE table without a policy.
 export async function withAdminClient<T>(
   env: TestEnv,
   database: string,
@@ -114,7 +107,6 @@ export async function dropDatabase(env: TestEnv, name: string): Promise<void> {
   await asAdmin(env, (client) => client.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`));
 }
 
-/** Creates the template database, applies every shipped migration as the owner and returns its name. */
 export async function createTemplate(env: TestEnv): Promise<string> {
   const name = await createDatabase(env);
   try {
@@ -126,12 +118,10 @@ export async function createTemplate(env: TestEnv): Promise<string> {
   return name;
 }
 
-/** One database per test file, cloned from the template and owned by the migration owner. */
 export function cloneTemplate(env: TestEnv, template: string): Promise<TestDatabase> {
   return open(env, template);
 }
 
-/** An empty database owned by the migration owner, for tests that run their own migration files. */
 export function emptyDatabase(env: TestEnv): Promise<TestDatabase> {
   return open(env);
 }

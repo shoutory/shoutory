@@ -9,7 +9,6 @@ function isAscendingAndDisjoint(ranges: readonly { from: number; to: number }[])
   );
 }
 
-/** Text-length rules as data: a provider manifest carries one, and `countText` is the only function that reads it. */
 export const countingRuleSchema = z
   .strictObject({
     unit: z.enum(["graphemes", "utf16", "bytes", "weighted"]),
@@ -34,7 +33,6 @@ export type CountingRule = z.infer<typeof countingRuleSchema>;
 const graphemes = new Intl.Segmenter("en", { granularity: "grapheme" });
 const encoder = new TextEncoder();
 const URL_PATTERN = /https?:\/\/\S+/giu;
-// Punctuation that follows a link in prose and is not part of it (Latin and Arabic).
 const TRAILING_PUNCTUATION = /[.,;:!?)\]}'"،؛؟]+$/u;
 
 function countSegment(rule: CountingRule, text: string): number {
@@ -60,10 +58,6 @@ function countSegment(rule: CountingRule, text: string): number {
   }
 }
 
-/**
- * The one counter for every length limit: the composer, admission and the adapter all call it with the same rule.
- * A link counts `urlWeight` whatever its length; a weighted rule weighs each code point by the first range that holds it.
- */
 export function countText(rule: CountingRule, text: string): number {
   let total = 0;
   let cursor = 0;

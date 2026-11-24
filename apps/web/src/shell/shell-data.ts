@@ -7,7 +7,6 @@ const organization = z.object({
   name: z.string(),
   slug: z.string(),
   type: z.enum(["agency", "team", "personal"]),
-  // The caller's own role in the organization (`owner`, `admin` or `member`).
   org_role: z.string(),
 });
 const workspace = z.object({
@@ -15,39 +14,31 @@ const workspace = z.object({
   organization_id: z.string(),
   name: z.string(),
   slug: z.string(),
-  // The caller's own role in the workspace.
   role: z.string(),
 });
 
 export type Organization = z.infer<typeof organization>;
 export type Workspace = z.infer<typeof workspace>;
 
-/**
- * The shell's lists, or the failure that stopped them: a list that fails shows inline and the frame stays. `admin` is
- * whether the caller is an instance admin; the failure of that read is no answer, which is never taken as "no".
- */
+// A failed admin read is kept as the error, never taken as "not an admin".
 export type ShellData =
   | { organizations: Organization[]; workspaces: Workspace[]; admin: boolean | ApiError }
   | { error: ApiError };
 
-/** An id that is none of my workspaces: only judged when the lists loaded and there is at least one workspace. */
 export const isUnknownWorkspace = (data: ShellData, id: string | undefined): boolean =>
   !("error" in data) && data.workspaces.length > 0 && !data.workspaces.some((w) => w.id === id);
 
-/** An id that is none of my organizations, or is a personal one (which has no clients or billing page). */
 export const isUnknownOrganization = (data: ShellData, id: string | undefined): boolean =>
   !("error" in data) && !data.organizations.some((org) => org.id === id && org.type !== "personal");
 
-/** The id of the shell route; the pages under it read its loader data. */
 export const SHELL_ROUTE_ID = "shell";
 
-// The first page only (AGENTS 6.6, R393): a `next_cursor` beyond it is not followed in M0.
+// Only the first page is read; a `next_cursor` beyond it is not followed.
 const LIMIT = "?limit=100";
 
 const adminAnswer = z.object({ admin: z.boolean() });
 
-// The admin read never fails the shell: without an answer there is no Admin entry, and the failure is kept for the
-// admin screens to show. An ended session is still the guard's page.
+// The admin read never fails the shell: the error is kept for the admin screens to show.
 async function readAdmin(): Promise<boolean | ApiError> {
   try {
     return (await request(adminAnswer, "/api/v1/instance/admin")).admin;
@@ -67,7 +58,6 @@ export async function shellLoader(): Promise<ShellData> {
     ]);
     return { organizations, workspaces, admin };
   } catch (error) {
-    // An ended session is the guard's page, not an inline panel.
     if (error instanceof ApiError && error.state !== "session_expired") return { error };
     throw error;
   }

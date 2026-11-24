@@ -16,7 +16,6 @@ import { TextField } from "../ui/text-field";
 import { ZonePicker } from "../zones/zone-picker";
 import { SWATCHES } from "./swatches";
 
-// The server's limits for a workspace name and slug.
 const MAX_NAME = 128;
 const SLUG = /^[a-z0-9][a-z0-9-]{0,62}$/;
 
@@ -29,7 +28,6 @@ const profileSchema = z.object({
 });
 type Profile = z.infer<typeof profileSchema>;
 
-/** What the form holds: the four fields of the profile (the colour is none until one is chosen). */
 interface Draft {
   name: string;
   slug: string;
@@ -43,7 +41,6 @@ const draftOf = (profile: Profile): Draft => ({
   zone: profile.default_tz,
 });
 
-/** The fields that differ from the saved profile, under the server's names: nothing else is sent. */
 function changesOf(draft: Draft, saved: Profile) {
   const changes: Record<string, string> = {};
   if (draft.name.trim() !== saved.name) changes.name = draft.name.trim();
@@ -53,7 +50,6 @@ function changesOf(draft: Draft, saved: Profile) {
   return changes;
 }
 
-// A taken slug and a role that no longer allows the change have their own words; the rest are the generic ones.
 function saveCopy(error: ApiError) {
   if (error.code === "conflict")
     return {
@@ -118,7 +114,6 @@ function Colours({
   );
 }
 
-// The form's state: the draft, the profile the server last answered (the baseline of "unsaved") and the one save.
 function useGeneral(profile: Profile) {
   const navigate = useNavigate();
   const revalidator = useRevalidator();
@@ -132,8 +127,7 @@ function useGeneral(profile: Profile) {
         method: "PATCH",
         body,
       });
-      // The form shows what the server kept, and the lists (switchers, clients) read it again. The save is done
-      // once the answer is in; a failure of the lists is the top bar's to show, never a failed save.
+      // A failure to reload the lists is shown by the top bar; it is not a failed save.
       setSaved(answer);
       setDraft(draftOf(answer));
       setDone(true);
@@ -142,7 +136,6 @@ function useGeneral(profile: Profile) {
     (error) => {
       if (error.state === "session_expired")
         void navigate(`/sign-in?return-to=${encodeURIComponent(`/w/${saved.id}/settings/general`)}`);
-      // A role that changed under the page: the lists say what it is now.
       if (error.state === "forbidden") void revalidator.revalidate();
     },
   );
@@ -206,7 +199,7 @@ function GeneralForm({ profile, canEdit }: { profile: Profile; canEdit: boolean 
   const [invalid, setInvalid] = useState<Invalid>({ name: false, slug: false });
   const clear = (name: keyof Invalid) => setInvalid((now) => ({ ...now, [name]: false }));
   const submit = () => {
-    // Enter in a field submits even though the button is unavailable: a role that may only read sends nothing.
+    // Enter in a field still submits while the button is unavailable.
     if (!canEdit) return;
     const bad = { name: g.draft.name.trim() === "", slug: !SLUG.test(g.draft.slug.trim()) };
     setInvalid(bad);
@@ -257,10 +250,9 @@ const WorkspaceHeading = () => (
   </h1>
 );
 
-// The profile is read when the page opens: the lists hold no colour or zone.
+// The profile is read here because the workspace lists hold no colour or zone.
 function General({ workspace }: { workspace: Workspace }) {
   const { state, reload } = useLoad(profileSchema, `/api/v1/workspaces/${workspace.id}`);
-  // The role comes from the list as text; a role the matrix does not know changes nothing.
   const permissions: Readonly<Record<string, readonly string[] | undefined>> = ROLE_PERMISSIONS;
   const canEdit = permissions[workspace.role]?.includes("settings.manage") ?? false;
   return (
@@ -279,7 +271,6 @@ function General({ workspace }: { workspace: Workspace }) {
   );
 }
 
-/** T-01 (`/w/:ws/settings/general`): name, address name, colour and time zone of one workspace. */
 export function GeneralPage() {
   const { ws } = useParams();
   const data = useShellData();

@@ -1,4 +1,3 @@
-/** The credential keys, compared case-insensitively at any depth. */
 const CENSORED_KEYS: ReadonlySet<string> = new Set([
   "authorization",
   "cookie",
@@ -23,7 +22,6 @@ const MIN_SECRET_LENGTH = 8;
 
 export type Scrubber = (value: unknown) => unknown;
 
-/** The five spellings of a value that the canary rule (AGENTS 4.2) checks: raw, percent, hex, base64, JSON-escaped. */
 function spellings(secret: string): string[] {
   const buffer = Buffer.from(secret);
   return [
@@ -57,12 +55,8 @@ function plainError(error: Error): Record<string, unknown> {
   return { type: error.name, message: error.message, stack: error.stack, cause: error.cause };
 }
 
-/**
- * Builds the one scrubber every log call passes through: credential keys are censored at any depth, every registered
- * value is replaced in every string in its five spellings, an Error becomes type, message, stack and cause, and
- * depth stops at 8. It throws on a value it cannot read (a hostile getter); the logger turns that into a
- * fixed marker line, never the raw value.
- */
+// It throws on a value it cannot read (a hostile getter); the logger turns that into a fixed marker line, never the
+// raw value.
 export function createScrubber(secrets: readonly string[]): Scrubber {
   const forms = registeredForms(secrets);
   const walk = (value: unknown, depth: number, ancestors: object[]): unknown => {
@@ -87,7 +81,6 @@ export function createScrubber(secrets: readonly string[]): Scrubber {
 
 const more = (n: number) => `[${n} more]`;
 
-// At most MAX_ENTRIES items are kept; the rest become one marker.
 function capped<T, R = unknown>(
   items: T[],
   map: (item: T) => R,

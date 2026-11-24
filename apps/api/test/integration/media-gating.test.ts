@@ -19,11 +19,6 @@ vi.mock("node:child_process", async (importOriginal) => {
   return { ...original, spawn: vi.fn(original.spawn) };
 });
 
-// Security floor of the pipeline trigger (R644 (1)): the worker's relay runs `processAsset` for each `media.uploaded`
-// event. The relay leases an event for five minutes and counts each claim; a run that crashes leaves the asset
-// `processing` and the next claim finishes it, and the fourth claim rejects the asset as `processing_failed` and ends the
-// event, so no image is retried for ever. The lease is lapsed by an update, nothing sleeps for it. The step from
-// `uploaded` to `ready` is media-pipeline.test.ts's, not repeated here.
 // Each wait below is bounded by `settle`; the test limit only has to cover two of them and a real image run.
 vi.setConfig({ testTimeout: 15_000 });
 const env = readTestEnv();
@@ -72,7 +67,6 @@ afterEach(async () => {
   await stop?.();
 });
 
-// An uploaded original with its event, as `media_mark_uploaded` leaves them; `claims` is how many claims it has had.
 let planted = 0;
 async function plant(state: string, claims: number): Promise<{ asset: string; event: string }> {
   const asset = randomUUID();
@@ -112,7 +106,6 @@ const look = async ({ asset, event }: { asset: string; event: string }) =>
         )
       ).rows[0] as { state: string; reject_reason: string | null; done: boolean; claims: number },
   );
-// Reads until the answer is the one wanted or four seconds pass; the last answer is returned for the assertion.
 async function settle<T>(read: () => Promise<T>, wanted: (value: T) => boolean): Promise<T> {
   const until = Date.now() + 4_000;
   for (;;) {

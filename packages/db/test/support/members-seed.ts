@@ -3,9 +3,9 @@ import type { Client, Pool } from "pg";
 import type { TenantCtx } from "../../src/context/with-tenant.js";
 import { openTx } from "./race.js";
 
-// One tenancy fixture for the member and invitation definer tests. Workspace WA holds a stored Owner, two stored
-// admins, an editor, an approver and two viewers; UVOA is a stored viewer who is also an organization Admin (effective
-// rank admin) and UORG is an implicit admin with no stored row. WB is another organization's workspace.
+// Workspace WA holds a stored owner, two stored admins, an editor, an approver and two viewers; UVOA is a stored
+// viewer who is also an organization admin (effective rank admin) and UORG is an implicit admin with no stored row.
+// WB is another organization's workspace.
 const id = () => randomUUID();
 export const U = {
   owner: id(),
@@ -66,7 +66,6 @@ export async function seedMembers(admin: Client): Promise<void> {
 
 export interface Planted {
   token: string;
-  /** The workspace of the row; WA when absent. */
   ws?: string;
   email?: string;
   role?: string;
@@ -76,10 +75,7 @@ export interface Planted {
   revoked?: boolean;
 }
 
-/**
- * Inserts one invitation row as the superuser, in any state, for the accept tests; the token is hashed here. A pending
- * row ends an earlier pending row of the same address, as the one-pending-row key requires.
- */
+// A pending row ends an earlier pending row of the same address, as the one-pending-row key requires.
 export async function plantInvitation(admin: Client, o: Planted): Promise<void> {
   if (!o.used && !o.revoked) {
     await admin.query(
@@ -108,7 +104,6 @@ export async function plantInvitation(admin: Client, o: Planted): Promise<void> 
   );
 }
 
-/** Runs one statement as the caller and commits it; the connection is always released, rolled back on failure. */
 export async function commitAs(
   pool: Pool,
   user: string,
@@ -132,7 +127,6 @@ export interface Attempt {
   after?: Record<string, unknown>[] | undefined;
 }
 
-/** Runs one statement as the caller in a transaction that is always rolled back; `after` reads the effect first. */
 export async function attempt(
   pool: Pool,
   ctx: TenantCtx,

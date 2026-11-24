@@ -13,10 +13,8 @@ function wellFormed(value: string): boolean {
   }
 }
 
-/**
- * The request headers with a session cookie whose token part is not the library's shape removed, so the cookie counts
- * as absent: a `session` route answers 401, a public route is served without it. The one place a client token enters.
- */
+// The one place a client token enters. A token not in the library's shape counts as absent: session routes answer
+// 401 and public routes are served.
 export function withoutForgedSession(headers: Headers): Headers {
   const cookie = headers.get("cookie");
   if (cookie === null) return headers;
@@ -30,7 +28,6 @@ export function withoutForgedSession(headers: Headers): Headers {
   return clean;
 }
 
-/** The cookie that holds a second-factor challenge between the password and the code; ten minutes (the plugin's). */
 export const TWO_FACTOR_COOKIE = "__Host-shoutory_two_factor";
 
 /** Only our two cookies leave a library answer: it also expires cookies of features we do not use. */
@@ -39,10 +36,8 @@ export const authCookies = (headers: Headers): string[] =>
     .getSetCookie()
     .filter((line) => line.startsWith(`${SESSION_COOKIE}=`) || line.startsWith(`${TWO_FACTOR_COOKIE}=`));
 
-/** Only the session cookie: what a session check forwards. */
 export const sessionCookies = (headers: Headers): string[] =>
   headers.getSetCookie().filter((line) => line.startsWith(`${SESSION_COOKIE}=`));
 
-/** The session cookie line that sets a session (a non-empty value), if the answer carries one. */
 export const liveSessionCookie = (lines: readonly string[]): string | undefined =>
   lines.find((line) => new RegExp(`^${SESSION_COOKIE}=[^;]`).test(line));

@@ -46,7 +46,6 @@ const get = (d: Driver) => d.get(KEY);
 const head = (d: Driver) => d.head(KEY);
 const remove = (d: Driver) => d.delete(KEY);
 
-// What a caller sees for each answer of the server: the status, the S3 error code, and the kind it becomes.
 const MAPPING: [string, (d: Driver) => Promise<unknown>, number, string, string][] = [
   ["put refused with AccessDenied", put, 403, "AccessDenied", "denied"],
   ["get refused with AccessDenied", get, 403, "AccessDenied", "denied"],
@@ -188,8 +187,6 @@ describe("s3 driver: a streamed get body", () => {
   });
 });
 
-// The lifecycle rules of a bucket, as the S3 API answers them (GetBucketLifecycleConfiguration): the check warns when
-// no rule aborts incomplete multipart uploads within 7 days for the keys the app writes (`ws/<workspace>/...`).
 const abortRule = (
   days: number,
   { filter = "<Filter><Prefix></Prefix></Filter>", status = "Enabled" } = {},
@@ -200,7 +197,6 @@ const configuration = (...rules: string[]) =>
 const refusal = (code: string) =>
   `<?xml version="1.0" encoding="UTF-8"?><Error><Code>${code}</Code><Message>${KEY} on unit-bucket-1 for ${ACCESS_KEY}</Message></Error>`;
 
-// [row, status, body, the warnings the check reports]
 const LIFECYCLE: [string, number, string, string[]][] = [
   [
     "a bucket with no lifecycle configuration",

@@ -28,20 +28,12 @@ import { type CredentialService, deadlineFetch, ensureSalt, expiryOf, sealedPara
 import type { HealthChecker, HealthProvider } from "./health.js";
 import { type AppKey, readApp, writeApp } from "./instance-app.js";
 
-// The OAuth connect. `start` seals the PKCE verifier under the flow id and stores the flow through its
-// definer; it makes no outbound call, so it runs in the route's own transaction. `finish` answers the callback: it takes
-// the flow, checks the issuer, exchanges the code and reads the account through the adapter's egress fetch with no
-// transaction open, stores the channel through the credential service and looks at its health twice before it shows it.
-
 export interface ConnectDeps {
   readonly pool: AppPool;
   readonly keys: KeyProvider;
-  /** The egress client; the adapter's calls get a deadline from it. */
   readonly fetch: typeof fetch;
-  /** The egress client bound to the one instance host of a provider whose accounts live on user-chosen servers. */
   readonly fetchFor?: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
   readonly now: () => Date;
-  /** The exact origin the web app is served from: the redirect URI of a provider is built on it. */
   readonly publicOrigin: string;
   readonly providers: Readonly<Record<string, HealthProvider>>;
   readonly credentials: CredentialService;
@@ -49,14 +41,12 @@ export interface ConnectDeps {
   readonly logger: Logger;
 }
 
-/** The redirect URI the provider sends the person back to; an instance host rides in its query. */
 function redirectUriOf(publicOrigin: string, providerId: string, instanceHost?: string): string {
   const base = `${publicOrigin}/api/v1/connect/${providerId}/callback`;
   if (instanceHost === undefined) return base;
   return `${base}?${new URLSearchParams({ instance_host: instanceHost })}`;
 }
 
-/** The AAD of a flow object: the workspace is the scope and the flow id the owner (generation 1). */
 const flowAadOf = (workspaceId: string, flowId: string): Aad => ({
   formatVersion: FORMAT_VERSION,
   scopeId: workspaceId,
@@ -69,11 +59,9 @@ export interface StartInput {
   readonly workspaceId: string;
   readonly providerId: string;
   readonly instanceHost?: string | undefined;
-  /** The channel being reconnected, when there is one. */
   readonly channelId?: string | undefined;
 }
 
-/** The parameters of a provider's callback that are read; anything else a provider adds is ignored. */
 interface CallbackQuery {
   readonly code?: string | undefined;
   readonly state?: string | undefined;
@@ -91,15 +79,12 @@ export interface FinishInput {
   readonly ipHmac: Buffer;
 }
 
-/** What a callback came to: a stored channel, a flow that must be started again, or a refusal. */
 type Outcome =
   | { readonly kind: "connected"; readonly channelId: string }
   | { readonly kind: "start_again" | "refused" | "failed" }
   | { readonly kind: "provider_error"; readonly message: string }
-  /** A reconnect whose sign-in returned another account than the channel's: the channel it was for. */
   | { readonly kind: "wrong_account"; readonly channelId: string };
 
-/** An outcome names the flow's workspace whenever the callback's flow was taken, and never otherwise. */
 export type ConnectOutcome = Outcome & { readonly workspaceId?: string };
 
 const bytes = z.instanceof(Buffer);
@@ -119,19 +104,16 @@ const flowRowSchema = z.object({
 });
 type FlowRow = z.infer<typeof flowRowSchema>;
 
-/** What a provider handed over for a code: the tokens, the account they belong to and the limits its instance states. */
 interface Granted {
   readonly credential: RefreshedCredential;
   readonly identity: AccountIdentity;
   readonly limits?: Readonly<Record<string, ReadLimit>> | undefined;
 }
 
-/** A provider's refusal of the code or of the account read: the step, the adapter's error class and its code. */
 interface GrantFailure {
   readonly step: string;
   readonly errorClass: string;
   readonly providerCode?: string | undefined;
-  /** The client id the instance refused, when it no longer knows the app. */
   readonly refusedApp?: string | undefined;
 }
 
@@ -165,7 +147,6 @@ const PUT_FLOW =
   "SELECT app.oauth_flow_put($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)";
 const TAKE_FLOW = "SELECT * FROM app.oauth_flow_take($1, $2, $3, $4, $5)";
 const RECORD_HEALTH = "SELECT app.channel_health_record($1, $2, $3, $4, $5, $6, $7, $8)";
-// A spent or stale flow is started again; every other refusal of the take is plain refused.
 const START_AGAIN = new Set(["consumed", "expired"]);
 
 export class ConnectService {
@@ -180,16 +161,12 @@ export class ConnectService {
     return Object.hasOwn(this.#deps.providers, providerId) ? this.#deps.providers[providerId] : undefined;
   }
 
-  // The fetch an adapter call gets: bound to the channel's instance host when the provider has one, with its deadline.
   #fetchOf(manifest: Manifest, host: string | undefined): typeof fetch {
     return deadlineFetch(this.#deps.fetchFor?.(manifest, host) ?? this.#deps.fetch);
   }
 
-  /**
-   * The app of the provider on an instance: the stored one, else a new one registered there (an outbound call, so no
-   * transaction is open) and stored. When another connect stored one first, this one's is dropped and the winner's read;
-   * `replaces` names the client id an instance no longer knows, so only that stored app is replaced.
-   */
+  // Registering is an outbound call, so no transaction is open. When another connect stored an app first, this one's
+  // is dropped and the winner's read; `replaces` names the client id an instance no longer knows.
   async #appOf(inTx: InTx, step: AppStep, replaces?: string): Promise<AppCredentials> {
     const { key, provider, connect } = step;
     const { keys } = this.#deps;
@@ -209,7 +186,6 @@ export class ConnectService {
     return winner;
   }
 
-  // Only a provider that registers an app per instance has one; it needs the instance host the person named.
   async #startApp(scoped: Scoped, input: StartInput, provider: HealthProvider, connect: ConnectAdapter) {
     if (!connect.registerApp) return undefined;
     if (input.instanceHost === undefined)
@@ -222,7 +198,6 @@ export class ConnectService {
     return this.#appOf((write, run) => scoped(write, (tx) => run(tx)), { key, provider, connect });
   }
 
-  /** Stores a new flow for the caller and answers the URL the person is sent to. */
   async start(scoped: Scoped, input: StartInput): Promise<string> {
     const provider = this.#providerOf(input.providerId);
     const connect = provider?.adapter.connect;
@@ -260,7 +235,6 @@ export class ConnectService {
     });
   }
 
-  /** Answers a callback: the flow is taken first and spent whatever follows; a provider's own error ends it there. */
   async finish(input: FinishInput): Promise<ConnectOutcome> {
     const provider = this.#providerOf(input.providerId);
     const connect = provider?.adapter.connect;
@@ -268,12 +242,10 @@ export class ConnectService {
     const principal = { principalKind: "user", principalId: input.userId } as const;
     const taken = await this.#take(principal, input);
     if ("kind" in taken) return taken;
-    // The workspace is the flow's own, so it is named only once the take resolved a flow.
     const outcome = await this.#complete(principal, taken, { provider, connect, input });
     return { ...outcome, workspaceId: taken.workspace_id };
   }
 
-  // Everything after the take: a provider's own error, the issuer check, the grant and the stored channel.
   async #complete(
     principal: TenantCtx,
     taken: FlowRow,
@@ -306,7 +278,6 @@ export class ConnectService {
     }
   }
 
-  // One structured line per failed connect: the provider, the step and the error class, never a value of the flow.
   #failed(providerId: string, step: string, errorClass: string): Outcome {
     this.#deps.logger.warn({ event: "connect_failed", providerId, step, errorClass }, "connect failed");
     return { kind: "failed" };
@@ -329,7 +300,6 @@ export class ConnectService {
     return flowRowSchema.parse(answer.rows[0]);
   }
 
-  // The verifier the flow sealed, opened with the workspace salt and the flow id as the owner.
   async #verifierOf(principal: TenantCtx, flow: FlowRow): Promise<string> {
     const salt = await withTenant(this.#deps.pool, principal, (tx) => ensureSalt(tx, flow.workspace_id));
     const stored = {
@@ -346,7 +316,6 @@ export class ConnectService {
     return flowObjectSchema.parse(JSON.parse(plain)).code_verifier;
   }
 
-  // The app the flow's instance holds for the provider, read as the signed-in user; a provider with no app has none.
   async #storedApp(
     principal: TenantCtx,
     flow: FlowRow,
@@ -439,7 +408,6 @@ export class ConnectService {
     return { kind: "start_again" };
   }
 
-  // The channel and its first credential, then its health looked at before it is shown.
   async #store(
     principal: TenantCtx,
     flow: FlowRow,
@@ -468,8 +436,7 @@ export class ConnectService {
       await this.#recordHealthOnce(principal, flow.workspace_id, channelId, step.provider);
       return { kind: "connected", channelId };
     } catch (error) {
-      // The account is not the channel's (SH409, nothing was stored): for a reconnect the person is told which channel
-      // it was; a first connect has no channel to name.
+      // The account is not the channel's and nothing was stored: a reconnect names the channel; a first connect has none.
       if (definerRefusal(error)?.code === "conflict") {
         return flow.channel_id === null
           ? { kind: "refused" }

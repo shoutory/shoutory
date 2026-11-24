@@ -4,10 +4,6 @@ import type { Throttle } from "./throttle.js";
 const TOTP_PATH = "/two-factor/verify-totp";
 const BACKUP_PATH = "/two-factor/verify-backup-code";
 
-/**
- * Who a second-factor check is for: the signed-in user (enrolment, step-up) or else the user of the challenge the
- * password step opened, from the signed cookie, as the plugin resolves it (`verify-two-factor.mjs`).
- */
 async function challengedUser(ctx: Parameters<Parameters<typeof createAuthMiddleware>[0]>[0]) {
   const session = await getSessionFromCtx(ctx, { disableRefresh: true });
   if (session) return session.user.id;

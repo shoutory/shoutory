@@ -2,10 +2,9 @@ import { z } from "zod";
 import type { OutboxHandlers } from "../outbox-relay.js";
 import { failAsset, type PipelineDeps, processAsset } from "./pipeline.js";
 
-// The relay's handler for `media.uploaded`, the event `media_mark_uploaded` writes when an upload completes. The relay
-// leases an event for five minutes and counts each claim, so the claims are the retries: a run that crashes or times out
-// leaves the asset `processing` and the next claim continues it. The bound is checked first, because a run that never
-// returns cannot count itself: the claim after the last one ends the asset as `processing_failed` and the event with it.
+// The relay counts each claim, so the claims are the retries: a run that crashes or times out leaves the asset
+// `processing` and the next claim continues it. The bound is checked first, because a run that never returns cannot
+// count itself: the claim after the last one ends the asset as `processing_failed`.
 const MAX_CLAIMS = 3;
 const payloadSchema = z.object({ media_id: z.guid() });
 

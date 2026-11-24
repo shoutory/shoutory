@@ -2,7 +2,6 @@ import { Trans } from "@lingui/react/macro";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Button } from "../ui/button";
 
-/** A copy button: it says when the text was copied, or that the browser refused and the text is to be selected. */
 export function CopyButton({ text, children }: { text: string; children: ReactNode }) {
   const [result, setResult] = useState<"copied" | "refused" | null>(null);
   if (!navigator.clipboard) return null;
@@ -29,10 +28,6 @@ export function CopyButton({ text, children }: { text: string; children: ReactNo
   );
 }
 
-/**
- * The heading of a step or block; with `focus` it takes focus when it appears, so a screen reader hears the change,
- * and again each time `refocus` changes (a block whose content changes under it more than once).
- */
 export function StepHeading({
   children,
   focus,
@@ -81,7 +76,6 @@ function useDownload(codes: string[]) {
   };
 }
 
-// The codes are shown once: closing or reloading the tab while they are on screen asks first.
 function useLeaveGuard() {
   useEffect(() => {
     const ask = (event: BeforeUnloadEvent) => event.preventDefault();
@@ -90,7 +84,6 @@ function useLeaveGuard() {
   }, []);
 }
 
-/** Recovery codes shown once, with copy, download and a leave guard; `onSaved` ends the step and the codes go. */
 export function CodesStep({ codes, onSaved }: { codes: string[]; onSaved: () => void }) {
   const download = useDownload(codes);
   useLeaveGuard();

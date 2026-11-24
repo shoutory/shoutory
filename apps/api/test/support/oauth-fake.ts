@@ -1,7 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
 
-// A token pair the OAuth fake issued through its authorization-code flow with PKCE (S256), for the tests that need a
-// refresh token the fake will accept.
 export const FAKE_CLIENT = "client-1";
 const REDIRECT = "http://127.0.0.1:9/callback";
 

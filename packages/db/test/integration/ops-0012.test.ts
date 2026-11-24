@@ -10,9 +10,6 @@ import {
 
 const env = readTestEnv();
 
-// Operations behaviour of migration 0012 that is not part of its security floor: the partition upkeep, the registry
-// against the data model, worker liveness and lag, the suppression list and the unsubscribe throttle.
-
 let db: TestDatabase;
 beforeAll(async () => {
   db = await cloneTemplate(env, inject("shoutoryTemplate"));
@@ -22,7 +19,6 @@ const admin = <T>(run: (client: Client) => Promise<T>) => withAdminClient(env, d
 const rows = (sql: string, params?: unknown[]) => admin(async (a) => (await a.query(sql, params)).rows);
 const pool = (role: Parameters<TestDatabase["pool"]>[0]): Pool => db.pool(role);
 
-// Leaves that start after now: the runway an insert needs. The bound is read from the leaf's own expression.
 const FUTURE_LEAVES = `
   SELECT count(*)::int AS n,
          (SELECT partdefid FROM pg_partitioned_table WHERE partrelid = $1::regclass) AS default_leaf
@@ -70,8 +66,6 @@ describe("ensure_partitions", () => {
   });
 });
 
-// The tables whose data-model row states a retention window or partition (data-model 3, "Retention", and 1.7), with the
-// class each must have. A new retained table adds its row here and its class in its own migration.
 const RETAINED = [
   ["app.audit_logs", "audit_logs"],
   ["app.outbox", "outbox"],
@@ -101,7 +95,7 @@ describe("retention classes", () => {
     expect(found).toEqual([{ table_name: table }]);
   });
 
-  it("the registry holds no class beyond the data model's", async () => {
+  it("the registry holds no class beyond the retained ones", async () => {
     const found = await rows("SELECT class FROM app.retention_classes ORDER BY class");
     expect(found.map((row) => row.class)).toEqual(RETAINED.map(([, klass]) => klass).sort());
   });
@@ -149,7 +143,6 @@ describe("worker liveness and lag", () => {
     // The api's test setup installs the queue library into the template; this test starts without it.
     await admin((a) => a.query("DROP SCHEMA IF EXISTS pgboss CASCADE"));
     expect(await lag()).toEqual({ installed: false, lag_seconds: null });
-    // A stand-in with the three columns the function reads, in the schema name the queue library uses.
     await admin(async (a) => {
       await a.query(
         `CREATE SCHEMA pgboss; CREATE TABLE pgboss.job (name text, state text, start_after timestamptz);

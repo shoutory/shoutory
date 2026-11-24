@@ -18,11 +18,9 @@ import { ErrorPanel } from "../ui/error-panel";
 import { TextField } from "../ui/text-field";
 import { ZonePicker } from "../zones/zone-picker";
 
-// The server's limit for a workspace name.
 const MAX_NAME = 128;
 const created = z.object({ id: z.string() });
 
-// The organization holds 100 clients at most: that refusal has its own words, the rest are the generic ones.
 function clientCopy(error: ApiError) {
   if (error.code !== "limit_reached") return authCopy("link", error);
   return {
@@ -47,7 +45,6 @@ function AddClient({ orgId, onDone }: { orgId: string; onDone: () => void }) {
     async () => {
       const body = { organization_id: orgId, name: name.trim(), default_tz: zone };
       await request(created, "/api/v1/workspaces", { method: "POST", body });
-      // The lists now hold the client; the dialog closes only after the answer.
       await revalidator.revalidate();
       onDone();
     },
@@ -95,8 +92,7 @@ function AddClient({ orgId, onDone }: { orgId: string; onDone: () => void }) {
   );
 }
 
-// A link in a table cell is not a link in a sentence, so it is a target of its own: at least 24 px each way (44 px on a
-// touch screen).
+// A link in a table cell is not exempt from the target size rule: 24 px each way, 44 px on a touch screen.
 const ROW_LINK = "inline-flex min-h-6 min-w-6 pointer-coarse:min-h-11 items-center text-link underline";
 
 function ClientRow({ client }: { client: Workspace }) {
@@ -167,7 +163,6 @@ function Clients({ org, clients }: { org: Organization; clients: Workspace[] }) 
   const show = () => setOpen(true);
   const why = t({ id: "org.clients.no_add", message: "Only organization admins can add clients." });
   const addFirst = t({ id: "org.clients.add_first", message: "Add your first client" });
-  // A client was added: the dialog is gone, so focus goes to the heading and the status line says what happened.
   useEffect(() => {
     if (added > 0) heading.current?.focus();
   }, [added]);
@@ -215,7 +210,6 @@ function Clients({ org, clients }: { org: Organization; clients: Workspace[] }) 
   );
 }
 
-/** O-02 (`/o/:org/clients`): the organization's clients, and the dialog that adds one. A personal organization has none. */
 export function ClientsPage() {
   const { org: id } = useParams();
   const data = useShellData();

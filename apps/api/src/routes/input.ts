@@ -3,15 +3,11 @@ import { z } from "zod";
 import { nameOf } from "../names.js";
 import type { AppEnv } from "./define-route.js";
 
-// The input shapes and the list answer that the organization and workspace routes share.
-
-/** The name of an organization or a workspace: the shared name rule, with the bound of the name columns. */
 export const nameSchema = nameOf(128);
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 
-/** `?cursor=&limit=`: the cursor is the last row's id until it is signed (M4). */
 export const pageQuery = z.strictObject({
   cursor: z
     .uuid()
@@ -26,10 +22,6 @@ export const pageQuery = z.strictObject({
     .default(DEFAULT_LIMIT),
 });
 
-/**
- * The list envelope: `next_cursor` is the last row's cursor field (`id` unless the list pages by another key) of a
- * full page and null after a short one.
- */
 export function pageAnswer(
   c: Context<AppEnv>,
   rows: Array<Record<string, unknown>>,

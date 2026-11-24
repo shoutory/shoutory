@@ -11,10 +11,8 @@ import { asUser, attempt, commitAs, seedMembers, U, WA, WB } from "../support/me
 
 const env = readTestEnv();
 
-// Security floor (R533 (D)): a channel's connection state moves only through channel_disable and channel_enable, which
-// check channels.manage (admin and owner), apply the allowed moves only and write their audit row in the same
-// transaction. The app role may write a channel's nickname and nothing else. The seeded workspace is that of the
-// members fixture: U.owner and U.admin manage; U.editor, U.approver, U.viewer do not; U.outsider is no member.
+// The seeded workspace is that of the members fixture: U.owner and U.admin manage channels; U.editor, U.approver
+// and U.viewer do not; U.outsider is no member.
 let db: TestDatabase;
 const admin = <T>(run: (client: Client) => Promise<T>) => withAdminClient(env, db.name, run);
 

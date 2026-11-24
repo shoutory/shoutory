@@ -4,7 +4,6 @@ import { startTelemetry, type Telemetry } from "./telemetry.js";
 
 // The image starts node with `--import` of this file, so the ESM hook is registered and the SDK has patched `node:http`
 // before the server module loads it; started later, the incoming-request span of an ESM build would be missing.
-// `main.ts` imports `telemetry` from here: the module runs once, preloaded or not, and main takes the shutdown handle.
 if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim()) {
   register("@opentelemetry/instrumentation/hook.mjs", import.meta.url);
 }
@@ -25,5 +24,4 @@ async function start(): Promise<{ telemetry?: Telemetry; failure?: Error }> {
 
 const started = await start();
 export const telemetry = started.telemetry;
-/** Why telemetry did not start, when it was asked to; `main` ends start-up with it. */
 export const telemetryFailure = started.failure;

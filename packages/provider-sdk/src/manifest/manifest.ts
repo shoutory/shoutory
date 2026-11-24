@@ -62,7 +62,6 @@ const manifestShape = z.strictObject({
     method: z.enum(["oauth2", "oauth2_pkce", "api_key", "bot_token", "app_password", "webhook_url"]),
   }),
   scopes: z.array(name).max(64),
-  // None yet for a provider whose publishing has not shipped: post validation refuses a target on it.
   capabilities: z.array(z.enum(CAPABILITIES)).max(CAPABILITIES.length),
   readBackMode: z.enum(["A", "B", "C", "D", "E"]),
   idempotency: z.strictObject({
@@ -106,19 +105,14 @@ const manifestShape = z.strictObject({
     edit: leaseSeconds.optional(),
     delete: leaseSeconds.optional(),
   }),
-  // The worker's call timeout, the longest wait it accepts for a provider's Retry-After before it pauses the operation,
-  // and how early (seconds) admission may take a target before its time.
   callTimeoutSeconds: z.int().positive().max(3_600),
   retryAfterMaxSeconds: z.int().positive().max(86_400),
   dispatchMarginSeconds: z.int().nonnegative().max(3_600),
-  // The unknown-outcome rules (OL 7.3): how long a sent call may still land, the gap between two absence reads, the
-  // attempts a post gets, how long an unknown outcome is chased before it is `unverified`, and the clock skew allowed.
   maxInFlightSeconds: z.int().positive().max(86_400),
   readBackGapSeconds: z.int().positive().max(86_400),
   maxAttempts: z.int().positive().max(20),
   unverifiedHorizonDays: z.int().positive().max(3_650),
   clockSkewSeconds: z.int().nonnegative().max(3_600),
-  // The publishing quotas the provider counts on top of its rate limits; none by default (no M1 provider has one).
   quotas: z
     .array(
       z.strictObject({
@@ -146,7 +140,6 @@ interface CrossFieldIssue {
   readonly message: string;
 }
 
-// A declared edit or delete needs its retry rule and its lease.
 function declaredActionIssues(manifest: ManifestShape): CrossFieldIssue[] {
   return (["edit", "delete"] as const).flatMap((action) => {
     if (!manifest.capabilities.includes(action)) return [];
@@ -198,7 +191,6 @@ function resendIssues({ idempotency, readBackMode, retrySafety }: ManifestShape)
   return issues;
 }
 
-// A provider names its hosts as a list or as the channel's instance, not both and not neither.
 function hostSourceIssues({ egressHosts, egressHostSource }: ManifestShape): CrossFieldIssue[] {
   if ((egressHosts === undefined) === (egressHostSource === undefined)) {
     return [

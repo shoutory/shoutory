@@ -15,8 +15,6 @@ const DEFAULT_TEMPLATE =
 // The pictures are made on Linux, as in CI; a listing never runs a test, so the platform here is the baselines'.
 const PLATFORM = "linux";
 
-// Every visual cell the config lists, as { project, title }. A listing loads the specs and reports them; it never starts
-// the stack.
 function visualCells() {
   const cli = join(root, "node_modules/@playwright/test/cli.js");
   const args = ["test", "--list", "--reporter=json", "--config", "e2e/playwright.config.ts"];
@@ -40,8 +38,6 @@ function visualCells() {
     .filter((cell) => cell.project.startsWith("visual"));
 }
 
-// The picture a cell compares with: the spec names it `<id>-<width>-<locale>-<theme>.png` after the title's cell, and the
-// template turns the name into a path (the same tokens Playwright replaces, here for a spec at the top of the test dir).
 function pathOf(template, project, title) {
   const match = /^visual: the (\S+) (?:screen|page) matches its baseline \((\d+) px, (\w+), (\w+)\)$/.exec(
     title,

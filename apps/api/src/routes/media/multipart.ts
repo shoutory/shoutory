@@ -19,13 +19,9 @@ import {
   uploadOf,
 } from "./shared.js";
 
-// Uploads above 64 MiB: the browser sends the file to S3-compatible storage in parts of 16 MiB, each to a URL that signs
-// that part's sha256 and length, and the API never reads a byte of it. The server creates the storage upload, signs the
-// parts the browser names, and completes the upload from the part list storage holds, never from a list the client sends.
-// Storage proves each part, not the whole object, so the digest declared at register stays unproved until the pipeline
-// hashes the original.
+// The upload is completed from the part list storage holds, never from a list the client sends. Storage proves each
+// part, not the whole object, so the digest declared at register stays unproved until the pipeline hashes the original.
 
-/** The largest file: 320 parts of 16 MiB. */
 export const MAX_MULTIPART_BYTES = 5 * 1024 * 1024 * 1024;
 export const PART_SIZE = 16 * 1024 * 1024;
 const MAX_PART_NUMBER = MAX_MULTIPART_BYTES / PART_SIZE;
@@ -43,7 +39,6 @@ const partsBody = z.strictObject({
     .max(MAX_PARTS_PER_CALL),
 });
 
-/** What the server knows of a large upload that is still open: its storage id, the declared size and digest, the part size. */
 export interface OpenUpload {
   uploadId: string;
   size: number;
@@ -51,7 +46,6 @@ export interface OpenUpload {
   sha256: string;
 }
 
-/** The upload of a pending asset that can still take parts, or the conflict that says why it cannot. */
 export function openUpload(asset: Asset, upload: UploadSession | undefined): OpenUpload {
   if (asset.state !== "pending_upload") throw conflict("not_pending");
   if (!upload?.multipart_upload_id || !upload.part_size || !upload.declared_size || !upload.declared_sha256)
@@ -66,22 +60,17 @@ export function openUpload(asset: Asset, upload: UploadSession | undefined): Ope
 }
 
 export const partCount = (open: OpenUpload) => Math.ceil(open.size / open.partSize);
-/** Every part is a whole part but the last, which is the rest of the file. */
 export const lengthOf = (open: OpenUpload, number: number) =>
   number < partCount(open) ? open.partSize : open.size - (partCount(open) - 1) * open.partSize;
-/** What the filesystem driver records as the storage id of an upload: it has none, its parts are files under the asset. */
+// The filesystem driver has no storage upload id: its parts are files under the asset.
 const FS_UPLOAD_ID = "fs-parts";
 
-/** The part URL of the filesystem driver: this API's own route, so one client serves both drivers. */
+// This API's own route, so one client serves both drivers.
 const fsPartUrl = (workspaceId: string, mediaId: string, number: number) => ({
   url: `${BASE.replace("{workspace_id}", workspaceId)}/${mediaId}/parts/${number}`,
   headers: { "content-type": "application/octet-stream" },
 });
 
-/**
- * What a route needs of storage and of the log: the multipart half of the driver (the S3 driver only; the filesystem
- * driver stores its parts as files) and a logger for what it cannot undo.
- */
 interface Multipart {
   multipart: S3Multipart | undefined;
   logger: Pick<Logger, "warn">;
@@ -152,10 +141,6 @@ async function retire(logger: Pick<Logger, "warn">, scoped: Scope, mediaId: stri
   }
 }
 
-/**
- * Creates the storage upload of a registered large file (the filesystem driver has none: it records a fixed token) and
- * records it; a failure of either retires the asset.
- */
 export async function startMultipart(
   stores: Multipart,
   scoped: Scope,
@@ -173,14 +158,12 @@ export async function startMultipart(
   return { id: asset.id, part_size: PART_SIZE };
 }
 
-/** What the part list of storage must be: every part from 1, the whole ones the part size, the last one the rest. */
 function partsProblem(parts: readonly UploadedPart[], open: OpenUpload): string | undefined {
   if (parts.length !== partCount(open)) return "part_count";
   const wrong = parts.findIndex((part, at) => part.number !== at + 1 || part.size !== lengthOf(open, at + 1));
   return wrong === -1 ? undefined : "part_size";
 }
 
-/** The size storage holds for the object must be the declared one; then the asset is uploaded with the declared digest. */
 async function markDeclared(
   storage: StorageDriver,
   workspaceId: string,
@@ -194,7 +177,6 @@ async function markDeclared(
   return markUploaded(storage, workspaceId, asset, scoped, { sha256: open.sha256, size: open.size });
 }
 
-/** Complete of a large upload: storage's own list of parts must add up to the declared file before storage assembles it. */
 export async function finishMultipart(
   stores: { storage: StorageDriver; multipart: S3Multipart | undefined; logger: Pick<Logger, "warn"> },
   workspaceId: string,
@@ -221,7 +203,6 @@ export async function finishMultipart(
   return markDeclared(storage, workspaceId, asset, open, scoped);
 }
 
-/** Completes the storage upload from the parts storage listed; `exists` when the key already holds an object. */
 async function completeOnce(
   multipart: S3Multipart,
   key: string,
@@ -242,10 +223,8 @@ async function completeOnce(
   }
 }
 
-/**
- * The URLs of the parts a browser names. On S3 each URL signs that part's sha256 and the length the server derives; on
- * the filesystem (no presigner) it is this API's own part route, which checks the length itself.
- */
+// On S3 each URL signs that part's sha256 and the length the server derives; on the filesystem the part route checks
+// the length itself.
 export function registerParts(app: App, presigner: S3Presigner | undefined): void {
   defineRoute(app, {
     method: "post",

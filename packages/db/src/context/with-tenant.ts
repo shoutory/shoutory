@@ -1,9 +1,7 @@
 import type { Pool, PoolClient, QueryResult, QueryResultRow } from "pg";
 import { z } from "zod";
 
-// The one place that sets the tenant context. Every setting is transaction-local (set_config with is_local), so a
-// pooled connection never carries one request's tenant into the next. The helpers in migration 0003 read these
-// settings and answer NULL or an empty list for anything missing or malformed.
+// Every setting is transaction-local, so a pooled connection never carries one request's tenant into the next.
 
 const MAX_WORKSPACES = 500;
 const MAX_JOB_PURPOSE = 64;
@@ -61,7 +59,6 @@ async function rollback(client: PoolClient): Promise<Error | undefined> {
   }
 }
 
-/** Runs `run` in one transaction with the tenant context set; the context ends with the transaction. */
 export async function withTenant<T>(
   pool: Pool,
   ctx: TenantCtx,

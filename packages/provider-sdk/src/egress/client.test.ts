@@ -30,7 +30,7 @@ const redirect = (status: number, location: string) => ({
 });
 const namesOf = (next: ReturnType<typeof nextHop>) => Object.keys(next?.headers ?? {}).sort();
 
-describe("the headers a redirect hop carries (SSRF-11)", () => {
+describe("the headers a redirect hop carries", () => {
   it.each([
     ["another host", "http://other.test:8080/x"],
     ["another port", "http://origin.test:9090/x"],

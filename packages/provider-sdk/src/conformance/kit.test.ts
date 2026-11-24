@@ -8,14 +8,12 @@ function errorRow() {
   return row;
 }
 
-// A correct mapper: the class comes from what the adapter knows, never from the body.
 const correct: ErrorMapper = ({ status, effect }) =>
   errorResult({
     effect,
     errorClass: effect === "none" ? (status === 429 ? "rate_limited" : "permanent") : "unknown",
   });
 
-// Mappers with the defects the row exists to catch.
 const DEFECTS: [string, ErrorMapper][] = [
   [
     "reads an id from the error body",

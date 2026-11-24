@@ -35,7 +35,7 @@ const aad: Aad = {
 };
 const flip = (b: Buffer) => Buffer.from(b.map((v, i) => (i === 0 ? v ^ 1 : v)));
 const opens = (run: () => SealedSecret) => expect(run).toThrow(EnvelopeError);
-// A salted kind needs the workspace salt (32 bytes); an unsalted kind refuses one (R532 (6)).
+// A salted kind needs the workspace salt (32 bytes); an unsalted kind refuses one.
 const SALT = Buffer.alloc(32, 7);
 const saltFor = (kind: CredentialKind): Buffer | undefined =>
   CREDENTIAL_SALT_POLICY[kind] === "salted" ? SALT : undefined;
@@ -133,13 +133,11 @@ describe.each(CREDENTIAL_KINDS)("envelope open fails when any AAD field of kind 
   );
 });
 
-// R532 (6): a salted kind wraps its DEK under a key derived from the KEK and the workspace salt, so deleting the salt
-// shreds the row; the salt must be 32 bytes (RFC 5869 section 3.1, HashLen) and an unsalted kind takes none.
 describe("the salt of a kind", () => {
   const salted = CREDENTIAL_KINDS.filter((kind) => CREDENTIAL_SALT_POLICY[kind] === "salted");
   const unsalted = CREDENTIAL_KINDS.filter((kind) => CREDENTIAL_SALT_POLICY[kind] === "unsalted");
 
-  // R554: the sealed OAuth flow object (the PKCE verifier) is salted like a token, so deleting the salt shreds it too.
+  // The sealed OAuth flow object (the PKCE verifier) is salted like a token, so deleting the salt shreds it too.
   it("channel_token and oauth_flow are salted and email_link is not", () => {
     expect([
       CREDENTIAL_SALT_POLICY.channel_token,

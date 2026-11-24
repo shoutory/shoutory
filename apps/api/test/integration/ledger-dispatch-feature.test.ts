@@ -17,10 +17,6 @@ import {
   workerPool,
 } from "../support/ledger-dispatch-env.js";
 
-// Feature rows of the dispatch: what a result of the provider does to the account's bucket, what a row that cannot be sent
-// does, and what the tick does with the sweeps and with an unknown outcome. The decisions themselves (result to move,
-// resend by class and window, the absence rule) are the unit tables of core; these rows prove only what the database and
-// the worker do with them. The environment of the rows is `support/ledger-dispatch-env.ts`.
 useDispatchEnv();
 
 const rateKey = async (id: string, providerId: string) => {
@@ -36,7 +32,6 @@ const rateKey = async (id: string, providerId: string) => {
 
 describe("a rate limit from the provider", () => {
   it("pauses the operation with a cooldown and the account's bucket with it", async () => {
-    // fails first because: the 429 moves the row but leaves the bucket open, so the next post of the account goes out at once
     const e = await makeEnv();
     try {
       e.sim.arm("commit", { kind: "respond", status: 429, retryAfter: "5000" });
@@ -74,7 +69,6 @@ describe("a claimed row that cannot be sent", () => {
   it.each(CANNOT)(
     "fails before any call when %s, with one log line of ids and reason",
     async (_name, wiring, planted, text, reason) => {
-      // fails first because: the row stays leased, the text comes from the mutable variant, or the turn calls with nothing to send
       const e = await makeEnv();
       const lines: string[] = [];
       const own = createLogger({ secrets: [], stream: { write: (line) => void lines.push(line) } });
@@ -108,7 +102,6 @@ describe("a claimed row that cannot be sent", () => {
 
 describe("the tick", () => {
   it("gives the lease sweep the manifest's horizon, so a row that became unknown is chased and not forgotten", async () => {
-    // fails first because: the sweep gets no arguments, so the row has no unverified horizon and is due on the default back-off
     const e = await makeEnv();
     try {
       const id = await plant(e, { state: "dispatching", effect: "possible", leased: true });
@@ -122,7 +115,6 @@ describe("the tick", () => {
   });
 
   it("reads one unknown outcome back by its id and publishes it on read-back evidence, with no resend", async () => {
-    // fails first because: the tick never reads an unknown outcome back, or sends the post again instead
     const e = await makeEnv();
     try {
       const made = await fetch(`${e.sim.url}/v1/posts`, {
@@ -149,7 +141,6 @@ describe("the tick", () => {
 
 describe("the tick and an unknown outcome that cannot be read", () => {
   it("ends an unknown outcome past its horizon unverified, without a call", async () => {
-    // fails first because: the due-move sweep gets no live providers, so the row is chased for ever
     const e = await makeEnv();
     try {
       const id = await plant(e, {
@@ -167,7 +158,6 @@ describe("the tick and an unknown outcome that cannot be read", () => {
   });
 
   it("claims no unknown outcome to read back once the worker is closing", async () => {
-    // fails first because: the reconcile step takes its batch of leases before it looks at the closing signal
     const e = await makeEnv();
     try {
       const id = await plant(e, { state: "unknown_external_state", effect: "possible", reconcile: true });
@@ -210,7 +200,6 @@ describe("an absence read back twice", () => {
   it.each(ROWS)(
     "%s",
     async (_name, manifest, after, proven) => {
-      // fails first because: one absent read is enough, or a provider that forbids a resend gets one
       const e = await makeEnv({ manifest });
       try {
         const id = await plant(e, { state: "unknown_external_state", effect: "possible", reconcile: true });

@@ -2,10 +2,6 @@ import { ENTITLEMENT_KEYS, type Entitlements } from "@shoutory/core/entitlements
 import { z } from "zod";
 import { type App, defineRoute } from "../define-route.js";
 
-// The plan limits of one workspace, read by any member (the billing page shows them): one entry per key of the core
-// list, each copied field by field so an implementation's extra fields never reach the answer. A workspace the caller
-// does not reach answers like one that does not exist (the access rule of the route).
-
 const params = z.strictObject({ workspace_id: z.uuid().transform((id) => id.toLowerCase()) });
 
 // What an implementation returns is parsed, not trusted: an unknown kind throws (the route answers 500) instead of

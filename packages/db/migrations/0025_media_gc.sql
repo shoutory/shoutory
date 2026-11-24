@@ -1,20 +1,11 @@
--- The media garbage collection, for a job: what may be collected is one rule that the candidate list and the take both
--- read, the take moves one asset to deleted after reading that rule again under the row lock, and a post may name only a
--- ready medium, so a medium the collection takes can never be attached by a save that read it a moment earlier. Definers,
--- one trigger and policies only: no table or column changes.
-
--- A job with no workspace (the sweep of the whole instance) reads every workspace's assets; a job that holds some reads
--- only those. The avatar of a workspace is its own asset (FK of 0016), so it is never collected.
 GRANT TRIGGER ON app.post_media TO shoutory_definer;
 SET ROLE shoutory_definer;
 
--- The one rule. `workspaces` NULL reads every workspace, `only_asset` NULL every asset; the take names both. An asset is
--- pinned by an operation in any state except the terminal ones that sent nothing more (published, failed, cancelled,
--- missed), and a superseded operation pins it while its late evidence is watched (no end recorded, or until
--- `unverified_until`). A post that names it, the library and the avatar of its workspace pin it too. A saved version's
--- snapshot is not a use. A pending upload is collected after 24 hours, a ready asset and a rejected one 30 days after they
--- were created, and a deleted asset whose object is still stored 30 days after its deletion. Names are qualified: the
--- helper runs under the purpose of the definer that calls it.
+-- The one rule for the candidate list and the take. `workspaces` NULL reads every workspace, `only_asset` NULL every
+-- asset. An operation pins an asset in any state except the terminal ones that sent nothing more, and a superseded
+-- operation pins it while its late evidence is watched. A post that names it, the library and the avatar of its
+-- workspace pin it too. A saved version's snapshot is not a use. Names are qualified because the helper runs under
+-- the purpose of the definer that calls it.
 CREATE FUNCTION app.media_gc_due(workspaces uuid[], only_asset uuid)
 RETURNS TABLE (workspace_id uuid, asset_id uuid, object_key text, arm text)
 LANGUAGE sql STABLE
@@ -54,9 +45,7 @@ AS $$
       AND u.deleted_at <= clock_timestamp() - interval '30 days'
 $$;
 
--- The candidate list of 0019 over that rule: its limit rules and its job-only call stay, and a job that holds no
--- workspace reads every one. It takes a cursor, the id after which it lists (none: from the start), so a run can go on
--- past assets that stay candidates; the one-argument call of 0016 is replaced by this signature.
+-- The cursor lets a run go on past assets that stay candidates.
 DROP FUNCTION app.media_gc_candidates(integer);
 CREATE FUNCTION app.media_gc_candidates(lim integer, after_asset uuid DEFAULT NULL)
 RETURNS TABLE (workspace_id uuid, asset_id uuid, object_key text, arm text)
@@ -82,11 +71,8 @@ BEGIN
 END
 $$;
 
--- The one move of an asset to deleted by the collection, for a job of the workspace only. It locks the asset, reads the
--- arm's rule again (an asset attached, put in the library or made an avatar since the list was read is not taken), moves
--- it through the one move table, and answers the object keys the job may remove: the original, then each derivative.
--- Nothing is answered when nothing was taken. The deleted arm answers its keys and moves nothing: the job retries a
--- delete that failed.
+-- The rule is read again under the asset lock, so an asset attached, put in the library or made an avatar since the
+-- list was read is not taken. The deleted arm answers its keys and moves nothing: the job retries a failed delete.
 CREATE FUNCTION app.media_gc_take(workspace_id uuid, asset_id uuid, arm text)
 RETURNS TABLE (object_key text)
 LANGUAGE plpgsql SECURITY DEFINER
@@ -127,9 +113,8 @@ BEGIN
 END
 $$;
 
--- A post names a medium only while it is ready. The guard locks the asset FOR SHARE, which conflicts with the take's
--- FOR UPDATE, so a save and the collection of the same medium are serialized: whichever comes second sees the other's
--- state. A row whose medium does not change (an alt text, a position, a move the policies refuse) is not checked.
+-- FOR SHARE conflicts with the take's FOR UPDATE, so a save and the collection of the same medium are serialized and
+-- whichever comes second sees the other's state. A row whose medium does not change is not checked.
 CREATE FUNCTION app.post_media_guard()
 RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER
@@ -153,8 +138,8 @@ BEGIN
 END
 $$;
 
--- An AFTER trigger, so that the row-security check and the keys answer first: a medium of another workspace is still
--- refused by its key, and a write the policies refuse is still refused by them.
+-- AFTER, so the row-security check and the keys answer first: a medium of another workspace is still refused by its
+-- key, and a write the policies refuse is still refused by them.
 CREATE TRIGGER post_media_guard AFTER INSERT OR UPDATE OF media_id ON app.post_media
   FOR EACH ROW EXECUTE FUNCTION app.post_media_guard();
 
@@ -165,8 +150,7 @@ GRANT EXECUTE ON FUNCTION app.media_gc_candidates(integer, uuid), app.media_gc_t
 RESET ROLE;
 REVOKE TRIGGER ON app.post_media FROM shoutory_definer;
 
--- What each purpose reads and locks: the take and the guard lock the asset (a row lock passes the UPDATE policy) and the
--- take reads the pins, the avatar and the derivatives; the candidate list now also reads the avatar of a workspace.
+-- A row lock passes the UPDATE policy, so the take and the guard hold it to lock the asset.
 CALL app.grant_purposes('media_assets', 'SELECT', ARRAY['media_gc_take', 'post_media_guard']);
 CALL app.grant_purposes('media_assets', 'UPDATE', ARRAY['media_gc_take', 'post_media_guard']);
 CALL app.grant_purposes('operations', 'SELECT', ARRAY['media_gc_take']);

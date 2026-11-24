@@ -1,7 +1,6 @@
 import type { AppPool } from "@shoutory/db/pool";
 import { Refusal } from "../errors/refusal.js";
 
-/** The ways a person proves their identity again; the closed list of the `session_step_ups` method column. */
 type Method = "password" | "totp" | "backup_code";
 
 interface Holder {
@@ -11,17 +10,11 @@ interface Holder {
 }
 
 export interface StepUp {
-  /**
-   * Refuses with `step_up_required`, naming the method, unless the session has a record of the last ten minutes (the
-   * window is the definer's). An account with the second factor on counts only a `totp` or `backup_code` record (a
-   * person without the device must still be able to prove identity): a password alone does not open its sensitive
-   * routes.
-   */
+  /** With the second factor on, only a `totp` or `backup_code` record counts, so a person without the device can still step up. */
   require(session: Holder): Promise<void>;
   record(session: { readonly id: string; readonly userId: string }, method: Method): Promise<void>;
 }
 
-/** The step-up records of the sessions, through the definers on the `shoutory_auth` pool. */
 export function createStepUp(pool: AppPool): StepUp {
   const has = async (session: Holder): Promise<boolean> => {
     // The newest record in the window is the one the definer returns, so a later password check replaces a totp one.

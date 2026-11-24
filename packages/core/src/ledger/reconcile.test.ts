@@ -53,14 +53,13 @@ describe("planReconcile", () => {
       { kind: "wait", checkInSeconds: 60 },
     ],
     [
-      "class E is never resent and goes to a person",
+      "a provider with no read-back is never resent and goes to a person",
       without({ readBackMode: "E", resendAfterUnknown: "read_back_only" }),
       { firstEffectAgoSeconds: 10 },
       { kind: "needs_human" },
     ],
   ];
   it.each(ROWS)("%s", (_name, facts, state, plan) => {
-    // fails first because: a resend is decided without the class, the manifest rule and the key window of the first use
     expect(planReconcile(facts, state)).toEqual(plan);
   });
 });
@@ -87,7 +86,6 @@ describe("readBackOutcome", () => {
     ],
   ];
   it.each(ROWS)("%s", (_name, result, ago, reads, since, kind) => {
-    // fails first because: one absent read proves absence, or a refusal counts as one, or the in-flight time is ignored
     expect(
       readBackOutcome(result, A, {
         lastEffectAgoSeconds: ago,
@@ -97,8 +95,7 @@ describe("readBackOutcome", () => {
     ).toBe(kind);
   });
 
-  it("a proven absence on a provider that never resends goes to a person, not back to retry (OL row 38)", () => {
-    // fails first because: every proven absence is sent back to retry, whatever the manifest says of a resend
+  it("a proven absence on a provider that never resends goes to a person, not back to retry", () => {
     const never = without({ resendAfterUnknown: "read_back_only" });
     expect(
       readBackOutcome(gone, never, { lastEffectAgoSeconds: 120, absentReads: 1, secondsSinceAbsentRead: 31 })
@@ -107,7 +104,6 @@ describe("readBackOutcome", () => {
   });
 
   it("a found post carries read-back evidence with its id", () => {
-    // fails first because: the evidence of a read-back is built with the level or kind of a receipt
     expect(
       readBackOutcome(found, A, { lastEffectAgoSeconds: 10, absentReads: 0, secondsSinceAbsentRead: 0 }),
     ).toEqual({

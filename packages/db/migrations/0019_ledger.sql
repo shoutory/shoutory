@@ -1,11 +1,5 @@
--- The publishing ledger: one row per external effect, the attempts and the evidence behind it, the human resolutions, the
--- media it pins, the usage it reserves, and the table of state moves the database allows. The runtime roles read these
--- tables and write nothing: the ledger definers of a later migration are their only writers, under purposes of their own.
-
--- The moves the ledger allows: one row per (row, from, to, actor) of the transition table. A row of the table that lists
--- several from-states, to-states or actors is one entry here for every combination. Two rows may name one move (23 and 40,
--- 32 and 48, 42 and 43), so the key starts with the row number and the move itself is only indexed. It is seeded here and
--- nowhere else; a test compares it with the list in core. Seeded before row security is applied: the table is template I.
+-- Different source rows can name the same move, so the key starts with the row number and the move is only indexed.
+-- Seeded before row security is applied to the table.
 CREATE TABLE app.ledger_transitions (
   row_no integer NOT NULL CHECK (row_no BETWEEN 1 AND 51),
   from_state text NOT NULL CHECK (from_state IN ('none', 'pending', 'claimed', 'processing', 'dispatching',
@@ -81,11 +75,6 @@ CROSS JOIN LATERAL unnest(m.tos) AS t
 CROSS JOIN LATERAL unnest(m.actors) AS a;
 SELECT app.apply_rls_template('app.ledger_transitions'::regclass, 'I');
 
--- One row per external effect (a publish, an edit, a delete, a reply). Its state moves only along the seeded table, which
--- the transition trigger of a later step enforces from `last_actor`, the actor of the latest move. The target is exactly
--- one of three ids (a variant now; a reply target or a moderation target arrive with the inbox, which replaces both target
--- checks), and a unique index lets one non-terminal operation hold a target at a time. A variant or a channel with an
--- operation cannot be deleted. Columns that belong to one state only are checked against it.
 CREATE TABLE app.operations (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   workspace_id uuid NOT NULL REFERENCES app.workspaces (id),
@@ -139,8 +128,7 @@ CREATE TABLE app.operations (
   CONSTRAINT operations_marker_key UNIQUE (workspace_id, idempotency_marker),
   CONSTRAINT operations_target_count_check CHECK (num_nonnulls(variant_id, reply_target_id, moderation_target_id) = 1),
   CONSTRAINT operations_frozen_check CHECK ((frozen_version_id IS NULL) = (frozen_snapshot_hash IS NULL)),
-  -- The reason a state carries, from the reason table of the transition table: only the states that list one may hold it,
-  -- and a blocked operation always holds the state it is restored to.
+  -- Only the states that list a reason may hold one, and a blocked operation always holds the state it is restored to.
   CONSTRAINT operations_reason_check CHECK (CASE state
     WHEN 'paused' THEN reason_code IS NULL OR reason_code IN ('quota', 'entitlement', 'provider_cooldown',
       'capability_withdrawn', 'api_sunset', 'channel_disabled')
@@ -165,21 +153,19 @@ CREATE TABLE app.operations (
   FOREIGN KEY (workspace_id, supersedes_operation_id) REFERENCES app.operations (workspace_id, id),
   FOREIGN KEY (workspace_id, superseded_by_operation_id) REFERENCES app.operations (workspace_id, id)
 );
--- The keys to the variant and the channel are checked on every delete of either, so each has an index to find its rows.
+-- The keys to the variant and the channel are checked on every delete of either, so each needs an index.
 -- shoutory:accepted-lock new empty table in this file
 CREATE INDEX operations_variant_idx ON app.operations (workspace_id, variant_id);
 -- shoutory:accepted-lock new empty table in this file
 CREATE INDEX operations_channel_idx ON app.operations (workspace_id, channel_id);
--- R1: one operation per target outside the terminal states; a terminal state frees the slot.
+-- One operation per target outside the terminal states; a terminal state frees the slot.
 -- shoutory:accepted-lock new empty table in this file
 CREATE UNIQUE INDEX operations_target_key ON app.operations (
   workspace_id, target_kind, coalesce(variant_id, reply_target_id, moderation_target_id))
   WHERE state NOT IN ('published', 'failed', 'cancelled', 'missed', 'superseded_after_unknown_outcome');
--- A part of a variant is published once.
 -- shoutory:accepted-lock new empty table in this file
 CREATE UNIQUE INDEX operations_settled_key ON app.operations (workspace_id, variant_id, part_index)
   WHERE kind = 'publish' AND state = 'published';
--- The scans of the claim, the poll and the reconcile, the lease sweep and the escalation.
 -- shoutory:accepted-lock new empty table in this file
 CREATE INDEX operations_claim_idx ON app.operations (queue, next_attempt_at) WHERE state = 'pending';
 -- shoutory:accepted-lock new empty table in this file
@@ -192,8 +178,8 @@ CREATE INDEX operations_escalation_idx ON app.operations (next_escalation_at)
   WHERE state IN ('needs_human', 'unverified');
 SELECT app.apply_rls_template('app.operations'::regclass, 'W');
 
--- The exact object of each medium an operation sends: the derivative (or the original, when the provider takes it as it is)
--- and its hash, so a later edit of the library never changes what a published post was made from. It goes with its operation.
+-- Pins the exact object and hash of each medium sent, so a later library edit never changes what a published post was
+-- made from.
 CREATE TABLE app.operation_media (
   workspace_id uuid NOT NULL,
   operation_id uuid NOT NULL,
@@ -214,7 +200,6 @@ CREATE INDEX operation_media_derivative_idx ON app.operation_media (workspace_id
   WHERE derivative_id IS NOT NULL;
 SELECT app.apply_rls_template('app.operation_media'::regclass, 'W');
 
--- The calls the ledger made for an operation, one row per attempt and step: written once, never changed.
 CREATE TABLE app.operation_attempts (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   workspace_id uuid NOT NULL,
@@ -237,8 +222,7 @@ CREATE TABLE app.operation_attempts (
 );
 SELECT app.apply_rls_template('app.operation_attempts'::regclass, 'A');
 
--- What the provider or a person said about the outcome: a receipt is the provider's own answer to the call, a read-back a
--- later independent read. Written once, never changed.
+-- A receipt is the provider's own answer to the call; a read-back is a later independent read.
 CREATE TABLE app.operation_evidence (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   workspace_id uuid NOT NULL,
@@ -259,7 +243,6 @@ CREATE TABLE app.operation_evidence (
 CREATE INDEX operation_evidence_operation_idx ON app.operation_evidence (workspace_id, operation_id, observed_at);
 SELECT app.apply_rls_template('app.operation_evidence'::regclass, 'A');
 
--- What a person decided about an operation that automation could not settle. Written once, never changed.
 CREATE TABLE app.operation_resolutions (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   workspace_id uuid NOT NULL,
@@ -282,8 +265,7 @@ CREATE INDEX operation_resolutions_absence_idx ON app.operation_resolutions (wor
   WHERE absence_evidence_id IS NOT NULL;
 SELECT app.apply_rls_template('app.operation_resolutions'::regclass, 'A');
 
--- Entitlement usage reserved when an operation is admitted, booked when the provider accepts and released when nothing
--- happened. Template D: no runtime role reads or writes it, only the definers.
+-- No runtime role reads or writes it, only the definers.
 CREATE TABLE app.usage_reservations (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   workspace_id uuid NOT NULL,
@@ -298,12 +280,12 @@ CREATE TABLE app.usage_reservations (
 );
 SELECT app.apply_rls_template('app.usage_reservations'::regclass, 'D');
 
--- The runtime roles read the ledger and write nothing; the reservations and the transition table have no runtime grant.
+-- The reservations and the transition table have no runtime grant.
 GRANT SELECT ON app.operations, app.operation_media, app.operation_attempts, app.operation_evidence,
   app.operation_resolutions TO shoutory_app, shoutory_worker;
 
--- The definer role holds only what the two guards, the garbage collection of media and the purge of expired rows read or
--- delete, each under the purpose of the function that does it. It writes no ledger table here.
+-- The definer holds only what the guards, the media garbage collection and the purge read or delete, each under the
+-- purpose of the function that does it.
 GRANT SELECT ON app.operations, app.operation_media, app.ledger_transitions TO shoutory_definer;
 GRANT SELECT, DELETE ON app.operation_attempts, app.usage_reservations TO shoutory_definer;
 CALL app.grant_purposes('ledger_transitions', 'SELECT', ARRAY['ledger_guard']);
@@ -316,18 +298,14 @@ CALL app.grant_purposes('operation_attempts', 'DELETE', ARRAY['purge_expired']);
 CALL app.grant_purposes('usage_reservations', 'SELECT', ARRAY['purge_expired']);
 CALL app.grant_purposes('usage_reservations', 'DELETE', ARRAY['purge_expired']);
 
--- The guards are created by the definer role, which needs the right to attach them; the right goes again after.
+-- The definer creates the guard triggers, so it needs TRIGGER on the table until they exist.
 GRANT TRIGGER ON app.operations TO shoutory_definer;
 SET ROLE shoutory_definer;
 
--- Every insert and every change of state of an operation must be a move of the seeded table for the actor named in
--- `last_actor` (an insert is a move from `none`), whoever runs the statement; any other is refused with SH409 and nothing
--- changes. An insert starts with no effect and token 0. A change that leaves the state as it is passes, unless it brings an
--- effect that may have happened back to none or lowers the token. A move the seed marks as raising the fencing token
--- raises it here (a move two seed rows name raises it if either does), any other move leaves it as it was, and a move
--- into a terminal state sets `settled_at`. A move into `published` or `provider_accepted` sets `effect = 'confirmed'`.
--- An operation whose effect is possible or confirmed may not fall back to none except by the rows that prove nothing
--- happened (19, 20, 21, 24, 36, 42, 44); the proof itself is read by the definers that write the attempts.
+-- Applies whoever runs the statement; an insert is a move from `none`. A move that two seed rows name raises the
+-- fencing token if either does. An effect that may have happened goes back to none only by the moves that prove
+-- nothing happened (no-effect retry, failure or cooldown, terminal failure absent, absence proven, the not-executed
+-- attestation, drop); the proof itself is read by the definers that write the attempts.
 CREATE FUNCTION app.ledger_guard()
 RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER
@@ -375,8 +353,7 @@ BEGIN
 END
 $$;
 
--- A publish for a variant that is settled (its parts all published) is refused at insert, unless it names the operation
--- it supersedes: the one way a settled variant is published again. Other kinds (an edit) are not refused.
+-- A settled variant is published again only by an operation that names the one it supersedes.
 CREATE FUNCTION app.ledger_settled_guard()
 RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER
@@ -405,12 +382,9 @@ CREATE TRIGGER operations_b_settled_guard BEFORE INSERT ON app.operations
 
 REVOKE ALL ON FUNCTION app.ledger_guard(), app.ledger_settled_guard() FROM PUBLIC;
 
--- The assets whose objects the garbage collection may remove, for a job, in the workspaces of the job: a pending upload
--- older than 24 hours; a deleted asset 30 days after its deletion whose object is still stored; and a ready asset 30 days
--- old that no post uses. An asset in the library is never a candidate, and neither is one an operation pins: every state
--- pins its media except the terminal states that sent nothing more (published, failed, cancelled, missed), and a superseded
--- operation pins it while its late evidence is watched (no end recorded, or until `unverified_until`). A saved version's snapshot is not a
--- use. The function is the 0016 one with the third arm and the two exclusions; its limit rules and its job-only call stay.
+-- An asset in the library or pinned by an operation is never a candidate. Every state pins its media except the
+-- terminal states that sent nothing more; a superseded operation pins it while its late evidence is watched. A saved
+-- version's snapshot is not a use.
 CREATE OR REPLACE FUNCTION app.media_gc_candidates(lim integer)
 RETURNS TABLE (workspace_id uuid, asset_id uuid, object_key text, arm text)
 LANGUAGE plpgsql SECURITY DEFINER
@@ -460,9 +434,7 @@ $$;
 RESET ROLE;
 REVOKE TRIGGER ON app.operations FROM shoutory_definer;
 
--- The attempts of an operation are removed a year after it settled (an operation still open has no settled time, so its
--- attempts stay), and a usage reservation 13 months after it was made (the 0016 way of seeding the registry, under a
--- policy that exists only for this statement).
+-- An open operation has no settled time, so its attempts stay. The seed policy exists only for this insert.
 CREATE POLICY retention_seed_insert ON app.retention_classes FOR INSERT TO shoutory_owner WITH CHECK (true);
 INSERT INTO app.retention_classes (class, table_name, kind, event_column, retain, partition_unit) VALUES
   ('app.operation_attempts', 'app.operation_attempts', 'window',

@@ -1,9 +1,8 @@
 import { type App, defineRoute } from "../define-route.js";
 import { asAdmin } from "./admin.js";
 
-// The queue health behind the Z-05 screen: the worker heartbeats with their stale flag (silent for 90 s), the age of
-// the oldest undispatched outbox event and of the oldest due job. The three definers are granted to the app role and
-// are not admin-gated inside (the readiness probe calls them with no user), so the admin check is this route's.
+// The three definers are not admin-gated inside (the readiness probe calls them with no user), so the admin check is
+// this route's.
 export function registerQueue(app: App): void {
   defineRoute(app, {
     method: "get",
@@ -19,7 +18,7 @@ export function registerQueue(app: App): void {
         const jobs = await tx.query<{ installed: boolean; lag_seconds: number | null }>(
           "SELECT installed, lag_seconds FROM app.job_lag()",
         );
-        // One total for each of the 17 states across every workspace, with no workspace, post or channel in it.
+        // Totals only: no workspace, post or channel appears in them.
         const counts = await tx.query<{ state: string; total: string }>(
           "SELECT state, total FROM app.ledger_state_counts()",
         );

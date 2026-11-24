@@ -1,9 +1,8 @@
 import type { AppPool } from "@shoutory/db/pool";
 import { type App, defineRoute } from "./define-route.js";
 
-// The sign-up mode of the instance, for the sign-up screen: one boolean that names no address and is the same for
-// every caller. It is served from a cache of at most 5 s, so the database sees at most one call per 5 s per process
-// whatever the request rate (flood protection beyond that is the operator's proxy, as for every public read).
+// Cached for at most 5 s, so the database sees at most one call per 5 s per process whatever the request rate (flood
+// protection beyond that is the operator's proxy, as for every public read).
 const CACHE_MS = 5_000;
 
 export function registerInstance(app: App, pool: AppPool, now: () => number): void {

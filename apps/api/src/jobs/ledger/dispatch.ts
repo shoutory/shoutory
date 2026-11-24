@@ -29,17 +29,13 @@ import {
   type TurnResult,
 } from "./held.js";
 
-/** What a step needs to call a provider for a held operation. */
 export interface Caller {
   readonly pool: AppPool;
   readonly logger: Logger;
-  /** The lease owner. */
   readonly owner: string;
   readonly adapter: ProviderAdapter;
   readonly fetch: typeof fetch;
-  /** The access of the operation's channel: its token and the instance host it stored. */
   readonly account: AccountAccess;
-  /** A monotonic clock in milliseconds. */
   readonly now: () => number;
 }
 export interface Dispatcher extends Caller {
@@ -47,12 +43,10 @@ export interface Dispatcher extends Caller {
   readonly closing: AbortSignal;
 }
 
-// The text of the post for the channel of the operation, from the frozen version it was admitted with.
 const snapshotSchema = z.object({
   draft: z.object({ variants: z.array(z.object({ channel_id: z.string(), text: z.string() })) }),
 });
 
-/** What the frozen version gives to send, or the constant reason it gives nothing. */
 type Frozen =
   | { readonly text: string }
   | { readonly reason: "no_frozen_version" | "frozen_snapshot_unreadable" };
@@ -72,7 +66,6 @@ async function frozenText(pool: AppPool, held: Held): Promise<Frozen> {
   return text === undefined ? { reason: "frozen_snapshot_unreadable" } : { text };
 }
 
-// The adapter's `fetch`, ended by the lease (the heartbeat) or by the call's own time limit.
 export function contextFor(deps: Caller, held: Held, timeoutMs: number): AdapterContext {
   const own = AbortSignal.any([held.signal, AbortSignal.timeout(Math.max(1, Math.floor(timeoutMs)))]);
   return {
@@ -89,7 +82,6 @@ export const timeoutOf = (deps: Caller, held: Held): number | null =>
     elapsedMs: deps.now() - held.started,
   });
 
-/** The arguments of an attempt's start and of the fenced writes of its step. */
 export const call = (deps: Caller, held: Held) => ({
   workspaceId: held.claim.workspaceId,
   operationId: held.claim.id,
@@ -105,14 +97,13 @@ const factsOf = (held: Held): DispatchFacts => ({
   latenessLeftSeconds: held.operation.lateness_left_seconds,
 });
 
-// What the attempt did at the provider, as the ledger records it.
 function attemptOf(result: CallResult, outcome: ResultMove): AttemptResult {
   return {
     effect: outcome.row === 17 ? "confirmed" : outcome.row === 22 ? "possible" : "none",
     ...(result.httpStatus === undefined ? {} : { http_status: result.httpStatus }),
     ...(result.errorClass === undefined ? {} : { error_class: result.errorClass }),
     ...(result.retryAfterMs === undefined ? {} : { retry_after_ms: result.retryAfterMs }),
-    // The id the call answered with: the later read-back of this send reads it, never an older one on the row.
+    // The read-back of this send must use the id this call answered with, never an older one on the row.
     ...(result.externalId === undefined ? {} : { response_excerpt: result.externalId }),
   };
 }
@@ -142,7 +133,7 @@ async function applyMove(tx: TenantTx, deps: Dispatcher, held: Held, from: strin
 // The database refuses a pause longer than a day.
 const MAX_PAUSE_SECONDS = 86_399;
 
-// A provider's rate limit holds for everything on the account, so the buckets of the manifest's limits wait too (R610 (5)).
+// A provider's rate limit holds for everything on the account, so the buckets of the manifest's limits wait too.
 async function pauseBuckets(
   tx: TenantTx,
   held: Held,
@@ -160,12 +151,10 @@ async function pauseBuckets(
 
 interface Attempt {
   readonly id: string;
-  /** The state the row is in while the attempt settles. */
   readonly from: string;
 }
 
-// The result of an attempt and the move it calls for, in ONE transaction, the result first. Nothing is written when the lease
-// is no longer the caller's.
+// One transaction, so a crash cannot leave a finished attempt without its move. Nothing is written when the lease is lost.
 async function settle(
   deps: Dispatcher,
   held: Held,
@@ -194,7 +183,7 @@ async function settle(
 
 const lostTurn = (held: Held): TurnResult => ({ kind: "lost", id: held.claim.id });
 
-// The step before the commit: the provider validates the post. A failure here has no effect at the provider.
+// A failure in this validation step has no effect at the provider.
 async function prepare(
   deps: Dispatcher,
   held: Held,
@@ -236,7 +225,7 @@ function quotasOf(held: Held) {
   );
 }
 
-// The committing call. Its marker (the effect `possible`) is committed in a transaction of its own before the call.
+// The attempt is marked `possible` in its own committed transaction before the call, so a crash mid-call is never read as no effect.
 async function commit(
   deps: Dispatcher,
   held: Held,
@@ -249,7 +238,6 @@ async function commit(
     startAttempt(sqlOf(tx), { ...call(deps, held), step: "commit", quotas: quotasOf(held) }),
   );
   if (started.outcome === "lost_lease") return lostTurn(held);
-  // A full quota window sends nothing: the row waits a minute and is claimed again.
   if (started.outcome === "quota_denied")
     return movedOrLost(held, "retry_wait", await move(deps.pool, held, "retry_wait", { waitSeconds: 60 }));
   const result = await deps.adapter.commit(contextFor(deps, held, timeout), {
@@ -261,13 +249,10 @@ async function commit(
   return settle(deps, held, channel, { id: started.attemptId, from: "dispatching" }, result);
 }
 
-/**
- * The turn after pre-flight: validation, the effect marker, the one committing call, and the result with its move. The
- * caller's heartbeat runs from the claim to the end of this function, so the lease holds through the call.
- */
+// The caller's heartbeat runs until this returns, so the lease holds through the call.
 export async function dispatch(deps: Dispatcher, held: Held, channel: ChannelFacts): Promise<TurnResult> {
   const frozen = await frozenText(deps.pool, held);
-  // An operation with nothing to send fails before any call; the log line names the ids and the reason, never the text.
+  // The log line names the ids and the reason, never the post text.
   if ("reason" in frozen) {
     deps.logger.error(
       { operation: held.claim.id, workspace: held.claim.workspaceId, reason: frozen.reason },

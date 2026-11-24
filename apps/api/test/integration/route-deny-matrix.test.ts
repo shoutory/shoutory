@@ -15,9 +15,6 @@ import {
 } from "../support/tenancy.js";
 import { type Fixture, PEPPER, startFixture } from "./auth/harness.js";
 
-// E4: roles x actions at request level. A route is reached only through its access declaration; what the caller
-// may not see answers 404, what the caller sees but may not do answers 403 (R206, R216).
-
 let fx: Fixture;
 let orgId: string;
 beforeAll(async () => {
@@ -40,7 +37,7 @@ interface Kind {
   readonly get: number;
   readonly patch: number;
 }
-// R175: only Admin and Owner hold settings.manage. An organization owner or admin acts as admin; an organization
+// Only Admin and Owner hold settings.manage. An organization owner or admin acts as admin; an organization
 // member or billing contact has no workspace access at all.
 const KINDS: readonly Kind[] = [
   ...WORKSPACE_ROLES.map((role) => ({
@@ -218,7 +215,7 @@ describe("route table", () => {
     expect(find("PATCH")?.access).toEqual({ workspace: "workspace_id", permission: "settings.manage" });
   });
 
-  it("only the unsubscribe route opts out of the web-client CSRF check, and it is a public POST (R321)", () => {
+  it("only the unsubscribe route opts out of the web-client CSRF check, and it is a public POST", () => {
     const optedOut = registeredRoutes(fx.app).filter((route) => route.csrf === "token");
     expect(optedOut.map((r) => `${r.method} ${r.path} ${r.policy}`)).toEqual([
       "POST /api/v1/unsubscribe/:token public",
@@ -266,8 +263,6 @@ describe("route table", () => {
   });
 });
 
-// M0-05e floor: the organization and workspace list and create routes. Before the routes exist each of these fails
-// with 404 "no such route" (or a 404 where another status is expected).
 const ORGS = "/api/v1/organizations";
 const WORKSPACES = "/api/v1/workspaces";
 const post = (cookie: string, path: string, body: unknown, headers: Record<string, string> = {}) =>

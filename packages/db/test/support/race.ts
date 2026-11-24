@@ -1,11 +1,7 @@
 import type { Pool, PoolClient } from "pg";
 import type { TenantCtx } from "../../src/context/with-tenant.js";
 
-// Helpers for the tests that force two transactions to meet on one lock: the first holds it, the second is seen
-// waiting in pg_locks, then the first commits. The settings are set the way withTenant sets them, but the
-// transaction stays open for the test to drive.
-
-/** The R178 audit hash recomputed in SQL from the stored columns: counts the rows whose hash is not what the spec says. */
+// Counts the audit rows whose hash is not the one recomputed from the stored columns.
 export const HASH_BAD = `SELECT count(*)::int AS bad FROM app.audit_logs WHERE hash <> sha256(prev_hash || convert_to(
   jsonb_build_array(id, workspace_id, organization_id, (extract(epoch FROM at) * 1000000)::bigint, actor_kind,
     actor_ref, action, resource_kind, resource_id, request_id, encode(ip_hmac, 'hex'), metadata)::text, 'UTF8'))`;
@@ -23,7 +19,7 @@ const SETTINGS: [string, (ctx: TenantCtx) => string | undefined][] = [
   ["app.job_purpose", (ctx) => ctx.jobPurpose],
 ];
 
-/** Opens a transaction on its own connection with the context set; `null` sets nothing. The caller ends it. */
+// The settings are set the way withTenant sets them, but the transaction stays open for the test to drive.
 export async function openTx(pool: Pool, ctx: TenantCtx | null): Promise<PoolClient> {
   const client = await pool.connect();
   await client.query("BEGIN");
@@ -49,16 +45,11 @@ async function waitsForLock(rows: Rows, pid: number, waitMs: number): Promise<vo
 }
 
 export interface RaceOutcome {
-  /** The error the second writer ended with, if it was refused; its transaction is then rolled back. */
   secondError: unknown;
 }
 
-/**
- * tx1 writes and holds, tx2 starts its write and is seen waiting in pg_locks (`rows` runs as the superuser), then tx1
- * commits and tx2 finishes. A refused second writer is rolled back and reported, never thrown. Both clients are released.
- * The second writer has `waitMs` (10 s by default) to be seen waiting; a test whose own limit is shorter passes less, so
- * that a writer that never waits fails with this error and not with the test's timeout.
- */
+// A test whose own timeout is shorter than the default `waitMs` of 10 s passes less, so that a writer that never
+// waits fails with this error and not with the test's timeout.
 export async function holdThenRace(
   rows: Rows,
   first: PoolClient,

@@ -41,7 +41,6 @@ beforeAll(async () => {
   db = await cloneTemplate(env, inject("shoutoryTemplate"));
   authPool = db.pool("auth");
   appPool = db.pool("app");
-  // The outbox row of a workspace points at a real workspace.
   await withAdminClient(env, db.name, async (admin) => {
     const org = await admin.query(
       "INSERT INTO app.organizations (name, slug, type) VALUES ('enqueue-org', 'enqueue-org', 'team') RETURNING id",

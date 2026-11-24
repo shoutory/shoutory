@@ -3,10 +3,8 @@ import { clientAddressResolver } from "./client-address.js";
 
 const PROXIES = ["10.0.0.0/8", "fd00::/8"];
 
-// [name, peer, X-Forwarded-For header lines, trusted proxies, expected client]
 type Row = [string, string, string[], string[], string];
 const ROWS: Row[] = [
-  // [name, peer, X-Forwarded-For header lines, trusted proxies, expected client]
   ["an unlisted peer: the header is ignored entirely", "192.0.2.1", ["198.51.100.9"], PROXIES, "192.0.2.1"],
   ["an empty proxy list trusts nobody", "10.0.0.1", ["198.51.100.9"], [], "10.0.0.1"],
   ["no header: the peer", "10.0.0.1", [], PROXIES, "10.0.0.1"],

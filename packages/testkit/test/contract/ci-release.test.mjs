@@ -14,7 +14,6 @@ const runs = (job) => steps(job).map((step) => step.run ?? "");
 const usesOf = (job, action) => steps(job).find((step) => (step.uses ?? "").startsWith(`${action}@`));
 const list = (value) => [value ?? []].flat();
 
-// The pins of the version record: every action by commit SHA.
 const PINS = {
   "actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",
   "actions/setup-node": "949feb2413d6458794dcd2491c4babbbce0c15c1",

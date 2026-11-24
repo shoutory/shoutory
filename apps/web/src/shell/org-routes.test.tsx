@@ -17,8 +17,6 @@ const personal = {
 };
 const linkTo = (host: ParentNode, href: string) => host.querySelector(`nav a[href="${href}"]`);
 
-// An id that is none of the caller's, or an organization page of a personal organization, reaches the not-found page
-// and no call beyond the two lists.
 describe("the organization and settings routes", () => {
   it.each([
     ["an unknown organization's clients", "/o/zzz/clients", {}],

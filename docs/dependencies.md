@@ -171,12 +171,12 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
   a package: the 10,000 entries of SecLists `Passwords/Common-Credentials/10k-most-common.txt`, read from the
   repository's default branch on 2026-11-18 (73,026 bytes, 10,001 lines, no upper-case or non-ASCII entry), embedded as
   one string in `common-passwords.ts` by a one-off conversion that adds nothing. It drops one entry, a provider
-  name, because no core file may carry one (AGENTS 5.1).
+  name, because no core file may carry one.
 - Licence: MIT, "Copyright (c) 2018 Daniel Miessler", verified by reading
   https://raw.githubusercontent.com/danielmiessler/SecLists/master/LICENSE on 2026-11-18. The full notice is in the
   header of `common-passwords.ts`, as the licence requires of every copy. The list is not a runtime dependency and
   downloads nothing.
-- Rejected: the NCSC 100k list (the licence of its origin could not be verified) and a run-time download (AGENTS 4.9).
+- Rejected: the NCSC 100k list (the licence of its origin could not be verified) and a run-time download (the project forbids run-time downloads).
   The breached-password range check covers the breadth the 10,000 entries do not.
 
 ## @better-auth/core 1.7.16
@@ -218,7 +218,7 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
 ## @aws-sdk/client-s3 3.1161.0
 
 - Used for: the optional S3-compatible storage driver in `apps/api/src/storage/s3-driver.ts` (put, get and delete of whole
-  objects). Multipart upload is not added; the slice that needs it adds its own card.
+  objects). Multipart upload is not used here and would need its own card.
 - Licence: Apache-2.0. Published 2026-10-30, more than 14 days before adoption. Its install scripts: none (no package in
   its tree needs a build script, so `strictDepBuilds` stays satisfied).
 - Egress: the SDK keeps its own HTTP handler; the operator-chosen endpoint is checked at start-up (http or https, no
@@ -341,7 +341,7 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
 - Licence: OFL-1.1 (the SIL Open Font License; the package carries the licence text). Published 2026-07-19, more than 14 days
   before adoption. Its install scripts: none.
 - Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
-- Rejected: a font CDN; Inter (the owner's identity names IBM Plex Sans).
+- Rejected: a font CDN; Inter (the design uses IBM Plex Sans).
 
 ## @fontsource/ibm-plex-sans-arabic 5.3.0
 
@@ -349,7 +349,7 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
 - Licence: OFL-1.1 (the SIL Open Font License; the package carries the licence text). Published 2026-07-19, more than 14 days
   before adoption. Its install scripts: none.
 - Advisories: `pnpm audit --audit-level=high` reported none after adding it. Re-read at each upgrade.
-- Rejected: Cairo (retired by the owner's identity decision); a font CDN.
+- Rejected: Cairo (the design uses IBM Plex Sans Arabic); a font CDN.
 
 ## happy-dom 21.0.4
 

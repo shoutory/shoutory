@@ -1,9 +1,7 @@
 import type { SealedSecret } from "@shoutory/core/crypto";
 
-/** What an attempt did at the provider: nothing, possibly something (unknown), or confirmed something. */
 export type Effect = "none" | "possible" | "confirmed";
 
-/** The non-success result classes of the operation ledger; success is `ok` with its `effect`. */
 export type ProviderErrorClass =
   | "retryable_before_send"
   | "retryable_after_send"
@@ -12,18 +10,14 @@ export type ProviderErrorClass =
   | "permanent"
   | "unknown";
 
-/**
- * The tokens a refresh obtained, as RFC 6749 section 5.1 answers them: an access token with its lifetime and, only when
- * the provider rotated it, a new refresh token. They stay sealed (printing one gives `[redacted]`). A token the provider
- * never expires has no lifetime: `expiresInSeconds` is absent and the credential is stored with no expiry.
- */
+// As RFC 6749 section 5.1 answers them. A token the provider never expires has no `expiresInSeconds`, and the credential
+// is stored with no expiry.
 export interface RefreshedCredential {
   readonly accessToken: SealedSecret;
   readonly refreshToken?: SealedSecret;
   readonly expiresInSeconds?: number;
 }
 
-/** The account a connect reached, as the provider names it. */
 export interface AccountIdentity {
   readonly providerAccountId: string;
   readonly accountKind: string;
@@ -32,29 +26,23 @@ export interface AccountIdentity {
   readonly avatar?: string;
 }
 
-/** A limit as an instance states it: the number, the page it was read from and the day (never a bare number). */
 export interface ReadLimit {
   readonly value: number;
   readonly source: string;
   readonly checked: string;
 }
 
-/** The app a provider registered on one instance; the secret stays sealed (printing it gives `[redacted]`). */
 export interface RegisteredApp {
   readonly clientId: string;
   readonly clientSecret: SealedSecret;
 }
 
-/** Every adapter method answers with this and never throws a raw error; throwing is only for bugs. */
 export interface ProviderResult {
   readonly ok: boolean;
-  /** Present on a successful app registration only. */
   readonly app?: RegisteredApp;
   /** Present on a successful identity or channel read of a provider whose instances state their own limits. */
   readonly limits?: Readonly<Record<string, ReadLimit>>;
-  /** Present on a successful refresh or code exchange only. */
   readonly credential?: RefreshedCredential;
-  /** Present on a successful identity read only. */
   readonly identity?: AccountIdentity;
   /** Present on a successful channel read: what the provider's answer says of the channel (`ok` when absent). */
   readonly health?: "ok" | "degraded";
@@ -70,7 +58,7 @@ export interface ProviderResult {
   readonly absent?: boolean;
 }
 
-/** What the adapter knows about a failed attempt. The class is the adapter's call, never read from a body. */
+// The class is the adapter's call, never read from a body.
 export interface ErrorInput {
   readonly effect: Effect;
   readonly errorClass: ProviderErrorClass;
@@ -96,10 +84,8 @@ function assertPair({ effect, errorClass }: ErrorInput): void {
   if (!valid) throw new Error(`an error with effect ${effect} cannot have class ${errorClass}`);
 }
 
-/**
- * A failure result. It reads nothing from a response body: whatever a body holds as an id is not proof that anything was
- * created, so it carries no `externalId` or `permalink`. The provider code is kept only in the shape of a code.
- */
+// It reads nothing from a response body: whatever a body holds as an id is not proof that anything was created, so it
+// carries no `externalId` or `permalink`.
 export function errorResult(input: ErrorInput): ProviderResult {
   assertPair(input);
   const { effect, errorClass, providerCode, retryAfterMs } = input;

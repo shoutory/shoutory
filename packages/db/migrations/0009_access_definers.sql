@@ -1,17 +1,14 @@
--- The access definers: the only read and create paths of the tenancy tables for the signed-in user.
---
 -- Every function here serves a signed-in user: the caller is read from the session context, never from an argument,
 -- and any other principal kind (or none) is refused with 42501. Each function sets its own purpose at entry and puts
 -- the caller's purpose back at exit, and each table it touches has one policy for that purpose and command, so a
 -- function cannot read or write a table it was not written for. The policies read no row column: the function does
--- the filtering. The definer role gets read and insert only, never update, delete or truncate, on these tables.
+-- the filtering. The definer role gets read and insert only on these tables.
 GRANT SELECT ON app.workspaces, app.workspace_members, app.roles TO shoutory_definer;
 GRANT INSERT ON app.organizations, app.organization_members, app.workspaces, app.workspace_members
   TO shoutory_definer;
--- The member directory names a member; the address stays with the invitation definer of a later migration.
+-- Name and image only: the directory never exposes an address.
 GRANT SELECT (name, image) ON auth."user" TO shoutory_definer;
 
--- resolve_workspace_access
 CREATE POLICY resolve_workspace_access_select ON app.workspace_members FOR SELECT TO shoutory_definer
   USING ((SELECT app.job_purpose()) = 'resolve_workspace_access');
 CREATE POLICY resolve_workspace_access_select ON app.workspaces FOR SELECT TO shoutory_definer
@@ -20,7 +17,6 @@ CREATE POLICY resolve_workspace_access_select ON app.roles FOR SELECT TO shoutor
   USING ((SELECT app.job_purpose()) = 'resolve_workspace_access');
 CREATE POLICY resolve_workspace_access_select ON app.organization_members FOR SELECT TO shoutory_definer
   USING ((SELECT app.job_purpose()) = 'resolve_workspace_access');
--- my_workspaces, my_organizations, member_directory
 CREATE POLICY my_workspaces_select ON app.workspaces FOR SELECT TO shoutory_definer
   USING ((SELECT app.job_purpose()) = 'my_workspaces');
 CREATE POLICY my_organizations_select ON app.organization_members FOR SELECT TO shoutory_definer
@@ -29,7 +25,6 @@ CREATE POLICY my_organizations_select ON app.organizations FOR SELECT TO shoutor
   USING ((SELECT app.job_purpose()) = 'my_organizations');
 CREATE POLICY member_directory_select ON app.workspace_members FOR SELECT TO shoutory_definer
   USING ((SELECT app.job_purpose()) = 'member_directory');
--- workspace_create
 CREATE POLICY workspace_create_select ON app.organization_members FOR SELECT TO shoutory_definer
   USING ((SELECT app.job_purpose()) = 'workspace_create');
 CREATE POLICY workspace_create_select ON app.roles FOR SELECT TO shoutory_definer
@@ -38,7 +33,6 @@ CREATE POLICY workspace_create_insert ON app.workspaces FOR INSERT TO shoutory_d
   WITH CHECK ((SELECT app.job_purpose()) = 'workspace_create');
 CREATE POLICY workspace_create_insert ON app.workspace_members FOR INSERT TO shoutory_definer
   WITH CHECK ((SELECT app.job_purpose()) = 'workspace_create');
--- organization_create
 CREATE POLICY organization_create_select ON app.organization_members FOR SELECT TO shoutory_definer
   USING ((SELECT app.job_purpose()) = 'organization_create');
 CREATE POLICY organization_create_insert ON app.organizations FOR INSERT TO shoutory_definer
@@ -46,9 +40,8 @@ CREATE POLICY organization_create_insert ON app.organizations FOR INSERT TO shou
 CREATE POLICY organization_create_insert ON app.organization_members FOR INSERT TO shoutory_definer
   WITH CHECK ((SELECT app.job_purpose()) = 'organization_create');
 
--- Every workspace the caller reaches, one row each: through a stored active membership, or as an owner or admin of
--- its organization (implicit admin). The role is the higher of the two (owner > admin > editor > approver > viewer;
--- a custom role ranks below viewer until custom roles define their own order). More than 500 workspaces raise 54000
+-- Reaches a workspace through a stored active membership, or as an owner or admin of its organization (implicit
+-- admin); the role is the higher of the two. A custom role ranks below viewer. More than 500 workspaces raise 54000
 -- (the size of the context's workspace list): the answer is never cut short.
 CREATE FUNCTION app.resolve_workspace_access()
 RETURNS TABLE (workspace_id uuid, organization_id uuid, role_key text)
@@ -98,8 +91,8 @@ BEGIN
 END
 $$;
 
--- The workspace switcher list: the reachable workspaces with their names, one page after a cursor. The reachable
--- set is read first and whole, so the nested call has put this function's purpose back before the rows are joined.
+-- The reachable set is read first and whole, so the nested call has put this function's purpose back before the
+-- rows are joined.
 CREATE FUNCTION app.my_workspaces(lim integer, after uuid)
 RETURNS TABLE (workspace_id uuid, organization_id uuid, name text, slug text, role_key text)
 LANGUAGE plpgsql SECURITY DEFINER
@@ -129,8 +122,7 @@ BEGIN
 END
 $$;
 
--- The organizations the caller belongs to in any role, one page after a cursor: an organization with no workspace is
--- found here, which is where onboarding starts.
+-- An organization with no workspace is listed here, so a new owner can still find it.
 CREATE FUNCTION app.my_organizations(lim integer, after uuid)
 RETURNS TABLE (organization_id uuid, name text, slug text, type text, org_role text)
 LANGUAGE plpgsql SECURITY DEFINER
@@ -158,8 +150,7 @@ BEGIN
 END
 $$;
 
--- The active stored members of a workspace the caller reaches: id, name and image, nothing else of the user. A
--- workspace outside the caller's reach gives no rows, exactly like an empty one. Implicit organization admins hold
+-- A workspace outside the caller's reach gives no rows, exactly like an empty one. Implicit organization admins hold
 -- no membership row and are not listed.
 CREATE FUNCTION app.member_directory(workspace_id uuid, lim integer, after uuid)
 RETURNS TABLE (user_id uuid, name text, image text)
@@ -192,10 +183,9 @@ BEGIN
 END
 $$;
 
--- A new organization, its first owner (the caller) and its audit row, in one transaction. The slug comes from the id,
--- so it never collides and tells nothing. The count of owned organizations is read after the audit write has taken the
--- instance chain's head lock, which serialises every call: two calls at 19 cannot both pass. Over 20 owned
--- organizations the call raises 53400 and the whole transaction rolls back.
+-- The slug comes from the id, so it never collides and tells nothing. The count of owned organizations is read after
+-- the audit write has taken the instance chain's head lock, which serialises every call: two calls at 19 cannot both
+-- pass. Over 20 owned organizations the call raises 53400 and the whole transaction rolls back.
 CREATE FUNCTION app.organization_create(name text, type text, request_id text, ip_hmac bytea)
 RETURNS uuid
 LANGUAGE plpgsql SECURITY DEFINER
@@ -225,9 +215,8 @@ BEGIN
 END
 $$;
 
--- A new workspace in an organization the caller owns or administers, the caller as its stored Owner, and its audit row
--- on the workspace's own chain, in one transaction. A foreign and a missing organization give the same refusal. The
--- slug is the caller's: a clash can only be inside an organization the caller administers.
+-- A foreign and a missing organization give the same refusal. The slug is the caller's: a clash can only be inside
+-- an organization the caller administers.
 CREATE FUNCTION app.workspace_create(
   organization_id uuid, name text, slug text, tz text, request_id text, ip_hmac bytea)
 RETURNS uuid

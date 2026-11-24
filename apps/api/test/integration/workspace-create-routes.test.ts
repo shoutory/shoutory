@@ -2,9 +2,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { seedOrganization, signedUser } from "../support/tenancy.js";
 import { type Fixture, startFixture } from "./auth/harness.js";
 
-// The workspace list and create routes: the answers, the derived slug and the refusals the definer does not own (R230,
-// R231). Who may see or do what is the floor in route-deny-matrix.test.ts.
-
 let fx: Fixture;
 let cookie: string;
 let orgId: string;

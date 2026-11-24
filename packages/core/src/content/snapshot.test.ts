@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { Draft } from "./document.js";
 import { buildSnapshot, type Resolved, snapshotHash } from "./snapshot.js";
 
-// The version snapshot: `{version, draft, resolved}` and its SHA-256 over canonical JSON, computed here and never from
-// the jsonb text (jsonb reorders keys). The database requires only the top-level `draft` and a 32-byte hash.
 const CH = "00000000-0000-4000-8000-0000000000a1";
 const MEDIA = "00000000-0000-4000-8000-0000000000b1";
 const SHA = "ab".repeat(32);
@@ -23,12 +21,10 @@ const resolved = (settings: Record<string, unknown> = {}): Resolved => ({
   media: {},
   manifestDigest: { [CH]: "digest-1" },
 });
-// A refusal is a thrown error that is not the stub's "not implemented".
 const refuses = (run: () => unknown) => {
   expect(run).toThrow();
   expect(run).not.toThrow("not implemented");
 };
-// The snapshot of a draft that fits; a result that is not ok is a failure of the test.
 const snap = (value: Draft, extra: Resolved = resolved()) => {
   const built = buildSnapshot(value, extra);
   if (!built.ok) throw new Error(built.code);
@@ -45,7 +41,6 @@ const pgText = (value: unknown): string => {
   }
   return JSON.stringify(value);
 };
-// A draft and resolved block whose snapshot is exactly `bytes` long as jsonb text, the padding spread over 11 texts.
 const SLOTS = 11;
 const ofBytes = (bytes: number): [Draft, Resolved] => {
   const build = (pads: string[]): [Draft, Resolved] => [

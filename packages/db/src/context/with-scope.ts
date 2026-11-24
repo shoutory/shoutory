@@ -3,9 +3,7 @@ import { type AuthorizedScope, mintScope, type ResolvedAccess } from "@shoutory/
 import type { Pool } from "pg";
 import { type TenantTx, withTenant } from "./with-tenant.js";
 
-// One transaction on one connection: the user-only context, the caller's reachable workspaces, the scope minted from
-// them, the context narrowed to the target, and only then the handler. A denial rolls the transaction back, so the
-// handler never holds a connection that is wider than its scope.
+// A denial rolls the transaction back, so the handler never holds a connection that is wider than its scope.
 
 export interface ScopeRequest {
   readonly target: string;
@@ -55,18 +53,10 @@ async function narrow(tx: TenantTx, scope: AuthorizedScope, write: boolean): Pro
   );
 }
 
-/**
- * Runs `run` in a transaction whose only context is the signed-in user: for the user-level definers (lists, creates)
- * that need no workspace. The context ends with the transaction.
- */
 export function withUser<T>(pool: Pool, principalId: string, run: (tx: TenantTx) => Promise<T>): Promise<T> {
   return withTenant(pool, { principalKind: "user", principalId }, run);
 }
 
-/**
- * Runs `run` for `principalId` inside the scope minted from the caller's resolved rows for the request's workspace;
- * a denial returns without running.
- */
 export async function withScope<T>(
   pool: Pool,
   principalId: string,

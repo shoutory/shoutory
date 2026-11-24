@@ -1,16 +1,10 @@
--- The writers of the publishing ledger. A worker moves an operation only with the fencing token it holds, so one that lost
--- its lease changes nothing; the insert has no runtime caller (admission and the human resolutions call it as the
--- definer role). Each writer runs under a purpose of its own and writes one outbox row for every move it makes.
-
--- What the definer role may write: the operations and their evidence, and the event outbox. An operation is changed in
--- the columns the ledger definers write and no others; the token, the settled time and the update time are set by the
--- transition trigger of 0019, the key and target columns never change.
+-- Only the columns the definers write; the token, settled time and update time come from the transition trigger.
 GRANT INSERT ON app.operations, app.operation_evidence TO shoutory_definer;
 GRANT UPDATE (state, effect, reason_code, last_actor, blocked_since, lease_owner, lease_expires_at, heartbeat_at,
   processing_deadline, poll_deadline, step_cursor, provider_refs, next_attempt_at, next_check_at, queue,
   external_id) ON app.operations TO shoutory_definer;
 
--- The principal check reads the tenancy tables under the purpose of the definer that calls it (the 0016 way).
+-- The principal check reads the tenancy tables under the calling definer's purpose.
 DO $$
 DECLARE
   t text;
@@ -27,7 +21,6 @@ CALL app.grant_purposes('operations', 'UPDATE', ARRAY['operation_transition', 'o
 -- The cancel reads the post of the operation to know its author.
 CALL app.grant_purposes('post_variants', 'SELECT', ARRAY['operation_cancel']);
 CALL app.grant_purposes('posts', 'SELECT', ARRAY['operation_cancel']);
--- The move is looked up in the transition table.
 CALL app.grant_purposes('ledger_transitions', 'SELECT', ARRAY['operation_transition']);
 CALL app.grant_purposes('operation_evidence', 'INSERT', ARRAY['operation_transition', 'record_evidence']);
 -- The move to blocked_reconnect reads the channel and holds it FOR SHARE, which needs an UPDATE privilege and policy.
@@ -36,9 +29,7 @@ CALL app.grant_purposes('channels', 'UPDATE', ARRAY['operation_transition']);
 
 SET ROLE shoutory_definer;
 
--- The outbox belongs to the definer role (0012), which holds every privilege on it already; its insert policies are
--- created by the table's owner, in the form app.grant_purposes gives them. The first producer of events adds its purpose
--- (the 0012 note).
+-- The outbox belongs to the definer, so its insert policies are created here in the form app.grant_purposes gives them.
 CREATE POLICY operation_transition_insert ON app.outbox FOR INSERT TO shoutory_definer
   WITH CHECK ((SELECT app.job_purpose()) = 'operation_transition');
 CREATE POLICY operation_cancel_insert ON app.outbox FOR INSERT TO shoutory_definer
@@ -46,9 +37,8 @@ CREATE POLICY operation_cancel_insert ON app.outbox FOR INSERT TO shoutory_defin
 CREATE POLICY record_evidence_insert ON app.outbox FOR INSERT TO shoutory_definer
   WITH CHECK ((SELECT app.job_purpose()) = 'record_evidence');
 
--- Stores one row of evidence for an operation, inside the caller's purpose (no entry point, no runtime EXECUTE). Level
--- human is the resolver's alone, and the references are a closed set: `source` is required, `external_id` and `permalink`
--- are kept. It writes the row and decides nothing; the caller holds the operation row.
+-- Not an entry point: no runtime EXECUTE. Level human is the resolver's alone. It decides nothing; the caller holds the
+-- operation row.
 CREATE FUNCTION app.ledger_add_evidence(
   workspace_id uuid, operation_id uuid, part integer, kind text, level text, outcome_kind text, refs jsonb)
 RETURNS uuid
@@ -77,10 +67,9 @@ BEGIN
 END
 $$;
 
--- Creates an operation for the scheduler (S) or a person (U); no runtime role runs it, admission and the resolutions call
--- it as the definer role. The keys of `fields` are a closed set (a reply or moderation target, the effect, the token and
--- the actor are never named), and the move from nothing into `state` is the transition trigger's to allow. It writes no
--- outbox row: admission writes its own event.
+-- No runtime role runs it; admission and the resolutions call it as the definer. The keys of `fields` are a closed set
+-- (the effect, the token and the actor are never named by the caller). It writes no outbox row: admission writes its
+-- own event.
 CREATE FUNCTION app.operation_insert(workspace_id uuid, fields jsonb, actor text)
 RETURNS uuid
 LANGUAGE plpgsql SECURITY DEFINER
@@ -125,14 +114,10 @@ BEGIN
 END
 $$;
 
--- The fenced write of a worker (W), a poller (P) or the reconciler (R): one UPDATE that names the token and the state the
--- caller holds, so a caller that lost its lease finds no row and gets `lost_lease` (never an error) and changes nothing.
--- The move itself is the transition trigger's to allow. The claims (rows 4, 33, 34) and the moves that reset an effect
--- (rows 19, 20, 21, 24, 36) have their own definers and are refused here. `changes` is a closed set of keys; a move into
--- dispatching sets the effect marker and keeps the lease it came with, every other move drops the lease, and a column
--- the new state does not hold is cleared. A move into published carries the evidence of its row, stored in the same
--- transaction. Locks: the channel FOR SHARE (rank 5) for a move to blocked_reconnect, then the operation row by the
--- UPDATE (6), then the evidence (7) and the outbox (10).
+-- One UPDATE names the token and state the caller holds, so a caller that lost its lease finds no row and gets
+-- `lost_lease`, not an error. The claims and the moves that reset an effect have their own definers and are refused
+-- here. A move into dispatching keeps the lease it came with; every other move drops it. Lock order: the channel FOR
+-- SHARE (for blocked_reconnect), then the operation row, then the evidence, then the outbox.
 CREATE FUNCTION app.operation_transition(
   workspace_id uuid, operation_id uuid, token bigint, from_state text, to_state text, actor text, changes jsonb)
 RETURNS TABLE (outcome text, fencing_token bigint)
@@ -160,8 +145,8 @@ BEGIN
       ('reconciling', 'retry_wait', 'R')) THEN
     RAISE EXCEPTION 'operation_transition: this move has its own definer' USING ERRCODE = '42501';
   END IF;
-  -- The move must be in the transition table for this actor, here and not only in the trigger: the trigger lets a call that
-  -- leaves the state as it is pass, and such a call would rewrite the row and announce the state a second time.
+  -- Checked here and not only in the trigger: the trigger lets a same-state call pass, which would rewrite the row and
+  -- announce the state a second time.
   IF operation_transition.from_state IS NOT DISTINCT FROM operation_transition.to_state
      OR NOT EXISTS (SELECT 1 FROM app.ledger_transitions AS t WHERE t.from_state = operation_transition.from_state
        AND t.to_state = operation_transition.to_state AND t.actor = operation_transition.actor) THEN
@@ -229,7 +214,7 @@ BEGIN
       AND (operation_transition.to_state <> 'dispatching' OR o.lease_owner IS NOT NULL)
     RETURNING o.fencing_token, o.part_index INTO new_token, part;
   IF NOT FOUND THEN
-    -- A caller that holds the token and the state but no lease is not a lost lease: the claim that gives the lease comes first.
+    -- Holding the token and state without a lease is not a lost lease: the claim that gives the lease comes first.
     IF operation_transition.to_state = 'dispatching' AND EXISTS (SELECT 1 FROM app.operations AS o
         WHERE o.workspace_id = operation_transition.workspace_id AND o.id = operation_transition.operation_id
           AND o.fencing_token = operation_transition.token AND o.state = operation_transition.from_state) THEN
@@ -256,11 +241,9 @@ BEGIN
 END
 $$;
 
--- Cancels an operation that has had no effect, for a signed-in Owner or Admin, or for the Editor who wrote the post
--- (the `publish.resolve` rule; an Approver or a Viewer, a job and a stranger are refused like an unknown id). The state
--- must be one a cancel may leave (row 8) and the effect none; the lease, the deadlines and the blocked columns go, and
--- the trigger raises the token so a worker still running loses its next write. Locks: the unlocked reads of the post and
--- its variant, then the operation row by the UPDATE (6) and the outbox (10).
+-- Only an Owner, an Admin or the Editor who wrote the post may cancel; anyone else is refused like an unknown id. The
+-- trigger raises the token so a worker still running loses its next write. Lock order: unlocked reads of the post and
+-- variant, then the operation row, then the outbox.
 CREATE FUNCTION app.operation_cancel(workspace_id uuid, operation_id uuid)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER
@@ -298,13 +281,9 @@ BEGIN
 END
 $$;
 
--- Records what the provider or a person said about an operation, and never waits for a lease: any job may call it. It always
--- stores the row. When the evidence is a receipt or better (never level human, which is the resolver's) of a post, and
--- the operation is not settled and its effect is possible or confirmed (or it is processing or provider_accepted), the
--- operation moves to published, the token rises so a holder of the old lease loses its next write, and the external id
--- is kept (row 40). Evidence of any other kind or outcome, of a settled operation, or of one that may not have been
--- sent only adds the row; a superseded operation also writes the late-evidence event (row 47). Locks: the operation row
--- FOR NO KEY UPDATE (6), the evidence insert (7), the outbox (10).
+-- Never waits for a lease: any job may call it. Evidence that proves a post moves an unsettled operation to published
+-- and raises the token so the old lease holder loses its next write; anything else only adds the row. Lock order: the
+-- operation row, then the evidence, then the outbox.
 CREATE FUNCTION app.record_evidence(
   workspace_id uuid, operation_id uuid, kind text, level text, outcome_kind text, refs jsonb)
 RETURNS TABLE (evidence_id uuid, moved boolean)

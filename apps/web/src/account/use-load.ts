@@ -8,10 +8,6 @@ export type Loaded<T> =
   | { readonly status: "done"; readonly data: T }
   | { readonly status: "failed"; readonly error: ApiError };
 
-/**
- * Reads one path when the block appears: `replace` swaps the data without a read, `reload` reads again from the
- * loading state, and `refresh` (or a new `stamp`) reads again quietly, keeping what is shown until the answer lands.
- */
 export function useLoad<T>(schema: ZodType<T>, path: string, stamp = 0) {
   const [state, setState] = useState<Loaded<T>>({ status: "loading" });
   const [version, setVersion] = useState(0);
@@ -26,7 +22,6 @@ export function useLoad<T>(schema: ZodType<T>, path: string, stamp = 0) {
       (error: unknown) => {
         if (!(error instanceof ApiError)) throw error;
         if (!current) return;
-        // The session ended while the page was open: sign in, then come back to this page.
         if (error.state === "session_expired") {
           void navigate(`/sign-in?return-to=${encodeURIComponent(pathname + search)}`);
         } else {

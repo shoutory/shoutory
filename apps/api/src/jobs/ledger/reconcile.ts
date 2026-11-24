@@ -25,7 +25,7 @@ import { type Caller, call, contextFor, timeoutOf } from "./dispatch.js";
 import { hold } from "./heartbeat.js";
 import { fencedMove, type Held, inJob, readOperation, sqlOf } from "./held.js";
 
-// One tick reconciles at most this many rows of a provider, so one tick never holds the worker for ever (AGENTS 6.6).
+// One tick reconciles at most this many rows of a provider, so one tick never holds the worker for ever.
 const BATCH = 5;
 const ALL_KINDS = ["publish", "edit", "delete", "reply"];
 
@@ -35,9 +35,7 @@ export interface ReconcileOptions {
   readonly registry: Registry;
   readonly adapters: AdapterMap;
   readonly fetchFor: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
-  /** The key ring the credentials of the channels are opened with. */
   readonly keys: KeyProvider;
-  /** The lease owner of the tick. */
   readonly owner: string;
   readonly closing: AbortSignal;
   readonly now?: () => number;
@@ -52,10 +50,6 @@ const factsOf = (manifest: Manifest): ReconcileFacts => ({
   absentAnswers: manifest.absentAnswers,
 });
 
-/**
- * Claims the unknown outcomes that are due, for each provider of the registry, and reads each back. A provider that
- * cannot read back (class E) has its rows handed to a person by the claim itself and needs no adapter.
- */
 export async function reconcileStep(options: ReconcileOptions): Promise<void> {
   const { pool, registry, adapters, owner } = options;
   for (const manifest of registry.manifests) {
@@ -110,8 +104,8 @@ async function reconcileClaim(
     started,
   });
   try {
-    // The channel's own credential and host, as at a send. A channel that has none cannot be read, and nothing will give it
-    // one: the row goes to a person, with no call, instead of waiting for ever.
+    // A channel with no usable credential cannot be read and nothing will give it one: the row goes to a person
+    // instead of waiting for ever.
     const host = await instanceHostOf(pool, operation);
     const account = await accountOf(options, operation, host);
     if (account === null) {
@@ -138,19 +132,15 @@ async function reconcileClaim(
 }
 
 interface History {
-  /** The id the latest committing attempt recorded; never an older one on the row. */
   readonly external_id: string | null;
-  /** Seconds since the key was first used (the first committing attempt began); null when the row has none. */
   readonly first_effect_ago: number | null;
-  /** Seconds since the latest committing attempt began. */
   readonly last_effect_ago: number | null;
-  /** Absence reads and the time since the last one, counted only since the latest committing attempt. */
   readonly absent_reads: number;
   readonly since_absent: number | null;
 }
 
-// What the attempts of the row say. The key window counts from the first send; the read-back target and the absence rule
-// count from the latest send, so an absence read before a resend never counts for the cycle after it.
+// The key window counts from the first send; the read-back id and the absence rule count from the latest send, so an
+// absence read before a resend never counts for the cycle after it.
 async function readHistory(pool: AppPool, held: Held): Promise<History> {
   const { rows } = await inJob(pool, held.claim.workspaceId, (tx) =>
     tx.query<History>(
@@ -174,21 +164,18 @@ async function readHistory(pool: AppPool, held: Held): Promise<History> {
   return rows[0];
 }
 
-// The row waits for its next read-back: back to unknown with the next back-off, no call made.
 async function park(pool: AppPool, held: Held, seconds: number): Promise<void> {
   await inJob(pool, held.claim.workspaceId, (tx) =>
     fencedMove(tx, held, "reconciling", "unknown_external_state", { checkInSeconds: seconds }, "R"),
   );
 }
 
-// What one step asked of the provider: the attempt that records it, its answer and what the answer proves.
 interface Asked {
   readonly attemptId: string;
   readonly result: CallResult;
   readonly outcome: ReadBackOutcome;
 }
 
-// A read-back of the id inside an attempt of its own, or null when the lease went.
 async function ask(
   deps: Caller,
   held: Held,
@@ -213,7 +200,6 @@ async function ask(
   return { attemptId: started.attemptId, result, outcome };
 }
 
-// An unknown outcome nothing can settle goes to a person, with the reason (no id to read back, no credential to read with).
 async function toPerson(pool: AppPool, held: Held, reasonCode: string | undefined): Promise<void> {
   const changes = reasonCode === undefined ? {} : { reasonCode };
   await inJob(pool, held.claim.workspaceId, (tx) =>
@@ -221,8 +207,7 @@ async function toPerson(pool: AppPool, held: Held, reasonCode: string | undefine
   );
 }
 
-// A resend inside the key window goes back to retry on the publish queue with the resend flag; the next publish turn
-// re-reads the target, takes the limits and marks the effect like any other send.
+// The next publish turn re-reads the target, takes the limits and marks the effect like any other send.
 async function resend(deps: Caller, held: Held): Promise<void> {
   await inJob(deps.pool, held.claim.workspaceId, (tx) =>
     fencedMove(tx, held, "reconciling", "retry_wait", { waitSeconds: 0, idempotentResend: true }, "R"),
@@ -247,7 +232,7 @@ async function reconcileHeld(deps: Caller, held: Held): Promise<void> {
   await settle(deps, held, asked, history, plan.externalId);
 }
 
-// The result of the read and its move, in ONE transaction, the result first; nothing is written once the lease is gone.
+// One transaction, so a crash cannot leave a finished attempt without its move. Nothing is written when the lease is lost.
 async function settle(
   deps: Caller,
   held: Held,
@@ -272,8 +257,6 @@ async function settle(
   });
 }
 
-// The move a read-back calls for: found is published; absent twice goes back to retry on absent evidence; anything else
-// waits for the next read-back.
 async function moveFor(
   tx: TenantTx,
   held: Held,

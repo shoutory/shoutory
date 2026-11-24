@@ -24,8 +24,6 @@ const list = async (cookie: string, path: string): Promise<Row[]> => {
   return ((await answer.json()) as { data: Row[] }).data;
 };
 
-// The onboarding and the settings read what the caller may do from the lists, so each row carries the caller's own
-// role and nothing of anybody else's.
 describe("the list routes answer the caller's own role", () => {
   it("organizations carry org_role for the caller's rows only, with the same keys on every row", async () => {
     const caller = await signedUser(fx, "roles-org");

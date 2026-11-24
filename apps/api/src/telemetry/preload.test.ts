@@ -22,7 +22,7 @@ describe("the telemetry preload", () => {
     },
   );
 
-  // An endpoint can carry userinfo or a token (AGENTS 4.2, 4.7): a bad one is kept as the short config error that
+  // An endpoint can carry userinfo or a token: a bad one is kept as the short config error that
   // `main` throws at the start of start-up (reported on stderr, exit code 1), never thrown at import.
   it.each(["http://user:endpoint-canary-0001@", "ftp://user:endpoint-canary-0001@collector.example.test"])(
     "a bad endpoint (%s) is kept as a config error that names the setting and never echoes the value",

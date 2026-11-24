@@ -30,8 +30,6 @@ async function submit(
 const signInCalls = (stub: Awaited<ReturnType<typeof submit>>["stub"]) =>
   stub.mock.calls.filter(([path]) => path.includes("/api/auth/sign-in/email"));
 
-// NFR-SEC-28..30: the form never submits natively, the fields say what they are, and the password goes nowhere but the
-// one POST.
 describe("the sign-in form (security floor)", () => {
   it("a submit is prevented, so the browser never sends a GET with the password in the URL", async () => {
     stubApi();
@@ -84,7 +82,6 @@ describe("the sign-in form (security floor)", () => {
   });
 });
 
-// R378, R410: where a successful sign-in goes is only ever a path on this origin.
 describe("after a successful sign-in", () => {
   it.each([
     ["a path on this origin", "/w/w2", "/w/w2"],
@@ -163,7 +160,6 @@ describe("the sign-in button", () => {
   });
 });
 
-// R403, R410: the auth routes are outside the session guard, and the mailed `/auth/sign-in` link has a page.
 describe("the auth routes", () => {
   it.each([
     ["/sign-in", "/sign-in"],

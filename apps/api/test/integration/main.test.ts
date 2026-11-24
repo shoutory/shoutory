@@ -77,7 +77,7 @@ afterAll(async () => {
   await Promise.all(Object.values(logins).map((login) => login.drop()));
 });
 
-// R316: `worker` runs no HTTP, `all` runs HTTP and the worker in one process; both beat before the start returns.
+// `worker` runs no HTTP, `all` runs HTTP and the worker in one process; both beat before the start returns.
 describe("process roles", () => {
   it.each(["worker", "all"] as const)("role %s beats at once, and only `all` listens", async (role) => {
     const db = await cloneTemplate(testEnv, inject("shoutoryTemplate"));

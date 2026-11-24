@@ -13,9 +13,6 @@ import { FAKE_CLIENT, mintTokens } from "../support/oauth-fake.js";
 import { addWorkspaceMember, seedOrganization, seedWorkspace, signedUser } from "../support/tenancy.js";
 import { type Fixture, keys, PEPPER, startFixture } from "./auth/harness.js";
 
-// "Check now" (R532 (13)-(15), R542): one on-demand read of a channel's provider with its sealed access token, stored
-// with its check time. A failed read never disconnects, a denied caller never causes a provider call, and the token
-// never leaves the sealed store. Every provider answer is real HTTP to the fixture OAuth network on loopback.
 type User = { id: string; cookie: string };
 const manifest = manifestSchema.parse(fixtureOAuthManifest);
 let fx: Fixture;
@@ -80,7 +77,6 @@ const snapshotCount = (channel: string) =>
         )
       ).rows[0].n as number,
   );
-// Lets the next check through: the cooldown reads `health_checked_at`.
 const backdate = (channel: string) =>
   fx.admin((c) =>
     c.query(
@@ -94,7 +90,6 @@ interface Made {
   access: string;
   refresh: string | undefined;
 }
-// A connected channel holding tokens the fake issued; `due` makes its access token already expired.
 async function channelWith(
   options: { due?: boolean; refresh?: boolean; state?: string } = {},
 ): Promise<Made> {
@@ -181,10 +176,8 @@ describe("the answer of a check", () => {
     };
     expect(Object.keys(body.data).sort()).toEqual(Object.keys(shown.data).sort());
     expect(body.data).toMatchObject({ id: channelId, health: "ok", connection_state: "connected" });
-    // The actions are an allowed field of every channel answer; their value is the actions table's to test.
     expect(Object.keys(body.data)).toContain("actions");
     expect(body.data.health_checked_at).toEqual(expect.any(String));
-    // AGENTS 4.2: neither token is in the body or in any log line of the app, in any of the six spellings.
     expect(leaks(`${text}\n${fx.logged.join("\n")}`, [access, ...(refresh ? [refresh] : [])])).toEqual([]);
   });
 
@@ -249,11 +242,10 @@ describe("what a check does to the channel", () => {
   );
 });
 
-describe("a check of a channel whose access token is due (R542 (5))", () => {
+describe("a check of a channel whose access token is due", () => {
   const refused = (status: number, error: string) => ({ kind: "respond" as const, status, body: { error } });
   // [the setup, what the token route answers, the health, the state, whether the provider is read at all]
-  // The state is asserted where the check itself leaves it connected; a revocation's move to needs_reconnect is the
-  // refresh service's own behaviour, tested in credential-refresh (R543 (4)), so that row names no state.
+  // A revocation's move to needs_reconnect belongs to the refresh service and is tested there, so that row names no state.
   const DUE: [
     string,
     { refresh?: boolean },

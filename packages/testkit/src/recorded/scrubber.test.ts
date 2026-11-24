@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { type RecordedExchange, scrubExchange } from "./scrubber.js";
 
-// A canary is assembled at run time from joined pieces, so no secret-shaped literal sits in the source. It carries a quote,
-// a backslash, a plus, a colon, a space and an apostrophe, so each encoding below differs from the raw value.
+// Joined at run time so no secret-shaped literal sits in the source. The quote, backslash, plus, colon, space and
+// apostrophe make each encoding below differ from the raw value.
 const canary = (kind: string) => `${["can", "ary"].join('"')}\\${kind}+a:b c'd`;
 
-// A secret inside a longer string, base64-encoded after `offset` other bytes: the characters that depend on the secret
-// alone are the ones from the first full character it covers to the last one it fills.
+// `middle` is the part of the base64 that depends on the secret alone, from the first full character it covers to the last it fills.
 const embedded = (secret: string, offset: number) =>
   Buffer.concat([Buffer.alloc(offset, "x"), Buffer.from(secret), Buffer.from("tail-1")]).toString("base64");
 const middle = (secret: string, offset: number) => {
@@ -14,7 +13,6 @@ const middle = (secret: string, offset: number) => {
   return whole.toString("base64").slice(Math.ceil((8 * offset) / 6), Math.floor((8 * whole.length) / 6));
 };
 
-// Each form: how the secret may be echoed, and the text that must not survive (the same, except for the embedded forms).
 interface Form {
   readonly name: string;
   readonly echo: (secret: string) => string;
@@ -50,20 +48,17 @@ const HOST = "https://api.fixture.example";
 const PLANTED = "planted-visible-1";
 
 interface Placed extends Pick<RecordedExchange["request"], "url" | "headers" | "body"> {
-  // Set when the secret naturally sits in the answer instead of the request.
   readonly response?: { readonly headers?: Record<string, string>; readonly body?: string };
 }
 
 const JSON_HEADERS = { "content-type": "application/json" };
 
-// A token-endpoint answer holding one secret member next to members that are not secret.
 const tokenAnswer = (member: string) => (s: string) => ({
   url: `${HOST}/token`,
   headers: {},
   response: { headers: JSON_HEADERS, body: JSON.stringify({ token_type: "bearer", [member]: s }) },
 });
 
-// Each kind: the exchange the secret naturally appears in, in the place a provider puts it.
 const KINDS: [string, (secret: string) => Placed][] = [
   [
     "set-cookie response header",
@@ -195,7 +190,6 @@ const KINDS: [string, (secret: string) => Placed][] = [
   ],
 ];
 
-// The secret in its natural place, and echoed back in the answer in the form under test.
 function exchangeWith(kind: string, build: (typeof KINDS)[number][1], form: Form) {
   const secret = canary(kind);
   const { body, response, ...rest } = build(secret);
@@ -212,7 +206,6 @@ function exchangeWith(kind: string, build: (typeof KINDS)[number][1], form: Form
   return { secret, exchange };
 }
 
-// Every string in the exchange, so a secret cannot hide behind JSON escaping of the whole value.
 function everyString(value: unknown): string[] {
   if (typeof value === "string") return [value];
   if (typeof value !== "object" || value === null) return [];

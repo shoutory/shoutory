@@ -15,7 +15,6 @@ const json = (body: unknown, status = 200) =>
 afterEach(() => vi.unstubAllGlobals());
 
 describe("the api client", () => {
-  // The server refuses an unsafe call without the header (security/csrf.ts), so every one must carry it.
   it.each(["POST", "PUT", "PATCH", "DELETE"])("a %s call sends X-Shoutory-Client: web", async (method) => {
     const fetchStub = stubFetch(json({ data: { open: true } }));
     await request(answer, "/api/v1/instance/signup", { method, body: {} });
@@ -32,7 +31,6 @@ describe("the api client", () => {
     await expect(request(answer, "/api/v1/instance/signup")).rejects.toBeInstanceOf(ApiError);
   });
 
-  // The state each failure leads to: the guard and the screens read `state`, never the code or the status.
   it.each([
     ["unauthenticated", 401, "session_expired"],
     ["forbidden", 403, "forbidden"],
@@ -45,8 +43,6 @@ describe("the api client", () => {
     await expect(request(answer, "/api/v1/x")).rejects.toMatchObject({ state, code, requestId: "r1" });
   });
 
-  // R410: only the code `unauthenticated` is an ended session; a 401 that says anything else (wrong credentials, a
-  // wrong code) is an answer of the screen's own form and never reads as an ended session.
   it.each([
     ["unauthenticated", json({ error: { code: "unauthenticated", message: "m" } }, 401), "session_expired"],
     ["invalid_credentials", json({ error: { code: "invalid_credentials", message: "m" } }, 401), "error"],
@@ -84,7 +80,6 @@ describe("the details of a refusal", () => {
 });
 
 describe("the api client while it reads the body", () => {
-  // R387: the 15 s limit also covers reading the body; a timeout or a dropped stream there is a network failure too.
   it.each([
     ["a dropped stream", () => new TypeError("terminated")],
     ["a timeout", () => new DOMException("The operation timed out", "TimeoutError")],
@@ -131,9 +126,6 @@ describe("the api client while it reads the body", () => {
   });
 });
 
-// R394, R410: a library-forwarded answer has no `{data}` envelope (sign-in answers `{user}` or `{twoFactorRedirect}`,
-// sign-out `{success}`); `envelope: false` parses the bare body with the schema, with the header, timeout and error
-// mapping of every other call.
 const bare = z.union([
   z.object({ user: z.object({ id: z.string() }) }),
   z.object({ twoFactorRedirect: z.literal(true) }),

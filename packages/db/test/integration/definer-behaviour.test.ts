@@ -18,7 +18,6 @@ interface Fixture {
   user: string;
 }
 
-/** One clone with one user, made through the auth role as sign-up does. */
 function useUser(): Fixture {
   let db: TestDatabase;
   let auth: Pool;
@@ -95,7 +94,6 @@ describe("every 0005 definer restores the caller's job purpose", () => {
   });
 });
 
-/** One user who owns an organization and its one workspace. */
 async function seedOwnerOfWorkspace(
   admin: Client,
   user: string,
@@ -118,7 +116,6 @@ async function seedOwnerOfWorkspace(
 // A creation call spends a tenant_create token; a fresh key per call keeps these tests off each other's bucket.
 const FRESH_KEY = "encode(sha256(convert_to(gen_random_uuid()::text, 'UTF8')), 'hex')";
 
-/** One call of each 0009 definer, for a user who owns the organization and its workspace. */
 const accessCalls = (organization: string, workspace: string): [string, string, unknown[]][] => [
   ["resolve_workspace_access", "SELECT * FROM app.resolve_workspace_access()", []],
   ["my_workspaces", "SELECT * FROM app.my_workspaces(10, NULL)", []],
@@ -132,8 +129,8 @@ const accessCalls = (organization: string, workspace: string): [string, string, 
   ["organization_create", `SELECT app.organization_create('n', 'team', NULL, NULL, ${FRESH_KEY})`, []],
 ];
 
-// The 0009 definers, as a signed-in user. member_directory and my_workspaces call resolve_workspace_access inside,
-// so their rows also prove that a nested call puts the outer purpose back.
+// member_directory and my_workspaces call resolve_workspace_access inside, so their rows also prove that a nested
+// call puts the outer purpose back.
 describe("every 0009 definer restores the caller's job purpose", () => {
   const user = randomUUID();
   const organization = randomUUID();
@@ -166,7 +163,6 @@ describe("every 0009 definer restores the caller's job purpose", () => {
   });
 });
 
-// The 0010 definers, each called by a user who may, with a prior purpose set and not set.
 describe("every 0010 definer restores the caller's job purpose", () => {
   let db: TestDatabase;
   let revokeId = "";
@@ -217,7 +213,6 @@ describe("every 0010 definer restores the caller's job purpose", () => {
 
 type Principal = { id?: string; kind?: string };
 
-/** One instance_setting_set call in its own transaction, with the settings of a session; returns the purpose after. */
 async function setInstanceSetting(
   t: Fixture,
   who: Principal,

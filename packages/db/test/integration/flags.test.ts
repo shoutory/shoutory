@@ -12,7 +12,7 @@ import { asUser, attempt, commitAs } from "../support/members-seed.js";
 
 const env = readTestEnv();
 
-/** Commits one statement as a user; the error comes back, so a missing definer fails an assertion, not the run. */
+// The error comes back, so a missing definer fails an assertion, not the run.
 async function commit(pool: Pool, user: string, sql: string, params: unknown[]): Promise<unknown> {
   try {
     await commitAs(pool, user, sql, params);
@@ -22,9 +22,6 @@ async function commit(pool: Pool, user: string, sql: string, params: unknown[]):
   }
 }
 
-// Security floor of the flags slice: a reader sees only the overrides of its own scope, and instance-wide state
-// changes only by an instance admin, with an audit row. (FORCE RLS and the empty runtime grants of the two tables are
-// asserted by rls-catalog and runtime-grants.)
 const OA = randomUUID();
 const OB = randomUUID();
 const WA = randomUUID();
@@ -36,7 +33,6 @@ const EXPIRED = "flag-expired-1";
 
 interface Fixture {
   db: () => TestDatabase;
-  /** The error the seed ended with, if any: a missing table fails the tests by assertion, not by a crash. */
   seeded: () => unknown;
   rows: (sql: string, params?: unknown[]) => Promise<Record<string, unknown>[]>;
 }
@@ -141,7 +137,6 @@ const REQUEST = "req-flags-1";
 const ADDRESS = Buffer.alloc(32, 7);
 const ADDRESS_HEX = ADDRESS.toString("hex");
 const OVERRIDE_SQL = "SELECT app.feature_flag_override_set($1, $2, $3, $4)";
-/** The one instance-chain audit row an admin write leaves: no workspace, the admin as actor, the request and address. */
 const instanceAuditRow = (resourceKind: string, resourceId: string) => ({
   workspace_id: null,
   organization_id: null,

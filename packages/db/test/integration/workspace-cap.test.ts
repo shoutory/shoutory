@@ -11,7 +11,6 @@ import { holdThenRace, openTx } from "../support/race.js";
 
 const env = readTestEnv();
 
-// workspace_create refuses the 101st workspace of an organization (R228, R240). Archived rows count too (R251).
 const FULL = randomUUID();
 const ALMOST = randomUUID();
 const OWNER = randomUUID();

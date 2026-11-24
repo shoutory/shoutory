@@ -4,10 +4,9 @@ import { EgressError } from "./errors.js";
 // A Response may not carry a body for these statuses.
 const NO_BODY = new Set([101, 204, 205, 304]);
 
-/** What an egress failure is to an adapter: the error codes it already classifies, and nothing of the original. */
 function adapterError(error: unknown): unknown {
   if (!(error instanceof EgressError)) return error;
-  // The class (never the host) rides along, so a caller can tell a refused address from an unreachable one (`isPolicyRefusal`).
+  // The class (never the host) rides along, so a caller can tell a refused address from an unreachable one.
   if (error.effect === "none")
     return new TypeError("fetch failed", { cause: { code: "ECONNREFUSED", egress: error.class } });
   if (error.class === "timeout") return new DOMException("the call timed out", "TimeoutError");
@@ -21,11 +20,6 @@ const headersOf = (reply: EgressResponse): Headers =>
     ),
   );
 
-/**
- * The `fetch` of an adapter's context, made from a bound egress call (the one network path of the core, AGENTS 4.5): the
- * answer is a `Response` of its status, headers and body, and an egress failure is rethrown as the network error an adapter
- * knows how to classify (before the request was sent, a timeout, a cut connection).
- */
 export function fetchOf(egress: (request: EgressRequest) => Promise<EgressResponse>): typeof fetch {
   return async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;

@@ -3,9 +3,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { signedUser } from "../support/tenancy.js";
 import { cookieOf, type Fixture, PASSWORD, startFixture } from "./auth/harness.js";
 
-// The operator routes of the queue, mail and release screens. Only an instance admin reaches them: anyone else is told
-// the route does not exist (the definers behind the queue read are not admin-gated themselves). The mail test also
-// needs a recent step-up, queues one message to the caller's own address and is throttled.
 const QUEUE = "/api/v1/admin/queue";
 const SYSTEM = "/api/v1/admin/system";
 const DNS = "/api/v1/admin/mail/check";
@@ -28,7 +25,6 @@ afterAll(async () => {
   await fx.close();
 });
 
-/** A fresh sign-in of the instance admin: its step-up is recent. */
 const login = async (): Promise<string> =>
   cookieOf(await fx.request("/api/auth/sign-in/email", { body: { email: adminEmail, password: PASSWORD } }));
 const send = (method: "GET" | "POST", path: string, cookie: string) =>

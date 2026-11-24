@@ -7,7 +7,6 @@ const dialog = () => document.querySelector('[role="dialog"]');
 const search = () => document.querySelector<HTMLInputElement>('[role="dialog"] input') as HTMLInputElement;
 const options = () => [...document.querySelectorAll('[role="option"]')].map((option) => option.textContent);
 
-// ux-spec X-02 (M0: switch client): an Autocomplete in a Dialog, opened by Ctrl/Cmd+K or by its visible button.
 describe("the command palette", () => {
   it.each([
     ["Ctrl+K", { ctrlKey: true }],
@@ -38,7 +37,6 @@ describe("the command palette", () => {
     expect(router.state.location.pathname).toBe("/w/w2");
     expect(dialog()).toBeNull();
     expect(document.activeElement).toBe(document.querySelector("h1"));
-    // The search text goes with the dialog: a reopened palette starts clean.
     press(document.body, "k", { ctrlKey: true });
     expect(search().value).toBe("");
   });

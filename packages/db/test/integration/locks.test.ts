@@ -5,7 +5,6 @@ import { cloneTemplate, readTestEnv, type TestDatabase } from "../../src/testing
 
 const env = readTestEnv();
 
-// Class ids 1 and 2 are the migrate and channel classes; pg_locks shows each held advisory lock of this database.
 const held = (db: TestDatabase, classId: number) =>
   db
     .pool("owner")
@@ -72,7 +71,6 @@ describe("withAdvisoryLock", () => {
   });
 });
 
-// The two transaction-scoped classes behave alike; each row is one class with its fixed class id (R318).
 describe.each<["channel" | "maintenance", number]>([
   ["channel", 2],
   ["maintenance", 3],

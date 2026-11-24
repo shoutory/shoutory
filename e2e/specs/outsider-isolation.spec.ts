@@ -3,7 +3,6 @@ import { type APIResponse, expect, test } from "@playwright/test";
 import { confirmEmail, createClient, loadFounder, newAccount, signIn, signUp } from "../support/journey";
 import { waitForLink } from "../support/mail";
 
-// Tenant isolation: the workspace is the unit. A person who belongs only to another workspace sees none of this one.
 test("an outsider with an account sees no trace of the workspace: not in the list, /w/<id> shows not-found, its members API answers not-found", async ({
   page,
   browser,
@@ -39,7 +38,6 @@ test("an outsider with an account sees no trace of the workspace: not in the lis
   await expect(seen.getByTestId("not-found")).toBeVisible();
   await expect(seen.getByTestId("workspace-name")).toHaveCount(0);
 
-  // The outsider's own workspace answers; the founder's answers exactly as an id that never existed does.
   const own = await seen.request.get(`/api/v1/workspaces/${other.id}/members`);
   expect(own.status()).toBe(200);
   const refused = await refusalOf(

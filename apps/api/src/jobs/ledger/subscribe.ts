@@ -8,7 +8,7 @@ import type { Logger } from "../../logging/logger.js";
 import { runTurn } from "./turn.js";
 
 // One job drains at most this many turns; a queue that still has work gets a new wake-up, so one job never holds the
-// worker for ever and the queue's other jobs are not starved (AGENTS 6.6).
+// worker for ever and the queue's other jobs are not starved.
 const MAX_TURNS_PER_JOB = 10;
 // A wake-up waits at most this long for its worker: a post due now is not held back for the queue's default poll.
 const POLL_SECONDS = 1;
@@ -21,16 +21,11 @@ export interface PublishSubscription {
   readonly adapters: AdapterMap;
   readonly fetchFor: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
   readonly keys: KeyProvider;
-  /** The lease owner: one value for the worker process. */
   readonly owner: string;
-  /** Aborts when the worker closes: a turn in flight hands its row back and no new one starts. */
   readonly closing: AbortSignal;
 }
 
-/**
- * Takes the wake-ups of each provider that has an adapter and runs turns on its publish queue, one at a time (a provider
- * queue has `localConcurrency` 1 here). A wake-up carries nothing: the ledger row is the truth.
- */
+// A wake-up carries nothing: the ledger row is the truth.
 export async function subscribePublish(options: PublishSubscription): Promise<void> {
   for (const manifest of options.registry.manifests) {
     if (options.adapters[manifest.id] === undefined) continue;

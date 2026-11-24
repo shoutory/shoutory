@@ -16,8 +16,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-// Table metadata for the typed query builder. The migration files are the source of truth for the database; a
-// test compares this file with the migrated catalog.
+// The migration files are the source of truth for the database; a test compares this file with the migrated catalog.
 export const app = pgSchema("app");
 export const auth = pgSchema("auth");
 
@@ -30,7 +29,7 @@ export const schemaMigrations = app.table("schema_migrations", {
   appliedAt: stamp("applied_at").notNull().defaultNow(),
 });
 
-// Identity tables: the authentication library's, reached only through the auth role.
+// The authentication library's tables, reached only through the auth role.
 export const authUser = auth.table("user", {
   id: id(),
   name: text("name").notNull(),
@@ -93,7 +92,7 @@ export const authTwoFactor = auth.table("two_factor", {
   lockedUntil: stamp("locked_until"),
 });
 
-// Throttle and step-up state: written only through definer functions.
+// Written only through definer functions.
 export const rateBuckets = app.table(
   "rate_buckets",
   {
@@ -125,7 +124,7 @@ export const userProfiles = app.table("user_profiles", {
 // The sealed fields of a stored secret are raw bytes; Drizzle has no bytea builder at the pin.
 const bytea = customType<{ data: Buffer }>({ dataType: () => "bytea" });
 
-// The mail outbox: written and read only through definer functions. The sealed link columns are NULL after send.
+// Written and read only through definer functions. The sealed link columns are NULL after send.
 export const emailOutbox = app.table("email_outbox", {
   id: uuid("id").primaryKey(),
   workspaceId: uuid("workspace_id"),
@@ -158,7 +157,7 @@ export const instanceAdmins = app.table("instance_admins", {
   grantedAt: stamp("granted_at").notNull().defaultNow(),
 });
 
-// Tenancy: the runtime role reads these tables; organization and membership writes come from definer functions.
+// The runtime role reads these tables; organization and membership writes come from definer functions.
 export const organizations = app.table("organizations", {
   id: id(),
   name: text("name").notNull(),
@@ -264,8 +263,8 @@ export const featureFlagOverrides = app.table("feature_flag_overrides", {
   on: boolean("on").notNull(),
 });
 
-// The audit log is partitioned by month on `at` and written only through the audit definers; its leaf partitions
-// are not declared. The head table holds the last hash of each chain (a workspace and a UTC day).
+// Partitioned by month on `at`, leaf partitions not declared; written only through the audit definers. The head
+// table holds the last hash of each chain (a workspace and a UTC day).
 export const auditLogs = app.table(
   "audit_logs",
   {
@@ -287,8 +286,8 @@ export const auditLogs = app.table(
   (table) => [primaryKey({ columns: [table.at, table.id] })],
 );
 
-// The event outbox: partitioned by day on `created_at`, leaves not declared, reached only through definers. `xid` is
-// the writer's transaction id (xid8), the relay's visibility cursor together with the id.
+// Partitioned by day on `created_at`, leaves not declared, reached only through definers. `xid` is the writer's
+// transaction id (xid8), the relay's visibility cursor together with the id.
 const xid8 = customType<{ data: string }>({ dataType: () => "xid8" });
 export const outbox = app.table(
   "outbox",
@@ -335,7 +334,7 @@ export const auditHeads = app.table("audit_heads", {
   headHash: bytea("head_hash").notNull(),
 });
 
-// Channels: a connected account of a workspace. Rows come from connect definers; the app role writes the nickname only.
+// Rows come from connect definers; the app role writes the nickname only.
 export const channels = app.table("channels", {
   id: id(),
   workspaceId: uuid("workspace_id")
@@ -390,7 +389,7 @@ export const syncCursors = app.table(
   (table) => [primaryKey({ columns: [table.workspaceId, table.channelId, table.stream] })],
 );
 
-// The platform's OAuth applications, instance-level and definer-only; the client secret is stored sealed.
+// Definer-only; the client secret is stored sealed.
 const sealedSecret = () => ({
   secretCiphertext: bytea("secret_ciphertext").notNull(),
   secretIv: bytea("secret_iv").notNull(),
@@ -422,7 +421,7 @@ export const providerInstanceApps = app.table("provider_instance_apps", {
   ...sealedSecret(),
 });
 
-// One salt per workspace wraps every credential's data key (crypto-shred); definer-only.
+// One salt per workspace wraps every credential's data key, so deleting it shreds them; definer-only.
 export const workspaceKeySalts = app.table("workspace_key_salts", {
   workspaceId: uuid("workspace_id")
     .primaryKey()
@@ -431,7 +430,6 @@ export const workspaceKeySalts = app.table("workspace_key_salts", {
   createdAt: stamp("created_at").notNull().default(sql`clock_timestamp()`),
 });
 
-// The sealed credential of a channel, its refresh lease and attempt marker; definer-only.
 export const channelCredentials = app.table("channel_credentials", {
   id: id(),
   workspaceId: uuid("workspace_id").notNull(),
@@ -457,7 +455,6 @@ export const channelCredentials = app.table("channel_credentials", {
   refreshAttemptOutcome: text("refresh_attempt_outcome"),
 });
 
-// An OAuth connect in progress: the state digest and one sealed object (verifier and optional DPoP key); definer-only.
 export const oauthFlows = app.table("oauth_flows", {
   id: id(),
   workspaceId: uuid("workspace_id").notNull(),
@@ -479,7 +476,6 @@ export const oauthFlows = app.table("oauth_flows", {
   consumedAt: stamp("consumed_at"),
 });
 
-// A chat connect word: the digest of what the chat sends, single use; definer-only.
 export const connectChallenges = app.table("connect_challenges", {
   id: id(),
   workspaceId: uuid("workspace_id").notNull(),
@@ -489,7 +485,7 @@ export const connectChallenges = app.table("connect_challenges", {
   consumedAt: stamp("consumed_at"),
 });
 
-// An uploaded original and what is known of it; written only by the media definers.
+// Written only by the media definers.
 export const mediaAssets = app.table("media_assets", {
   id: id(),
   workspaceId: uuid("workspace_id").notNull(),
@@ -514,7 +510,6 @@ export const mediaAssets = app.table("media_assets", {
   objectRemovedAt: stamp("object_removed_at"),
 });
 
-// The upload session of an asset (multipart id and parts; empty for a single request).
 export const mediaUploads = app.table("media_uploads", {
   id: id(),
   workspaceId: uuid("workspace_id").notNull(),
@@ -529,7 +524,6 @@ export const mediaUploads = app.table("media_uploads", {
   completedAt: stamp("completed_at"),
 });
 
-// A processed copy of an original, one per profile.
 export const mediaDerivatives = app.table("media_derivatives", {
   id: id(),
   workspaceId: uuid("workspace_id").notNull(),
@@ -542,7 +536,7 @@ export const mediaDerivatives = app.table("media_derivatives", {
   error: text("error"),
 });
 
-// A post; its text lives in the variants and `currentVersionId` is its ETag. Written only by the post definers.
+// Its text lives in the variants and `currentVersionId` is its ETag. Written only by the post definers.
 export const posts = app.table("posts", {
   id: id(),
   workspaceId: uuid("workspace_id").notNull(),
@@ -561,7 +555,7 @@ export const posts = app.table("posts", {
   updatedAt: stamp("updated_at").notNull().default(sql`clock_timestamp()`),
 });
 
-// One saved state of a post; inserted once, never changed. The snapshot holds the draft the variants are rebuilt from.
+// Inserted once, never changed. The snapshot holds the draft the variants are rebuilt from.
 export const postVersions = app.table("post_versions", {
   id: id(),
   workspaceId: uuid("workspace_id").notNull(),
@@ -577,7 +571,6 @@ export const postVersions = app.table("post_versions", {
 // The wall-clock time of a due date, without a zone: the zone is `due_tz`.
 const localStamp = customType<{ data: string }>({ dataType: () => "timestamp without time zone" });
 
-// A post's content for one channel and locale; its id is the publish target.
 export const postVariants = app.table("post_variants", {
   id: id(),
   workspaceId: uuid("workspace_id").notNull(),
@@ -601,7 +594,6 @@ export const postVariants = app.table("post_variants", {
   updatedAt: stamp("updated_at").notNull().default(sql`clock_timestamp()`),
 });
 
-// The media of a variant in order.
 export const postMedia = app.table(
   "post_media",
   {
@@ -615,7 +607,6 @@ export const postMedia = app.table(
   (table) => [primaryKey({ columns: [table.workspaceId, table.variantId, table.position] })],
 );
 
-// The keys of the public API; no definer reads them before the API exists.
 export const idempotencyKeys = app.table(
   "idempotency_keys",
   {

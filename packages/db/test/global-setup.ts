@@ -7,7 +7,6 @@ declare module "vitest" {
   }
 }
 
-// Builds the migrated template database once per run; every test file clones it.
 export default async function setup(project: TestProject): Promise<() => Promise<void>> {
   const env = readTestEnv();
   const template = await createTemplate(env);

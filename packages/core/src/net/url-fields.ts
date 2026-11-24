@@ -1,9 +1,5 @@
-/**
- * Every field that lets a user or an operator point the server at a host, and the route its requests take.
- * `egress`: through the egress guard. `operator_exception`: a driver the operator configures, listed in
- * `packages/testkit/test/invariants/egress-operator-exceptions.json` under `exceptionId`.
- * A slice that adds a URL field adds its row here and its test; the milestone is the one that ships the field.
- */
+// `operator_exception`: a driver the operator configures, listed in
+// `packages/testkit/test/invariants/egress-operator-exceptions.json` under `exceptionId`.
 export interface UrlField {
   readonly id: string;
   readonly route: "egress" | "operator_exception";
@@ -20,9 +16,7 @@ const exception = (id: string, exceptionId: string): UrlField => ({
 });
 
 export const URL_FIELDS: readonly UrlField[] = [
-  // The server a user connects a channel to by typing its address.
   egress("server-instance-url", "M1"),
-  // The server that holds a user's identity, given as a URL, and the handle that is resolved to one.
   egress("identity-server-url", "M1"),
   egress("identity-handle", "M1"),
   egress("media-import", "M1"),
@@ -32,7 +26,6 @@ export const URL_FIELDS: readonly UrlField[] = [
   egress("notification-webhook", "M3"),
   egress("webhook-target", "M4"),
   egress("cimd", "M4"),
-  // The address of a self-hosted site a user connects.
   egress("site-url", "M5"),
   egress("ai-base-url", "M7"),
   exception("s3-endpoint", "s3-driver"),

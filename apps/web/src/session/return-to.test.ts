@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { safeReturnTo } from "./return-to";
 
-// The sign-in page sends the visitor back to `return-to`: only a path on this origin may be followed (R378).
 describe("the return-to value", () => {
   it.each([
     ["an absolute URL", "https://evil.example.test/x"],

@@ -10,14 +10,11 @@ import {
 
 const env = readTestEnv();
 
-// Security floor of migration 0006: the outbox holds a sealed link that only definer functions may touch. Each
-// purpose policy opens only the read it names. The grants and the definer hygiene are in the catalog tests.
-
 const hex = (n: number) => `\\x${n.toString(16).padStart(2, "0").repeat(4)}`;
 // Time-ordered ids, so the batch order is the insert order.
 const id = (n: number) => `00000000-0000-7000-8000-${String(n).padStart(12, "0")}`;
 
-/** One sealed row; the bytes are placeholders, the definers never open a link. */
+// The bytes are placeholders, the definers never open a link.
 async function seed(admin: Client, n: number, keyId: string, generation = 0, sealed = true): Promise<void> {
   const part = (value: string) => (sealed ? value : null);
   await admin.query(
@@ -88,7 +85,6 @@ describe("email_outbox: definers", () => {
   });
 });
 
-// R91: a definer puts the caller's job purpose back at exit.
 describe("email_outbox: definers restore the job purpose", () => {
   const calls = (): [string, string, string, unknown[]][] => [
     ["sealed_key_ids", "app", "SELECT * FROM app.sealed_key_ids()", []],

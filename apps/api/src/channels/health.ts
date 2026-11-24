@@ -6,7 +6,6 @@ import type { ProviderResult } from "@shoutory/provider-sdk/result";
 import { snapshotOf } from "@shoutory/provider-sdk/snapshot";
 import { CredentialError, type CredentialService, deadlineFetch } from "./credentials.js";
 
-/** The provider behind a channel: its adapter and its manifest (the snapshot is made from it). */
 export interface HealthProvider {
   readonly adapter: ProviderAdapter;
   readonly manifest: Manifest;
@@ -15,19 +14,10 @@ export interface HealthProvider {
 export interface HealthCheckerDeps {
   readonly credentials: CredentialService;
   readonly fetch: typeof fetch;
-  /** The egress client bound to the one host a channel stored, for a provider whose accounts live on user-chosen servers. */
   readonly fetchFor?: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
   readonly now: () => Date;
 }
 
-/**
- * The on-demand read of a channel's health (R542). A due access token is refreshed first through the credential
- * service: a refresh retried later reads `degraded`, any other refresh that did not succeed reads `failing`, and in
- * neither case is the provider read. What the read answers is classed by `healthOf`; no reading moves a connection state.
- * It returns the health and the capability snapshot to record with it (the limits an instance states replace the
- * manifest's documented ones), and holds no database transaction while the provider is called (AGENTS 3.7); the caller
- * records it in one of its own.
- */
 export function createHealthChecker(deps: HealthCheckerDeps) {
   const failing = (provider: HealthProvider, health: Health) => ({
     health,
@@ -47,7 +37,6 @@ export function createHealthChecker(deps: HealthCheckerDeps) {
       : { ...snapshot, limits: { ...snapshot.limits, ...result.limits } };
   };
 
-  // The one provider call: with the instance host the channel stored, through the egress client bound to it.
   async function inspect(
     workspaceId: string,
     channelId: string,

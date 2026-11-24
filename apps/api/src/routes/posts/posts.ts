@@ -10,10 +10,6 @@ import { definerRefusal } from "../definer-refusal.js";
 import { pageAnswer, pageQuery } from "../input.js";
 import { resolveDraft } from "./resolve.js";
 
-// The posts of one workspace: create, read, the list of versions, autosave, save and restore. A member with posts.view
-// reads and posts.edit changes. Every change goes through a post definer, which checks the caller again; the answer to
-// a change carries the new version as its ETag, and a change names the version it is based on in If-Match.
-
 const uuid = z.uuid().transform((id) => id.toLowerCase());
 const workspaceParams = z.strictObject({ workspace_id: uuid });
 const postParams = z.strictObject({ workspace_id: uuid, post_id: uuid });
@@ -25,7 +21,6 @@ const BASE = "/api/v1/workspaces/{workspace_id}/posts";
 const VIEW = { workspace: "workspace_id", permission: "posts.view" } as const;
 const EDIT = { workspace: "workspace_id", permission: "posts.edit" } as const;
 
-/** An answer that carries the version it shows as its strong ETag. */
 const answer = (c: Context<AppEnv>, status: 200 | 201, data: unknown, version: string): Response =>
   c.json({ data }, status, { ETag: `"${version}"` });
 
@@ -44,7 +39,6 @@ function databaseRefusal(error: unknown): Refusal | undefined {
   return code === "23503" ? refuse("conflict", "reference_removed") : undefined;
 }
 
-/** Runs one definer call and turns its refusals into answers. */
 async function callDefiner(tx: TenantTx, sql: string, params: unknown[]): Promise<Record<string, string>> {
   try {
     return ((await tx.query(sql, params)).rows[0] ?? {}) as Record<string, string>;
@@ -77,7 +71,7 @@ function registerCreate(app: App, providers: Providers, now: () => Date): void {
 const POST = `SELECT id, status, current_version_id, author_kind, author_id, created_at, updated_at
   FROM app.posts WHERE workspace_id = $1 AND id = $2 AND deleted_at IS NULL`;
 
-// RLS template W does not hide a deleted post, so every read and write path says so itself.
+// Row security does not hide a deleted post, so every read and write path says so itself.
 async function livePost(tx: TenantTx, scope: AuthorizedScope, postId: string) {
   const found = await tx.query(POST, [scope.workspaceId, postId]);
   const row = found.rows[0];
@@ -122,7 +116,7 @@ function registerVersions(app: App): void {
     query: pageQuery,
     handler: async ({ c, tx, scope, params, query }) => {
       const post = await livePost(tx, scope, params.post_id);
-      // Newest first: the cursor is a version id, read here as its number.
+      // The cursor is a version id, read here as its number.
       const found = await tx.query(
         `SELECT v.id, v.version_no, v.kind, v.created_by, v.created_at FROM app.post_versions AS v
          WHERE v.workspace_id = $1 AND v.post_id = $2 AND ($3::uuid IS NULL OR v.version_no < (
@@ -139,7 +133,6 @@ function registerVersions(app: App): void {
 
 const QUOTED_VERSION = /^"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"$/i;
 
-/** The version a change is based on: exactly one quoted version id in If-Match (no `*`, weak validator or list). */
 function expectedVersion(c: Context<AppEnv>): string {
   const header = c.req.header("if-match");
   if (header === undefined) throw new Refusal("precondition_required", "If-Match is missing");
@@ -152,7 +145,6 @@ function expectedVersion(c: Context<AppEnv>): string {
   return (found[1] as string).toLowerCase();
 }
 
-/** A stale outcome is the 412 that names the version the post is at now; the transaction ends with no change. */
 function settled(outcome: Record<string, string>, c: Context<AppEnv>, status: 200 | 201, postId: string) {
   const version = outcome.version_id as string;
   if (outcome.outcome === "stale") {
@@ -193,10 +185,7 @@ function registerChange(app: App, providers: Providers, now: () => Date, kind: k
   });
 }
 
-/**
- * The draft a version recorded, read as the document it was. A version of another post is not found. A draft that the
- * document check no longer takes (a bound tightened since) is refused like one that no longer resolves.
- */
+// A draft that the document check no longer takes (a bound tightened since) is refused like one that no longer resolves.
 async function recordedDraft(tx: TenantTx, scope: AuthorizedScope, postId: string, versionId: string) {
   const found = await tx.query(
     "SELECT snapshot -> 'draft' AS draft FROM app.post_versions WHERE workspace_id = $1 AND post_id = $2 AND id = $3",

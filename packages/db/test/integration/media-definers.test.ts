@@ -13,12 +13,6 @@ import { holdThenRace, openTx } from "../support/race.js";
 
 const env = readTestEnv();
 
-// Security floor of migration 0016 (R551): the media tables are written only by the media definers, a user never
-// reaches scanning, processing, ready or rejected, the one move table is enforced in `media_advance`, an original's
-// key and hash cannot change after upload, a hash is unique per workspace among the live states, and every row stays
-// in its own workspace. Grants and EXECUTE are also rows of runtime-grants and rls-catalog. Rows are planted as the
-// superuser, ages move by planting dates, nothing sleeps. The argument lists, the outcome names and the column
-// `deleted_at` are the contract the migration must meet (the data model gives no deletion time for the 30-day arm).
 let db: TestDatabase;
 const admin = <T>(run: (client: Client) => Promise<T>) => withAdminClient(env, db.name, run);
 const rows = (sql: string, params: unknown[] = []) =>
@@ -80,10 +74,8 @@ interface Planted {
   ageHours?: number;
   deletedDaysAgo?: number;
   removed?: boolean;
-  /** Also plants an open upload session for the asset. */
   session?: boolean;
 }
-// An asset as the superuser, in any state, with the key the definer would derive.
 async function plantAsset(o: Planted = {}): Promise<string> {
   const id = randomUUID();
   const ws = o.ws ?? WA;
@@ -115,7 +107,6 @@ async function plantAsset(o: Planted = {}): Promise<string> {
   }
   return id;
 }
-// `count` pending assets as the superuser, to stand at the cap without a hundred calls.
 const plantPending = (ws: string, count: number) =>
   rows(
     `INSERT INTO app.media_assets (id, workspace_id, object_key, file_name, source, created_by)
@@ -143,7 +134,6 @@ const register = (ws = WD) =>
   scalar("media_register", [ws, "register.png", "image/png", "upload", null, null, null]);
 const run = (ctx: TenantCtx, [sql, params]: [string, unknown[]]) =>
   attempt(db.pool(poolOf(ctx)), ctx, sql, params);
-// Runs one call under any principal and commits it.
 async function commit(
   ctx: TenantCtx,
   [sql, params]: [string, unknown[]],
@@ -161,7 +151,7 @@ async function commit(
 const EDITOR = asUser(U.editor);
 const ADMIN = asUser(U.admin);
 
-describe("a hash is unique per workspace among the live states (F-MEDIA-004)", () => {
+describe("a hash is unique per workspace among the live states", () => {
   const plant = (state: string, ws: string, sha: Buffer) =>
     plantAsset({ ws, state, sha }).catch((error) => error);
   it("refuses a second live asset, allows one after the first is deleted, and keeps the hash in another workspace", async () => {
@@ -269,7 +259,6 @@ describe("object_key keeps the prefix of its workspace", () => {
   });
 });
 
-// R553 (11): the upload session lives as long as the pending upload does before garbage collection takes it (24 hours).
 describe("media_register's upload session", () => {
   it("expires 24 hours after registration", async () => {
     const [made] = await commit(EDITOR, register());
@@ -282,16 +271,13 @@ describe("media_register's upload session", () => {
   });
 });
 
-// Every definer: the call it takes, the asset state it needs, and who may run it. A refusal is 42501 whatever the
-// reason (kind, rank, workspace), so a caller learns nothing about another workspace's rows.
+// A refusal is 42501 whatever the reason, so a caller learns nothing about another workspace's rows.
 interface Definer {
   name: string;
   state?: string;
-  /** The asset has an open upload session. */
   session?: true;
   build: (asset: string) => [string, unknown[]];
   valid: TenantCtx;
-  /** Refused although it is a member of the workspace: the kind this definer does not admit. */
   alsoRefused: TenantCtx;
 }
 const DEFINERS: Definer[] = [
@@ -351,8 +337,7 @@ const COMMON_REFUSED: [string, TenantCtx][] = [
 ];
 
 describe("who may run a media definer", () => {
-  // The candidate list takes no workspace: a job of any workspace is its caller and sees only its own workspaces' rows
-  // (the scope row of the gc describe proves that), so "a job of another workspace" is not a refusal for it.
+  // The candidate list takes no workspace: any job is a valid caller and sees only its own workspaces' rows.
   const refusedFor = (d: Definer) =>
     COMMON_REFUSED.filter(
       ([who]) => !(d.name === "media_gc_candidates" && who === "a job of another workspace"),
@@ -369,8 +354,6 @@ describe("who may run a media definer", () => {
     else expect(result.error).toMatchObject({ code: "42501" });
   });
 
-  // R552 (4), R553 (10): its valid caller never reaches another workspace's row, and the refusal is no existence
-  // oracle: another workspace's asset id and an id that exists nowhere give the same code and the same message.
   it.each(DEFINERS.filter((d) => !["media_register", "media_gc_candidates"].includes(d.name)))(
     "$name with its valid caller never reaches a row of another workspace and answers it as an unknown id",
     async (d) => {
@@ -386,8 +369,6 @@ describe("who may run a media definer", () => {
   );
 });
 
-// R553 (4): facts are the pipeline's: only a job move applies them, a person's move with facts is refused, and a fact
-// that is malformed or out of range answers 22023 (never the raw cast error).
 const FACTS = {
   ok: { width: 640, height: 480, duration_ms: 1000, mime: "image/png" },
   text: { width: "abc" },
@@ -432,12 +413,10 @@ describe("media_advance facts", () => {
   });
 });
 
-// R551: the one move table. A caller of the right kind makes a legal move; anything else is refused and leaves the
-// row unchanged. A user never reaches scanning, processing, ready or rejected.
 const LEGAL: [string, string, TenantCtx][] = [
   ["pending_upload", "deleted", EDITOR],
   ["pending_upload", "deleted", job([WA])],
-  // R553 (5): the sweeper frees a stuck asset and its hash.
+  // The sweeper frees a stuck asset and its hash.
   ["uploaded", "deleted", job([WA])],
   ["scanning", "deleted", job([WA])],
   ["processing", "deleted", job([WA])],
@@ -453,8 +432,6 @@ const LEGAL: [string, string, TenantCtx][] = [
   ["rejected", "deleted", job([WA])],
 ];
 
-// R553 (1) and (8): a derivative never shares the original's key, belongs to an asset the pipeline is working on or has
-// finished, and a ready derivative carries its digest and size while a failed one carries its error.
 interface DerivativeRow {
   name: string;
   asset: string;
@@ -497,7 +474,6 @@ describe("media_derivative_put rules", () => {
   });
 });
 
-// R553 (3): progress is recorded for an open session of a pending upload; anything else is SH409, not a silent no-op.
 describe("media_upload_progress", () => {
   it.each([
     { name: "an open session of a pending upload stores the parts", state: "pending_upload", session: true },
@@ -678,7 +654,6 @@ describe("media_gc_candidates (the pending and deleted arms)", () => {
   });
 });
 
-// One table of bounds (AGENTS 6.6): each row changes one value of an otherwise valid asset or derivative.
 const KEY_OF = (id: string) => `ws/${WA}/${id}/1/original`;
 async function insertAsset(over: Record<string, unknown>): Promise<string | undefined> {
   const id = randomUUID();
@@ -743,7 +718,7 @@ describe("the bounds of a media asset", () => {
     expect((await run(EDITOR, register(WD))).error).toBeUndefined();
   });
 
-  // R553 (2): the workspace row is locked before the count, so two callers at 99 cannot both pass the cap.
+  // The workspace row is locked before the count, so two callers at 99 cannot both pass the cap.
   it("two callers registering at 99 pending uploads end with 100, one of them refused with 53400", async () => {
     await plantPending(WE, 99);
     const outcomes: Record<number, unknown> = {};

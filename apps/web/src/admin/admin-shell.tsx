@@ -8,12 +8,8 @@ import { ErrorPanel } from "../ui/error-panel";
 
 const NAV_LINK = "min-h-6 pointer-coarse:min-h-11 text-link underline";
 
-/**
- * The frame of the operator screens: a nav of the screens that exist, then the screen. They exist only for an
- * instance admin. A yes shows the frame and a no shows the not-found page (the server answers 404 to the same calls);
- * no answer (the admin read or a shell list failed) is neither: it shows the error panel, and Retry reads the shell
- * again.
- */
+// A non-admin sees the not-found page, as the server answers 404 to the same calls. A failed read is neither yes nor
+// no, so it shows the error panel.
 export function AdminShell() {
   const data = useShellData();
   const { t } = useLingui();

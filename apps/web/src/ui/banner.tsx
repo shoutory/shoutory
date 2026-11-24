@@ -8,7 +8,6 @@ const TONES: Record<Tone, string> = {
   danger: "border-danger bg-danger-bg",
 };
 
-/** A message that stays on the screen until the cause is gone. Only a danger banner is an alert (WI-F12). */
 export function Banner({
   tone,
   children,
@@ -16,7 +15,7 @@ export function Banner({
 }: {
   tone: Tone;
   children: ReactNode;
-  /** `false` when the caller keeps its own live region around the banner (WI-F13: a region mounted before its text). */
+  /** `false` when the caller keeps its own live region around the banner (a live region must be mounted before its text). */
   announce?: boolean;
 }) {
   return (

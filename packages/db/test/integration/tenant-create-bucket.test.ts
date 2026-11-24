@@ -10,10 +10,7 @@ import { asUser, attempt, commitAs, OA, seedMembers, U } from "../support/member
 
 const env = readTestEnv();
 
-// R532 (4), R533 (A): the per-user creation bucket `tenant_create` (capacity 10, a full refill over 24 hours) is spent
-// by workspace_create and organization_create alike, keyed by a digest the route computes and passes as the last
-// argument. A refusal is SQLSTATE SH429 under the definer's name with the retry seconds in DETAIL, and creates nothing.
-// The scope CHECK of rate_buckets also widens for the provider scopes that get their numbers later (R532 (5)).
+// A refusal is SQLSTATE SH429 under the definer's name with the retry seconds in DETAIL, and creates nothing.
 let db: TestDatabase;
 const key = (): string => randomUUID().replaceAll("-", "").repeat(2);
 const slug = () => `tc-${randomUUID().slice(0, 8)}`;

@@ -26,8 +26,7 @@ describe("detectLocale", () => {
   });
 });
 
-// Numbering system and calendar are always explicit (V-35): Latin digits by default, Arabic-Indic by setting, and the
-// Gregorian calendar whatever the locale's own default. Compact notation is not pinned: its text changes with ICU.
+// Compact notation is not pinned: its text changes with ICU.
 const INSTANT = new Date("2026-11-19T12:00:00Z");
 
 describe("digits and calendar per locale for fixed instants", () => {

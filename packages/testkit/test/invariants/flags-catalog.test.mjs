@@ -5,9 +5,6 @@ import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-// Every flag key that code reads exists in the seed, and no seed row is past its removal date. The seed is the rows
-// inserted into app.feature_flags (key, description, owner, remove_by, ...) by the migrations, less the rows a later
-// migration deletes: a flag that reached general availability is deleted, and code that still reads it fails here.
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const SKIPPED = new Set(["node_modules", "dist", ".git", ".artifacts", ".turbo"]);
 const CODE = ["ts", "tsx", "mts", "js", "cjs", "mjs"];
@@ -33,7 +30,6 @@ const SEED_EVENT = new RegExp(
   "gi",
 );
 
-/** The flags the migrations leave behind: key to removal date. */
 function seedOf(base) {
   const dir = join(base, "packages/db/migrations");
   const seed = new Map();

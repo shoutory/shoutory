@@ -162,14 +162,14 @@ const REFUSALS: [string, Mutate, string][] = [
     "idempotency.keyWindowSeconds",
   ],
   [
-    "read-back class E that resends in the key window",
+    "no read-back that resends in the key window",
     (m) => {
       m.readBackMode = "E";
     },
     "idempotency.resendAfterUnknown",
   ],
   [
-    "read-back class E with a commit that is safe to retry",
+    "no read-back with a commit that is safe to retry",
     (m) => {
       m.readBackMode = "E";
       at(m, "idempotency").resendAfterUnknown = "read_back_only";
@@ -317,8 +317,6 @@ describe("manifestSchema", () => {
   });
 });
 
-// R518, R539 (11): a provider's refresh answers map to one of the four classes, and an adapter that refreshes
-// declares the `refresh` capability like the other optional actions.
 describe("manifestSchema: token refresh", () => {
   it.each(["transient", "rate_limited", "config", "revoked"])(
     "accepts the refresh error class %s",

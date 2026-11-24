@@ -21,7 +21,7 @@ const valid = {
   link: "https://app.example.test/auth/verify#token=unit-1",
 } as const;
 
-/** A pool that counts every use and fails it: a refusal must happen before the database is touched. */
+// A refusal must happen before the database is touched, so any use fails.
 function countingPool(): { pool: AppPool; calls: () => number; params: () => unknown[] } {
   const seen: unknown[][] = [];
   const pool = {
@@ -61,7 +61,6 @@ describe("enqueueMail ids", () => {
     await expect(enqueueMail(pool, { ...valid, id, workspaceId: workspace }, deps)).rejects.toThrow(
       "pool used",
     );
-    // The definer call carries the id, the workspace and the sealed fields, in the order of its signature.
     const sent = params() as (string | Buffer)[];
     expect(sent.slice(0, 2)).toEqual([id.toLowerCase(), workspace.toLowerCase()]);
     const stored: StoredSecret = {

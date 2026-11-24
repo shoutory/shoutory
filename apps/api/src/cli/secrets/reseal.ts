@@ -32,7 +32,6 @@ const storedOf = (row: OutboxRow): StoredSecret => ({
   wrappedDek: row.link_wrapped_dek,
 });
 
-/** Opens a row under its own key and generation and seals it again under the active key at generation + 1. */
 async function resealRow(pool: AppPool, keys: KeyProvider, row: OutboxRow): Promise<boolean> {
   const link = open(
     storedOf(row),
@@ -61,9 +60,7 @@ async function resealRow(pool: AppPool, keys: KeyProvider, row: OutboxRow): Prom
 
 interface Tally {
   resealed: number;
-  /** Rows whose write was refused because another writer changed them first. */
   moved: number;
-  /** Key ids of the rows that could not be opened, with how many each. */
   skipped: Map<string, number>;
 }
 
@@ -73,7 +70,6 @@ async function resealBatch(pool: AppPool, keys: KeyProvider, rows: OutboxRow[], 
       if (await resealRow(pool, keys, row)) tally.resealed += 1;
       else tally.moved += 1;
     } catch (error) {
-      // Only a row that cannot be opened is skipped; any other failure ends the command.
       if (!(error instanceof EnvelopeError)) throw error;
       tally.skipped.set(row.link_key_id, (tally.skipped.get(row.link_key_id) ?? 0) + 1);
     }

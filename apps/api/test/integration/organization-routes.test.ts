@@ -2,9 +2,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { addOrganizationMember, seedOrganization, signedUser } from "../support/tenancy.js";
 import { type Fixture, startFixture } from "./auth/harness.js";
 
-// The organization list and create routes: the answers, the bounds and the pages (R229, R230). Who may see or do what
-// is the floor in route-deny-matrix.test.ts.
-
 let fx: Fixture;
 beforeAll(async () => {
   fx = await startFixture();

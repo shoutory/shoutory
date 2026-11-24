@@ -5,7 +5,6 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defaultClientConditions, defineConfig, type Plugin } from "vite";
 
-// The theme bootstrap is the page's only inline script: it is written into the head of the built index.html.
 function inlineThemeBootstrap(): Plugin {
   const source = () => readFileSync(join(import.meta.dirname, "src/theme/bootstrap.js"), "utf8");
   return {

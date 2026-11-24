@@ -7,7 +7,6 @@ const KEK_SUFFIX = /^[A-Z0-9_]{1,32}$/;
 const ACTIVE_VARIABLE = "SHOUTORY_ACTIVE_KEY_ID";
 const KEK_BYTES = 32;
 
-/** A refused key operation; `variable` names the setting at fault and the message never carries key material. */
 export class KeyError extends Error {
   constructor(
     message: string,
@@ -18,14 +17,14 @@ export class KeyError extends Error {
   }
 }
 
-/** The one source of key-encryption keys; the cloud's KMS provider is the second implementation. */
+// The cloud's KMS provider is the second implementation.
 export interface KeyProvider {
   activeKeyId(): string;
   has(keyId: string): boolean;
   getKey(keyId: string): Buffer;
 }
 
-/** The variable that holds a key id: uppercase, dash to underscore (underscore is outside the id alphabet). */
+// Dash becomes underscore; underscore is outside the key id alphabet, so the mapping is unambiguous.
 export function kekVariable(keyId: string): string {
   return `${KEK_PREFIX}${keyId.toUpperCase().replaceAll("-", "_")}`;
 }
@@ -39,7 +38,6 @@ function parseKek(value: string, variable: string): Buffer {
   return key;
 }
 
-/** Self-host key ring: every `SHOUTORY_KEK_<ID>` is a key, `SHOUTORY_ACTIVE_KEY_ID` names the one that seals. */
 export class EnvKeyProvider implements KeyProvider {
   readonly #active: string;
   readonly #keys = new Map<string, Buffer>();
@@ -78,7 +76,6 @@ export class EnvKeyProvider implements KeyProvider {
   }
 }
 
-/** Start-up check: every key id some stored row references must have a loaded key. */
 export function assertKeyIdsLoaded(inUse: readonly string[], keys: KeyProvider): void {
   for (const id of inUse) {
     if (!keys.has(id)) {
@@ -88,7 +85,7 @@ export function assertKeyIdsLoaded(inUse: readonly string[], keys: KeyProvider):
   }
 }
 
-/** The per-salt subkey that wraps a DEK: HKDF-SHA256 over the KEK, so deleting a salt shreds what it wrapped. */
+// Deleting a salt shreds what its subkey wrapped.
 export function deriveKey(
   kek: Buffer,
   salt: Uint8Array,

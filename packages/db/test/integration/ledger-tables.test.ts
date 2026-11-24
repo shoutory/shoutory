@@ -13,12 +13,6 @@ import { openTx } from "../support/race.js";
 
 const env = readTestEnv();
 
-// Security floor of migration 0019, the publishing ledger tables: the seed is the transition table, the trigger refuses
-// every move that table does not list, one operation per target holds the slot, a published part is settled once, and
-// the definer role holds only what the triggers and the retention need. Rows are planted as the superuser, and a row in
-// a given state is planted with the triggers off (`session_replication_role = replica`) so that its state is not the
-// result of a move. The columns an insert names, the error codes and the table and column names are the contract the
-// migration must meet; nothing sleeps.
 let db: TestDatabase;
 const admin = <T>(run: (client: Client) => Promise<T>) => withAdminClient(env, db.name, run);
 const rows = (sql: string, params: unknown[] = []) =>
@@ -41,7 +35,6 @@ beforeAll(async () => {
 });
 afterAll(() => db.drop());
 
-// A post with one variant, so every scenario has its own target (the variant is what an operation publishes to).
 async function newVariant(settled = false): Promise<string> {
   return admin(async (client) => {
     const post = (
@@ -58,7 +51,6 @@ async function newVariant(settled = false): Promise<string> {
   });
 }
 
-// The columns that belong to a state only: a blocked operation records when it was blocked and what it restores to.
 const scopedValues = (state: string) =>
   state === "blocked_reconnect"
     ? { blocked_since: new Date(), reason_code: "pending" }
@@ -72,10 +64,8 @@ interface Made {
   part?: number;
   supersedes?: string;
   target?: { variant: string | null; reply: string | null };
-  /** Columns to set beyond (or instead of) the ones the state implies. */
   extra?: Record<string, unknown>;
 }
-// One INSERT with every column the contract requires; the caller chooses what the test is about.
 async function insertOp(client: Client, made: Made): Promise<string> {
   const target = made.target ?? { variant: made.variant, reply: null };
   const given: Record<string, unknown> = {
@@ -108,7 +98,6 @@ async function insertOp(client: Client, made: Made): Promise<string> {
 }
 
 const insert = (made: Made) => admin((client) => insertOp(client, made));
-// A row in a given state, as if earlier moves had led there.
 const plant = (made: Made) =>
   admin(async (client) => {
     await client.query("BEGIN");
@@ -119,7 +108,7 @@ const plant = (made: Made) =>
   });
 
 describe("the seed of the transition table", () => {
-  it("holds exactly the 51 OL transition rows, ids 1..51 contiguous, and equals the core table", async () => {
+  it("holds every seeded state move, ids 1..51 contiguous, and equals the core table", async () => {
     const seeded = await rows(
       "SELECT row_no, from_state, to_state, actor, guard, bumps_fence FROM app.ledger_transitions",
     );
@@ -134,8 +123,7 @@ describe("the seed of the transition table", () => {
   });
 });
 
-// The moves of the core table, and whether any row for the triple raises the fencing token (two rows may share a
-// triple; a move that either row says bumps, bumps).
+// Two rows may share a triple; a move that either row says bumps the fencing token, bumps it.
 const KEY = (from: string, to: string, actor: string) => `${from}|${to}|${actor}`;
 const ALLOWED = new Map<string, boolean>();
 for (const move of LEDGER_TRANSITIONS) {
@@ -153,7 +141,6 @@ interface Seen {
 const SELECT_ROW =
   "SELECT state, fencing_token::text, settled_at, last_actor FROM app.operations WHERE id = $1";
 
-// One pair, tried inside a savepoint that is always rolled back: what the statement answered and what it left.
 async function attempt(client: Client, run: () => Promise<Seen | undefined>) {
   await client.query("SAVEPOINT pair");
   try {
@@ -165,8 +152,6 @@ async function attempt(client: Client, run: () => Promise<Seen | undefined>) {
   }
 }
 
-// What a pair must leave: a move of the table is taken (the new state, the token the seed row asks for, a settled time
-// exactly when the state is terminal), any other is refused with SH409. A mismatch names both.
 function problems(
   from: string,
   to: string,
@@ -202,12 +187,10 @@ interface Pair {
   to: string;
   actor: string;
   variant: string;
-  /** The planted row the move is tried on; none for an insert. */
   planted: string | undefined;
   before: Seen | undefined;
 }
 
-// One move, tried on the planted row (or as an insert) and rolled back: what it answered, and that the row is as it was.
 async function tryPair(client: Client, pair: Pair): Promise<string[]> {
   const { from, to, actor, variant, planted, before } = pair;
   const outcome = await attempt(client, async () =>
@@ -231,7 +214,6 @@ describe("the transition trigger", () => {
       const found = await admin(async (client) => {
         const before = planted ? (await client.query(SELECT_ROW, [planted])).rows[0] : undefined;
         const wrong: string[] = [];
-        // Every pair runs in a savepoint of this one transaction, which is rolled back at the end.
         await client.query("BEGIN");
         for (const to of LEDGER_STATES.filter((state) => state !== from)) {
           for (const actor of LEDGER_ACTORS) {
@@ -249,14 +231,10 @@ describe("the transition trigger", () => {
   );
 });
 
-// The effect and the token. No statement that leaves the state alone brings an effect back to none or lowers the token,
-// and an insert starts with no effect and token 0 (the proof behind a move that resets an effect, and the refusal of a
-// move that keeps one into a state that holds none, are tested in ledger-resolutions).
 const NO_EFFECT = new Set(["retry_wait", "failed", "paused", "cancelled"]);
 const EFFECT_ROW = "SELECT state, effect, fencing_token::text AS token FROM app.operations WHERE id = $1";
 type After = { code?: string | undefined; state?: string; effect?: string; token?: string };
 
-// One statement in a savepoint that is rolled back: the error code it gave, or the row it left.
 async function tried(client: Client, id: string, sql: string, params: unknown[]): Promise<After> {
   await client.query("SAVEPOINT effect");
   try {
@@ -269,7 +247,6 @@ async function tried(client: Client, id: string, sql: string, params: unknown[])
   }
 }
 
-// Statements that leave the state alone: the effect may not fall and the token may not go down, a harmless one passes.
 async function sameStateProblems(client: Client, id: string, from: string): Promise<string[]> {
   const fall = await tried(client, id, "UPDATE app.operations SET effect = 'none' WHERE id = $1", [id]);
   const down = await tried(
@@ -313,7 +290,6 @@ describe("the effect and the token", () => {
   });
 });
 
-// The reason table of the transition table: the reasons a state may carry. A blocked operation always carries one.
 const REASONS: Record<string, string[]> = {
   paused: [
     "quota",
@@ -339,7 +315,6 @@ const LEASED = ["claimed", "dispatching", "reconciling", "processing", "provider
 const SOON = new Date(Date.now() + 60_000);
 const LEASE = { lease_owner: "worker-1", lease_expires_at: SOON };
 
-// Columns that belong to some states only: [what is set, in which state, whether the database takes it].
 const SCOPED: [string, string, Record<string, unknown>, boolean][] = [
   ...LEASED.map((state): [string, string, Record<string, unknown>, boolean] => [
     `a lease in ${state}`,
@@ -375,7 +350,6 @@ async function taken(
   }
 }
 
-// Every reason in every state: the table pairs a state with its own reasons only.
 const REASON_CASES = LEDGER_STATES.flatMap((state) =>
   EVERY_REASON.map((reason): [string, string, Record<string, unknown>, boolean] => [
     `${reason} in ${state}`,
@@ -394,7 +368,6 @@ describe("columns and reasons that belong to a state", () => {
       for (const [what, state, extra, allowed] of [...SCOPED, ...REASON_CASES].filter(([, s]) => s === own)) {
         // A refused row is never stored, so one target serves them all; each stored row needs its own.
         const code = await taken(state, extra, allowed ? undefined : refused);
-        // Outside its state a column or a reason is a check violation, not any other refusal.
         if (code !== codeFor(allowed)) wrong.push(`${what} gave ${code}`);
       }
       expect(wrong).toEqual([]);
@@ -472,7 +445,6 @@ interface Asset {
   library?: boolean;
   deletedAgo?: number;
 }
-// An asset of the workspace with the age and flags a row of the garbage collection table names.
 async function plantAsset(asset: Asset): Promise<string> {
   const id = randomUUID();
   await rows(
@@ -493,7 +465,6 @@ async function plantAsset(asset: Asset): Promise<string> {
   );
   return id;
 }
-// An operation in `state` that sends the asset.
 async function pin(asset: string, state: string, extra: Record<string, unknown> = {}) {
   const operation = await plant({ variant: await newVariant(), state, extra });
   await rows(
@@ -509,7 +480,6 @@ async function reference(asset: string) {
   );
 }
 
-// Each row: the asset and what holds it, and the arm that offers it (none: not offered).
 const COLLECTED: [string, () => Promise<string>, string | undefined][] = [
   ["a ready asset 31 days old that nothing uses", () => plantAsset({}), "unreferenced"],
   ["a ready asset 29 days old", () => plantAsset({ age: 29 }), undefined],
@@ -666,9 +636,6 @@ describe("the purge of expired ledger rows", () => {
   });
 });
 
-// What the definer role may touch of the ledger and of the tables the guards read, and the purposes it acts under
-// (the two guards, the garbage collection of media, the purge of expired rows, and the ledger writers of 0020 and 0022).
-// Nothing else.
 const GRANTS: Record<string, string[]> = {
   operations: ["INSERT", "SELECT"],
   operation_media: ["INSERT", "SELECT"],

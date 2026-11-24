@@ -10,11 +10,8 @@ import {
 
 const env = readTestEnv();
 
-// The throttle is one definer: capacity and refill are constants per scope inside it (R57), the key is always an
-// HMAC digest, and the bucket row is keyed by scope and key together (R87). Time moves by editing `refilled_at`
-// as the superuser: nothing sleeps.
+// Time moves by editing `refilled_at` as the superuser: nothing sleeps.
 let counter = 1;
-/** A fresh 64-hex digest per call, so no two rows share a bucket. */
 const fresh = (): string => (counter++).toString(16).padStart(64, "0");
 
 interface Answer {
@@ -84,8 +81,7 @@ describe("bucket_take: spending, refilling and refunding", () => {
   });
 });
 
-// The connect scopes join the throttle and every earlier scope keeps its limit. Each row empties a bucket
-// and reads the wait for the next token, which is the scope's refill span divided by its capacity.
+// The expected wait is the scope's refill span divided by its capacity.
 describe("bucket_take: the connect scopes and every earlier limit", () => {
   const b = useBuckets();
   const LIMITS: [scope: string, capacity: number, secondsPerToken: number][] = [

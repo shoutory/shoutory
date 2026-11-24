@@ -18,7 +18,6 @@ export interface SimReply {
 }
 
 interface SimContext {
-  /** Counts one effect at the provider (a post created, edited or deleted). */
   effect(): void;
 }
 
@@ -27,11 +26,10 @@ export type Handler = (request: SimRequest, context: SimContext) => SimReply | P
 export interface Simulator {
   readonly url: string;
   readonly faults: FaultQueue;
-  /** Every request the simulator received, raw, for assertions; never written to disk (the scrubber does that). */
+  /** Raw, for assertions; never written to disk (the scrubber does that). */
   readonly requests: readonly SimRequest[];
-  /** How many effects the handlers produced; a late effect counts once it has happened. */
+  /** A late effect counts once it has happened. */
   effects(): number;
-  /** Waits for effects that were scheduled to appear late. */
   settle(): Promise<void>;
   close(): Promise<void>;
 }
@@ -39,7 +37,6 @@ export interface Simulator {
 const MAX_RECORDED_REQUESTS = 1000;
 const MAX_BODY_BYTES = 1_048_576;
 
-// The whole body, or undefined when it is over the bound.
 async function readBody(request: IncomingMessage): Promise<Buffer | undefined> {
   const chunks: Buffer[] = [];
   let size = 0;
@@ -65,11 +62,10 @@ interface State {
 }
 
 export interface SimulatorOptions {
-  /** Runs when a request has been received, before an armed fault or the route's handler (so before any effect). */
+  /** Runs before an armed fault or the route's handler, so before any effect. */
   readonly before?: (route: string) => void | Promise<void>;
 }
 
-// A route is "METHOD /path", where a path segment `:name` matches any one segment and is passed as a param.
 function matchRoute(routes: Routes, method: string, path: string) {
   const wanted = path.split("/");
   for (const [key, handler] of Object.entries(routes)) {
@@ -157,7 +153,6 @@ async function handle(state: State, request: IncomingMessage, response: ServerRe
   send(response, await run());
 }
 
-/** Starts a loopback HTTP server that answers the routes, applies armed faults and records what it received. */
 export async function startSimulator(routes: Routes, options: SimulatorOptions = {}): Promise<Simulator> {
   const state: State = {
     routes,

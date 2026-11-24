@@ -16,16 +16,15 @@ import { runProbe } from "./probe-run.js";
 import type { Scan } from "./scan.js";
 import { runSharpChild } from "./sharp-run.js";
 
-// The media pipeline as the worker runs it: one image or video, from `uploaded` to `ready` or `rejected`. It runs as a job of the
-// asset's workspace and moves the asset only through the media definers. Every step is safe to run again: the state of
-// the asset and of its derivatives says where a crashed run stopped, and what it already wrote is never overwritten.
+// Every step is safe to run again: the state of the asset and of its derivatives says where a crashed run stopped, and
+// what it already wrote is never overwritten.
 
 export interface PipelineDeps {
   readonly pool: AppPool;
   readonly storage: StorageDriver;
-  /** The scan hook in `warn` mode (absent: off). Its verdict never blocks an upload; a verdict that is not clean is logged. */
+  // The verdict never blocks an upload; a verdict that is not clean is logged.
   readonly scan?: Scan;
-  /** The absolute path of ffprobe (absent: video probing is off and a video is refused as an unsupported type). */
+  // Without it a video is refused as an unsupported type.
   readonly ffprobe?: string;
   readonly logger?: Pick<Logger, "warn">;
 }
@@ -39,10 +38,9 @@ interface Asset {
   state: string;
   mime: string | null;
   object_key: string;
-  /** The digest the asset was marked uploaded with (hex): the stored one, or for a large upload the sender's claim. */
+  // For a large upload this is the sender's claim, which the bytes are checked against.
   sha256: string | null;
 }
-// The verdict on bytes that are not the ones the asset's digest names.
 const CORRUPT = { ok: false, reason: "corrupt" } as const;
 type Job = <T>(run: (tx: TenantTx) => Promise<T>) => Promise<T>;
 
@@ -50,7 +48,6 @@ const keyOf = (original: string, profile: Profile) => original.replace(/original
 const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 const blob = (bytes: Uint8Array) => new Blob([new Uint8Array(bytes)]).stream();
 
-/** One statement as the job. */
 const sql = <R extends object = object>(job: Job, text: string, values: unknown[]) =>
   job((tx) => tx.query<R & Record<string, unknown>>(text, values));
 
@@ -82,14 +79,13 @@ const advance = (
     facts && JSON.stringify(facts),
   ]);
 
-/** The type the first bytes of the original name, never the one the sender claimed. */
+// The type comes from the bytes, never from what the sender claimed.
 async function sniff(storage: StorageDriver, key: string): Promise<string | undefined> {
   const sample = await storage.get(key, { start: 0, end: SAMPLE_BYTES - 1 });
   if (sample === null) throw new Error("the original of an uploaded asset is missing");
   return (await fileTypeFromBuffer(new Uint8Array(await new Response(sample).arrayBuffer())))?.mime;
 }
 
-/** The hash and size of an object that is already stored (a crashed run left it), read through. */
 async function hashStored(storage: StorageDriver, key: string): Promise<{ digest: string; size: number }> {
   const body = await storage.get(key);
   if (body === null) throw new Error("a derivative the store reported is gone");
@@ -143,7 +139,6 @@ async function putDerivative(
   ]);
 }
 
-/** `warn` mode: scan the original and say so when it is not clean; the upload goes on either way. */
 async function warnScan(deps: PipelineDeps, ws: string, id: string, path: string): Promise<void> {
   if (!deps.scan) return;
   try {
@@ -155,7 +150,6 @@ async function warnScan(deps: PipelineDeps, ws: string, id: string, path: string
   }
 }
 
-/** Copies the original to `path`, hashing the bytes on the way; the sha256 (hex) of what was copied. */
 async function copyOriginal(deps: PipelineDeps, asset: Asset, path: string): Promise<string> {
   const original = await deps.storage.get(asset.object_key);
   if (original === null) throw new Error("the original of an uploaded asset is missing");
@@ -171,11 +165,8 @@ async function copyOriginal(deps: PipelineDeps, asset: Asset, path: string): Pro
   return hash.digest("hex");
 }
 
-/**
- * Runs `use` on a temporary copy of the original (scanned first on a fresh run) in a folder that is removed after. The
- * bytes are proved first, whatever way they were uploaded: bytes that are not the asset's sha256 are `corrupt`, and
- * nothing is scanned or decoded.
- */
+// The bytes are proved first, whatever way they were uploaded: bytes that are not the asset's sha256 are `corrupt`, and
+// nothing is scanned or decoded.
 async function withOriginal<T>(
   deps: PipelineDeps,
   ws: string,
@@ -196,7 +187,6 @@ async function withOriginal<T>(
   }
 }
 
-/** Decodes the original in the sharp child and stores both derivatives; the facts of the image, or why it is refused. */
 function derive(
   deps: PipelineDeps,
   job: Job,
@@ -215,7 +205,6 @@ function derive(
   });
 }
 
-/** The type a sender claimed, as spelled by a browser or a script: case does not matter, and `image/jpg` is JPEG. */
 const claimedType = (mime: string | null): string => {
   const claimed = (mime ?? "").trim().toLowerCase();
   return claimed === "image/jpg" ? "image/jpeg" : claimed;
@@ -228,13 +217,9 @@ type Verdict =
     }
   | { ok: false; reason: RejectReason };
 
-// The container family ffprobe names for each video type the pipeline takes.
 const FAMILY_OF = { "video/mp4": "mov", "video/quicktime": "mov", "video/webm": "matroska" } as const;
 
-/**
- * A video is never transcoded or copied: ffprobe reads its facts, and they must agree with what its bytes and the sender
- * said. Without a configured ffprobe a video is not a type this server takes.
- */
+// A video is never transcoded or copied: ffprobe's facts must agree with what its bytes and the sender said.
 async function judgeVideo(
   deps: PipelineDeps,
   ws: string,
@@ -259,10 +244,7 @@ async function judgeVideo(
   };
 }
 
-/**
- * What the asset is: the type its bytes name must be one the pipeline takes and the one the sender claimed, before any
- * pixel is decoded; and the format the decoder then reads must be that type, whatever the bytes of its header said.
- */
+// The type is checked before any pixel is decoded, and the format the decoder then reads must be that type too.
 async function judge(
   deps: PipelineDeps,
   job: Job,
@@ -283,10 +265,7 @@ async function judge(
   return { ok: true, facts: { width: derived.width, height: derived.height, mime: derived.mime } };
 }
 
-/**
- * Takes one uploaded asset to `ready` or `rejected`. An asset that is not `uploaded` or `processing` is left as it is, so
- * a repeated or late call changes nothing; a `processing` one (a run that stopped) is continued.
- */
+// An asset that is not `uploaded` or `processing` is left as it is, so a repeated or late call changes nothing.
 export async function processAsset(
   deps: PipelineDeps,
   workspaceId: string,
@@ -297,10 +276,7 @@ export async function processAsset(
   await unlessLost(advanceAsset(deps, job, workspaceId, mediaId, signal));
 }
 
-/**
- * The end of the bounded retry: an asset still `uploaded` or `processing` is rejected as `processing_failed` (through
- * `processing`, the one move table has no `uploaded` to `rejected`); one that has finished is left as it is.
- */
+// An `uploaded` asset goes through `processing`: the move table has no direct `uploaded` to `rejected`.
 export async function failAsset(deps: PipelineDeps, workspaceId: string, mediaId: string): Promise<void> {
   const job = jobOf(deps, workspaceId);
   const state = (await readAsset(job, workspaceId, mediaId))?.state;
@@ -322,11 +298,8 @@ function jobOf(deps: PipelineDeps, workspaceId: string): Job {
     );
 }
 
-/**
- * Two runs of one asset (a retry racing its first run): the loser's refused move is not an error. It returns at once;
- * the other run owns the asset, and one it leaves `processing` by crashing is the bounded retry's. Any other refusal
- * is rethrown.
- */
+// Two runs of one asset (a retry racing its first run): the loser's refused move is not an error, since the other run
+// owns the asset.
 async function unlessLost(run: Promise<void>): Promise<void> {
   try {
     await run;

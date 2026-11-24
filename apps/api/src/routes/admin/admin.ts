@@ -7,10 +7,6 @@ import { Refusal } from "../../errors/refusal.js";
 import { loadFlags } from "../../flags/load.js";
 import { type App, type AppEnv, defineRoute, type InUserTx, type RouteAuth } from "../define-route.js";
 
-// The instance admin routes behind the flag and sign-up screens. Only an instance admin reaches them: the first
-// call of every handler asks `instance_admin_check` and anyone else is told the route does not exist. A write also
-// needs a recent step-up and is audited by its definer.
-
 const flagParams = z.strictObject({
   key: z
     .string()
@@ -20,7 +16,6 @@ const flagParams = z.strictObject({
 const overrideBody = z.strictObject({ on: z.boolean().nullable() });
 const signupBody = z.strictObject({ value: z.boolean() });
 
-/** Runs `run` in the caller's transaction once the caller is shown to be an instance admin. */
 export const asAdmin = <T>(inUserTx: InUserTx, run: (tx: TenantTx) => Promise<T>): Promise<T> =>
   inUserTx(async (tx) => {
     const check = await tx.query<{ ok: boolean }>("SELECT app.instance_admin_check() AS ok");

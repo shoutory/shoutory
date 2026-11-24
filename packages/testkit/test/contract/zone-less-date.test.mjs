@@ -7,9 +7,6 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 
-// Code takes the clock as an input and zone math goes through the Temporal helper, so a Date
-// built from zone-less text, a parse of local text, a local getter or a locale string with no zone is refused in the
-// folders that hold content, time and ledger rules.
 const FOLDERS = ["content", "time", "ledger"];
 // Each rule is read over the whole file text, so a call split over several lines is still seen; the optional third
 // member decides from the match whether it is a violation (a call is allowed when its arguments name a time zone).
@@ -29,7 +26,6 @@ const RULES = [
   ["the host zone offset", /\.getTimezoneOffset\(/g],
 ];
 
-/** The `line: rule` of every violation in one file's text. */
 function violations(text) {
   return RULES.flatMap(([rule, pattern, broken = () => true]) =>
     [...text.matchAll(pattern)]
@@ -38,7 +34,6 @@ function violations(text) {
   );
 }
 
-/** Every `file:line: rule` the non-test sources under `base/<folder>` break; a missing folder holds nothing. */
 function findings(base) {
   return FOLDERS.flatMap((folder) =>
     globSync(`${folder}/**/*.ts`, { cwd: base })
@@ -75,7 +70,6 @@ const PLANTED = [
     `const f = ${["new Intl.", 'DateTimeFormat("en", { timeZone: "UTC" })'].join("")};`,
     false,
   ],
-  // The construction is split over several lines, as a formatter writes a long call.
   ["zone-less text on its own line", `const d = ${date(`\n  ${quote("2027-03-14T02:30")},\n`)};`, true],
   [
     "a locale string whose arguments span lines",

@@ -1,6 +1,5 @@
 import type { Effect, ProviderResult } from "../result.js";
 
-/** An adapter's mapper from a provider's error answer to a result. */
 export type ErrorMapper = (input: {
   readonly status: number;
   readonly body: unknown;
@@ -27,7 +26,6 @@ const ERROR_BODIES: readonly unknown[] = [
 const STATUSES = [400, 409, 429, 500] as const;
 const EFFECTS: readonly Effect[] = ["none", "possible"];
 
-// What is wrong with an error result, or undefined: an id, a success, or a class that its effect cannot have.
 export function problemWith(result: ProviderResult): string | undefined {
   const leaked =
     result.externalId !== undefined ||

@@ -30,22 +30,55 @@ export const PATTERNS = [
   { name: "plan label", regex: new RegExp(["\\bA", "-M\\d+-"].join("")) },
 ];
 
+// Citations of planning documents and their ids: ruling ids, rule numbers, verification ids, requirement ids, open
+// questions and the architecture and UX documents. Product words stay free: `flows` only counts with a section number.
+export const CITATION_PATTERNS = [
+  { name: "ruling id", regex: new RegExp(["\\bR", "\\d{3}\\b"].join("")) },
+  { name: "rule number", regex: new RegExp(["\\bAGENTS", " \\d"].join("")) },
+  { name: "ledger spec row", regex: new RegExp(["\\bO", "L \\d"].join("")) },
+  { name: "verification id", regex: new RegExp(["\\bV", "-\\d+\\b"].join("")) },
+  {
+    name: "requirement id",
+    regex: new RegExp(
+      ["\\b(?:NFR|FLAG|COMPL|OPS|LAUNCH|REL|PLT|VIS|INV|DATA)", "-(?:[A-Z]+-)?\\d+\\b"].join(""),
+    ),
+  },
+  { name: "requirement id", regex: new RegExp(["\\bF", "-[A-Z]+-\\d+\\b"].join("")) },
+  { name: "security case id", regex: new RegExp(["\\bSSR", "F-\\d+\\b"].join("")) },
+  { name: "walkthrough id", regex: new RegExp(["\\bWI", "-F\\d+\\b"].join("")) },
+  { name: "case id", regex: new RegExp(["\\bBG", "-\\d+\\b"].join("")) },
+  { name: "case id", regex: new RegExp(["\\bE", "-\\d+\\b"].join("")) },
+  { name: "security set name", regex: new RegExp(["\\bH", "3\\b"].join("")) },
+  { name: "ledger spec term", regex: new RegExp(["\\bO", "L transition"].join("")) },
+  { name: "policy template name", regex: new RegExp(["\\btemplate ", "U\\b"].join("")) },
+  { name: "provider class name", regex: new RegExp(["\\bclass ", "E\\b"].join("")) },
+  { name: "planning document", regex: new RegExp(["data", " model"].join("")) },
+  { name: "open question id", regex: new RegExp(["\\bQ", "-[A-Z]+\\d*\\b"].join("")) },
+  { name: "planning document", regex: new RegExp(["\\bflows? ", "\\d+(?:\\.\\d+)?"].join("")) },
+  { name: "planning document", regex: new RegExp(["data", "-model"].join("")) },
+  { name: "planning document", regex: new RegExp(["ux", "-spec"].join("")) },
+];
+
 function trackedFiles() {
   const out = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
   return out.split("\0").filter(Boolean);
 }
 
+// A tracked path that is deleted or not readable in this checkout has no text to scan; any other error is a defect.
+const UNREADABLE = new Set(["ENOENT", "EACCES", "EPERM"]);
+
 function readText(file) {
   try {
     const buffer = readFileSync(file);
     return buffer.includes(0) ? null : buffer.toString("utf8");
-  } catch {
-    return null;
+  } catch (error) {
+    if (UNREADABLE.has(error?.code)) return null;
+    throw error;
   }
 }
 
-function scanLine(label, line, lineNumber, findings) {
-  for (const { name, regex } of PATTERNS) {
+function scanLine(label, line, lineNumber, patterns, findings) {
+  for (const { name, regex } of patterns) {
     if (regex.test(line)) findings.push(`${label}:${lineNumber}: ${name} (${regex.source})`);
   }
 }
@@ -54,10 +87,11 @@ export function scan() {
   const findings = [];
   for (const file of trackedFiles()) {
     if (EXCLUDED_FILES.has(file)) continue;
-    scanLine(file, file, 0, findings);
+    scanLine(file, file, 0, PATTERNS, findings);
     const text = readText(file);
     if (text === null) continue;
-    for (const [index, line] of text.split(/\r?\n/).entries()) scanLine(file, line, index + 1, findings);
+    for (const [index, line] of text.split(/\r?\n/).entries())
+      scanLine(file, line, index + 1, [...PATTERNS, ...CITATION_PATTERNS], findings);
   }
   return findings;
 }

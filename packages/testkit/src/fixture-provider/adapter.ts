@@ -12,7 +12,6 @@ import type {
 import { errorResult, type ProviderResult } from "@shoutory/provider-sdk/result";
 import { z } from "zod";
 
-/** What the adapter knows about a failed answer; the fixture network documents a code for each refusal. */
 interface FailureInput {
   readonly status: number;
   readonly code: string | undefined;
@@ -22,14 +21,12 @@ interface FailureInput {
   readonly write: boolean;
 }
 
-// A Retry-After header is a whole number of seconds or an HTTP date; anything else is no delay.
 function retryDelayMs(value: string, now: Date): number | undefined {
   if (/^\d+$/.test(value)) return Number(value) * 1000;
   const at = Date.parse(value);
   return Number.isNaN(at) ? undefined : Math.max(0, at - now.getTime());
 }
 
-/** Maps a failed answer to a result. The class follows the situation the provider documents, never the status alone. */
 function mapFailure({ status, code, retryAfter, now, write }: FailureInput): ProviderResult {
   if (status === 429) {
     const retryAfterMs = retryAfter === undefined ? undefined : retryDelayMs(retryAfter, now);
@@ -52,17 +49,15 @@ function mapFailure({ status, code, retryAfter, now, write }: FailureInput): Pro
 }
 
 export interface FixtureAdapterOptions {
-  /** Where the fixture simulator listens. */
   readonly baseUrl: string;
-  /** Replaces the failure mapper; a test passes a wrong one to see the fault matrix refuse it. */
+  /** A test passes a wrong mapper to see the fault matrix refuse it. */
   readonly mapFailure?: typeof mapFailure | undefined;
-  /** The OAuth client id of the fixture network; the adapter refreshes tokens (RFC 6749 section 6) only when it is set. */
+  /** The adapter refreshes tokens only when this is set. */
   readonly clientId?: string | undefined;
-  /** The issuer a connect callback must carry (RFC 9207); a connect with none expected accepts any. */
+  /** The issuer a connect callback must carry; a connect with none expected accepts any. */
   readonly issuer?: string | undefined;
 }
 
-// The error answer of RFC 6749 section 5.2; the token answer is the bounded schema of core.
 const oauthError = z.object({ error: z.string() });
 
 const created = z.object({ id: z.string() });
@@ -73,11 +68,9 @@ type Answer =
   // `status` is the provider's answer, absent when there was none (a network failure).
   | { readonly ok: false; readonly result: ProviderResult; readonly status?: number };
 
-// The fixture network answers 404 for a post that is not there (the manifest's absent answer).
 const ABSENT_STATUS = 404;
 
-// The codes undici and Node give a failure of the connection: one that never opened sent nothing; the others may have
-// been cut after the request went out.
+// A connection that never opened sent nothing; the others may have been cut after the request went out.
 const NOT_SENT = new Set(["UND_ERR_CONNECT_TIMEOUT", "ECONNREFUSED"]);
 const CUT_OFF = new Set([
   "UND_ERR_SOCKET",
@@ -92,7 +85,7 @@ const networkCode = (error: Error): string | undefined => {
   return typeof code === "string" ? code : undefined;
 };
 
-// A network failure. Only a coded one, or a deadline we set, is an outcome to report; anything else is a bug and throws.
+// Only a coded failure, or a deadline we set, is an outcome to report; anything else is a bug and throws.
 function networkFailure(error: unknown, write: boolean): ProviderResult {
   if (!(error instanceof Error)) throw error;
   const code = networkCode(error);
@@ -157,8 +150,7 @@ async function request(
   }
 }
 
-// One grant at the token route (a refresh or an authorization code). A grant changes nothing at the network (effect
-// none), so a failure is never "possible": the class follows the answer, and the provider's own error code is kept for
+// A grant changes nothing at the network, so a failure is never "possible"; the provider's own error code is kept for
 // the manifest's map.
 async function tokenGrant(
   options: FixtureAdapterOptions,
@@ -202,8 +194,7 @@ async function tokenGrant(
   }
 }
 
-// The read of a channel: the account route with the access token. A success that is not an account may be a garbled
-// answer, so what it says of the channel is unknown.
+// A success that is not an account may be a garbled answer, so what it says of the channel is unknown.
 async function inspectAccount(
   options: FixtureAdapterOptions,
   context: AdapterContext,
@@ -219,7 +210,6 @@ async function inspectAccount(
 
 const account = z.object({ id: z.string().min(1).max(256) });
 
-// The connect side of the fixture network: the authorization URL with PKCE, the code exchange and the account read.
 function connectOf(options: FixtureAdapterOptions & { readonly clientId: string }): ConnectAdapter {
   return {
     ...(options.issuer === undefined ? {} : { issuer: options.issuer }),
@@ -266,7 +256,7 @@ export function createFixtureAdapter(options: FixtureAdapterOptions): ProviderAd
     send?: { readonly body?: unknown; readonly key?: string; readonly write?: boolean },
   ) => request(options, context, method, path, send);
 
-  // A success answer must hold an id; one that does not (cut short, or garbled) is an unknown outcome.
+  // A success answer with no id (cut short, or garbled) is an unknown outcome.
   function withId(answer: Answer, effect: "confirmed", write: boolean): ProviderResult {
     if (!answer.ok) return answer.result;
     const id = created.safeParse(answer.json);
@@ -298,7 +288,6 @@ export function createFixtureAdapter(options: FixtureAdapterOptions): ProviderAd
     delete: async (context, post) => {
       const answer = await call(context, "DELETE", target(post));
       if (answer.ok) return { ok: true, effect: "confirmed" };
-      // A post that is already gone is the state the delete wanted: done, with nothing changed by this call.
       return answer.status === ABSENT_STATUS ? { ok: true, effect: "none" } : answer.result;
     },
     edit: async (context, post, input) =>

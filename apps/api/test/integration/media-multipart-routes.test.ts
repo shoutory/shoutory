@@ -8,11 +8,8 @@ import { createBucket, s3Env } from "../support/s3.js";
 import { addWorkspaceMember, seedOrganization, seedWorkspace, signedUser } from "../support/tenancy.js";
 import { type Fixture, startFixture } from "./auth/harness.js";
 
-// Security floor of the multipart upload routes (register above 64 MiB, sign parts, complete): the bytes go from the
-// browser to storage in 16 MiB parts and never through the API, a part URL works only for its own upload, the part list
-// that counts is storage's and never the client's, an original is never replaced, and no storage call runs inside a
-// database transaction. The storage calls of the server go through a wrapper that can answer what a real bucket would
-// answer only after gigabytes (a crafted list of parts, a missing upload), so most rows move no large body.
+// The storage calls of the server go through a wrapper that can answer what a real bucket would answer only after
+// gigabytes (a crafted list of parts, a missing upload), so most rows move no large body.
 
 type User = { id: string; cookie: string };
 type Signed = { number: number; url: string; headers: Record<string, string> };
@@ -156,7 +153,6 @@ async function startBig(big: Big = {}): Promise<string> {
 const sign = (who: User, id: string, parts: { number: number; sha256: string }[], workspace = ws) =>
   call(who, `${base(workspace)}/${id}/parts`, { parts });
 const complete = (who: User, id: string, workspace = ws) => call(who, `${base(workspace)}/${id}/complete`);
-/** The URL and headers of one part, signed for `body`'s sha256. */
 async function signedPart(id: string, number: number, body: Buffer, who = user("editor")): Promise<Signed> {
   const answer = await sign(who, id, [{ number, sha256: sha(body) }]);
   return ((await dataOf(answer)).parts as Signed[])[0] as Signed;
@@ -184,9 +180,7 @@ const assetOf = (id: string) =>
   );
 const listed = (...sizes: number[]): Part[] =>
   sizes.map((size, index) => ({ number: index + 1, size, etag: `"etag-${index + 1}"` }));
-// 70 MiB is four whole parts and a last one of 6 MiB.
 const EXACT = [PART, PART, PART, PART, 6 * MIB];
-/** An upload of 70 MiB whose storage list is exactly right: `complete` then runs as far as `storage` lets it. */
 async function exactUpload(complete_?: "skip" | StorageErrorKind) {
   const id = await startBig();
   faked.parts = listed(...EXACT);

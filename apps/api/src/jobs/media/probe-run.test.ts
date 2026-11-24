@@ -8,9 +8,8 @@ import { PassThrough } from "node:stream";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { checkFfprobePath, parseProbe, runProbe } from "./probe-run.js";
 
-// The ffprobe child: the one place an uploaded video is read, so the one place its bounds are proved. `spawn` is
-// replaced by a fake child (a real one cannot be killed by a signal on every host); what ffprobe prints is recorded from
-// the shipped binary, and the binary itself is proved in the image smoke test.
+// `spawn` is replaced by a fake child (a real one cannot be killed by a signal on every host); what ffprobe prints is
+// recorded from the shipped binary, and the binary itself is proved in the image smoke test.
 vi.mock("node:child_process", async (importOriginal) => ({ ...(await importOriginal()), spawn: vi.fn() }));
 
 const FIXTURES = new URL("../../../test/fixtures/ffprobe/", import.meta.url);
@@ -76,7 +75,6 @@ describe("parseProbe refuses what is no usable video", () => {
     ...format({ duration: undefined }),
     streams: [{ ...h264.streams[0], duration: undefined }],
   };
-  // [what the answer is, the answer, the reason]
   it.each([
     ["the answer for a truncated file", recorded("truncated.mp4.json"), "corrupt"],
     ["an answer that is no object", null, "corrupt"],
@@ -101,7 +99,6 @@ describe("parseProbe refuses what is no usable video", () => {
   });
 });
 
-/** A child process as `spawn` returns it: its output, its exit, and the signals it was sent. */
 class FakeChild extends EventEmitter {
   readonly stdout = new PassThrough();
   pid: number | undefined = 4242;
@@ -112,7 +109,6 @@ class FakeChild extends EventEmitter {
     return true;
   };
 
-  /** The child ends of itself: its output is read to the end, then it exits. */
   async exit(code: number, output = ""): Promise<void> {
     this.stdout.end(output);
     await once(this.stdout, "end");

@@ -2,8 +2,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { seedOrganization, seedWorkspace, signedUser } from "../../support/tenancy.js";
 import { type Fixture, PASSWORD, startFixture, tokenOf } from "./harness.js";
 
-// Security floor of the sign-up gate: a closed instance creates nothing for an address without an invitation and
-// answers every address alike, so no answer or mail tells an invitation or an account from nothing.
 const signUp = (fx: Fixture, email: string) =>
   fx.request("/api/auth/sign-up/email", { body: { name: "Test", email, password: PASSWORD } });
 const users = (fx: Fixture, email: string) =>
@@ -99,7 +97,6 @@ describe("a fresh instance", () => {
       Number((await client.query("SELECT count(*) AS n FROM app.instance_admins")).rows[0].n),
     );
     expect(founders).toBe(1);
-    // With an owner in place and the setting unset, the instance is closed to a third address.
     await signUp(fx, "gate-race-3@example.test");
     expect(await users(fx, "gate-race-3@example.test")).toBe(0);
   });

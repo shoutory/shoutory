@@ -8,10 +8,8 @@ import { Banner } from "../../ui/banner";
 import { DirText } from "../../ui/dir-text";
 import { ErrorPanel } from "../../ui/error-panel";
 
-// Where the OAuth callback sends the browser (the server writes `reason`, `channel`, `workspace` and, for a provider's
-// error, `message`). Anything else in the address is a generic failure. "Connected" is shown only after this page's own
-// read of the channel says so; a provider's words are text in Details, cut at 200 code points, never the headline.
-
+// The address is attacker-controllable: "Connected" is shown only after this page's own read of the channel says so,
+// and a provider's words are never the headline.
 const REASONS = [
   "start_again",
   "refused",
@@ -38,8 +36,8 @@ type Parsed =
     };
 const GENERIC: Parsed = { kind: "generic" };
 
-// Each key is read once: a repeated key, a reason beside a channel (except a wrong account), a message anywhere but
-// beside a provider's error, or a channel that is not a UUID is not what the server writes.
+// Anything the server does not write (repeated keys, a message outside a provider error, a non-UUID channel) is a
+// generic failure.
 function parse(params: URLSearchParams): Parsed {
   if (["reason", "channel", "workspace", "message"].some((key) => params.getAll(key).length > 1))
     return GENERIC;
@@ -58,7 +56,6 @@ function parse(params: URLSearchParams): Parsed {
   return { kind: "reason", reason: known, message, channel, workspace };
 }
 
-// A workspace counts only when it is a UUID and the id of an entry of the shell's list, matched exactly.
 function listed(shell: ShellData, workspace: string | undefined): string | undefined {
   if (workspace === undefined || "error" in shell || !uuid.safeParse(workspace).success) return undefined;
   return shell.workspaces.find((entry) => entry.id === workspace)?.id;
@@ -229,7 +226,6 @@ function StateMeaning({ state }: { state: string }) {
   );
 }
 
-// What a channel read said: a connected channel is the success, any other state is shown as that state.
 function viewOfChannel(channel: Channel): View {
   const name = channel.nickname ?? channel.display_name;
   if (channel.connection_state === "connected") {
@@ -264,7 +260,7 @@ function viewOfRead(state: Loaded<Channel>, wrong: boolean): View {
   return wrong ? wrongAccount(state.data.handle) : viewOfChannel(state.data);
 }
 
-// The polite region is mounted before its text and stays, so the announcement is made when the text arrives.
+// The live region is mounted before its text, so screen readers announce the text when it arrives.
 function ChannelRead({
   workspace,
   channel,

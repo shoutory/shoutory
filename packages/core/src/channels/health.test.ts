@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { healthOf } from "./health.js";
 
-// R542 (3): a read that cannot be confirmed is not evidence of failure. Only a refusal the provider confirmed
-// (`auth_revoked`, `permanent`) is `failing`; a limit, a cut-off or unknown answer is `degraded`; and no result here ever
-// names a connection state, since only the refresh service's confirmed revocation moves one.
 describe("healthOf", () => {
   it.each([
     ["a success with no health", { ok: true }, "ok"],

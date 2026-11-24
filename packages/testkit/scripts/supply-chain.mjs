@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-// Supply-chain checks, run from the repository root: licences, lockfile changes and resolutions,
-// release-age exclusions, and an evaluation card for every runtime dependency.
 import { execFileSync } from "node:child_process";
 import { globSync, readFileSync } from "node:fs";
 import { parseAllDocuments, parseDocument } from "yaml";
@@ -46,7 +44,6 @@ const named = (name, patterns) =>
     pattern.endsWith("*") ? name.startsWith(pattern.slice(0, -1)) : name === pattern,
   );
 
-// The exemption covers only a licence expression made of these two (their LGPL and the Apache-2.0 of sharp itself).
 const EXEMPT_TOKENS = new Set(["LGPL-3.0-or-later", "Apache-2.0", "AND", "OR", "(", ")"]);
 const withinExemption = (expression) =>
   (expression.match(/\(|\)|AND|OR|[^\s()]+/g) ?? []).every((token) => EXEMPT_TOKENS.has(token));
@@ -61,7 +58,6 @@ export function licenceProblems(licences, allowed, allowedPackages = []) {
     .map(([expression, found]) => `licence ${expression} is not allowed: ${found.map((p) => p.name)}`);
 }
 
-// A lockfile change needs a workspace manifest or the workspace settings changed beside it.
 const WORKSPACE_MANIFESTS = [
   /^package\.json$/,
   /^pnpm-workspace\.yaml$/,
@@ -82,7 +78,6 @@ export function resolutionProblems(lock) {
     .map(([id]) => `${id} resolves from outside the registry`);
 }
 
-// Every release-age exclusion carries `until YYYY-MM-DD` in its comment and is removed once that day has passed.
 export function exclusionProblems(workspaceText, today) {
   const list = parseDocument(workspaceText).get("minimumReleaseAgeExclude", true);
   return (list?.items ?? []).flatMap((item) => {
@@ -96,7 +91,6 @@ export function exclusionProblems(workspaceText, today) {
 export function cardProblems(manifests, cardsText) {
   const cards = new Set([...cardsText.matchAll(/^## (\S+)/gm)].map((match) => match[1]));
   return manifests.flatMap(({ file, dependencies = {} }) =>
-    // A workspace package is our own code, not a third-party dependency, so it has no card.
     Object.entries(dependencies)
       .filter(([name, range]) => !cards.has(name) && !String(range).startsWith("workspace:"))
       .map(([name]) => name)

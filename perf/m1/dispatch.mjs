@@ -1,10 +1,8 @@
-// Measurement script only (NFR-PERF-11; run alone after a build): how long a due post waits for its send, and what a batch of due targets costs the database (the 64-subtransaction cache of
-// PostgreSQL 18, `PGPROC_MAX_CACHED_SUBXIDS`). It runs the real worker and the real SQL against the fixture provider
-// and its simulator, on the database named by the same variables as the integration tests (a running PostgreSQL, see
-// the README). Build first (`pnpm build`), then from the repository root, with nothing else running:
+// Build first (`pnpm build`), then run alone from the repository root, on the database the integration tests use:
 //
 //   node perf/m1/dispatch.mjs [targets for the delay run, default 200] [seconds they are spread over, default 120]
 //
+// The batch cost is measured against the 64-subtransaction cache of PostgreSQL 18 (`PGPROC_MAX_CACHED_SUBXIDS`).
 // The delay of a post is `operation_attempts.effect_started_at - operations.due_at` of its committing attempt: the
 // claim, the re-read and the prepare step are all in it, so it overstates the claim delay (there is no `claimed_at`).
 import { randomBytes } from "node:crypto";
@@ -55,7 +53,6 @@ const percentile = (values, share) => {
 };
 const round = (value) => Math.round(value * 10) / 10;
 
-// A workspace, one connected channel, and `count` scheduled targets due between now and `spread` seconds from now.
 async function seed(db, count, spread) {
   return withAdminClient(env, db.name, async (client) => {
     const [user, org, workspace] = (
@@ -122,7 +119,6 @@ async function seed(db, count, spread) {
   });
 }
 
-// Waits until every target is published or the time allowed ends, and logs what state the operations are in.
 async function untilPublished(db) {
   const count = (sql) => withAdminClient(env, db.name, async (c) => (await c.query(sql)).rows);
   const deadline = Date.now() + (SPREAD_SECONDS + 300) * 1000;
@@ -134,7 +130,6 @@ async function untilPublished(db) {
   );
 }
 
-// The p50, p95 and p99 of the wait of a due post for its send, at one tick interval.
 async function delayRun(tickMs) {
   const db = await cloneTemplate(env, template);
   const sim = await startFixtureSimulator();
@@ -180,7 +175,6 @@ async function delayRun(tickMs) {
   };
 }
 
-// Admission, the claims and the sweeps over `count` targets all due now, with a second session counting subtransaction waits.
 async function subxidRun(count) {
   const db = await cloneTemplate(env, template);
   await seed(db, count, 0);
@@ -188,7 +182,6 @@ async function subxidRun(count) {
   const providers = JSON.stringify(providersArgument([manifest]));
   let waits = 0;
   let sampling = true;
-  // One client for the whole run, counting the waits of this database only.
   const sampler = withAdminClient(env, db.name, async (c) => {
     while (sampling) {
       waits += (

@@ -4,7 +4,6 @@ import { checkStorage } from "../storage/check.js";
 import { createStorageDriver } from "../storage/driver.js";
 import type { CliIo } from "./main.js";
 
-// What each warning asks of the operator: no bucket, key or SDK text, only the remedy (the README holds the rule to set).
 const ABORT_ADVICE =
   "set a bucket lifecycle rule that aborts incomplete multipart uploads after 7 days (see the README)";
 const WARNING_TEXT: Record<StorageWarning, string> = {

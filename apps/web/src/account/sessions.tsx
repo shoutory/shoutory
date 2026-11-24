@@ -63,7 +63,6 @@ function DeviceRow({ device, onEnded }: { device: Device; onEnded: () => void })
   );
 }
 
-/** The devices signed in as this person, newest first (at most 100), with a button to end each but this one. */
 export function Sessions() {
   const { t } = useLingui();
   const { state, replace, reload } = useLoad(devices, "/api/auth/sessions");

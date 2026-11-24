@@ -18,11 +18,6 @@ import {
   workerPool,
 } from "../support/ledger-dispatch-env.js";
 
-// Publishing to an instance through the worker: the turn opens the credential of the claimed channel, hands the adapter
-// that channel's token and stored host, and reaches only that host. A call with an answer the adapter cannot read ends
-// in an unknown outcome and is never sent again; a channel with no stored credential or no stored host sends nothing and
-// its operation fails with no effect. The instance is a simulator on loopback; the `fetch` the worker gives the adapter
-// records which host and which token each request was for, and sends it there.
 useDispatchEnv();
 
 const LEASE = 12;
@@ -46,8 +41,7 @@ const hostsAsked: (string | undefined)[] = [];
 const requests: Seen[] = [];
 const logger = createLogger({ secrets: [], stream: { write: (line) => void lines.push(line) } });
 
-// The worker's `fetchFor`: the host the channel stored arrives as its second argument; a channel with none gets a fetch
-// that refuses (as the production wiring does), and every request that is made is recorded and sent to the simulator.
+// A channel with no stored host gets a fetch that refuses, as the production wiring does.
 const fetchFor = (_given: unknown, host: string | undefined): typeof fetch => {
   hostsAsked.push(host);
   if (host === undefined) return () => Promise.reject(new TypeError("no egress is configured"));
@@ -77,7 +71,6 @@ const turn = () =>
     owner: "owner-instance",
     closing: new AbortController().signal,
   });
-// One tick of the ledger: its reconcile step reads back the unknown outcomes that are due.
 const tick = () =>
   createLedgerTick({
     pool: workerPool(),
@@ -175,7 +168,6 @@ describe("an answer the adapter cannot read is an unknown outcome and is never s
   });
 });
 
-// An unknown outcome that holds an id, due for its read-back now.
 const unknownWith = async (planted: Parameters<typeof plant>[1], externalId: string) => {
   const id = await plant(provider, {
     state: "unknown_external_state",

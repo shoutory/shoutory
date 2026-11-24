@@ -5,7 +5,7 @@ import { checkUrl, createOperatorPolicy } from "./policy.js";
 const userUrl = { kind: "user_url" } as const;
 const strict = createOperatorPolicy({ allowCidrs: [] });
 
-describe("the egress URL check (NFR-SEC-11, SSRF-04, SSRF-07)", () => {
+describe("the egress URL check", () => {
   it.each([
     ["decimal", "https://2130706433/"],
     ["hex", "https://0x7f000001/"],
@@ -34,8 +34,7 @@ describe("the egress URL check (NFR-SEC-11, SSRF-04, SSRF-07)", () => {
   });
 });
 
-// A provider whose accounts live on user-chosen servers is bound to exactly the one host a channel stored: nothing the
-// instance answers (a redirect, a discovery document) can widen it, and the operator policy still applies to that host.
+// Nothing the instance answers (a redirect, a discovery document) can widen the stored host.
 describe("an instance request reaches only the channel's own stored host", () => {
   const own = { kind: "instance", host: "social.example" } as const;
 

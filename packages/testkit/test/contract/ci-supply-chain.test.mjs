@@ -12,7 +12,6 @@ import {
 
 const pkg = [{ name: "some-package" }];
 const licence = (expression) => licenceProblems({ [expression]: pkg }, allowlist.allowed);
-// The packages the allowlist names (sharp's prebuilt libvips), judged by name and never by licence at large.
 const named = (expression, ...names) =>
   licenceProblems(
     { [expression]: names.map((name) => ({ name })) },
@@ -33,7 +32,6 @@ const withLock = (file) => changed("pnpm-lock.yaml", file);
 const resolution = (value) => resolutionProblems({ packages: { "a@1.0.0": { resolution: value } } });
 const card = (cards) => cardProblems([{ file: "apps/api/package.json", dependencies: { hono: "1" } }], cards);
 
-// The same exclusion written in the other YAML shapes must be judged alike.
 const FORMS = {
   "flow form": (item) => `minimumReleaseAgeExclude: [\n  ${item}\n]\n`,
   "unindented entries": (item) => `minimumReleaseAgeExclude:\n- ${item}\n`,

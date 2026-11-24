@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -5,6 +6,7 @@ import { Client } from "pg";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { withAdvisoryLock } from "../../src/locks.js";
 import {
+  type AcceptedRevision,
   type MigrateLimits,
   MigrationChecksumError,
   MigrationLintError,
@@ -15,7 +17,6 @@ import { emptyDatabase, readTestEnv, type TestDatabase } from "../../src/testing
 const env = readTestEnv();
 const CREATE_WIDGETS = "CREATE TABLE public.widgets (id int);";
 
-// A fresh database and folder per test: one test's tables and files must not leak into the next.
 function sandbox() {
   let db: TestDatabase;
   let dir: string;
@@ -29,7 +30,8 @@ function sandbox() {
   });
   return {
     write: (name: string, sql: string) => writeFile(join(dir, name), sql),
-    migrate: (limits?: MigrateLimits) => migrateDatabase(db.url("owner"), dir, limits),
+    migrate: (limits?: MigrateLimits, accepted?: AcceptedRevision[]) =>
+      migrateDatabase(db.url("owner"), dir, limits, accepted),
     query: (sql: string) => db.pool("owner").query(sql),
     db: () => db,
     recorded: async () =>
@@ -74,6 +76,42 @@ describe("migration runner: history", () => {
     const applied = await Promise.all([box.migrate(), box.migrate()]);
     expect(applied.flat()).toEqual(["0001_widgets.sql"]);
     expect(await box.recorded()).toEqual(["0001_widgets.sql"]);
+  });
+});
+
+describe("migration runner: accepted revisions", () => {
+  const box = sandbox();
+  const sum = (text: string) => createHash("sha256").update(text).digest("hex");
+  const V1 = "-- first wording\nCREATE TABLE public.widgets (id int);";
+  const V2 = "-- second wording\nCREATE TABLE public.widgets (id int);";
+  const NAME = "0001_widgets.sql";
+  const stored = async () =>
+    (await box.query("SELECT checksum FROM app.schema_migrations")).rows.map((row) => row.checksum);
+
+  it("passes and replaces the stored checksum when the pair of sums is listed", async () => {
+    await box.write(NAME, V1);
+    await box.migrate();
+    await box.write(NAME, V2);
+    expect(await box.migrate(undefined, [{ name: NAME, from: sum(V1), to: sum(V2) }])).toEqual([]);
+    expect(await stored()).toEqual([sum(V2)]);
+  });
+
+  it("is refused when the file no longer holds the listed new sum", async () => {
+    await box.write(NAME, V1);
+    await box.migrate();
+    await box.write(NAME, `${V2}\nALTER TABLE public.widgets ADD COLUMN extra int;`);
+    const listed = [{ name: NAME, from: sum(V1), to: sum(V2) }];
+    await expect(box.migrate(undefined, listed)).rejects.toThrow(MigrationChecksumError);
+    expect(await stored()).toEqual([sum(V1)]);
+  });
+
+  it("is refused when the stored sum is not the listed old sum", async () => {
+    await box.write(NAME, V1);
+    await box.migrate();
+    await box.write(NAME, V2);
+    const listed = [{ name: NAME, from: sum("another history"), to: sum(V2) }];
+    await expect(box.migrate(undefined, listed)).rejects.toThrow(MigrationChecksumError);
+    expect(await stored()).toEqual([sum(V1)]);
   });
 });
 

@@ -2,8 +2,7 @@ import { z } from "zod";
 import { type App, defineRoute } from "../define-route.js";
 import { pageAnswer, pageQuery } from "../input.js";
 
-// The audit rows of one workspace, newest first. Only the Owner reads them until a later milestone widens it (R270).
-// A row shows what happened and who did it; the keyed address digest and the chain hashes stay in the database.
+// The keyed address digest and the chain hashes of a row stay in the database.
 
 const params = z.strictObject({ workspace_id: z.uuid().transform((id) => id.toLowerCase()) });
 

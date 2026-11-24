@@ -3,19 +3,15 @@ import { checkDpopProof, pkceMatches } from "../simulator/auth.js";
 import { type Handler, type SimReply, startSimulator } from "../simulator/server.js";
 
 export interface OAuthFakeOptions {
-  /** The clock, so a code, a pushed request and a token expire when a test moves it. */
   readonly now: () => Date;
-  /** When set, the token route demands a DPoP proof and a server nonce, and issues `DPoP` tokens. */
   readonly requireDpop?: boolean;
 }
 
-// The fake's own lifetimes, not any provider's.
 const CODE_TTL_MS = 60_000;
 const REQUEST_URI_TTL_MS = 90_000;
 const ACCESS_TOKEN_TTL_S = 300;
 const DPOP_NONCE = "server-nonce-1";
 
-// What an authorization request carries, pushed (PAR) or sent to /authorize. Only S256 is accepted.
 const authorizationParams = z.object({
   response_type: z.literal("code"),
   client_id: z.string().min(1).max(256),
@@ -28,7 +24,6 @@ type AuthorizationParams = z.infer<typeof authorizationParams>;
 
 const NO_STORE = { "cache-control": "no-store", pragma: "no-cache" } as const;
 
-// The answer to a refused request: a fixed error code and nothing the caller sent.
 const oauthError = (status: number, error: string, headers: Record<string, string> = {}): SimReply => ({
   status,
   headers: { ...NO_STORE, ...headers },
@@ -49,7 +44,6 @@ interface Store {
   readonly refreshTokens: Set<string>;
   readonly requireDpop: boolean;
   readonly seenProofs: Set<string>;
-  /** Armed by a test: the next refresh answer carries no new refresh token. */
   omitNextRefreshToken: boolean;
   next(kind: string): string;
 }
@@ -112,7 +106,6 @@ const push =
     };
   };
 
-// Tokens for a grant; a new refresh token is issued (and remembered) unless the caller leaves it out.
 function issue(store: Store, withRefreshToken = true): SimReply {
   const refresh = store.next("refresh-token");
   if (withRefreshToken) store.refreshTokens.add(refresh);
@@ -141,8 +134,7 @@ function exchangeCode(store: Store, fields: Record<string, string>): SimReply {
   return matches ? issue(store) : oauthError(400, "invalid_grant");
 }
 
-// A refresh token is single use: a successful refresh swaps it for a new one, unless the answer is armed to omit it, in
-// which case the token that was used stays valid.
+// When the answer is armed to omit the new refresh token, the token that was used stays valid.
 function exchangeRefresh(store: Store, fields: Record<string, string>): SimReply {
   const held = fields.refresh_token ?? "";
   if (!store.refreshTokens.has(held)) return oauthError(400, "invalid_grant");
@@ -181,11 +173,6 @@ const token =
     return oauthError(400, "unsupported_grant_type");
   };
 
-/**
- * The routes of an OAuth 2.1 authorization server for a public client: `GET /authorize` (approves at once), `POST /par`
- * and `POST /token` for the authorization-code and refresh-token grants. A code, a pushed request and a refresh token
- * are single use. `omitNextRefreshToken` arms the next refresh answer to carry no new refresh token.
- */
 export function oauthRoutes(options: OAuthFakeOptions) {
   const store = createStore(options);
   return {
@@ -200,7 +187,6 @@ export function oauthRoutes(options: OAuthFakeOptions) {
   };
 }
 
-/** Starts the authorization server on a loopback port. */
 export function startOAuthFake(options: OAuthFakeOptions) {
   return startSimulator(oauthRoutes(options).routes);
 }

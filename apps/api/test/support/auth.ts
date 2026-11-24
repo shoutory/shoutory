@@ -4,7 +4,6 @@ import { type AppPool, createAuthDb } from "@shoutory/db/pool";
 import { createAuth } from "../../src/auth/auth.js";
 import type { Logger } from "../../src/logging/logger.js";
 
-/** The authentication service over a pool, with fixed test secrets; for tests whose routes never read a session. */
 export const testAuth = (pool: AppPool, keys: KeyProvider, logger: Logger, publicOrigin: string) =>
   createAuth({
     publicOrigin,

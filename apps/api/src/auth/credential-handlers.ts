@@ -26,7 +26,6 @@ const verifyPassword = guarded(async (ctx) => {
   return answer;
 });
 
-/** Enabling or disabling the second factor ends every session but the one that does it. */
 const secondFactorChange = guarded(async (ctx) => {
   const { data, cookies } = await forward(ctx);
   const current = await sessionAfter(ctx, cookies);

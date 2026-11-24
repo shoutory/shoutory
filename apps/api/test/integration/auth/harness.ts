@@ -24,7 +24,6 @@ export const keys = new EnvKeyProvider({
   SHOUTORY_KEK_K1: Buffer.alloc(32, 1).toString("base64"),
 });
 
-/** The headers of a same-origin request from the web client. */
 export const WEB = {
   "sec-fetch-site": "same-origin",
   "x-shoutory-client": "web",
@@ -51,7 +50,6 @@ export interface Fixture {
   /** Builds an app whose library runs on the given pool URL (a dead URL simulates its database failing). */
   appOn(authUrl: string): ReturnType<typeof createApp>;
   readonly app: ReturnType<typeof createApp>;
-  /** The authentication service of `app`, for a test that calls the library in process. */
   readonly auth: AuthService;
   request(
     path: string,
@@ -60,23 +58,17 @@ export interface Fixture {
       body?: unknown;
       headers?: Record<string, string>;
       peer?: string;
-      /** Aborts the request, as a client that disconnects does. */
       signal?: AbortSignal;
     },
     app?: ReturnType<typeof createApp>,
   ): Promise<Response>;
-  /** The mails queued for `recipient`, newest first, with the sealed link opened. */
   mails(recipient: string): Promise<Mail[]>;
   admin<T>(run: (client: AdminClient) => Promise<T>): Promise<T>;
-  /** Signs up, verifies through the mailed token and signs in; returns the session cookie. */
   signedIn(email: string, peer?: string): Promise<string>;
-  /** The breached-password service every auth call of this fixture reaches. */
   readonly hibp: HibpFake;
-  /** Signs in, enables the second factor and verifies its first code; the jar holds the new session. */
   enrolled(email: string): Promise<Enrolled>;
   /** Signs in a user with a second factor and returns the jar that holds only the challenge cookie. */
   challenged(email: string): Promise<{ jar: Jar; answer: Response }>;
-  /** The number of live session rows of the user. */
   sessionCount(email: string): Promise<number>;
   close(): Promise<void>;
 }
@@ -89,10 +81,8 @@ export interface Enrolled {
   readonly enableAnswer: Response;
 }
 
-/** The k-anonymity range API of the breached-password service: a password in `breached` is a hit; `down` fails. */
 export interface HibpFake {
   readonly breached: Set<string>;
-  /** Every URL asked for. */
   readonly urls: string[];
   down: boolean;
   /** When set, the whole answer body, whatever the range asked for. */
@@ -142,7 +132,6 @@ function base32Decode(text: string): Buffer {
   return Buffer.from(out);
 }
 
-/** The RFC 6238 code (SHA-1, 6 digits, 30 s) of the base32 secret, `steps` periods from now. */
 export function totpAt(secret: string, steps = 0): string {
   const counter = Buffer.alloc(8);
   counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30_000) + steps));
@@ -207,7 +196,6 @@ const send = (app: ReturnType<typeof createApp>, path: string, init: RequestInit
     ),
   );
 
-// An outbox row with its sealed link opened under the test key ring.
 interface OutboxRow {
   id: string;
   workspace_id: string | null;
@@ -238,7 +226,6 @@ function openedMail(recipient: string, row: OutboxRow): Mail {
   return { recipient, template: row.template, link: open(stored, aad, keys).expose() };
 }
 
-// Signs up, verifies through the mailed token and signs in; the session cookie.
 async function verifiedSession(
   { request, mails }: Pick<Fixture, "request" | "mails">,
   email: string,
@@ -252,13 +239,10 @@ async function verifiedSession(
 }
 
 export interface FixtureOptions {
-  /** A pepper that misbehaves, to force a failure inside a database hook. */
   readonly pepper?: SealedSecret;
-  /** Values the logger must mask, as the real process registers its secrets. */
   readonly secrets?: readonly string[];
   /** Sign-up is open to anyone unless a test says `false`: the first verified user closes it by becoming the owner. */
   readonly signupOpen?: boolean;
-  /** The clock of the app's in-process caches and of the 30-day session cap, in milliseconds. */
   readonly now?: () => number;
   /** The storage driver of the app; absent, the app has no storage routes. */
   readonly storage?: StorageDriver;
@@ -327,7 +311,6 @@ function accountHelpers({
   };
 }
 
-/** The state of an instance that has switched sign-up on: any address may register. */
 const openSignup = (database: string) =>
   withAdminClient(env, database, (client) =>
     client.query("INSERT INTO app.instance_settings (key, value) VALUES ('signup_enabled', 'true'::jsonb)"),
@@ -341,9 +324,8 @@ interface Parts {
   readonly options: FixtureOptions;
 }
 
-/** One app and its authentication service, with the library running on `libraryPool`. */
 function buildOn({ logger, hibp, authPool, appPool, options }: Parts, libraryPool: Parts["authPool"]) {
-  // The same clock serves the app's caches and the session cap (R545 Q2); absent, both read the system clock.
+  // The same clock serves the app's caches and the session cap; absent, both read the system clock.
   const authClock = options.now ? { now: options.now } : {};
   const auth = createAuth({
     ...authClock,

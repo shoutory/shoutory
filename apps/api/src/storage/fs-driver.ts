@@ -10,7 +10,6 @@ import { checkRange, type StorageDriver, StorageError, storageKeySegments } from
 const ABSENT = new Set(["ENOENT", "ENOTDIR"]);
 const isAbsent = (error: unknown) => ABSENT.has((error as NodeJS.ErrnoException | null)?.code ?? "");
 
-/** What is at `path` without following a link; null when nothing is there. */
 async function entry(path: string): Promise<Stats | null> {
   try {
     return await lstat(path);
@@ -20,10 +19,7 @@ async function entry(path: string): Promise<Stats | null> {
   }
 }
 
-/**
- * The folder that holds the key's file, walked one folder at a time. A link anywhere on the way is refused, so a key
- * cannot reach outside the root through one; a missing folder is created only for a write (null for a read).
- */
+// A link anywhere on the way is refused, so a key cannot reach outside the root through one.
 async function folderOf(root: string, folders: string[], create: boolean): Promise<string | null> {
   let path = root;
   for (const name of folders) {
@@ -38,7 +34,6 @@ async function folderOf(root: string, folders: string[], create: boolean): Promi
   return path;
 }
 
-/** The file of an existing object, or null when there is none; a link in the last place is refused too. */
 async function fileOf(root: string, key: string): Promise<string | null> {
   const folders = storageKeySegments(key);
   const name = folders.pop() as string;
@@ -50,7 +45,6 @@ async function fileOf(root: string, key: string): Promise<string | null> {
   return found?.isFile() ? path : null;
 }
 
-/** Passes bytes through and fails the pipeline as soon as more than `maxBytes` have passed. */
 function bounded(maxBytes: number): Transform {
   let seen = 0;
   return new Transform({
@@ -62,10 +56,8 @@ function bounded(maxBytes: number): Transform {
   });
 }
 
-/**
- * What a filesystem failure means to a caller, as on the S3 driver: no path, no system text. `link` is how a write that
- * must not replace is made, so a filesystem that cannot link (ENOTSUP, EXDEV) cannot hold originals.
- */
+// No path and no system text reach the caller. `link` is how a write that must not replace is made, so a filesystem
+// that cannot link (ENOTSUP, EXDEV) cannot hold originals.
 function mapped(error: unknown): StorageError {
   if (error instanceof StorageError) return error;
   const code = (error as NodeJS.ErrnoException | null)?.code ?? "";
@@ -83,7 +75,6 @@ async function guarded<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
-/** The default driver: objects are files under `root`, which the operator creates and mounts. */
 export function createFsDriver(root: string): StorageDriver {
   return {
     name: "fs",
@@ -145,7 +136,6 @@ async function getFile(
   return path === null ? null : (Readable.toWeb(createReadStream(path, range)) as ReadableStream<Uint8Array>);
 }
 
-/** The size and the sha256 (hex) of the stored file, hashed by a streamed read: the filesystem keeps no checksum. */
 async function headFile(root: string, key: string): Promise<{ size: number; sha256: string } | null> {
   const path = await fileOf(root, key);
   if (path === null) return null;

@@ -2,9 +2,6 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { flowObjectSchema, issuerAccepted, newState, pkcePair, providerErrorText } from "./flow.js";
 
-// The pure rules of an OAuth connect: the state is unguessable and stored only as its digest, the PKCE pair is
-// S256, the callback's `iss` is checked against the one the adapter expects, and a provider's error text is shown only as
-// bounded plain text.
 describe("the state", () => {
   it("has at least 128 bits, differs per call and is stored as the digest of its bytes", () => {
     const first = newState();

@@ -1,7 +1,3 @@
-// Builds the image and proves what a self-hoster gets, on a Docker network that has no way out: the image runs as a
-// non-root user in UTC on the pinned Node, ships its version, web build and migrations, applies its migrations, answers
-// /readyz with a telemetry endpoint set, and stops cleanly on SIGTERM. Every step fails the script with a message that names it.
-// Needs Docker; run with `pnpm verify --only image-smoke`.
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -57,7 +53,6 @@ const appEnv = {
   SHOUTORY_SESSION_SECRET: secret(),
   SHOUTORY_ACTIVE_KEY_ID: "k1",
   SHOUTORY_KEK_K1: randomBytes(32).toString("base64"),
-  // The role `all` connects as these three; the owner URL goes to migrate alone.
   ...Object.fromEntries(
     ["app", "auth", "worker"].map((role) => [`SHOUTORY_DATABASE_URL_${role.toUpperCase()}`, url(role)]),
   ),
@@ -114,8 +109,7 @@ function shipped() {
   expect(found.migrations > 0, "no migration file is at /app/packages/db/migrations");
 }
 
-// The shipped ffprobe runs as the runtime user on a read-only root with no network, so its libraries resolve there; the
-// rows run independently and every failure is reported together.
+// The rows run independently so every failure is reported together.
 const FFPROBE = "/usr/local/bin/ffprobe";
 const FFPROBE_ROWS = [
   [
@@ -191,8 +185,6 @@ function ffprobe() {
   expect(failures.length === 0, failures.join(" || "));
 }
 
-// The app's own probe code from the shipped build runs the shipped ffprobe on a real mp4: the argv, the parse and the
-// binary are proved together, as the runtime user on a read-only root with no network.
 const VIDEO_FIXTURE = join(root, "apps/api/test/fixtures/h264.mp4");
 function probeVideo() {
   step("the shipped probe reads a real mp4 with the production argv, read-only and offline");
@@ -308,7 +300,7 @@ function probeWithQuery() {
   docker(["exec", `${id}-app`, NODE, "-e", probe]);
 }
 
-// The spans the collector received (shutdown flushed them), as [kind, attributes] pairs; kind 2 is a server span.
+// Kind 2 is a server span; shutdown flushes the spans to the collector.
 function receivedSpans() {
   const lines = docker(["logs", `${id}-collector`])
     .stdout.split("\n")
@@ -359,7 +351,6 @@ function cleanUp() {
   docker(["image", "rm", "-f", IMAGE], { allowFailure: true });
 }
 
-// An interrupted run still removes what it started.
 for (const [signal, code] of [
   ["SIGINT", 130],
   ["SIGTERM", 143],

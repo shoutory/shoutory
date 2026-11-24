@@ -13,7 +13,6 @@ function render(element: React.ReactElement) {
   return host;
 }
 
-// WI-F01 and WI-F06: a visible label names the input; a refusal is text tied to the field, not colour alone.
 describe("TextField", () => {
   it("names the input by its label", () => {
     const host = render(<TextField label="Email" name="email" />);

@@ -30,7 +30,6 @@ afterEach(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
 });
 
-/** A DNS stub: each name answers from its own queue of answers; the last answer repeats. */
 function stubLookup(answers: Record<string, string[][]>) {
   const calls: Record<string, number> = {};
   const lookup = async (hostname: string) => {
@@ -59,7 +58,7 @@ async function refusal(promise: Promise<unknown>): Promise<EgressError> {
   return error as EgressError;
 }
 
-describe("egressFetch connect pinning (SSRF-02, SSRF-05, SSRF-14)", () => {
+describe("egressFetch connect pinning", () => {
   it("a hostname whose answer holds one blocked address is refused whole, with no connection opened", async () => {
     const dns = stubLookup({ "mixed.test": [["93.184.216.34", "127.0.0.1"]] });
     const failure = await refusal(
@@ -80,7 +79,7 @@ describe("egressFetch connect pinning (SSRF-02, SSRF-05, SSRF-14)", () => {
   });
 });
 
-describe("egressFetch one lookup per connection (R520 (6), R524 (2))", () => {
+describe("egressFetch one lookup per connection", () => {
   it("looks up once and connects only to the checked address, never to a later answer", async () => {
     const dns = stubLookup({ "pin.test": [["127.0.0.1"], ["169.254.169.254"]] });
     const reply = await egressFetch(
@@ -102,7 +101,7 @@ describe("egressFetch one lookup per connection (R520 (6), R524 (2))", () => {
   );
 });
 
-describe("egressFetch redirects (SSRF-06)", () => {
+describe("egressFetch redirects", () => {
   it.each(["file:///etc/hosts", "gopher://hop.test/x", "ftp://hop.test/x"])(
     "a redirect hop to %s is refused",
     async (location) => {
@@ -113,7 +112,7 @@ describe("egressFetch redirects (SSRF-06)", () => {
   );
 });
 
-describe("egressFetch credentials across hops (SSRF-11)", () => {
+describe("egressFetch credentials across hops", () => {
   it("drops Authorization, Cookie and Proxy-Authorization on a cross-host hop", async () => {
     const dns = stubLookup({ "a.test": [["127.0.0.1"]], "b.test": [["127.0.0.1"]] });
     const seen: Record<string, IncomingMessage["headers"]> = {};
@@ -175,7 +174,7 @@ describe("egressFetch credentials across hops (SSRF-11)", () => {
 
 const local = () => stubLookup({ "slow.test": [["127.0.0.1"]] });
 
-describe("egressFetch size and total time (SSRF-09)", () => {
+describe("egressFetch size and total time", () => {
   it("a response above the size cap is cut as size_exceeded", async () => {
     handler = (_req, res) => {
       res.write("x".repeat(600));
@@ -213,9 +212,8 @@ describe("egressFetch size and total time (SSRF-09)", () => {
   });
 });
 
-describe("egressFetch caller's signal (LIM-01)", () => {
+describe("egressFetch caller's signal", () => {
   it("a signal that aborts ends a sent call at once, as a possible effect, long before its own time limit", async () => {
-    // fails first because: the request carries no signal of the caller, so a lost lease cannot cancel a call in flight
     handler = () => undefined;
     const caller = new AbortController();
     setTimeout(() => caller.abort(), 150);
@@ -237,7 +235,6 @@ describe("egressFetch caller's signal (LIM-01)", () => {
   });
 
   it("a signal that is already aborted refuses the call before any connection is opened", async () => {
-    // fails first because: the signal is ignored, so the call connects and waits for the answer
     const caller = new AbortController();
     caller.abort();
     await refusal(
@@ -250,7 +247,7 @@ describe("egressFetch caller's signal (LIM-01)", () => {
   });
 });
 
-describe("egressFetch connections and retry (BG-18)", () => {
+describe("egressFetch connections and retry", () => {
   it("keep-alive reuses one connection per host", async () => {
     const policy = policyOf(["127.0.0.0/8"], local().lookup);
     await egressFetch({ url: `http://slow.test:${port}/a` }, policy);

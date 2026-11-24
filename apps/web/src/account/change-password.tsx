@@ -13,7 +13,6 @@ import { StepHeading } from "./recovery-codes";
 
 const changed = z.object({ user: z.object({ email: z.string() }) });
 
-// A password found in a breach is told apart from any other refusal by the reason the server gives.
 function FailedChange({ error }: { error: ApiError }) {
   if (error.details?.reason === "password_breached") {
     return (
@@ -27,12 +26,10 @@ function FailedChange({ error }: { error: ApiError }) {
       />
     );
   }
-  // A wrong current password has its own words; any other refusal of the call is about the new password.
   const screen = error.details?.reason === "current_password_wrong" ? "step-up" : "reset";
   return <ErrorPanel focusOnMount error={error} {...authCopy(screen, error)} />;
 }
 
-/** The current password goes with the new one; neither is kept. A stale identity check is asked for by X-04. */
 export function ChangePassword({ onChanged }: { onChanged: () => void }) {
   const { t } = useLingui();
   const stepUp = useStepUp();
@@ -48,7 +45,6 @@ export function ChangePassword({ onChanged }: { onChanged: () => void }) {
       setCurrent("");
       next.clear();
       setDone(true);
-      // The change ended every other session, so the device list is out of date.
       onChanged();
     },
     (error) => {

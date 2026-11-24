@@ -7,7 +7,6 @@ import { Banner } from "./banner";
 
 afterEach(() => document.body.replaceChildren());
 
-// WI-F12: an alert role is for urgent errors; a notice is a status. The text carries the meaning, not the colour.
 describe("Banner", () => {
   it.each([
     ["info", "status"],

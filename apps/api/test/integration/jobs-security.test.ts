@@ -5,9 +5,6 @@ import { type JobQueue, parseJobPayload } from "../../src/jobs/registry.js";
 const env = readTestEnv();
 const WORKSPACE = "00000000-0000-7000-8000-000000000001";
 
-// Security floor of M0-09b (NFR-SEC-24): a job is a wake-up that carries ids, never authority, and the runtime role of
-// the API has no way into the queue library's tables.
-
 describe("job payloads", () => {
   it.each<[JobQueue, unknown, boolean]>([
     ["ensure_partitions", {}, true],

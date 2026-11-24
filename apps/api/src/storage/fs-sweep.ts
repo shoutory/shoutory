@@ -1,10 +1,9 @@
 import { lstat, readdir, rmdir, unlink } from "node:fs/promises";
 import { join } from "node:path";
 
-// The filesystem driver leaves two kinds of file that nothing else removes: the part files of an upload that was never
-// completed (`ws/<workspace>/<media>/parts/<n>`) and the temporary file of a write that died (`.<name>.<uuid>.tmp`).
-// The sweep removes them once they are older than 7 days. It looks at every entry with `lstat` and never follows or
-// removes a link or a junction, stays under `ws/`, and stops at a real-time deadline.
+// Nothing else removes the part files of an upload never completed (`ws/<workspace>/<media>/parts/<n>`) or the
+// temporary file of a write that died (`.<name>.<uuid>.tmp`). Entries are read with `lstat` so a link or junction is
+// never followed or removed.
 
 const DAY_MS = 86_400_000;
 const WEEK_MS = 7 * DAY_MS;
@@ -13,18 +12,14 @@ const MAX_DEPTH = 6;
 const TEMP = /^\..+\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.tmp$/i;
 
 export interface SweepResult {
-  /** Files and folders removed. */
   removed: number;
-  /** Media folders walked. */
   visited: number;
-  /** True when the walk stopped at its deadline. */
   cut: boolean;
 }
 
 const gone = (error: unknown) =>
   error instanceof Error && "code" in error && (error.code === "ENOENT" || error.code === "ENOTDIR");
 
-/** The names in a folder; none for a folder that is not there. */
 async function namesIn(dir: string): Promise<string[]> {
   try {
     return await readdir(dir);
@@ -34,7 +29,6 @@ async function namesIn(dir: string): Promise<string[]> {
   }
 }
 
-/** What the entry is by `lstat`, so a link is never taken for a folder or a file; null once it is gone. */
 async function look(path: string) {
   try {
     const stat = await lstat(path);
@@ -45,7 +39,7 @@ async function look(path: string) {
   }
 }
 
-/** Removes a file or an empty folder; one that a complete or another sweep removed first is no error. */
+// One that a completing upload or another sweep removed first is no error.
 async function removeOne(path: string, remove: (path: string) => Promise<void>): Promise<number> {
   try {
     await remove(path);
@@ -60,7 +54,6 @@ interface Walk {
   cutoff: number;
 }
 
-/** Removes the stale files of one folder and of the folders below it; answers how many entries it removed. */
 async function sweepFolder(dir: string, inParts: boolean, walk: Walk, depth: number): Promise<number> {
   let removed = 0;
   for (const name of await namesIn(dir)) {
@@ -81,11 +74,8 @@ async function removeEmpty(dir: string): Promise<number> {
   return (await namesIn(dir)).length === 0 ? removeOne(dir, rmdir) : 0;
 }
 
-/**
- * The real folders under `dir` (a link is not one), in name order and starting at the folder the day number selects, so a
- * walk that is cut at its deadline begins somewhere else the next day. The deadline is read for every entry listed, and
- * a listing that ran out of time answers null.
- */
+// Starts at the folder the day number selects, so a walk cut at its deadline begins somewhere else the next day and
+// every folder is reached in the end (no stored cursor). A listing that ran out of time answers null.
 async function foldersIn(dir: string, now: Date, timeUp: () => boolean): Promise<string[] | null> {
   const found: string[] = [];
   for (const name of (await namesIn(dir)).sort()) {
@@ -97,12 +87,7 @@ async function foldersIn(dir: string, now: Date, timeUp: () => boolean): Promise
   return [...found.slice(start), ...found.slice(0, start)];
 }
 
-/**
- * Sweeps `<root>/ws/<workspace>/<media>/`. `now` is the clock (ages are file times, never the wall clock); the deadline
- * runs on real time and is checked before each media folder. A walk that is cut leaves the rest for a later day: the
- * workspace list and each media list begin at an offset of the day number (no stored cursor), so the folders that a
- * cut walk did not reach come first on another day and every folder is reached in the end.
- */
+// Ages are file times compared with `now`; the deadline runs on real time.
 export async function sweepStaleFiles(
   root: string,
   now: Date,

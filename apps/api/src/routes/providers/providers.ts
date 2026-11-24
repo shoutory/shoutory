@@ -2,9 +2,8 @@ import { z } from "zod";
 import type { HealthProvider } from "../../channels/health.js";
 import { type App, defineRoute } from "../define-route.js";
 
-// The providers a workspace can connect, read from the registry the app was given. A member with channels.view reads
-// it. The answer is an allowlist of five fields: nothing of a manifest's scopes, hosts or limits, and nothing of the
-// adapter, leaves the server. `connectable` says whether the provider has a connect side at all.
+// The answer is an allowlist: nothing of a manifest's scopes, hosts or limits, and nothing of the adapter, leaves the
+// server.
 
 const workspaceParams = z.strictObject({ workspace_id: z.uuid().transform((id) => id.toLowerCase()) });
 

@@ -3,15 +3,13 @@ import { inPage, openScreen } from "../support/quality";
 import { ERROR_PAGES, LOCALES, openErrorPage, SCREENS, THEMES } from "../support/screens";
 import { freezeVolatileValues, masksFor } from "../support/visual";
 
-// The widths of the three layouts: the bottom bar, the collapsed rail and the full rail. A screen is compared with its
-// baseline in each language and theme, so a layout that does not mirror under `dir=rtl` changes a picture.
+// The widths of the three layouts: the bottom bar, the collapsed rail and the full rail.
 const SIZES = [
   { width: 390, height: 844 },
   { width: 768, height: 1024 },
   { width: 1440, height: 900 },
 ] as const;
 
-/** The screen as it will be photographed: faces loaded, nothing moving. */
 async function settle(page: Page): Promise<void> {
   await page.evaluate(() => document.fonts.ready);
 }

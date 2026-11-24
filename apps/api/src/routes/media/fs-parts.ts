@@ -20,8 +20,8 @@ import {
   uploadOf,
 } from "./shared.js";
 
-// The filesystem driver has no storage-side multipart upload: a file above 64 MiB is sent to this API in parts of 16 MiB,
-// each a file under the asset's folder, and complete assembles them into the original.
+// The filesystem driver has no storage-side multipart upload, so the parts come to this API and are kept as files
+// under the asset's folder until complete assembles them.
 
 const partParams = z.strictObject({
   ...mediaParams.shape,
@@ -35,7 +35,6 @@ const partKey = (workspaceId: string, mediaId: string, number: number | string) 
 const unprocessable = (reason: string, message: string) =>
   new Refusal("unprocessable_content", message, { details: { reason } });
 
-/** The PUT of one part's bytes to the API: streamed, never buffered, the length the one the server derives. */
 export function registerFsParts(app: App, storage: StorageDriver): void {
   defineRoute(app, {
     method: "put",
@@ -67,7 +66,7 @@ export function registerFsParts(app: App, storage: StorageDriver): void {
   });
 }
 
-/** A reader of the part, or null when there is no such part in the list; a part that is gone from storage is a failure. */
+// A part that is in the list but gone from storage is a failure.
 async function openPart(storage: StorageDriver, key: string | undefined) {
   if (key === undefined) return null;
   const part = await storage.get(key);
@@ -75,7 +74,6 @@ async function openPart(storage: StorageDriver, key: string | undefined) {
   return part.getReader();
 }
 
-/** The parts of an upload as one stream: each part is opened when the one before it has been read to its end. */
 function concatenated(storage: StorageDriver, keys: readonly string[]): ReadableStream<Uint8Array> {
   let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
   let next = 0;
@@ -95,7 +93,6 @@ function concatenated(storage: StorageDriver, keys: readonly string[]): Readable
   });
 }
 
-/** Passes the bytes through and refuses the end of the stream when their sha256 is not the declared one. */
 function proving(source: ReadableStream<Uint8Array>, sha256: string) {
   const hash = createHash("sha256");
   const verdict = { mismatch: false };
@@ -115,7 +112,7 @@ function proving(source: ReadableStream<Uint8Array>, sha256: string) {
   return { stream, verdict };
 }
 
-/** Every part must be there before one byte of the original is written: a missing part is a conflict, not a half file. */
+// Every part is checked before one byte of the original is written: a missing part is a conflict, not a half file.
 async function requireParts(storage: StorageDriver, keys: readonly string[]): Promise<void> {
   for (const key of keys) {
     const part = await storage.get(key);
@@ -161,7 +158,6 @@ async function assemble(storage: StorageDriver, key: string, keys: readonly stri
   }
 }
 
-/** Complete of a large upload on the filesystem: the parts become the original, then the asset is uploaded and the parts go. */
 export async function finishFsParts(
   stores: { storage: StorageDriver; logger: Pick<Logger, "warn"> },
   workspaceId: string,
@@ -183,7 +179,7 @@ export async function finishFsParts(
   return done;
 }
 
-/** The part files are not needed once the original is stored; one that stays is the sweeper's after 7 days. */
+// A part file that stays is removed by the sweeper after 7 days.
 async function removeParts(
   storage: StorageDriver,
   keys: readonly string[],

@@ -36,7 +36,7 @@ function catalog(po: string) {
 const missingIn = (ids: Iterable<string>, messages: Map<string, string>) =>
   [...ids].filter((id) => !messages.has(id));
 
-// A plural message lists its forms as `zero {..} one {..}`; Arabic needs all six (NFR-I18N-02).
+// A plural message lists its forms as `zero {..} one {..}`; Arabic needs all six.
 function lackingPluralForms(messages: Map<string, string>) {
   return [...messages].flatMap(([id, text]) => {
     if (!/\{\w+,\s*plural,/.test(text)) return [];

@@ -8,12 +8,10 @@ import { changeCopy, Listed, useChange } from "../settings/member-actions";
 import { ErrorPanel } from "../ui/error-panel";
 import { Switch } from "../ui/switch";
 
-// The instance settings that exist; a row is absent until an admin writes it, and absent means sign-up is off.
+// A row is absent until an admin writes it, and absent means sign-up is off.
 const settingsSchema = z.array(z.object({ key: z.string(), value: z.unknown() }));
 const saved = z.object({ key: z.string(), value: z.boolean() });
 
-// The switch shows its effect first, in words, and changes only after the server answers (the write needs a recent
-// password check: a refused one asks once and runs again).
 function SignupSwitch({ initial }: { initial: boolean }) {
   const stepUp = useStepUp();
   const [on, setOn] = useState(initial);
@@ -58,7 +56,6 @@ function SignupSwitch({ initial }: { initial: boolean }) {
   );
 }
 
-/** Z-03's neighbour: whether anyone may create an account on this installation (the instance admin only). */
 export function SignupSwitchPage() {
   const { state, reload } = useLoad(settingsSchema, "/api/v1/admin/settings");
   return (

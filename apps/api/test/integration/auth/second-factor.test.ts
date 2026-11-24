@@ -26,7 +26,6 @@ const sharedUser = () => {
   return shared;
 };
 
-/** Enrols a user, signs in through the challenge with the next code and answers the verification's status. */
 async function signInWithTotp(email: string): Promise<number> {
   const enrolled = await fx.enrolled(email);
   const { jar } = await fx.challenged(email);
@@ -50,7 +49,6 @@ describe("the TOTP code is single use and the second factor is throttled", () =>
     const replay = await verifyTotp(second.jar, code);
     expect([replay.status, await codeOf(replay)]).toEqual([429, "too_many_requests"]);
     expect(Number(replay.headers.get("retry-after"))).toBeGreaterThan(0);
-    // Key isolation: the spent code bucket of this user never refuses another user.
     expect(await signInWithTotp("totp-replay-2@example.test")).toBe(200);
   });
 
@@ -70,7 +68,6 @@ describe("the TOTP code is single use and the second factor is throttled", () =>
     const flooded = await verifyTotp(jar, "999999");
     expect(flooded.status).toBe(429);
     expect(Number(flooded.headers.get("retry-after"))).toBeGreaterThan(0);
-    // Key isolation: the emptied two_factor bucket of this user never refuses another user.
     const other = await sharedUser();
     const challenge = await fx.challenged(other.email);
     expect((await verifyTotp(challenge.jar, totpAt(other.secret, 1))).status).toBe(200);
@@ -210,7 +207,6 @@ describe("the enrolment answers carry the secret once and nothing else does", ()
   });
 });
 
-// What the setup page may tell the user: which sessions survive the two calls of an enrolment.
 describe("an enrolment and its first code", () => {
   it("activating the second factor ends a session made during enrolment; enabling signs out the other devices and the first code keeps this device signed in", async () => {
     const email = "setup-sessions-1@example.test";

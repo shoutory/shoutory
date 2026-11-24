@@ -9,12 +9,6 @@ import { jpeg } from "../support/images.js";
 import { addWorkspaceMember, seedOrganization, seedWorkspace, signedUser } from "../support/tenancy.js";
 import { type Fixture, startFixture, WEB } from "./auth/harness.js";
 
-// Security floor of the filesystem upload in parts (a file above 64 MiB): a member PUTs each part of a pending upload to
-// the API, which stores it under the upload's own folder and nowhere else; the part's length is the one the server derives
-// from the declared size, a part number is a number and never path text, a finished original is never rewritten, and
-// complete assembles the parts into the original only when their bytes are the declared digest. The checks of the single
-// upload route (CSRF, the session, library.edit, the workspace) hold for a part too.
-
 type User = { id: string; cookie: string };
 type Signed = { number: number; url: string; headers: Record<string, string> };
 const MIB = 1024 * 1024;
@@ -59,7 +53,6 @@ const post = (who: User, path: string, body?: unknown) =>
   });
 /** A body of 64 MiB + 1 bytes that no other upload of this file shares (a second upload of a digest is a duplicate). */
 const bodyOf = (seed: string) => Buffer.alloc(LARGE, `fs-parts-${seed}-`);
-/** The part `number` of a file of LARGE bytes: whole parts of 16 MiB and a last one of one byte. */
 const partOf = (body: Buffer, number: number) => body.subarray((number - 1) * PART, number * PART);
 const NUMBERS = [1, 2, 3, 4, 5];
 
@@ -95,7 +88,6 @@ interface Put {
   csrf?: boolean;
   length?: string;
 }
-/** A part PUT as a browser sends it: the cookie, the web-client headers, an octet-stream body and its length. */
 function putPart(id: string, number: string | number, body: Buffer, sent: Put = {}) {
   const who = sent.who === undefined ? user("editor") : sent.who;
   return fx.app.request(
@@ -113,7 +105,6 @@ function putPart(id: string, number: string | number, body: Buffer, sent: Put = 
     { incoming: { socket: { remoteAddress: "192.0.2.77" } } },
   );
 }
-/** Signs the parts of `numbers` and PUTs each one to the URL it was given, the way a client of either driver does. */
 async function uploadParts(id: string, body: Buffer, numbers = NUMBERS, tampered?: number): Promise<void> {
   const signed = (await dataOf(await sign(user("editor"), id, numbers))).parts as Signed[];
   for (const { number, url, headers } of signed) {

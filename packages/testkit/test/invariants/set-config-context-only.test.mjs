@@ -20,7 +20,6 @@ const ALTERED_DEFAULT = /\bALTER\s+(?:ROLE|DATABASE)\b[^;]*\bSET\s+app\./i;
 const ALLOWED_IN_SQL = /\bset_config\s*\(\s*'app\.job_purpose'|\bSET\s+(?:LOCAL\s+)?app\.job_purpose\b/gi;
 const RESEND_CALL =
   /\bset_config\s*\(\s*'app\.idempotent_resend'\s*,\s*(?:'(?:true|false)'|CASE\s+WHEN\s[^;]*?THEN\s+'true'\s+ELSE\s+'false'\s+END)\s*,\s*true\s*\)/gi;
-// The text of a migration with the allowed resend calls removed from the body of operation_transition.
 function withoutResendCalls(text) {
   return text
     .split(/(?=CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s)/i)

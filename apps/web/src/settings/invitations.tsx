@@ -13,7 +13,6 @@ import { InviteButton } from "./invite";
 import { ConfirmChange, Listed, useHeadingFocus } from "./member-actions";
 import { ROLES } from "./roles";
 
-// The pending invitations of a workspace (the list holds no token or digest: the link is only mailed).
 const invitationsSchema = z.array(
   z.object({
     id: z.string(),
@@ -26,7 +25,6 @@ type Invitation = z.infer<typeof invitationsSchema>[number];
 
 const nothing = z.null();
 
-// An invitation that was accepted or revoked meanwhile has its own words (the list is read again at once).
 function revokeCopy(error: ApiError) {
   if (error.details?.reason !== "already_ended") return undefined;
   return {
@@ -107,17 +105,13 @@ function InvitationTable({
   );
 }
 
-/**
- * The pending invitations of one workspace: the Invite button, then the table, the empty state or the error panel. A
- * new `stamp` reads the list again quietly (the page does it when a refused rank may have changed it).
- */
 export function Invitations({ workspace, stamp }: { workspace: Workspace; stamp: number }) {
   const { state, reload, refresh } = useLoad(
     invitationsSchema,
     `/api/v1/workspaces/${workspace.id}/invitations?limit=100`,
     stamp,
   );
-  // The question lives here, not in a row, so reading the list again never closes it under its own error.
+  // Held here, not in a row, so reloading the list never closes the question.
   const [revoking, setRevoking] = useState<Invitation | null>(null);
   const heading = useHeadingFocus();
   const email = revoking?.email ?? "";

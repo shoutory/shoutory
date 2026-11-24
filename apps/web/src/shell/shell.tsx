@@ -13,7 +13,6 @@ import { OfflineBanner } from "./offline-banner";
 import { useShellData } from "./shell-data";
 import { Switchers } from "./switcher";
 
-// X-08: one constant, no setting (R390); the domain is an owner action before launch.
 const HELP_URL = "https://docs.shoutory.com";
 
 // The skip link moves focus into main itself: a hash change alone does not focus it in every browser.
@@ -62,8 +61,6 @@ function TopBar() {
 
 const NAV_LINK = "min-h-6 pointer-coarse:min-h-11 text-link underline";
 
-// The links of the place the person is in: the workspace's own, and its organization's unless that is a personal one
-// (a person on their own has no clients or billing).
 function Rail() {
   const { ws, org } = useParams();
   const { t } = useLingui();
@@ -117,7 +114,6 @@ function Rail() {
   );
 }
 
-/** The frame of every signed-in route (ux-spec X-01): skip link, top bar, rail or bottom bar, offline banner, main. */
 export function Shell() {
   return (
     <div className="flex min-h-dvh flex-col md:grid md:grid-cols-[auto_1fr] md:grid-rows-[auto_1fr]">
@@ -162,7 +158,6 @@ function NoWorkspaces() {
   );
 }
 
-// A person who is only a member of organizations that have no workspace waits for an invitation, or starts their own.
 function AskAnAdmin() {
   return (
     <>
@@ -180,15 +175,9 @@ function AskAnAdmin() {
   );
 }
 
-/**
- * `/`: the last-used workspace if it is still one of mine, else the first. With none: the onboarding for a person with
- * no organization, or who owns or administers one that has no workspace (the first such, in list order); a person who
- * is only a member is told to ask an admin and may start their own organization (`?new`).
- */
 export function StartPage() {
   const data = useShellData();
   const [params] = useSearchParams();
-  // A failed list is shown in the top bar; the page still has its heading.
   if ("error" in data) return <Welcome />;
   if (data.workspaces.length > 0) {
     const stored = lastWorkspace();
@@ -204,7 +193,6 @@ export function StartPage() {
   return <AskAnAdmin />;
 }
 
-/** `/w/:ws`: the workspace scope. An id that is not one of mine is the not-found page (R392, R393). */
 export function WorkspaceHome() {
   const { ws } = useParams();
   const data = useShellData();

@@ -5,9 +5,6 @@ import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sweepStaleFiles } from "../../src/storage/fs-sweep.js";
 
-// The sweeper of the filesystem driver: a part file of an upload that was never completed, and the temporary file a write
-// left beside an object, are removed once they are older than 7 days. It removes only what that rule names, follows no
-// link, stays under `ws/` and stops at its deadline. The clock is injected and the ages are planted with `utimes`.
 const DAY = 86_400_000;
 const NOW = new Date("2026-11-24T03:23:00Z");
 let root: string;
@@ -26,7 +23,6 @@ afterEach(async () => {
 });
 
 const ago = (days: number) => new Date(NOW.getTime() - days * DAY);
-/** A regular file at `path` under the root, `days` old by its modification time. */
 async function plant(path: string, days: number): Promise<string> {
   const full = join(root, path);
   await mkdir(dirname(full), { recursive: true });
@@ -34,7 +30,7 @@ async function plant(path: string, days: number): Promise<string> {
   await utimes(full, ago(days), ago(days));
   return full;
 }
-/** A directory link at `path` to `target`, `days` old: a junction on Windows, which needs no privilege. */
+// A junction on Windows, which needs no privilege.
 async function link(path: string, target: string, days: number): Promise<string> {
   const full = join(root, path);
   await mkdir(dirname(full), { recursive: true });
@@ -64,7 +60,6 @@ describe("what the sweeper removes after 7 days", () => {
     const strangerFile = await plant("elsewhere/secret", 30);
     await writeFile(join(outside, "old-file"), "outside-file-1");
     await utimes(join(outside, "old-file"), ago(30), ago(30));
-    // A link in the place of a part, and a link in the place of the parts folder, both old and both leading out.
     kept.push(await link("ws/w1/m1/parts/4", outside, 30), await link("ws/w1/m2/parts", outside, 30));
     const answer = await sweepStaleFiles(root, NOW);
     expect(answer).toMatchObject({ removed: 3, cut: false });
@@ -81,7 +76,6 @@ describe("what the sweeper removes after 7 days", () => {
     await sweepStaleFiles(root, NOW);
     expect(await there(join(root, "ws/w1/m1/parts"))).toBe(false);
     expect(await there(join(root, "ws/w1/m2/parts/1"))).toBe(true);
-    // The media folder itself is not the sweeper's to remove.
     expect(await there(join(root, "ws/w1/m1"))).toBe(true);
   });
 });

@@ -38,7 +38,6 @@ describe("the releases screen", () => {
     expect(host.textContent).toMatch(/version[\s\S]*not available/i);
   });
 
-  // No update feed is read: a fresh install makes no idle outbound call, so the notice area stays quiet.
   it("keeps the update area quiet and says updates are not checked", async () => {
     const { host } = await openAdmin(PATH);
     expect(host.querySelector('[data-kind="update-notice"]')?.textContent).toMatch(

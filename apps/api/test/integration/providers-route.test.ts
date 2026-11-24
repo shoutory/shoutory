@@ -8,9 +8,6 @@ import { FAKE_CLIENT } from "../support/oauth-fake.js";
 import { addWorkspaceMember, seedOrganization, seedWorkspace, signedUser } from "../support/tenancy.js";
 import { type Fixture, PEPPER, startFixture } from "./auth/harness.js";
 
-// The providers route: which providers a workspace's members may connect. A member with channels.view reads it; the
-// answer is an allowlist of five fields per provider and holds nothing of the manifest's internals.
-
 type User = { id: string; cookie: string };
 let fx: Fixture;
 let sim: Awaited<ReturnType<typeof startFixtureOAuthSimulator>>;

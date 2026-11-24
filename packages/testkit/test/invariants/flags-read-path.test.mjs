@@ -5,9 +5,6 @@ import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-// Flags are read through one path: the loader of apps/api/src/flags asks the definer, and code asks `flags.isOn`.
-// Any other mention of the flag tables or of the definer that reads them, outside migrations, the table metadata, the
-// loader folder and tests, is a second read path.
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const SKIPPED = new Set(["node_modules", "dist", ".git", ".artifacts", ".turbo"]);
 const EXTENSIONS = ["ts", "tsx", "mts", "js", "cjs", "mjs", "sql"];

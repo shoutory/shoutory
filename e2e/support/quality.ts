@@ -27,12 +27,9 @@ const SIGNED_OUT = { cookies: [], origins: [] };
 let shared: Promise<{ context: Context; member: Account }> | undefined;
 const FACTS = `${STATE_DIR}/quality.json`;
 
-/**
- * What the quality specs share for the whole run: the addresses of the founder's screens, and a member with the
- * second factor on, whose password step opens the challenge screen. The member is one an earlier spec made: sign-up
- * is limited to five an hour from one address, and the run's other specs already use them all. The facts are kept in
- * the run's state folder, since Playwright starts a new process after a failed test.
- */
+// The member is one an earlier spec made: sign-up is limited to five an hour from one address, and the run's other
+// specs already use them all. The facts are kept in the state folder, since Playwright starts a new process after a
+// failed test.
 export function qualityRun(browser: Browser): Promise<{ context: Context; member: Account }> {
   shared ??= (async () => {
     if (existsSync(FACTS))
@@ -58,10 +55,6 @@ async function makeQualityRun(browser: Browser): Promise<{ context: Context; mem
   }
 }
 
-/**
- * A page in its own browser context for one screen: the founder's session or an empty browser, the language and
- * theme chosen as a person chooses them, and optionally a viewport. The context is closed when `use` ends.
- */
 export async function inPage<T>(
   browser: Browser,
   options: {
@@ -91,11 +84,8 @@ export async function inPage<T>(
   }
 }
 
-/**
- * Makes the founder's identity check fresh with a code of the authenticator, as the dialog does, so a change that asks
- * for one goes through without it. The founder has the second factor on, so a password check would not count. The
- * run is long enough for the check made at sign-in to have passed its ten minutes. The page must be on the app.
- */
+// The founder has the second factor on, so a password check would not count. The run outlasts the ten minutes of the
+// check made at sign-in.
 export async function refreshStepUp(page: Page, secret: string): Promise<void> {
   await waitForFreshCode();
   const code = await nextTotp(secret);
@@ -111,10 +101,7 @@ export async function refreshStepUp(page: Page, secret: string): Promise<void> {
   if (status !== 200) throw new Error(`the code check answered ${status}`);
 }
 
-/**
- * New recovery codes for the founder, as the security screen offers them; returns the codes shown. This replaces the
- * codes made at enrolment, which no other spec uses.
- */
+// This replaces the codes made at enrolment, which no other spec uses.
 export async function newRecoveryCodes(
   page: Page,
   password: string,
@@ -131,7 +118,7 @@ export async function newRecoveryCodes(
   return page.getByTestId("recovery-code").allTextContents();
 }
 
-/** Opens a catalogue screen. The challenge screen only opens after a password step, which is made first. */
+// The challenge screen only opens after a password step, which is made first.
 export async function openScreen(page: Page, screen: Screen, browser: Browser): Promise<void> {
   const { context, member } = await qualityRun(browser);
   if (screen.id === "mfa") {

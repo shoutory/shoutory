@@ -27,7 +27,7 @@ beforeAll(async () => {
 });
 afterAll(() => new Promise<void>((done) => server.close(() => done())));
 
-/** The guard on the real egress client; only the scheme and port are rewritten, to reach the loopback simulator. */
+// Only the scheme and port are rewritten, to reach the loopback simulator.
 function guard(hosts: readonly string[] = [HOST]) {
   const operator = createOperatorPolicy({
     allowCidrs: ["127.0.0.0/8"],

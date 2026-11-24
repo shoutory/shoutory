@@ -78,7 +78,7 @@ const post = (body: string): RequestInit => ({
   body,
 });
 
-// The exact status each surface must answer, so a row cannot pass by failing in the wrong way.
+// The exact status per surface, so a row cannot pass by failing in the wrong way.
 const STATUS: Record<string, number> = {
   "an error message": 500,
   "a refusal message and cause": 400,

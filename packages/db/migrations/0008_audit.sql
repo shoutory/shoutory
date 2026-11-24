@@ -1,9 +1,6 @@
--- The audit log: an insert-only, hash-chained record written only by definer functions.
---
 -- Template A: a workspace row is readable inside the session's read set, and nothing else is granted: there is no
--- insert, update or delete policy for a runtime role, so every row comes from audit_insert, audit_insert_instance
--- or the internal audit_append. A row with no workspace (an organization-only or instance row) matches no read set
--- and is invisible to every runtime role. The function stays a migration tool: only the owner may run it.
+-- insert, update or delete policy for a runtime role, so every row comes from a definer function. A row with no
+-- workspace matches no read set and is invisible to every runtime role.
 CREATE OR REPLACE FUNCTION app.apply_rls_template(tbl regclass, template text, key_col text DEFAULT 'workspace_id')
 RETURNS void
 LANGUAGE plpgsql SECURITY INVOKER
@@ -51,7 +48,7 @@ $$;
 
 REVOKE ALL ON FUNCTION app.apply_rls_template(regclass, text, text) FROM PUBLIC;
 
--- The key is (at, id): a unique key on a partitioned table must contain the partition key (V-48). A foreign key
+-- The key is (at, id): a unique key on a partitioned table must contain the partition key. A foreign key
 -- to the workspace would block erasure of a workspace, so there is none; the workspace is a plain column.
 CREATE TABLE app.audit_logs (
   id uuid NOT NULL DEFAULT uuidv7(),
@@ -75,7 +72,7 @@ CREATE INDEX audit_logs_workspace_at_idx ON app.audit_logs (workspace_id, at DES
 -- shoutory:accepted-lock new empty table in this file
 CREATE INDEX audit_logs_resource_idx ON app.audit_logs (resource_kind, resource_id, at);
 
--- One head row per chain: a workspace and a UTC day; the rows with no workspace are the instance chain.
+-- One head row per workspace and UTC day; the rows with no workspace are the instance chain.
 CREATE TABLE app.audit_heads (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   workspace_id uuid,
@@ -84,9 +81,8 @@ CREATE TABLE app.audit_heads (
   CONSTRAINT audit_heads_workspace_day_key UNIQUE NULLS NOT DISTINCT (workspace_id, day)
 );
 
--- Nothing changes or empties a written row: a row trigger refuses UPDATE and DELETE, a statement trigger refuses
--- TRUNCATE, on the parent and on every leaf, and ENABLE ALWAYS keeps session_replication_role = replica from
--- skipping them. Dropping a whole partition stays possible for retention.
+-- ENABLE ALWAYS keeps session_replication_role = replica from skipping the triggers. Dropping a whole partition
+-- stays possible for retention.
 CREATE FUNCTION app.audit_immutable() RETURNS trigger
 LANGUAGE plpgsql
 SET search_path = pg_catalog, pg_temp
@@ -106,7 +102,6 @@ SELECT app.apply_rls_template('app.audit_logs'::regclass, 'A');
 SELECT app.apply_rls_template('app.audit_heads'::regclass, 'I');
 GRANT SELECT ON app.audit_logs TO shoutory_app;
 
--- The writers act through one purpose. The log takes inserts only; the head row is read, created and moved.
 CREATE POLICY audit_append_insert ON app.audit_logs FOR INSERT TO shoutory_definer
   WITH CHECK ((SELECT app.job_purpose()) = 'audit_append');
 CREATE POLICY audit_append_select ON app.audit_heads FOR SELECT TO shoutory_definer
@@ -116,9 +111,7 @@ CREATE POLICY audit_append_insert ON app.audit_heads FOR INSERT TO shoutory_defi
 CREATE POLICY audit_append_update ON app.audit_heads FOR UPDATE TO shoutory_definer
   USING ((SELECT app.job_purpose()) = 'audit_append') WITH CHECK ((SELECT app.job_purpose()) = 'audit_append');
 
--- The first partitions: the current UTC month and the two after it, no DEFAULT partition. Each leaf gets the
--- TRUNCATE trigger (the row trigger is cloned from the parent) and both are ENABLE ALWAYS. Then the parent, the
--- leaves and the head table pass to the definer role, after everything that needs the migration owner.
+-- No DEFAULT partition. Ownership passes to the definer role last, after everything that needs the migration owner.
 DO $$
 DECLARE
   first_month constant date := date_trunc('month', now() AT TIME ZONE 'UTC')::date;
@@ -149,10 +142,9 @@ BEGIN
 END
 $$;
 
--- The one writer. It takes the chain's head row FOR UPDATE (rank 11, the last lock of a transaction), then reads
--- the clock, so the order of `at` inside a chain is the order of the chain. When the UTC day moved between the day
--- chosen and the clock read, the new day's head is locked and the clock read again: a row's day is always the UTC
--- day of its `at`. The hash covers the row's columns as in the audit chain contract; the genesis is 32 zero bytes.
+-- Takes the chain's head row FOR UPDATE (the last lock rank of a transaction), then reads the clock, so the order
+-- of `at` inside a chain is the order of the chain. If the UTC day moved in between, the new day's head is locked
+-- and the clock read again: a row's day is always the UTC day of its `at`. The genesis hash is 32 zero bytes.
 -- Internal: no runtime role may execute it; the other definers call it.
 CREATE FUNCTION app.audit_append(
   workspace_id uuid, organization_id uuid, actor_kind text, actor_ref text, action text, resource_kind text,
@@ -196,8 +188,8 @@ BEGIN
 END
 $$;
 
--- The workspace chain. The workspace, organization and actor come from the caller's context, never from an
--- argument, so a caller cannot write a row for a workspace it does not hold or in another actor's name.
+-- The workspace, organization and actor come from the caller's context, never from an argument, so a caller
+-- cannot write a row for a workspace it does not hold or in another actor's name.
 CREATE FUNCTION app.audit_insert(
   action text, resource_kind text, resource_id text, request_id text, ip_hmac bytea, metadata jsonb)
 RETURNS void
@@ -220,8 +212,7 @@ BEGIN
 END
 $$;
 
--- The instance chain: an event with no workspace (a sign-in). The auth role names the actor; the row is about that
--- actor, so the actor is also its resource.
+-- An event with no workspace (a sign-in). The auth role names the actor, who is also the resource.
 CREATE FUNCTION app.audit_insert_instance(
   action text, actor_kind text, actor_ref text, request_id text, ip_hmac bytea, metadata jsonb)
 RETURNS void

@@ -26,15 +26,11 @@ import type { ProviderResult } from "@shoutory/provider-sdk/result";
 import { z } from "zod";
 import type { Logger } from "../logging/logger.js";
 
-// The credential service (R537 (1)): the pure rules are in core, this file runs them. The lease, the attempt marker and
-// the commit are definers in short transactions of their own; the provider is called between them with no transaction
-// open (AGENTS 3.7, flows 1.3). Constants of R537 (9) and R540 (2): a 60 s lease, a 30 s provider timeout below it, a
-// 5 minute refresh margin.
+// The provider is called between short transactions with none open, and its timeout stays below the lease.
 const LEASE_SECONDS = 60;
 const PROVIDER_TIMEOUT_MS = 30_000;
 const REFRESH_MARGIN_MS = 5 * 60_000;
 
-/** The provider behind a channel: its adapter and the manifest's map of refresh error codes to classes. */
 interface ChannelProvider {
   readonly adapter: ProviderAdapter;
   readonly manifest: { readonly refreshErrorMap: Readonly<Record<string, RefreshClass>> };
@@ -44,7 +40,6 @@ export interface CredentialServiceDeps {
   readonly pool: AppPool;
   readonly keys: KeyProvider;
   readonly pepper: SealedSecret;
-  /** The egress client; the service gives every provider call its deadline. */
   readonly fetch: typeof fetch;
   readonly now: () => Date;
   readonly logger: Logger;
@@ -53,7 +48,6 @@ export interface CredentialServiceDeps {
 }
 
 interface ConnectInput {
-  /** The caller: a user with channels.manage or a job principal of the workspace. */
   readonly principal: TenantCtx;
   readonly workspaceId: string;
   readonly identity: {
@@ -65,10 +59,10 @@ interface ConnectInput {
     readonly handle?: string | undefined;
     readonly avatar?: string | undefined;
   };
-  /** The channel being reconnected, when there is one: another account on it is refused. */
+  /** Another account on a reconnected channel is refused. */
   readonly reconnectChannelId?: string | undefined;
   readonly tokens: ChannelToken;
-  /** When the access token stops working; none for a token the provider never expires (it is never due for a refresh). */
+  /** Null for a token the provider never expires; it is never due for a refresh. */
   readonly accessExpiresAt: Date | null;
   readonly refreshExpiresAt?: Date | undefined;
   readonly snapshot: {
@@ -89,7 +83,6 @@ type RefreshOutcome =
   | { readonly kind: "no_refresh_token" }
   | { readonly kind: "needs_reconnect"; readonly reason: string };
 
-/** A channel with no usable credential (none stored, or its salt was deleted). */
 export class CredentialError extends Error {
   constructor(message: string) {
     super(message);
@@ -97,7 +90,6 @@ export class CredentialError extends Error {
   }
 }
 
-// What each definer answers, parsed once where the row enters the service.
 const bytes = z.instanceof(Buffer);
 const int = z.number().int();
 const openRowSchema = z.object({
@@ -141,10 +133,7 @@ const aadOf = (workspaceId: string, channelId: string, generation: number): Aad 
   generation,
 });
 
-/**
- * The workspace's salt, created on first use: two first callers end with one salt and the loser receives the winner's.
- * It is ensured before anything is sealed under it, in the caller's own transaction.
- */
+// Two first callers end with one salt: the loser receives the winner's.
 export async function ensureSalt(tx: TenantTx, workspaceId: string): Promise<Buffer> {
   const salted = await tx.query("SELECT app.workspace_salt_ensure($1, $2) AS salt", [
     workspaceId,
@@ -153,7 +142,6 @@ export async function ensureSalt(tx: TenantTx, workspaceId: string): Promise<Buf
   return saltSchema.parse(salted.rows[0]).salt;
 }
 
-/** The moment a token granted at `now` for `seconds` stops working; none when the provider states no lifetime. */
 export const expiryOf = (now: Date, seconds: number | undefined): Date | null =>
   seconds === undefined ? null : new Date(now.getTime() + seconds * 1000);
 
@@ -179,13 +167,12 @@ const storedOf = (row: OpenRow): StoredSecret => ({
   wrappedDek: row.wrapped_dek,
 });
 
-// `SELECT * FROM app.<definer>($1, ..., $n)`; the name is always a literal of this file.
+// The definer name is always a literal of this file, never input.
 const callOf = (definer: string, params: unknown[]): [string, unknown[]] => [
   `SELECT * FROM app.${definer}(${params.map((_, index) => `$${index + 1}`).join(", ")})`,
   params,
 ];
 
-// The stored credential of a channel, read as a job principal of its workspace (R537 (2)).
 async function readOpenRow(pool: AppPool, workspaceId: string, channelId: string): Promise<OpenRow> {
   const ctx: TenantCtx = { principalKind: "job", principalId: randomUUID(), workspaceIds: [workspaceId] };
   const found = await withTenant(pool, ctx, (tx) =>
@@ -200,10 +187,6 @@ function tokenOfRow(keys: KeyProvider, row: OpenRow, workspaceId: string, channe
   return channelTokenSchema.parse(JSON.parse(open(storedOf(row), aad, keys, row.salt).expose()));
 }
 
-/**
- * The access token a channel stores, opened with the workspace's salt, for a caller that refreshes nothing (the worker's
- * sends). A channel with no usable credential is a `CredentialError`.
- */
 export async function openAccessToken(
   pool: AppPool,
   keys: KeyProvider,
@@ -214,7 +197,6 @@ export async function openAccessToken(
   return new SealedSecret(tokenOfRow(keys, row, workspaceId, channelId).access_token);
 }
 
-/** An egress client that gives every provider call its deadline (below the lease, R537 (9)). */
 export const deadlineFetch =
   (egress: typeof fetch, timeoutMs = PROVIDER_TIMEOUT_MS): typeof fetch =>
   (input, init) =>
@@ -233,13 +215,11 @@ export class CredentialService {
       : pepperDigest(this.#deps.pepper, "refresh_token", token.refresh_token);
   }
 
-  // The service's own transactions run as a job principal of the one workspace (R537 (2)).
   #asJob<T>(workspaceId: string, fn: (tx: TenantTx) => Promise<T>): Promise<T> {
     const ctx: TenantCtx = { principalKind: "job", principalId: randomUUID(), workspaceIds: [workspaceId] };
     return withTenant(this.#deps.pool, ctx, fn);
   }
 
-  /** The instance host a channel stored (a provider whose accounts live on user-chosen servers), or none. */
   async instanceHostOf(workspaceId: string, channelId: string): Promise<string | undefined> {
     const found = await this.#asJob(workspaceId, (tx) =>
       tx.query("SELECT instance_host FROM app.channels WHERE workspace_id = $1 AND id = $2", [
@@ -261,7 +241,6 @@ export class CredentialService {
     return tokenOfRow(this.#deps.keys, row, workspaceId, channelId);
   }
 
-  /** Stores the first or a new credential generation of a channel, in one transaction. */
   async connect(input: ConnectInput): Promise<{ channelId: string; generation: number }> {
     // The salt is ensured in its own statement first, so no row lock is held while it is drawn.
     const salt = await withTenant(this.#deps.pool, input.principal, (tx) =>
@@ -322,7 +301,6 @@ export class CredentialService {
     );
   }
 
-  /** The stored tokens, still sealed, with their generation and whether the refresh margin says a refresh is due. */
   async open(workspaceId: string, channelId: string) {
     const row = await this.#openRow(workspaceId, channelId);
     const token = this.#tokenOf(row, workspaceId, channelId);
@@ -335,7 +313,7 @@ export class CredentialService {
     };
   }
 
-  // Takes the lease and writes the attempt marker, in a transaction of its own that commits before the provider call.
+  // Commits before the provider call, so the attempt marker survives a crash during it.
   async #beginLease(workspaceId: string, channelId: string): Promise<Lease> {
     const owner = `service-${randomUUID().slice(0, 8)}`;
     const begun = await this.#asJob(workspaceId, (tx) =>
@@ -386,7 +364,7 @@ export class CredentialService {
   }
 
   // Ends a failed attempt. The class follows the adapter's result and the manifest's map; a revocation that follows an
-  // earlier attempt still unknown with the same digest is `refresh_token_rotated_unknown` (flows 1.3). The definer acts
+  // earlier attempt still unknown with the same digest is `refresh_token_rotated_unknown`. The definer acts
   // only while the digest is the one the attempt started from, so a competing commit is never overridden.
   async #endFailed(
     workspaceId: string,
@@ -442,13 +420,11 @@ export class CredentialService {
     );
   }
 
-  /** One refresh of a channel's token: lease, provider call, commit or failure, each in its own transaction. */
   async refresh(workspaceId: string, channelId: string): Promise<RefreshOutcome> {
     const first = await this.#openRow(workspaceId, channelId);
     const provider = this.#deps.providers[first.provider_id];
     const refreshCall = provider?.adapter.refresh;
     if (!provider || !refreshCall) return { kind: "config" };
-    // With no refresh token there is nothing to send: no lease, no marker, no call, no state change.
     if (this.#tokenOf(first, workspaceId, channelId).refresh_token === undefined) {
       return { kind: "no_refresh_token" };
     }

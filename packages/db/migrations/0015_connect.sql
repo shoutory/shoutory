@@ -1,12 +1,10 @@
--- The connect schema: the OAuth sign-in state of a channel connect, the Telegram connect word, the definers that write and
--- consume them, and the step-up method a backup code needs. Neither table has a runtime grant: the state and the word are
--- single use, so every write and every take is a definer with its own purpose policy (as 0010 and 0014 do).
+-- Neither table has a runtime grant: the state and the word are single use, so every write and every take is a
+-- definer with its own purpose policy.
 
--- One row per started OAuth connect. The state is the proof that a callback belongs to the person, workspace, provider and
--- instance host that started it: only its digest is stored, and the verifier (and the DPoP key, when the provider binds
--- one) is one sealed object in the eight sealed columns of 0014, AAD scope `workspace_id` and owner this row's id. The
--- state is unique per workspace like an invitation's digest (the callback carries no workspace, so it is also looked up
--- by the digest alone and a match in two workspaces is refused).
+-- The state is the proof that a callback belongs to the person, workspace, provider and instance host that started
+-- it: only its digest is stored, and the verifier (and the DPoP key, when the provider binds one) is one sealed
+-- object, AAD scope `workspace_id` and owner this row's id. The callback carries no workspace, so the digest is also
+-- looked up alone and a match in two workspaces is refused.
 CREATE TABLE app.oauth_flows (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   workspace_id uuid NOT NULL REFERENCES app.workspaces (id) ON DELETE CASCADE,
@@ -29,17 +27,14 @@ CREATE TABLE app.oauth_flows (
   CONSTRAINT oauth_flows_workspace_state_key UNIQUE (workspace_id, state_hash),
   FOREIGN KEY (workspace_id, channel_id) REFERENCES app.channels (workspace_id, id) ON DELETE CASCADE
 );
--- The callback finds its flow by the digest alone.
 -- shoutory:accepted-lock new empty table in this file
 CREATE INDEX oauth_flows_state_hash_idx ON app.oauth_flows (state_hash);
--- The cascades from a user and from a channel look their rows up by these columns.
 -- shoutory:accepted-lock new empty table in this file
 CREATE INDEX oauth_flows_user_idx ON app.oauth_flows (user_id);
 -- shoutory:accepted-lock new empty table in this file
 CREATE INDEX oauth_flows_channel_idx ON app.oauth_flows (workspace_id, channel_id);
 SELECT app.apply_rls_template('app.oauth_flows'::regclass, 'D');
 
--- Template D (as 0014's sealed tables): no runtime role holds a grant or a policy; only a definer under its purpose.
 GRANT SELECT, INSERT, DELETE ON app.oauth_flows TO shoutory_definer;
 GRANT UPDATE (consumed_at) ON app.oauth_flows TO shoutory_definer;
 CALL app.grant_purposes('oauth_flows', 'SELECT', ARRAY['oauth_flow_take', 'purge_expired']);
@@ -51,15 +46,14 @@ DO $$
 DECLARE
   t text;
 BEGIN
-  -- The principal check reads the tables of the tenancy rank, and the audit row reads the workspace's organization.
   FOREACH t IN ARRAY ARRAY['workspaces', 'workspace_members', 'organization_members', 'roles'] LOOP
     CALL app.grant_purposes(t, 'SELECT', ARRAY['oauth_flow_put', 'oauth_flow_take']);
   END LOOP;
 END
 $$;
 
--- An old flow is removed a day after it expires (data-model retention, the 0012 registry). The registry has no runtime
--- policy and forces row security on its owner too, so the row goes in under a policy that exists only for this statement.
+-- The registry has no runtime policy and forces row security on its owner too, so the row goes in under a policy
+-- that exists only for this statement.
 CREATE POLICY retention_seed_insert ON app.retention_classes FOR INSERT TO shoutory_owner WITH CHECK (true);
 INSERT INTO app.retention_classes (class, table_name, kind, event_column, retain, partition_unit) VALUES
   ('app.oauth_flows', 'app.oauth_flows', 'window', 'expires_at', interval '1 day', NULL);
@@ -67,9 +61,8 @@ DROP POLICY retention_seed_insert ON app.retention_classes;
 
 SET ROLE shoutory_definer;
 
--- Writes one flow for the signed-in user: an Admin or above of the workspace, never a job or another kind of principal.
--- The user comes from the session, the expiry (10 minutes) from the database clock, and a channel (a reconnect) must
--- belong to the workspace. The sealed object is the application's to seal; the state digest is of a random state.
+-- Only an Admin or above of the workspace, never a job or another kind of principal. The user comes from the
+-- session and the expiry from the database clock, and a channel (a reconnect) must belong to the workspace.
 CREATE FUNCTION app.oauth_flow_put(
   workspace_id uuid, provider_id text, state_hash bytea, channel_id uuid, instance_host text, format_version integer,
   key_id text, iv bytea, ciphertext bytea, auth_tag bytea, wrap_iv bytea, wrap_tag bytea, wrapped_dek bytea,
@@ -105,13 +98,10 @@ BEGIN
 END
 $$;
 
--- The callback's one step: every unspent flow with this state digest is spent by a single UPDATE (a second concurrent
--- taker re-reads the WHERE after the first commits and finds nothing, PostgreSQL 18 transaction isolation, Read
--- Committed), then the one it spent is judged. A refusal is an answer, never an error, so the spent state and its audit
--- row survive: unknown_state (nothing is spent), consumed, expired, wrong_provider, wrong_instance_host, wrong_user,
--- not_admin (the caller is no longer Admin or above of the flow's workspace) and ambiguous (the digest names flows in
--- more than one workspace: all are spent, none is returned). Only `ok` returns the flow and its sealed object. A refusal
--- is audited as channel.connect_refused with its kind; an ok take writes none (the connect itself is audited later).
+-- Every unspent flow with this state digest is spent by a single UPDATE (a second concurrent taker re-reads the
+-- WHERE after the first commits and finds nothing, PostgreSQL 18 Read Committed), then the one it spent is judged.
+-- A refusal is an answer, never an error, so the spent state and its audit row survive. An ambiguous digest (flows
+-- in more than one workspace) spends all and returns none. Only `ok` returns the flow and its sealed object.
 CREATE FUNCTION app.oauth_flow_take(
   state_digest bytea, want_provider text, want_host text, request_id text, ip_hmac bytea)
 RETURNS TABLE (
@@ -179,9 +169,8 @@ GRANT EXECUTE ON FUNCTION app.oauth_flow_put(uuid, text, bytea, uuid, text, inte
   bytea, bytea, text), app.oauth_flow_take(bytea, text, text, text, bytea) TO shoutory_app;
 RESET ROLE;
 
--- One row per Telegram connect word: `/connect <word>` sent to the bot proves the sender controls the chat. Only the
--- digest of the word is stored, it is unique per workspace and provider while unspent, and it lives 10 minutes from its
--- creation (the definer that creates a word sets `expires_at`). Template D like the flows: no runtime role holds a grant.
+-- `/connect <word>` sent to the bot proves the sender controls the chat. Only the digest of the word is stored, and
+-- it is unique per workspace and provider while unspent.
 CREATE TABLE app.connect_challenges (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   workspace_id uuid NOT NULL REFERENCES app.workspaces (id) ON DELETE CASCADE,
@@ -204,7 +193,6 @@ DO $$
 DECLARE
   t text;
 BEGIN
-  -- The principal check (credential_caller) reads the tables of the tenancy rank.
   FOREACH t IN ARRAY ARRAY['workspaces', 'workspace_members', 'organization_members', 'roles'] LOOP
     CALL app.grant_purposes(t, 'SELECT', ARRAY['connect_challenge_take']);
   END LOOP;
@@ -218,10 +206,8 @@ DROP POLICY retention_seed_insert ON app.retention_classes;
 
 SET ROLE shoutory_definer;
 
--- Spends the word of one workspace and provider and answers its id, or NULL when no unspent, unexpired word matches (a
--- wrong workspace, provider or word, a word already taken, one past its 10 minutes): one UPDATE, so of two concurrent
--- takers one gets the id (PostgreSQL 18 transaction isolation, Read Committed re-reads the WHERE). The caller is a job
--- principal of the workspace (the poller) or a user Admin of it, as for every credential definer.
+-- One UPDATE, so of two concurrent takers one gets the id (PostgreSQL 18 Read Committed re-reads the WHERE). NULL
+-- covers every miss alike: wrong workspace, provider or word, already taken, expired.
 CREATE FUNCTION app.connect_challenge_take(workspace_id uuid, provider_id text, code_hash bytea)
 RETURNS uuid
 LANGUAGE plpgsql SECURITY DEFINER
@@ -246,9 +232,8 @@ REVOKE ALL ON FUNCTION app.connect_challenge_take(uuid, text, bytea) FROM PUBLIC
 GRANT EXECUTE ON FUNCTION app.connect_challenge_take(uuid, text, bytea) TO shoutory_app, shoutory_worker;
 RESET ROLE;
 
--- A backup-code sign-in counts as a recent step-up as a TOTP sign-in does (R545): the method CHECK of 0005 (named for its
--- column) is the only gate, since step_up_record stores the value it is given. The constraint is replaced the way 0013 does
--- it (NOT VALID, then VALIDATE in the same file) on the table that keeps its rows one day.
+-- A backup-code sign-in counts as a recent step-up like a TOTP sign-in: the method CHECK is the only gate, since
+-- step_up_record stores the value it is given.
 -- shoutory:accepted-lock the step-up table is small and its rows expire within a day; the lock is held for this migration only
 ALTER TABLE app.session_step_ups DROP CONSTRAINT session_step_ups_method_check;
 -- shoutory:accepted-lock same small table, same transaction

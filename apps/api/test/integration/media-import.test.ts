@@ -13,12 +13,6 @@ import { png } from "../support/images.js";
 import { addWorkspaceMember, seedOrganization, seedWorkspace, signedUser } from "../support/tenancy.js";
 import { type Fixture, startFixture } from "./auth/harness.js";
 
-// Security floor of the import of media by URL: a member fetches one image or video from a URL through the egress
-// guard, and nothing the URL names may reach anywhere the guard refuses. A refused address, a redirect to one, a body
-// over the cap, a page that is not media whatever it claims, a body that stalls and an encoding that hides the bytes all
-// end before anything is stored, and no secret of the URL reaches the log, a row or an answer. The server is a loopback
-// simulator; each row says which part of the policy it leaves open, so the one part under test is what refuses it.
-
 type User = { id: string; cookie: string };
 const MIB = 1024 * 1024;
 const CANARY = "import-canary-token-1";
@@ -111,21 +105,18 @@ const assets = () =>
       (await client.query("SELECT * FROM app.media_assets")).rows as Record<string, unknown>[],
   );
 const stored = async () => (await readdir(dir, { recursive: true })).sort();
-// Serves a body with a content type, as a page or an image host would.
 const serve = (path: string, body: Buffer | string, headers: Record<string, string> = {}) =>
   routes.set(path, (_req, res) => {
     res.writeHead(200, { "content-type": "image/png", ...headers });
     res.end(body);
   });
 
-/** What a refused import must leave behind: no asset row, no object, and (where the simulator was the target) no request. */
 async function expectNothing(before: { rows: number; objects: string[] }, requests = 0) {
   expect((await assets()).length).toBe(before.rows);
   expect(await stored()).toEqual(before.objects);
   expect(asked.length).toBe(requests);
 }
 const snapshot = async () => ({ rows: (await assets()).length, objects: await stored() });
-/** The member's session is theirs: no request to a user URL carries a cookie, a credential or a forwarding header. */
 const expectNoSession = () => {
   expect(asked.length).toBeGreaterThan(0);
   for (const { headers } of asked)

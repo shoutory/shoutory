@@ -14,9 +14,6 @@ import { FAKE_CLIENT as CLIENT, mintTokens } from "../support/oauth-fake.js";
 import { seedOrganization, seedWorkspace, signedUser } from "../support/tenancy.js";
 import { type Fixture, keys, PEPPER, startFixture } from "./auth/harness.js";
 
-// Security floor of the credential service (R537, R538, R539), on the fixture-oauth fake: the lease, the attempt marker,
-// the compare-and-set, the class of each failure and what it does to the channel, and that no token leaves the sealed
-// store. Every provider answer is real HTTP to the fake on loopback; leases are never waited for.
 let fx: Fixture;
 let sim: Awaited<ReturnType<typeof startFixtureOAuthSimulator>>;
 let workspace: string;
@@ -46,7 +43,6 @@ const principal = (): TenantCtx => ({
 
 const mint = () => mintTokens(sim.url);
 
-/** A connected channel whose stored tokens are `tokens` (a minted pair unless the test says otherwise). */
 async function connected(tokens?: {
   access_token: string;
   refresh_token?: string;
@@ -134,8 +130,8 @@ describe("the lease", () => {
     expect(tokenCalls()).toBe(before);
   });
 
-  // R540 (4): the injected egress fetch lets a competing refresh commit before it answers invalid_grant, as a
-  // provider that rotated the token for the competitor would. No hook in production code is involved.
+  // The injected fetch lets a competing refresh commit before it answers invalid_grant, as a provider that rotated
+  // the token for the competitor would.
   it("an invalid_grant that follows a competing commit keeps the state and the next open returns the new token", async () => {
     const { channelId, minted } = await connected();
     const racing: typeof fetch = async (input, init) => {
@@ -173,7 +169,7 @@ const FAULT = (status: number, error?: string, headers: Record<string, string> =
 type Answer = { kind: "respond"; status: number; headers?: Record<string, string>; body?: unknown };
 const CLASSES: [string, Answer, object, string, string | null][] = [
   ["a 503", FAULT(503), { kind: "retry_later", refreshClass: "transient" }, "connected", null],
-  // A 2xx answer that cannot be used may have spent the token: unknown, never a config or a revocation (R541 (3), (4)).
+  // A 2xx answer that cannot be used may have spent the token: unknown, never a config or a revocation.
   [
     "a 200 answer the adapter cannot use",
     { kind: "respond", status: 200, body: { access_token: "a-token-without-lifetime" } },
@@ -232,7 +228,6 @@ describe("what each failure does to the channel", () => {
     sim.faults.failNext("POST /token", fault);
     expect(await service().refresh(workspace, channelId)).toEqual(outcome);
     expect(await stateOf(channelId)).toEqual({ connection_state: state, state_reason: reason });
-    // A failed refresh never adopts a token it did not obtain: generation and tokens are the ones that were stored.
     const opened = await service().open(workspace, channelId);
     expect([opened.generation, opened.accessToken.expose(), opened.refreshToken?.expose()]).toEqual([
       1,
@@ -241,7 +236,6 @@ describe("what each failure does to the channel", () => {
     ]);
   });
 
-  // R541 (2): with no refresh token there is nothing to send, so the provider is not called and nothing is recorded.
   it("a credential with no refresh token is not refreshed: no provider call, no state change, no marker", async () => {
     const { channelId } = await connected({ access_token: "access-token-without-refresh" });
     const before = tokenCalls();
@@ -264,7 +258,7 @@ describe("what each failure does to the channel", () => {
 });
 
 describe("an attempt that may have spent the token", () => {
-  // An attempt whose answer was lost or unusable may have spent a rotating token: it stays unknown (AGENTS 3.7), so the
+  // An attempt whose answer was lost or unusable may have spent a rotating token: it stays unknown, so the
   // invalid_grant that follows is not a confirmed revocation.
   it.each([
     [
@@ -294,9 +288,6 @@ describe("an attempt that may have spent the token", () => {
   });
 });
 
-// AGENTS 4.2: the tokens that went through connect and refresh are in no text column, no row dump, no log line, no
-// result dump, in the raw, percent-encoded, hex, base64, base64url and JSON-escaped forms.
-// Every row of every table of both schemas, as the text a dump would hold.
 const databaseDump = () =>
   fx.admin(async (c) => {
     const tables = await c.query(
@@ -345,7 +336,6 @@ describe("no token leaves the sealed store", () => {
         secrets,
       ),
     ).toEqual([]);
-    // The operator alert for the unmapped code never echoes the value the provider's body carried (R538 (B)).
     expect(logged.join("\n")).not.toContain("unmapped_code_value_7");
     expect(logged.length).toBeGreaterThan(0);
   });

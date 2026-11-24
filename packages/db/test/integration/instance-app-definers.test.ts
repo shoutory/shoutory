@@ -13,13 +13,7 @@ import { holdThenRace, openTx } from "../support/race.js";
 
 const env = readTestEnv();
 
-// Security floor of the per-instance app of a provider whose accounts live on user-chosen servers: the app's client
-// secret is one sealed object in `provider_instance_apps`, a table no runtime role can touch, written and read by two
-// definers. `instance_app_put` stores the row the caller sealed under that row's own id and answers whether the stored
-// row is the caller's: a second first-writer of one (provider, host) loses without an error, and a replace names the
-// client id it replaces, so a late replace never overwrites a newer app (compare-and-set). Both definers are for a
-// signed-in Admin of the workspace named in the call, never a job or a service. The argument lists, the boolean answer
-// of `put` and the columns of `get` are the contract the migration must meet. Rows are planted and read as the superuser.
+// Rows are planted and read as the superuser.
 let db: TestDatabase;
 const admin = <T>(run: (client: Client) => Promise<T>) => withAdminClient(env, db.name, run);
 const rows = (sql: string, params: unknown[] = []) =>
@@ -216,8 +210,6 @@ describe("instance_app_put: a replace is compare-and-set on the client id (floor
     expect(await storedOf(host)).toMatchObject([{ client_id: "client-newer" }]);
   });
 
-  // One policy per purpose, table and command: the app table is written and read only under these two purposes, and the
-  // permission check reads the tenancy tables under the same two.
   it("the policies on the app table and of its two purposes are exactly these", async () => {
     const found = await rows(
       `SELECT p.polname || ' on ' || c.relname AS policy FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid
@@ -241,8 +233,8 @@ describe("instance_app_put: a replace is compare-and-set on the client id (floor
   });
 });
 
-// An app stored or replaced on an instance is a change of what every workspace of that instance connects through, so it
-// is audited in the workspace of the caller, with the provider and the host and no secret. A put that lost writes nothing.
+// An app stored or replaced changes what every workspace of that instance connects through, so it is audited in the
+// caller's workspace, with the provider and the host and no secret.
 describe("instance_app_put audits what it changes (floor)", () => {
   const auditOf = (id: string) =>
     rows(

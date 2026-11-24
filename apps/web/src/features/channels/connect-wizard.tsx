@@ -9,9 +9,6 @@ import { ErrorPanel } from "../../ui/error-panel";
 import { useSignIn } from "./channels-hub";
 import { StartError, useStart } from "./connect-start";
 
-// H-02: the dialog "Connect a channel". It reads the platforms each time it opens; a tile starts the OAuth flow only for
-// a platform that can connect and signs in with OAuth.
-
 const platformSchema = z.object({
   id: z.string(),
   display_name: z.string(),
@@ -159,7 +156,6 @@ function Body({ ws }: { ws: string }) {
   );
 }
 
-/** The dialog of the platforms of workspace `ws`; closing it drops whatever it was doing. */
 export function ConnectWizard({
   ws,
   isOpen,

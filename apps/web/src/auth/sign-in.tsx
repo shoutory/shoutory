@@ -11,14 +11,12 @@ import { TextField } from "../ui/text-field";
 import { authCopy } from "./auth-copy";
 import { AuthFrame, SubmitButton, useAction } from "./auth-frame";
 
-// `POST /api/auth/sign-in/email` answers a bare body: the user, or a challenge when a second factor is set.
 const answer = z.union([
   z.object({ user: z.object({ id: z.string() }) }),
   z.object({ twoFactorRedirect: z.literal(true) }),
 ]);
 const sent = z.object({ status: z.boolean() });
 
-// The email is not confirmed yet: send the link again, and say so (the answer is alike for every address).
 function ResendLink({ email }: { email: string }) {
   const [resent, setResent] = useState(false);
   const resend = useAction(async () => {
@@ -44,8 +42,6 @@ function ResendLink({ email }: { email: string }) {
   );
 }
 
-// The password step: where the visitor goes next. `return-to` passes `safeReturnTo` again wherever it finally takes
-// them (R378, R410), and a challenge carries it on to `/mfa`.
 async function credentialsStep(email: string, password: string, returnTo: string | null): Promise<string> {
   const result = await request(answer, "/api/auth/sign-in/email", {
     method: "POST",
@@ -91,7 +87,6 @@ function CredentialFields({ email, onEmail, password, onPassword }: Credentials)
   );
 }
 
-/** A-01 sign in (`/sign-in`): email and password; a challenge goes on to `/mfa`, carrying `return-to` along. */
 export function SignInPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -102,7 +97,7 @@ export function SignInPage() {
 
   const signIn = useAction(
     async () => navigate(await credentialsStep(email, password, returnTo)),
-    // An unavailable server never saw the password: it stays, and Retry sends it again (R412).
+    // An unavailable server never saw the password: it stays, and Retry sends it again.
     (error) => error.state !== "maintenance" && setPassword(""),
   );
 

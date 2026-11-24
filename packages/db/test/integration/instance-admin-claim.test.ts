@@ -19,7 +19,7 @@ interface Claim {
   admins: () => Promise<{ user_id: string; granted_by: string | null }[]>;
 }
 
-/** A fresh database per row: the claim is one-shot. Users are made through the auth role, as sign-up does. */
+// A fresh database per row: the claim is one-shot.
 function useClaimDatabase(): Claim {
   let db: TestDatabase;
   let auth: Pool;
@@ -52,8 +52,6 @@ function useClaimDatabase(): Claim {
   };
 }
 
-// Security floor: the first verified user becomes the instance owner, once, even under a race, and a deleted
-// founder never reopens the claim while any admin row exists.
 describe("instance_admin_claim: who wins", () => {
   const t = useClaimDatabase();
 
@@ -124,9 +122,7 @@ describe("instance_admin_claim: who may call it and what the definer reads", () 
     },
   );
 
-  // The definer role reads these columns of auth.user and no others: id and email_verified (granted with the claim
-  // definer), name and image (granted with the access definers), email (read by the invitation accept) and created_at
-  // (the age of an unverified account, read by the retention purge). A later grant adds its columns here.
+  // The definer role reads these columns of auth.user and no others.
   const DEFINER_USER_COLUMNS = ["created_at", "email", "email_verified", "id", "image", "name"];
 
   it("the definer role holds column SELECT on exactly the matrix columns of auth.user", async () => {

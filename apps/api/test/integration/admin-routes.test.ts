@@ -6,8 +6,6 @@ import { createFsDriver } from "../../src/storage/fs-driver.js";
 import { signedUser } from "../support/tenancy.js";
 import { cookieOf, type Fixture, PASSWORD, startFixture } from "./auth/harness.js";
 
-// The instance admin routes (Z-03 and the sign-up switch). Only an instance admin reaches them: anyone else is told
-// the route does not exist; a write needs a recent step-up and leaves one audit row.
 const FLAGS = "/api/v1/admin/flags";
 const SETTINGS = "/api/v1/admin/settings";
 const SIGNUP = `${SETTINGS}/signup_enabled`;
@@ -21,7 +19,6 @@ let fx: Fixture;
 let adminEmail: string;
 let outsider: { id: string; cookie: string };
 let storageDir: string;
-// The real driver, counting the objects the storage check probe writes.
 let probes = 0;
 beforeAll(async () => {
   storageDir = await mkdtemp(join(tmpdir(), "shoutory-admin-storage-"));
@@ -59,7 +56,6 @@ afterAll(async () => {
   await rm(storageDir, { recursive: true, force: true });
 });
 
-/** A fresh sign-in of the instance admin: its step-up is recent. */
 const login = async (): Promise<string> =>
   cookieOf(await fx.request("/api/auth/sign-in/email", { body: { email: adminEmail, password: PASSWORD } }));
 const send = (method: "GET" | "PUT", path: string, cookie: string, body?: unknown) =>
@@ -244,8 +240,6 @@ describe("admin storage check route", () => {
   });
 });
 
-// The shell asks once whether to show the Admin entry: true for the instance admin, false (never an error) for any
-// other signed-in user, 401 without a session.
 describe("GET /api/v1/instance/admin", () => {
   const rows: Array<[string, number, boolean | undefined, () => Promise<string>]> = [
     ["the instance admin", 200, true, () => login()],

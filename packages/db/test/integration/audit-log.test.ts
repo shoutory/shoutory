@@ -12,8 +12,6 @@ import { HASH_BAD, holdThenRace, openTx } from "../support/race.js";
 
 const env = readTestEnv();
 
-// Security floor of the audit log: rows are written only by the definers, the database refuses every change to a
-// written row, one chain per (workspace, UTC day) links the rows by hash, and a reader sees only its own workspace.
 const OA = randomUUID();
 const OB = randomUUID();
 const WA = randomUUID();
@@ -36,12 +34,11 @@ const ctxA = ctxOf(WA);
 
 interface Fixture {
   db: () => TestDatabase;
-  /** The rows of one statement, run as the superuser: the runtime roles cannot read the audit tables. */
+  // Run as the superuser: the runtime roles cannot read the audit tables.
   rows: (sql: string, params?: unknown[]) => Promise<Record<string, unknown>[]>;
   admin: <T>(run: (client: Client) => Promise<T>) => Promise<T>;
 }
 
-/** One clone with two organizations, a workspace each and one user. */
 function useDatabase(): Fixture {
   let db: TestDatabase;
   const admin = <T>(run: (client: Client) => Promise<T>) => withAdminClient(env, db.name, run);
@@ -100,7 +97,7 @@ describe("writes and who may make them", () => {
     await expect(run).rejects.toMatchObject({ code: "42501" });
   });
 
-  // R181: the workspace, organization and actor are never arguments, so none can be forged.
+  // The workspace, organization and actor are never arguments, so none can be forged.
   it.each([
     ["B's workspace from an A context", { ...ctxA, writeWorkspaceId: WB }],
     ["no write workspace", { ...ctxA, writeWorkspaceId: undefined }],
@@ -109,7 +106,7 @@ describe("writes and who may make them", () => {
     await expect(writeAudit(app(), ctx)).rejects.toMatchObject({ code: "42501" });
   });
 
-  // R180: the database checks the shape of an action code only, never the closed list.
+  // The database checks the shape of an action code only, never the closed list.
   it.each([
     ["uppercase", "Workspace.create"],
     ["no dot", "workspace"],
@@ -140,7 +137,7 @@ describe("the database refuses every change to a written row", () => {
   });
   const insertOnly = { code: "55000", message: expect.stringMatching(/insert-only/) };
 
-  // R183: the superuser client, so the trigger and not row security is what refuses.
+  // The superuser client, so the trigger and not row security is what refuses.
   it.each([
     ["UPDATE", "UPDATE app.audit_logs SET action = 'post.deleted'"],
     ["DELETE", "DELETE FROM app.audit_logs"],
@@ -159,7 +156,7 @@ describe("the database refuses every change to a written row", () => {
     },
   );
 
-  // R184: TRUNCATE on the parent and on a leaf; a dropped partition stays possible (retention).
+  // TRUNCATE on the parent and on a leaf; a dropped partition stays possible (retention).
   it.each(["parent", "leaf"])("TRUNCATE of the %s is refused", async (which) => {
     const refused = t.admin((a) => a.query(`TRUNCATE ${which === "parent" ? "app.audit_logs" : leaf}`));
     await expect(refused).rejects.toMatchObject(insertOnly);
@@ -183,7 +180,6 @@ describe("the database refuses every change to a written row", () => {
 describe("ownership and leaf privileges", () => {
   const t = useDatabase();
 
-  // R185, R190
   it("the parent, every leaf and the head table are owned by shoutory_definer", async () => {
     const owners = await t.rows(
       `SELECT DISTINCT pg_get_userbyid(c.relowner) AS owner FROM pg_class c
@@ -229,7 +225,7 @@ describe("the hash chain", () => {
     expect(await t.rows(HASH_BAD)).toEqual([{ bad: 0 }]);
   });
 
-  // R186 and R188: the day is the UTC day of `at`; yesterday's head never feeds today's first row.
+  // The day is the UTC day of `at`; yesterday's head never feeds today's first row.
   it("a day with no head starts at the genesis whatever yesterday's head holds, and day is the UTC day of at", async () => {
     await t.rows(
       `INSERT INTO app.audit_heads (workspace_id, day, head_hash)
@@ -254,7 +250,7 @@ describe("concurrent writers", () => {
     client.query(AUDIT, [action, randomUUID(), null, "{}"]);
   const app = () => t.db().pool("app");
 
-  // R186: forced, not hoped for. tx1 holds the head, tx2 is seen waiting in pg_locks, then tx1 commits.
+  // Forced, not hoped for. tx1 holds the head, tx2 is seen waiting in pg_locks, then tx1 commits.
   it("a second writer waits for the head lock and then chains after the first", async () => {
     await writeAudit(app(), ctxA);
     const first = await openTx(app(), ctxA);
@@ -308,7 +304,7 @@ describe("the instance chain and rows with no workspace", () => {
     expect(rows[1]?.prev_hash).toEqual(rows[0]?.hash);
   });
 
-  // R187: an organization-only row has no read policy at M0.
+  // An organization-only row has no read policy.
   it("an organization-only row and an instance row are invisible to the app role, whatever the context", async () => {
     await t.rows(
       `INSERT INTO app.audit_logs (id, at, workspace_id, organization_id, actor_kind, actor_ref, action,
@@ -325,7 +321,7 @@ describe("the instance chain and rows with no workspace", () => {
   });
 });
 
-// V-48: a unique index on a partitioned table must contain the partition key, on the parent and on every leaf.
+// A unique index on a partitioned table must contain the partition key, on the parent and on every leaf.
 const KEYLESS = `
   SELECT i.indexrelid::regclass::text AS idx FROM pg_index i
   WHERE (i.indisprimary OR i.indisunique) AND i.indrelid IN (SELECT 'app.audit_logs'::regclass::oid UNION ALL ${LEAVES})
@@ -333,7 +329,7 @@ const KEYLESS = `
                     WHERE k.attnum = (SELECT attnum FROM pg_attribute
                                       WHERE attrelid = 'app.audit_logs'::regclass AND attname = 'at'))`;
 
-describe("V-48: unique keys of the partitioned audit table include the partition key", () => {
+describe("unique keys of the partitioned audit table include the partition key", () => {
   const t = useDatabase();
 
   it("no primary key or unique index of the table or a leaf lacks `at`", async () => {

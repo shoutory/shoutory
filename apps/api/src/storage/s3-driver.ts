@@ -23,7 +23,7 @@ import {
   storageKeySegments,
 } from "@shoutory/core/storage";
 
-// Bounds of every request the client makes (R344). `throwOnRequestTimeout` is needed: without it a request that outlasts
+// Bounds of every request the client makes. `throwOnRequestTimeout` is needed: without it a request that outlasts
 // `requestTimeout` only logs a warning.
 const CONNECTION_TIMEOUT_MS = 5_000;
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -31,7 +31,6 @@ const REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_BODY_DEADLINE_MS = 300_000;
 const MAX_BODY_DEADLINE_MS = 3_600_000;
 
-/** The whole body, or a refusal as soon as it passes `maxBytes`, before any request is made (R343). */
 async function readBounded(body: ReadableStream<Uint8Array>, maxBytes: number): Promise<Uint8Array> {
   const reader = body.getReader();
   const chunks: Uint8Array[] = [];
@@ -50,11 +49,8 @@ async function readBounded(body: ReadableStream<Uint8Array>, maxBytes: number): 
 
 const DENIED_NAMES = new Set(["AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch"]);
 
-/**
- * What an SDK failure means to a caller. The result carries no SDK text, key, host or credential, so the kind is the
- * only signal: 412 an existing object (a conditional write), 501 a server without the conditional header (it cannot hold
- * immutable originals), 401, 403 and the credential error names a refusal of the keys, anything else a failure.
- */
+// The result carries no SDK text, key, host or credential. 501 is a server without the conditional header, which cannot
+// hold immutable originals.
 function mapped(error: unknown): StorageError {
   if (error instanceof StorageError) return error;
   const { name, $metadata } = (error ?? {}) as { name?: string; $metadata?: { httpStatusCode?: number } };
@@ -65,7 +61,6 @@ function mapped(error: unknown): StorageError {
   return new StorageError("failed");
 }
 
-/** Runs one request and gives its failure as a storage class. */
 async function guarded<T>(run: () => Promise<T>): Promise<T> {
   try {
     return await run();
@@ -76,7 +71,6 @@ async function guarded<T>(run: () => Promise<T>): Promise<T> {
 
 const isNamed = (error: unknown, name: string) => (error as { name?: unknown } | null)?.name === name;
 
-/** The body, cancelled and failed once `ms` have passed since the answer; a read error of the body is a failure too. */
 function withDeadline(source: ReadableStream<Uint8Array>, ms: number): ReadableStream<Uint8Array> {
   const reader = source.getReader();
   let expired = false;
@@ -112,7 +106,6 @@ function withDeadline(source: ReadableStream<Uint8Array>, ms: number): ReadableS
 
 const SHA256_BASE64 = /^[A-Za-z0-9+/]{43}=$/;
 
-/** The size and stored sha256 (hex) of a HEAD answer; no length at all is a failure, never a made-up 0. */
 function headFacts(answer: { ContentLength?: number | undefined; ChecksumSHA256?: string | undefined }): {
   size: number;
   sha256?: string;
@@ -126,7 +119,6 @@ function headFacts(answer: { ContentLength?: number | undefined; ChecksumSHA256?
 
 type S3Config = Extract<StorageConfig, { driver: "s3" }>;
 
-// An upload URL lives 15 minutes.
 const PRESIGN_EXPIRY_SECONDS = 900;
 // S3 numbers the parts of an upload from 1 to 10,000; one page of ListParts holds at most 1,000 of them.
 const MAX_PART_NUMBER = 10_000;
@@ -149,7 +141,6 @@ const clientFor = (config: S3Config, endpoint: string, extra: Partial<S3ClientCo
     },
   });
 
-/** The base64 sha256 header value of a body of `contentLength` bytes, or a RangeError for a length or digest that is not one. */
 function checksumOf(contentLength: number, sha256: string): string {
   if (!Number.isSafeInteger(contentLength) || contentLength <= 0)
     throw new RangeError("contentLength must be a whole number of bytes above zero");
@@ -157,11 +148,8 @@ function checksumOf(contentLength: number, sha256: string): string {
   return Buffer.from(sha256, "hex").toString("base64");
 }
 
-/**
- * Upload URLs for browsers. The presigner holds its own client on the public endpoint, because the URL carries the
- * host of the client that signs it; the server's own client is unchanged. The declared length is signed
- * (`content-length`), so a body of another length is refused by the server; the content type is not signed.
- */
+// The presigner holds its own client on the public endpoint, because the URL carries the host of the client that signs
+// it. The declared length is signed (`content-length`), so a body of another length is refused by the server.
 export function createS3Presigner(config: S3Config) {
   // No default checksum parameter is signed into the URL: a browser would have to send it too.
   const client = clientFor(config, config.publicEndpoint, { requestChecksumCalculation: "WHEN_REQUIRED" });
@@ -173,11 +161,7 @@ export function createS3Presigner(config: S3Config) {
     unhoistableHeaders: new Set(["x-amz-checksum-sha256"]),
   });
   return {
-    /**
-     * A PUT URL for one part of a multipart upload: it accepts exactly `contentLength` bytes whose sha256 is `sha256`,
-     * for 15 minutes after `signedAt`. Parts are signed one by one because each carries its own digest, which only the
-     * browser that holds the bytes knows. The URL belongs to this upload id and this key.
-     */
+    // Parts are signed one by one because each carries its own digest, which only the browser that holds the bytes knows.
     async presignPart(
       key: string,
       uploadId: string,
@@ -201,11 +185,8 @@ export function createS3Presigner(config: S3Config) {
       const url = await getSignedUrl(client, command, signing(signedAt));
       return { url, headers: { "x-amz-checksum-sha256": checksum } };
     },
-    /**
-     * A PUT URL for `key` that accepts exactly `contentLength` bytes for 15 minutes after `signedAt`, and only while
-     * nothing is stored there: the caller must send `If-None-Match: *`, which the URL signs, so it cannot replace an
-     * object (an original is immutable).
-     */
+    // The caller must send `If-None-Match: *`, which the URL signs, so it cannot replace an object (an original is
+    // immutable).
     async presignPut(
       key: string,
       contentLength: number,
@@ -231,7 +212,6 @@ export function createS3Presigner(config: S3Config) {
 
 export type S3Presigner = ReturnType<typeof createS3Presigner>;
 
-/** One part of an upload as storage lists it: its number, its size, its ETag and the sha256 (base64) it holds for it. */
 export interface UploadedPart {
   readonly number: number;
   readonly size: number;
@@ -239,7 +219,6 @@ export interface UploadedPart {
   readonly checksum?: string;
 }
 
-/** Every page of the parts of an upload; null when storage has no such upload (finished or aborted). */
 async function listAllParts(
   client: S3Client,
   Bucket: string,
@@ -258,7 +237,6 @@ async function listAllParts(
   throw new StorageError("failed");
 }
 
-/** One page of ListParts; null when storage has no such upload. */
 async function listPage(client: S3Client, input: ConstructorParameters<typeof ListPartsCommand>[0]) {
   try {
     return await client.send(new ListPartsCommand(input));
@@ -280,12 +258,8 @@ function uploadedPart(part: {
   return { number: part.PartNumber, size: part.Size, etag: part.ETag, ...checksum };
 }
 
-/**
- * The server side of S3 multipart uploads, on the server's own endpoint and credentials: it creates an upload, lists
- * what storage holds, completes it and aborts it. The parts themselves go from the browser to the presigned URLs. A
- * complete is attempted once and never replaces an object (`If-None-Match: *`), and it states the size it expects, so
- * storage refuses a list that does not add up to it.
- */
+// A complete is attempted once and never replaces an object (`If-None-Match: *`), and it states the size it expects, so
+// storage refuses a list that does not add up to it.
 export function createS3Multipart(config: S3Config) {
   const client = clientFor(config, config.endpoint);
   const onceClient = clientFor(config, config.endpoint, { maxAttempts: 1 });
@@ -361,7 +335,7 @@ const prefixOf = (rule: LifecycleRule) =>
   rule.Filter?.And?.Prefix ?? rule.Filter?.Prefix ?? rule.Prefix ?? "";
 const tagged = (rule: LifecycleRule) => rule.Filter?.Tag !== undefined || !!rule.Filter?.And?.Tags?.length;
 
-/** What the rules of a bucket mean for uploads: a rule counts when it is enabled, aborts uploads, has no tag filter and covers `ws/`. */
+// A rule counts when it is enabled, aborts uploads, has no tag filter and covers `ws/`.
 function lifecycleWarnings(rules: readonly LifecycleRule[]): StorageWarning[] {
   const aborting = rules.filter(
     (rule) =>
@@ -376,10 +350,7 @@ function lifecycleWarnings(rules: readonly LifecycleRule[]): StorageWarning[] {
 
 const UNREADABLE_NAMES = new Set(["AccessDenied", "NotImplemented"]);
 
-/**
- * Reads the lifecycle configuration (never writes one). A bucket with none is the plain "no rule" answer; a server that
- * refuses the read or has no such API is "unreadable"; any other failure is the storage failure it is (R333: no SDK text).
- */
+// Never writes a configuration. A server that refuses the read or has no such API is "unreadable".
 async function lifecycleAdvice(client: S3Client, Bucket: string): Promise<StorageWarning[]> {
   try {
     const answer = await client.send(new GetBucketLifecycleConfigurationCommand({ Bucket }));
@@ -394,11 +365,8 @@ async function lifecycleAdvice(client: S3Client, Bucket: string): Promise<Storag
   }
 }
 
-/**
- * Objects in one bucket of an S3-compatible server, under the storage key itself. The bucket must exist: the driver
- * never creates one. The credentials are read from their sealed form only when the SDK asks for them. One client
- * serves every call until `close`; a streamed body has `bodyDeadlineMs` in all (default 5 minutes, at most an hour).
- */
+// The bucket must exist: the driver never creates one. The credentials are read from their sealed form only when the
+// SDK asks for them.
 export function createS3Driver(config: S3Config, options: { bodyDeadlineMs?: number } = {}): StorageDriver {
   const deadline = options.bodyDeadlineMs ?? DEFAULT_BODY_DEADLINE_MS;
   if (!Number.isInteger(deadline) || deadline < 1 || deadline > MAX_BODY_DEADLINE_MS)

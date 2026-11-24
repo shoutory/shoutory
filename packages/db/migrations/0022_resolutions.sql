@@ -1,11 +1,4 @@
--- The effect SQL of the publishing ledger: the attempts that mark an effect before a call is sent, the proof behind every
--- move that takes an effect back to none, the rollup of the post and its target, the usage and the provider quota that
--- follow an operation to its end, the human resolutions, and the sweeps that give an unknown outcome its deadlines. A
--- worker job calls the first group under the ledger purpose, a signed-in person calls the resolutions, and no other
--- caller reaches any of them.
-
--- What the definer role may write beyond 0020 and 0021. The columns are the ones a statement names; the guard sets the
--- token, the settled time, the update time and the escalation time itself.
+-- The guard sets the token, the settled time, the update time and the escalation time itself.
 GRANT SELECT ON app.operation_evidence TO shoutory_definer;
 GRANT INSERT ON app.operation_attempts, app.operation_resolutions TO shoutory_definer;
 GRANT UPDATE (effect, finished_at, request_fingerprint, http_status, error_class, provider_code, retry_after_ms,
@@ -18,9 +11,8 @@ GRANT UPDATE (status, targets_total, targets_published, targets_published_not_li
 GRANT UPDATE (published_at, external_id, permalink, presence, updated_at) ON app.post_variants TO shoutory_definer;
 COMMENT ON TABLE app.operation_attempts IS 'The calls the ledger made for an operation: a start row and one finish update.';
 
--- One row per attempt and quota key: reserved before the committing call, booked when the provider accepts the work and
--- refunded when an attempt is shown to have had no effect, so a retry reserves again. Template D: only the definers read
--- or write it. The index is the one of the data model (a refunded row no longer counts).
+-- Refunded when an attempt is shown to have had no effect, so a retry reserves again. Only the definers read or write
+-- it. A refunded row no longer counts in the window index.
 CREATE TABLE app.provider_quota_ledger (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   workspace_id uuid,
@@ -42,8 +34,7 @@ SELECT app.apply_rls_template('app.provider_quota_ledger'::regclass, 'D');
 GRANT SELECT, INSERT, DELETE ON app.provider_quota_ledger TO shoutory_definer;
 GRANT UPDATE (state) ON app.provider_quota_ledger TO shoutory_definer;
 
--- The rows of a quota ledger go 7 days after they were made, as the data model states (the 0019 way of seeding the
--- registry, under a policy that exists only for this statement).
+-- The seed policy exists only for this insert.
 CREATE POLICY retention_seed_insert ON app.retention_classes FOR INSERT TO shoutory_owner WITH CHECK (true);
 INSERT INTO app.retention_classes (class, table_name, kind, event_column, retain, partition_unit) VALUES
   ('app.provider_quota_ledger', 'app.provider_quota_ledger', 'window', 'at', interval '7 days', NULL);
@@ -51,8 +42,7 @@ DROP POLICY retention_seed_insert ON app.retention_classes;
 CALL app.grant_purposes('provider_quota_ledger', 'SELECT', ARRAY['purge_expired']);
 CALL app.grant_purposes('provider_quota_ledger', 'DELETE', ARRAY['purge_expired']);
 
--- The purposes of this file. The lock helper and the rollup run under purposes of their own, so the policies of each
--- list only what that function touches; a row lock needs the SELECT policy as well as the UPDATE one.
+-- Each function lists only what it touches; a row lock needs the SELECT policy as well as the UPDATE one.
 CALL app.grant_purposes('operations', 'SELECT', ARRAY['ledger_prelock', 'operation_rollup', 'operation_attempt_start',
   'operation_attempt_finish', 'operation_record_progress', 'resolve_operation', 'ledger_state_counts']);
 CALL app.grant_purposes('operations', 'UPDATE', ARRAY['ledger_prelock', 'operation_attempt_start',
@@ -70,7 +60,7 @@ CALL app.grant_purposes('operation_attempts', 'INSERT', ARRAY['operation_attempt
 CALL app.grant_purposes('operation_attempts', 'UPDATE', ARRAY['operation_attempt_finish']);
 CALL app.grant_purposes('operation_resolutions', 'INSERT', ARRAY['resolve_operation']);
 CALL app.grant_purposes('channels', 'SELECT', ARRAY['operation_attempt_start', 'resolve_operation']);
--- The resolution holds the channel FOR SHARE, which needs the UPDATE policy as well (as the move to blocked_reconnect does).
+-- FOR SHARE on the channel needs the UPDATE policy as well.
 CALL app.grant_purposes('channels', 'UPDATE', ARRAY['resolve_operation']);
 CALL app.grant_purposes('rate_buckets', 'SELECT', ARRAY['operation_attempt_start']);
 CALL app.grant_purposes('rate_buckets', 'INSERT', ARRAY['operation_attempt_start']);
@@ -91,7 +81,7 @@ BEGIN
 END
 $$;
 
--- The three triggers are created by the definer role, which needs the right to attach them; the right goes again after.
+-- The definer creates the triggers, so it needs TRIGGER on the table until they exist.
 GRANT TRIGGER ON app.operations TO shoutory_definer;
 SET ROLE shoutory_definer;
 
@@ -100,9 +90,8 @@ CREATE POLICY operation_attempt_start_insert ON app.outbox FOR INSERT TO shoutor
 CREATE POLICY resolve_operation_insert ON app.outbox FOR INSERT TO shoutory_definer
   WITH CHECK ((SELECT app.job_purpose()) = 'resolve_operation');
 
--- Locks the post and the target of an operation, in that order (the lock order of the ledger), before the caller locks
--- the operation: a move the rollup or the usage trigger handles writes the post and the target after the operation
--- update, so the locks come first. The ids are read unlocked. No entry point: a definer calls it inside its purpose.
+-- Locks the post, then the target, before the caller locks the operation: the rollup and usage triggers write the post
+-- and target after the operation update, so the locks must come first. Not an entry point.
 CREATE FUNCTION app.ledger_prelock(p_ws uuid, p_op uuid)
 RETURNS void
 LANGUAGE plpgsql
@@ -125,8 +114,8 @@ BEGIN
 END
 $$;
 
--- The same three locks for a sweep, taken together and skipped when any is held (a sweep never waits), and the row is
--- locked only if it is still in the state and with the token the sweep read it with. True when the caller holds them.
+-- The same locks for a sweep, skipped when any is held because a sweep never waits. The row is locked only if it still
+-- has the state and token the sweep read.
 CREATE FUNCTION app.ledger_lock_target(p_ws uuid, p_op uuid, p_state text, p_token bigint)
 RETURNS boolean
 LANGUAGE plpgsql
@@ -148,10 +137,7 @@ BEGIN
 END
 $$;
 
--- Writes the target and the post of an operation as the operations of the target say (the mapping of the ledger
--- rollup): a live operation makes the target in_progress, or held when one waits on a person or a reconnect; no live
--- operation makes it settled after a published, failed or missed one and draft after a cancelled one. The post follows
--- from its targets and carries the count triple. Only the operations of kind publish count.
+-- Only operations of kind publish count.
 CREATE FUNCTION app.ledger_rollup(p_ws uuid, p_variant uuid, p_fired text)
 RETURNS void
 LANGUAGE plpgsql
@@ -219,9 +205,7 @@ BEGIN
 END
 $$;
 
--- The trigger of the rollup: it fires (by the WHEN of each trigger) only on a move into published, a terminal state,
--- needs_human, unverified, blocked_reconnect or paused, on a move out of the last four, and on an insert that is already
--- missed. Claims, dispatches, retries and reconciles never touch a post.
+-- Claims, dispatches, retries and reconciles never touch a post.
 CREATE FUNCTION app.operations_rollup()
 RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER
@@ -235,10 +219,7 @@ BEGIN
 END
 $$;
 
--- The trigger of the usage and the quota: an operation the provider accepted books its usage and its quota rows once; an
--- operation shown to have had no effect refunds its quota rows once and, when it ended (failed, cancelled, missed),
--- releases its usage once; a superseded operation hands its usage to the one that replaces it. A row moves only from
--- the state it must be in, so a second call changes nothing.
+-- A row moves only from the state it must be in, so a second call changes nothing.
 CREATE FUNCTION app.operations_usage()
 RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER
@@ -267,7 +248,7 @@ BEGIN
 END
 $$;
 
--- They sort after the two guards of 0019 (the name decides the order), and run after the row is final.
+-- The names sort these after the two guards, and they run after the row is final.
 CREATE TRIGGER operations_c_rollup_insert AFTER INSERT ON app.operations
   FOR EACH ROW WHEN (NEW.state = 'missed') EXECUTE FUNCTION app.operations_rollup();
 CREATE TRIGGER operations_c_rollup_update AFTER UPDATE ON app.operations
@@ -280,12 +261,11 @@ CREATE TRIGGER operations_d_usage AFTER UPDATE ON app.operations
     'cancelled', 'missed', 'superseded_after_unknown_outcome') OR (OLD.effect <> 'none' AND NEW.effect = 'none')))
   EXECUTE FUNCTION app.operations_usage();
 
--- The transition guard of 0021 with the proof behind every move that takes an effect back to none. The row of the table
--- that names the move says what it needs: rows 19, 20 and 21 the latest attempt of the operation recorded as having had
--- no effect and finished; rows 24 and 36 `absent` evidence read after that attempt began (row 36 also with the resend flag
--- of the caller, which the writer of the move sets for the one case the core rule allows); rows 42 and 44 that evidence
--- or a person's attestation. A row that cannot be seen is a refusal, never a pass. The escalation time is the entry time
--- of every move into needs_human or unverified.
+-- Proof for a move that takes an effect back to none: the no-effect retry, failure and cooldown moves need the latest
+-- attempt recorded as no effect and finished; terminal failure absent and absence proven need `absent` evidence read
+-- after that attempt began (absence proven also accepts the caller's resend flag, set only for the one case the core
+-- rule allows); the not-executed attestation and drop need that evidence or a person's attestation. A row that cannot
+-- be seen is a refusal, never a pass.
 CREATE OR REPLACE FUNCTION app.ledger_guard()
 RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER
@@ -369,14 +349,10 @@ BEGIN
 END
 $$;
 
--- The fenced write of a worker (W), a poller (P) or the reconciler (R), as in 0020, with three changes: the moves that take
--- an effect back to none (rows 19, 20, 21, 24, 36) are no longer refused here but proven by the guard; a move that does
--- so sets the effect to none, and row 36 puts the operation back on its publish queue; and the one change key
--- `idempotent_resend` is accepted for row 36 alone; a move into unknown_external_state may carry
--- `unverified_horizon_days` (1 to 3650), which sets `unverified_until` from the database clock when it is empty. The
--- setting the guard reads is always set from the call, so a value a caller set earlier in the transaction never counts.
--- The moves into dispatching (rows 9 and 14) are refused here: they mark the effect with their attempt row and run only
--- through operation_attempt_start, so no lease or heartbeat key is accepted. The post and its target are locked first.
+-- The `idempotent_resend` key is accepted only for the absence-proven move, which also puts the operation back on its
+-- publish queue. The setting the guard reads is always set from this call, so a value set earlier in the transaction
+-- never counts. Moves into dispatching are refused: they mark the effect with their attempt row and run only through
+-- operation_attempt_start. The post and its target are locked first.
 CREATE OR REPLACE FUNCTION app.operation_transition(
   workspace_id uuid, operation_id uuid, token bigint, from_state text, to_state text, actor text, changes jsonb)
 RETURNS TABLE (outcome text, fencing_token bigint)
@@ -504,7 +480,6 @@ BEGIN
 END
 $$;
 
--- The cancel of 0020, with the post and its target locked first.
 CREATE OR REPLACE FUNCTION app.operation_cancel(workspace_id uuid, operation_id uuid)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER
@@ -543,7 +518,6 @@ BEGIN
 END
 $$;
 
--- The evidence writer of 0020, with the post and its target locked first.
 CREATE OR REPLACE FUNCTION app.record_evidence(
   workspace_id uuid, operation_id uuid, kind text, level text, outcome_kind text, refs jsonb)
 RETURNS TABLE (evidence_id uuid, moved boolean)
@@ -585,14 +559,10 @@ BEGIN
 END
 $$;
 
--- Starts one step of a worker's attempt. A committing start is the one that marks the effect: the move to dispatching, the
--- effect `possible`, the attempt row with its effect start time and `attempt_count + 1` are written together, in the
--- caller's own transaction, which commits before the provider is called. Any other step writes its attempt row and
--- moves nothing; every start takes the next attempt number, and only a committing start counts as an attempt (the
--- sends the manifest limits). The start is fenced by the token and the owner (a worker that lost its lease gets `lost_lease`
--- and nothing is written). A committing start reserves one quota row for each key of `p_quotas` ({key: {capacity,
--- window_seconds}}) unless the window is full (`quota_denied`, nothing written); the keys are counted under a lock on a
--- bucket row of their own, taken last of the locks of the move so that two starts never count together.
+-- A committing start marks the effect (dispatching, effect `possible`, the attempt row) in the caller's own
+-- transaction, which commits before the provider is called. Only a committing start counts as an attempt against the
+-- manifest's send limits. The quota keys are counted under a lock on a bucket row of their own, taken last of the
+-- move's locks, so two starts never count together.
 CREATE FUNCTION app.operation_attempt_start(
   p_ws uuid, p_op uuid, p_token bigint, p_owner text, p_step text, p_quotas jsonb DEFAULT '{}'::jsonb)
 RETURNS TABLE (outcome text, attempt_id uuid, attempt_no integer)
@@ -684,9 +654,8 @@ BEGIN
 END
 $$;
 
--- Writes the result of an attempt once: the effect it had, when it finished and what the provider answered. It is
--- fenced by the token of the attempt and the token the operation holds now, so a worker that lost its lease changes
--- nothing; an attempt already finished is not written again. The keys of `p_result` are a closed set.
+-- Fenced by the attempt's token and the operation's current token, so a worker that lost its lease changes nothing;
+-- a finished attempt is not written again.
 CREATE FUNCTION app.operation_attempt_finish(p_ws uuid, p_attempt uuid, p_token bigint, p_result jsonb)
 RETURNS TABLE (outcome text)
 LANGUAGE plpgsql SECURITY DEFINER
@@ -717,8 +686,6 @@ BEGIN
 END
 $$;
 
--- Records what a worker has done so far (the prepare cursor and the references the provider returned), with no move of
--- the state, while it holds the lease and the token.
 CREATE FUNCTION app.operation_record_progress(p_ws uuid, p_op uuid, p_token bigint, p_cursor text, p_refs jsonb)
 RETURNS TABLE (outcome text)
 LANGUAGE plpgsql SECURITY DEFINER
@@ -744,8 +711,8 @@ BEGIN
 END
 $$;
 
--- Admission of 0021, with one change: a target that is already missed at admission is written by the rollup (its post is
--- locked first, skipping the target when another session holds it), so the admission no longer writes the target for it.
+-- A target already missed at admission is written by the rollup, with its post locked first, so admission does not
+-- write that target itself.
 CREATE OR REPLACE FUNCTION app.admit_due_targets(p_limit integer, p_providers jsonb)
 RETURNS TABLE (operation_id uuid, workspace_id uuid, queue text, state text)
 LANGUAGE plpgsql SECURITY DEFINER
@@ -770,7 +737,7 @@ BEGIN
   IF p_limit IS NULL OR p_limit NOT BETWEEN 1 AND 500 OR jsonb_typeof(p_providers) IS DISTINCT FROM 'object' THEN
     RAISE EXCEPTION 'admit_due_targets: the limit is 1 to 500 and the providers an object' USING ERRCODE = '22023';
   END IF;
-  -- The lease of a provider is a positive whole number of seconds; a value that is not is the caller's defect and no target is read.
+  -- A bad lease is the caller's defect, so no target is read.
   IF EXISTS (SELECT 1 FROM jsonb_each(p_providers) AS e (provider, facts)
       WHERE NOT coalesce(jsonb_typeof(e.facts -> 'lease_seconds' -> 'publish') = 'number'
         AND (e.facts -> 'lease_seconds' ->> 'publish') ~ '^[1-9][0-9]{0,8}$', false)) THEN
@@ -846,8 +813,8 @@ BEGIN
 END
 $$;
 
--- The reconcile claim of 0021, with each candidate locked together with its post and target (skipping any that is held,
--- and any that moved on since it was read): a row that goes to needs_human is an ending the rollup handles.
+-- Each candidate is locked with its post and target, skipping any that is held or moved on since it was read: a row
+-- that goes to needs_human is an ending the rollup handles.
 CREATE OR REPLACE FUNCTION app.claim_reconciles(p_queue text, p_limit integer, p_owner text, p_lease_seconds integer,
   p_class_e_kinds text[])
 RETURNS TABLE (id uuid, workspace_id uuid, fencing_token bigint, lease_expires_at timestamptz, kind text, state text)
@@ -890,10 +857,9 @@ BEGIN
 END
 $$;
 
--- Takes back what an expired lease holds, as 0021 does, with the deadlines of an unknown outcome set in the same move.
--- `p_providers` is {provider id: {first_backoff_seconds, unverified_horizon_days}}: a row that becomes
--- unknown_external_state is due for its first read-back after that many seconds (60 for a provider not listed, 0 for one
--- that cannot read back) and carries `unverified_until` when the provider has a horizon; the first value that was set is kept.
+-- The deadlines of an unknown outcome are set in the same move. A row that becomes unknown_external_state is due for
+-- its first read-back after the provider's backoff (60 seconds for an unlisted provider, 0 for one that cannot read
+-- back); the first `unverified_until` that was set is kept.
 DROP FUNCTION app.sweep_expired_leases();
 CREATE FUNCTION app.sweep_expired_leases(p_providers jsonb DEFAULT '{}'::jsonb)
 RETURNS integer
@@ -945,7 +911,6 @@ BEGIN
 END
 $$;
 
--- The one due move of 0021, with the post and its target locked first.
 CREATE OR REPLACE FUNCTION app.ledger_due_move(p_ws uuid, p_id uuid)
 RETURNS void
 LANGUAGE plpgsql
@@ -969,14 +934,10 @@ BEGIN
 END
 $$;
 
--- Moves the rows whose wait is over, one row at a time (the guard's refusal of one row's move leaves the others moved),
--- each locked with its post and target first and skipped when it moved on or is held. In this order: a retry_wait row with
--- no effect that has used its attempts becomes failed (row 27, only for a provider in `p_live_providers`, whose entry has
--- `max_attempts`); a reconciling or unknown_external_state row whose `unverified_until` has come becomes unverified
--- (row 39, same providers); then, as in 0021, a pending, retry_wait or paused row with no effect past its lateness window
--- becomes missed, a retry_wait row whose retry is due becomes pending, and a paused row whose pause is over becomes
--- pending: a provider cooldown whose time came, a disabled channel that is connected again, and an api_sunset pause of a
--- provider that is live again (row 28). Returns the count.
+-- One row at a time, so the guard's refusal of one row leaves the others moved. Each row is locked with its post and
+-- target first and skipped when it moved on or is held. Attempts exhausted and the unverified horizon apply only to
+-- providers in `p_live_providers`. A pause ends for a provider cooldown whose time came, a disabled channel that is
+-- connected again, and an api_sunset pause of a provider that is live again.
 DROP FUNCTION app.sweep_due_moves();
 CREATE FUNCTION app.sweep_due_moves(p_live_providers jsonb DEFAULT '{}'::jsonb)
 RETURNS integer
@@ -1066,13 +1027,10 @@ BEGIN
 END
 $$;
 
--- The human resolution of an operation that automation could not settle, for a signed-in Owner or Admin or the Editor who
--- wrote the post (a job, a stranger and a lower role are refused like an unknown id). Each kind moves only from the
--- states of the resolution table, and one that would send (attest_not_executed, publish_late, supersede) is refused
--- unless the channel is connected. It writes one resolution row (the step-up time is stamped for the kinds that need
--- step-up; the route has checked it), the evidence a person's word is, the move, the outbox row, and for supersede and a
--- publish_late of a missed operation a new operation that carries its usage and links back to the old one. Locks: the
--- post and its target, the channel FOR SHARE, then the operation.
+-- Only an Owner, an Admin or the Editor who wrote the post may resolve; anyone else is refused like an unknown id. A
+-- kind that would send (attest_not_executed, publish_late, supersede) is refused unless the channel is connected. The
+-- step-up time is only stamped here; the route has checked it. Lock order: the post and its target, the channel FOR
+-- SHARE, then the operation.
 CREATE FUNCTION app.resolve_operation(p_ws uuid, p_op uuid, p_kind text, p_args jsonb DEFAULT '{}'::jsonb)
 RETURNS TABLE (new_operation_id uuid)
 LANGUAGE plpgsql SECURITY DEFINER
@@ -1124,8 +1082,8 @@ BEGIN
   END IF;
   SELECT o.state, o.effect INTO st, eff FROM app.operations AS o
     WHERE o.workspace_id = p_ws AND o.id = p_op FOR NO KEY UPDATE;
-  -- OL 6.1 row 44: a drop or a reschedule of a post that may have been sent needs `absent` evidence of this operation
-  -- that was read after its latest attempt began (any, when it has no attempt); the move then resets the effect.
+  -- A drop or reschedule of a post that may have been sent needs `absent` evidence read after its latest attempt began
+  -- (any, when it has no attempt); the move then resets the effect.
   absent_ok := jsonb_exists(p_args, 'absence_evidence_id') AND EXISTS (SELECT 1 FROM app.operation_evidence AS e
     WHERE e.workspace_id = p_ws AND e.operation_id = p_op AND e.id = (p_args ->> 'absence_evidence_id')::uuid
       AND e.kind = 'absent' AND e.observed_at > coalesce((SELECT a.started_at FROM app.operation_attempts AS a
@@ -1196,8 +1154,7 @@ BEGIN
 END
 $$;
 
--- The count of operations in each of the 17 states, across every workspace and with no tenant data, for the admin counts
--- (the 0012 precedent: the route that calls it is the admin gate).
+-- Counts across every workspace and carries no tenant data; the admin route that calls it is the gate.
 CREATE FUNCTION app.ledger_state_counts()
 RETURNS TABLE (state text, total bigint)
 LANGUAGE plpgsql SECURITY DEFINER

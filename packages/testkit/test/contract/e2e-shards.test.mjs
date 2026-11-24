@@ -7,7 +7,6 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const cli = join(root, "node_modules/@playwright/test/cli.js");
-// The projects that make the state every other spec needs, so every shard runs them.
 const EVERY_SHARD = ["journey", "founder"];
 
 // What `playwright test --list` reports for one shard (none = the whole run). Listing loads the specs and reports them;
@@ -83,7 +82,6 @@ test("in every shard each project after the founder project depends on it, direc
   for (const shard of Object.keys(table)) {
     const answer = listed(shard);
     assert.equal(answer.run.status, 0, `${shard}: ${answer.run.stderr}`);
-    // The report carries each project's dependencies in config.filteredProjects[].dependencies.
     const projects = new Map(
       answer.report.config.filteredProjects.map((project) => [project.name, project.dependencies]),
     );

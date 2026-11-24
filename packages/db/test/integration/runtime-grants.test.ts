@@ -9,10 +9,7 @@ import {
 
 const env = readTestEnv();
 
-// Security floor: a runtime role holds no privilege beyond what the row security template of a table allows, and on
-// a table with an exact expectation nothing more and nothing less. Column privileges are read as well: a column
-// grant on a key column would let the app role move a row between tenants. The constants are the grant decisions of
-// the migrations; a later table adds a row here (no committed snapshot file).
+// Column privileges are read as well: a column grant on a key column would let the app role move a row between tenants.
 const RUNTIME_ROLES = ["shoutory_app", "shoutory_worker", "shoutory_auth", "shoutory_readonly"];
 const CEILING: Record<string, string[]> = {
   W: ["SELECT", "INSERT", "UPDATE", "DELETE"],
@@ -22,7 +19,6 @@ const CEILING: Record<string, string[]> = {
 };
 const READ = ["SELECT"];
 
-// Per table of the app schema: the privileges each role holds on it.
 const EXACT: Record<string, Record<string, string[]>> = {
   schema_migrations: { shoutory_app: READ, shoutory_worker: READ },
   user_profiles: { shoutory_app: READ, shoutory_worker: READ },
@@ -41,32 +37,23 @@ const EXACT: Record<string, Record<string, string[]>> = {
   roles: { shoutory_app: READ },
   audit_logs: { shoutory_app: READ },
   audit_heads: {},
-  // 0013: channel rows change only through the channel definers (and a nickname column grant below); the two app
-  // tables are template I and no runtime role holds anything on them.
   channels: { shoutory_app: READ },
   channel_capability_snapshots: { shoutory_app: READ },
   sync_cursors: { shoutory_app: READ },
   provider_apps: {},
   provider_instance_apps: {},
-  // 0014: sealed credentials and the workspace salts are template D; the credential definers are the only way in.
   channel_credentials: {},
   workspace_key_salts: {},
-  // 0015: the connect state is template W with no runtime grant at all (R546); only its definers reach it.
   oauth_flows: {},
   connect_challenges: {},
-  // 0016: the media tables are template W and read-only to the runtime roles: only the media definers write them.
   media_assets: { shoutory_app: READ, shoutory_worker: READ },
   media_uploads: { shoutory_app: READ, shoutory_worker: READ },
   media_derivatives: { shoutory_app: READ, shoutory_worker: READ },
-  // 0018: the content tables are read-only to the runtime roles (only the post definers write them); the idempotency
-  // keys have no runtime grant at all and no definer yet.
   posts: { shoutory_app: READ, shoutory_worker: READ },
   post_versions: { shoutory_app: READ, shoutory_worker: READ },
   post_variants: { shoutory_app: READ, shoutory_worker: READ },
   post_media: { shoutory_app: READ, shoutory_worker: READ },
   idempotency_keys: {},
-  // 0019: the ledger tables are read-only to the runtime roles (only the ledger definers write them); the reservations
-  // and the transition table have no runtime grant at all.
   operations: { shoutory_app: READ, shoutory_worker: READ },
   operation_media: { shoutory_app: READ, shoutory_worker: READ },
   operation_attempts: { shoutory_app: READ, shoutory_worker: READ },
@@ -75,13 +62,12 @@ const EXACT: Record<string, Record<string, string[]>> = {
   usage_reservations: {},
   ledger_transitions: {},
 };
-// "role table.column privilege": the column-level grants, and the only ones.
 const COLUMN_GRANTS = [
   "shoutory_app workspaces.name UPDATE",
   "shoutory_app workspaces.slug UPDATE",
   "shoutory_app workspaces.colour UPDATE",
   "shoutory_app workspaces.default_tz UPDATE",
-  // R533 (D): a channel's nickname is the one column the app role writes; connection_state and state_reason have
+  // A channel's nickname is the one column the app role writes; connection_state and state_reason have
   // no runtime UPDATE grant, so a state can only come from a definer that checks the move.
   "shoutory_app channels.nickname UPDATE",
   // The worker reads the seven columns of a channel it needs to act on an operation: no secret and no display column.
@@ -141,7 +127,6 @@ async function tableGrants(pool: Pool): Promise<{ present: string[]; held: Held[
   return { present: present.rows.map((row) => row.tbl as string), held: held.rows as Held[] };
 }
 
-/** What one table's grants get wrong: privileges beyond the allowance, and (with an exact set) missing ones. */
 function oneTable(tbl: string, mine: Held[], ceiling: string[]): string[] {
   const exact = EXACT[tbl];
   const extra = mine
@@ -184,7 +169,6 @@ async function columnViolations(pool: Pool): Promise<string[]> {
   ];
 }
 
-/** Every difference between what the runtime roles hold and what the tables allow. */
 async function grantViolations(pool: Pool): Promise<string[]> {
   return [...(await tableViolations(pool)), ...(await columnViolations(pool))].sort();
 }

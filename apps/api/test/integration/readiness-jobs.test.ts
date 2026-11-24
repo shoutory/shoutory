@@ -20,7 +20,6 @@ interface Fixture {
   readonly admin: Parameters<Parameters<typeof withAdminClient>[2]>[0];
 }
 
-// One clone per row: each row plants exactly one fault (or none) and reads the answer of the unauthenticated probe.
 async function answer(plant: (fixture: Fixture) => Promise<void>): Promise<[number, string | undefined]> {
   const db: TestDatabase = await cloneTemplate(env, inject("shoutoryTemplate"));
   const appPool = createAppPool(db.url("app"), () => undefined);
@@ -39,7 +38,6 @@ async function answer(plant: (fixture: Fixture) => Promise<void>): Promise<[numb
       auth: testAuth(appPool, keys, logged, ORIGIN),
     });
     const response = await Promise.resolve(app.request("/readyz", {}, REMOTE));
-    // The cause is in the log only (R494).
     return [response.status, /"cause":"([a-z_]+)"/.exec(lines.join("\n"))?.[1]];
   } finally {
     await appPool.end();
@@ -65,7 +63,7 @@ const lateEvent = (seconds: number) => async (fixture: Fixture) => {
   );
 };
 
-// R315: never a fixed healthy answer. Limits are those of R304: outbox lag 60 s, job lag 120 s, worker stale at 90 s.
+// Never a fixed healthy answer. The limits: outbox lag 60 s, job lag 120 s, worker stale at 90 s.
 it.each<[string, (fixture: Fixture) => Promise<void>, number, string | undefined]>([
   [
     "an undispatched event is older than 60 s",

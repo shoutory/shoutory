@@ -27,7 +27,6 @@ function decodedPassword(value: string): string | undefined {
   }
 }
 
-/** The values the logger must never print: every set secret variable, every KEK and the password inside a URL. */
 export function collectSecrets(env: NodeJS.ProcessEnv): string[] {
   const names = [
     ...SECRET_VARIABLES,
@@ -59,7 +58,6 @@ const COMMANDS: ReadonlyMap<string, Command> = new Map([
   ["secrets reseal", resealCommand],
 ]);
 
-/** Runs one command and returns its exit code; starting a process around it is the server slice's job. */
 export async function run(argv: readonly string[], env: NodeJS.ProcessEnv, io: CliIo): Promise<number> {
   // `audit verify` is the one command with an argument of its own (a day); it checks that argument itself.
   const withDay = argv[0] === "audit" && argv[1] === "verify";

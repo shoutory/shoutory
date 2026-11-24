@@ -18,7 +18,6 @@ const testKeys = new EnvKeyProvider({
   SHOUTORY_KEK_K1: Buffer.alloc(32, 1).toString("base64"),
 });
 
-/** A TCP forwarder to PostgreSQL that the test can cut and bring back on the same port. */
 class Forwarder {
   private server?: Server;
   private readonly sockets = new Set<Socket>();
@@ -49,7 +48,7 @@ async function freePort(): Promise<number> {
   return port;
 }
 
-// A ready answer needs a worker that has beaten (R315).
+// A ready answer needs a worker that has beaten.
 const beat = (database: TestDatabase) =>
   database.pool("worker").query("SELECT app.worker_heartbeat('http-test-worker', 'worker')");
 

@@ -18,8 +18,6 @@ const callsTo = (stub: ReturnType<typeof stubApi>, name: string) =>
 type Call = readonly [string, (RequestInit | undefined)?];
 const bodyOf = (call: Call | undefined) => JSON.parse(String(call?.[1]?.body));
 
-// Everything a mailed link opens shows its page and changes nothing until a press: the token comes from the fragment,
-// is held in memory, and is gone from the address, the title, every link and every request URL.
 describe("a page opened from a mailed link (security floor)", () => {
   it.each([
     ["verify", `/auth/verify#token=${TOKEN}`, "verify-email", "Confirm my email"],
@@ -142,7 +140,6 @@ async function resetWith(password: string, api: Parameters<typeof stubApi>[0] = 
   return { ...opened, stub };
 }
 
-// A dead link and a refused password are told apart by the answer's code, not by its status.
 describe("the reset page", () => {
   it("a password under 15 characters sends nothing and says why", async () => {
     const { stub, host } = await resetWith("too short pw 1");

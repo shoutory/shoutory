@@ -15,20 +15,17 @@ import { TextField } from "../ui/text-field";
 import { ZonePicker } from "../zones/zone-picker";
 
 type OrgType = Organization["type"];
-// The server's limit for an organization and a workspace name.
 const MAX_NAME = 128;
 const made = z.object({ id: z.string(), name: z.string(), type: z.enum(["agency", "team", "personal"]) });
 const workspaceMade = z.object({ id: z.string() });
 
-/** The organization the flow is for: the one just created, or the one a resumed flow picked up. */
 interface Target {
   id: string;
   name: string;
   type: OrgType;
 }
 
-// The flow's state and its one submit: the organization (kept once made, so a retry after the workspace call failed
-// sends only the workspace) and then the first workspace, which opens when it is made.
+// The organization is kept once made, so a retry after the workspace call failed sends only the workspace.
 function useOnboarding(resume: Organization | undefined) {
   const navigate = useNavigate();
   const revalidator = useRevalidator();
@@ -37,7 +34,6 @@ function useOnboarding(resume: Organization | undefined) {
   const [type, setType] = useState<OrgType>("agency");
   const [typed, setTyped] = useState<string | null>(null);
   const [zone, setZone] = useState(readZone);
-  // The first workspace starts as the organization's name until it is edited.
   const workspaceName = typed ?? target?.name ?? orgName;
   const submit = async () => {
     let org = target;
@@ -46,7 +42,7 @@ function useOnboarding(resume: Organization | undefined) {
       const row = await request(made, "/api/v1/organizations", { method: "POST", body });
       org = { id: row.id, name: row.name, type: row.type };
       setTarget(org);
-      // The lists now hold the organization, so a reload from here resumes it instead of starting another.
+      // So a reload from here resumes this organization instead of starting another.
       await revalidator.revalidate();
     }
     const body = { organization_id: org.id, name: workspaceName.trim(), default_tz: zone };
@@ -55,7 +51,6 @@ function useOnboarding(resume: Organization | undefined) {
     await navigate(`/w/${workspace.id}`);
   };
   const create = useAction(submit, (error) => {
-    // The session ended while the page was open: sign in, then come back here.
     if (error.state === "session_expired") void navigate("/sign-in?return-to=%2F");
   });
   const edited = typed !== null;
@@ -76,7 +71,6 @@ function useOnboarding(resume: Organization | undefined) {
 
 type Fields = { organization: boolean; workspace: boolean };
 
-// A field that is empty on submit is flagged and cleared again when it changes; the first flagged one takes focus.
 function useValidation(s: ReturnType<typeof useOnboarding>) {
   const form = useRef<HTMLFormElement>(null);
   const [invalid, setInvalid] = useState<Fields>({ organization: false, workspace: false });
@@ -128,10 +122,6 @@ function WorkspaceStep({
   );
 }
 
-/**
- * A-08: an organization (unless one is resumed) and its first workspace, then the workspace opens. `focusHeading`
- * moves focus to the heading when the flow replaces the member-only state.
- */
 export function Onboarding({
   resume,
   focusHeading = false,

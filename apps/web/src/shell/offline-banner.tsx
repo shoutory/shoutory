@@ -2,7 +2,6 @@ import { Trans } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
 import { Banner } from "../ui/banner";
 
-/** Whether the browser is online: `navigator.onLine` at the start, then the window's `online` and `offline` events. */
 export function useOnline(): boolean {
   const [online, setOnline] = useState(() => navigator.onLine);
   useEffect(() => {
@@ -18,10 +17,9 @@ export function useOnline(): boolean {
   return online;
 }
 
-/** The persistent banner of the offline state (ux-spec 2.1 O); nothing while online. */
 export function OfflineBanner() {
   const online = useOnline();
-  // The live region is always there, empty while online, so the text is announced when it arrives (WI-F13).
+  // The live region is always there, empty while online, so the text is announced when it arrives.
   return (
     <div role="status">
       {online ? null : (

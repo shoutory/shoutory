@@ -11,7 +11,6 @@ import {
 
 const env = readTestEnv();
 
-// Security floor: a runtime role that can bypass row security, create roles or own objects defeats tenant isolation.
 const ROLES = [
   { name: "shoutory_owner", login: true, key: "owner" },
   { name: "shoutory_definer", login: false, key: undefined },
@@ -69,14 +68,13 @@ async function createViolations(pool: Pool, role: string): Promise<string[]> {
     [role],
   );
   const row = create.rows[0];
-  // The NOLOGIN definer holds CREATE on app (R30): ALTER FUNCTION ... OWNER TO needs it. Nothing else may.
+  // The NOLOGIN definer holds CREATE on app: ALTER FUNCTION ... OWNER TO needs it. Nothing else may.
   const exempt = role === "shoutory_definer" ? "app" : undefined;
   return (["app", "auth", "database"] as const)
     .filter((place) => row[place] && place !== exempt)
     .map((place) => `CREATE on ${place}`);
 }
 
-/** Everything the catalog says that the role design forbids. An empty list is a pass. */
 async function violations(pool: Pool, role: string, login: boolean): Promise<string[]> {
   return [
     ...(await attributeViolations(pool, role, login)),
@@ -171,7 +169,6 @@ describe("the owner's one allowed membership", () => {
   });
 });
 
-// The catalog check must fail for a role that is built wrong: each row plants one violation and expects it named.
 describe("the role catalog check catches a planted violation", () => {
   let db: TestDatabase;
   beforeAll(async () => {

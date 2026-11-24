@@ -9,20 +9,15 @@ interface OutboxEvent {
   readonly payload: unknown;
   readonly attempts: number;
 }
-/**
- * One handler per event type; an event whose type has none is left for the lease to lapse. The signal aborts when the
- * handler has run too long: it must stop its work then, since the row is no longer its to end.
- */
+// The signal aborts when the handler has run too long: it must stop its work then, since the row is no longer its to end.
 export type OutboxHandlers = Readonly<
   Record<string, (event: OutboxEvent, signal: AbortSignal) => Promise<void>>
 >;
 
 export interface OutboxRelay {
-  /** Claims one batch, runs the handlers and marks what was delivered; answers how many rows it marked. */
   tick(): Promise<number>;
-  /** Ticks until stopped (R317: an interval loop, not a queue schedule, so lag stays far under its limit). Once only. */
+  // An interval loop, not a queue schedule, so lag stays far under its limit.
   start(): void;
-  /** Stops the loop and waits a bounded time for a tick in flight. */
   stop(): Promise<void>;
 }
 
@@ -31,10 +26,9 @@ export interface OutboxRelayOptions {
   readonly handlers: OutboxHandlers;
   readonly logger: Logger;
   readonly batch?: number;
-  /** A handler that runs longer is aborted and its row stays unmarked; well inside the 5-minute lease. */
+  // Kept well inside the 5-minute lease.
   readonly handlerTimeoutMs?: number;
   readonly intervalMs?: number;
-  /** How long `stop` waits for a tick in flight. */
   readonly stopTimeoutMs?: number;
 }
 
@@ -56,7 +50,6 @@ class HandlerTimeout extends Error {
   override readonly name = "HandlerTimeout";
 }
 
-/** Runs one handler under a timeout: on expiry the promise rejects first, then the signal aborts. */
 function runWithin(handler: OutboxHandlers[string], event: OutboxEvent, ms: number): Promise<void> {
   const controller = new AbortController();
   let timer: NodeJS.Timeout | undefined;
@@ -69,7 +62,6 @@ function runWithin(handler: OutboxHandlers[string], event: OutboxEvent, ms: numb
   return Promise.race([handler(event, controller.signal), expired]).finally(() => clearTimeout(timer));
 }
 
-/** Waits for `promise`, but no longer than `ms`. */
 async function waitUpTo(promise: Promise<unknown>, ms: number): Promise<void> {
   let timer: NodeJS.Timeout | undefined;
   const limit = new Promise<void>((resolve) => {
@@ -80,16 +72,10 @@ async function waitUpTo(promise: Promise<unknown>, ms: number): Promise<void> {
 }
 
 export interface IntervalLoop {
-  /** Ticks until stopped. Once only: a second start, or a start after stop, throws. */
   start(): void;
-  /** Stops the loop and waits a bounded time for a tick in flight. */
   stop(): Promise<void>;
 }
 
-/**
- * An interval loop (R317): one tick in flight at a time, the next scheduled when it ends, a failed tick logged and
- * never fatal. The outbox relay and the mail sender both run on it; `name` words their log line and their start error.
- */
 export function intervalLoop(
   name: string,
   tick: () => Promise<unknown>,
@@ -124,10 +110,7 @@ export function intervalLoop(
   };
 }
 
-/**
- * Runs the handler of one claimed row, then marks it with the claim's attempt; true when the mark took. A failure is
- * logged by type and error class only: an error message may carry the payload.
- */
+// A failure is logged by type and error class only: an error message may carry the payload.
 async function deliver(
   { pool, handlers, logger, handlerTimeoutMs = DEFAULT_HANDLER_TIMEOUT_MS }: OutboxRelayOptions,
   row: Claimed,
@@ -163,12 +146,9 @@ async function deliver(
   return marked.rows[0]?.ok === true;
 }
 
-/**
- * Delivery is at least once. A claim is a short transaction that leases the rows; the handler runs after it
- * ended (no external call inside a transaction, AGENTS 3.7); the mark names the attempt the claim handed out, so a
- * claimer whose lease lapsed cannot end a row another one holds. A failed, timed-out or unhandled event stays
- * unmarked: its lease lapses and the lag shows it, never a simulated success.
- */
+// Delivery is at least once. The handler runs after the claim transaction ended (no external call inside a
+// transaction); the mark names the claim's attempt, so a claimer whose lease lapsed cannot end a row another one holds.
+// A failed, timed-out or unhandled event stays unmarked: its lease lapses and the lag shows it, never a simulated success.
 export function createOutboxRelay(options: OutboxRelayOptions): OutboxRelay {
   const {
     pool,

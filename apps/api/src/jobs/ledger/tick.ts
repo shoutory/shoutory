@@ -18,7 +18,7 @@ const TICK_MS = 30_000;
 const STOP_MS = 10_000;
 // Targets taken in one call; the database caps a call at 500.
 const ADMIT_BATCH = 100;
-// One tick takes at most this many batches, so one tick never holds the worker for ever (AGENTS 6.6).
+// One tick takes at most this many batches, so one tick never holds the worker for ever.
 const MAX_ADMIT_BATCHES = 5;
 
 export interface Admitted {
@@ -28,18 +28,12 @@ export interface Admitted {
   readonly state: string;
 }
 
-/** The queue library's database seam on a transaction: its statements run inside the transaction of `tx`. */
 const bossDb = (tx: TenantTx) => ({
   executeSql: (text: string, values?: unknown[]) => tx.query(text, values),
 });
 
-/**
- * Admits the due targets and sends one wake-up for each queue that got an operation, inside the transaction of `tx`: a
- * rollback leaves no job, and a commit never leaves an operation without its job. The queue keeps one waiting wake-up per
- * queue. Admission takes a target up to its dispatch margin before it is due, so this wake-up can come before the post is
- * due: the end of every tick wakes each publish queue again (`createLedgerTick`), which sends it when it falls due and
- * covers a wake-up that is lost.
- */
+// The wake-up is sent inside the transaction of `tx`: a rollback leaves no job, and a commit never leaves an operation
+// without its job.
 export async function admitAndWake(
   tx: TenantTx,
   boss: Pick<PgBoss, "send">,
@@ -51,7 +45,6 @@ export async function admitAndWake(
     JSON.stringify(providersArgument(registry.manifests)),
   ]);
   for (const queue of new Set(rows.map((row) => row.queue))) {
-    // A wake-up carries nothing: the ledger row is the truth.
     await boss.send(
       queue,
       {},
@@ -70,17 +63,13 @@ export interface LedgerTickOptions {
   readonly boss: PgBoss;
   readonly registry: Registry;
   readonly logger: Logger;
-  /** The adapter of each provider the tick reads back for; a provider with none is only swept and admitted. */
   readonly adapters?: AdapterMap;
   readonly fetchFor?: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
-  /** The key ring the credentials of the channels are opened with. */
   readonly keys: KeyProvider;
-  /** The calendar time, for the sunset of an API version; the default is the real clock. */
   readonly clock?: () => Date;
   readonly intervalMs?: number;
 }
 export interface LedgerTick extends IntervalLoop {
-  /** One pass: the two sweeps, then admission. A step that fails is logged and the others still run. */
   tick(): Promise<void>;
 }
 
@@ -88,8 +77,8 @@ export interface LedgerTick extends IntervalLoop {
 const sweepsAt = (registry: Registry, now: Date) =>
   sweepArguments(registry.manifests.map((manifest) => ({ ...manifest, live: !pastSunset(manifest, now) })));
 
+// A step that fails is logged and the others still run.
 type Step = (name: string, run: () => Promise<unknown>) => Promise<void>;
-// Runs one step of the tick; a step that fails is logged and the others still run.
 const stepper =
   (logger: Logger): Step =>
   async (name, run) => {
@@ -106,8 +95,7 @@ const stepper =
     }
   };
 
-// One wake-up for the publish queue of each provider that can send, each in its own logged step so that one failing send
-// does not skip the others; the queue keeps one waiting wake-up of this key.
+// Each send is its own logged step so that one failing send does not skip the others.
 async function wakePublish(
   step: Step,
   boss: PgBoss,
@@ -144,7 +132,6 @@ export function createLedgerTick({
     );
     if (moved > 0) await wake();
   };
-  // Admits batch after batch while one comes back full, so a backlog does not wait a tick for each hundred.
   async function admitBacklog(): Promise<void> {
     for (let batch = 0; batch < MAX_ADMIT_BATCHES; batch++) {
       const admitted = await withSystem(pool, "ledger", (tx) => admitAndWake(tx, boss, registry));
@@ -160,8 +147,8 @@ export function createLedgerTick({
     await step("reconcile", () =>
       reconcileStep({ pool, logger, registry, adapters, fetchFor, keys, owner, closing: closing.signal }),
     );
-    // A post is admitted up to its dispatch margin before it is due, and the wake-up of admission comes then: waking the
-    // queues at the end of every tick sends it when it falls due, and covers a wake-up that was lost.
+    // A post is admitted before it is due, so the wake-up of admission can come early: waking the queues at the end of
+    // every tick sends it when it falls due, and covers a wake-up that was lost.
     await wake();
   }
   const loop = intervalLoop("ledger tick", tick, logger, intervalMs, STOP_MS);

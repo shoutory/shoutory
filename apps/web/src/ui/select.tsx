@@ -13,11 +13,6 @@ export interface SelectOption {
   readonly label: string;
 }
 
-/**
- * A labelled list of options with one chosen (React Aria): the label is the accessible name, a keyboard opens it and
- * Escape closes it. `hideLabel` keeps the label for assistive technology only, for a Select inside a table row whose
- * column already says what it is.
- */
 export function Select({
   label,
   value,
@@ -35,7 +30,6 @@ export function Select({
   onChange: (value: string) => void;
   options: readonly SelectOption[];
   hideLabel?: boolean;
-  /** The list cannot be used now: it stays focusable, does not open, and says why through `reason`. */
   unavailable?: boolean;
   reason?: string;
 }) {

@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { IMAGE_EXTENSIONS, type ImageType, isImageType, type RejectReason } from "@shoutory/core/media";
 
-// Runs the sharp child (sharp-child.ts) on one file. The child has the server's memory and secrets nowhere in reach: it
-// starts with an empty environment, reads one temporary file, writes two, and is killed at its time limit.
+// The child has the server's memory and secrets nowhere in reach: it starts with an empty environment and is killed at
+// its time limit.
 
 const TIME_LIMIT_MS = 30_000;
 // The JS heap of the child only; the pixel limit in the child is what bounds the native memory of libvips.
@@ -30,17 +30,13 @@ interface Options {
   readonly inputPath: string;
   readonly outputDir: string;
   readonly timeoutMs?: number;
-  /** Kills the child when the caller gives up (the relay's handler limit); the run then throws, like any crash. */
   readonly signal?: AbortSignal;
 }
 
 const refusal = (reason: RejectReason): SharpResult => ({ ok: false, reason });
 
-/**
- * What the child printed, checked: one of its answers, or undefined when it is not one. The paths of the derivatives are
- * never read from it: the parent builds them from the output folder and the type, so a child that is led astray by an
- * image cannot point the parent at another file.
- */
+// The derivative paths are never read from the child's answer: the parent builds them, so a child led astray by an
+// image cannot point the parent at another file.
 function parse(text: string, outputDir: string): SharpResult | undefined {
   let answer: Record<string, unknown>;
   try {
@@ -64,7 +60,6 @@ function parse(text: string, outputDir: string): SharpResult | undefined {
   return { ok: true, width, height, mime, files };
 }
 
-/** Decodes the file in a child process, writes its `stripped` and `thumb` derivatives, and answers the facts or a reason. */
 export async function runSharpChild(options: Options): Promise<SharpResult> {
   const child = spawn(process.execPath, [HEAP_FLAG, CHILD, options.inputPath, options.outputDir], {
     env: {},
@@ -97,7 +92,6 @@ export async function runSharpChild(options: Options): Promise<SharpResult> {
   return timedOut || answer === undefined ? refusal("timeout") : answer;
 }
 
-/** A refused image leaves nothing behind. */
 async function clear(dir: string): Promise<void> {
   for (const name of await readdir(dir)) await rm(join(dir, name), { force: true });
 }

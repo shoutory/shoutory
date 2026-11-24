@@ -8,7 +8,6 @@ const EXPIRES = "2026-11-20T10:00:00.000Z";
 const ACCEPT = "invitation_accept";
 const UNUSABLE = "invitation_unusable";
 
-// state, message, DETAIL, code, details
 const MAPPED: [string, string, string | undefined, string, Record<string, string> | undefined][] = [
   ["SH403", `${ACCEPT}: email_mismatch`, undefined, "forbidden", { reason: "email_mismatch" }],
   ["SH403", "member_role_set: rank too low", undefined, "forbidden", undefined],
@@ -17,7 +16,6 @@ const MAPPED: [string, string, string | undefined, string, Record<string, string
   ["42501", "post: refused", undefined, "not_found", undefined],
   ["42501", "media: refused", undefined, "not_found", undefined],
   ["SH409", "media_set_multipart: the asset is not a pending upload", undefined, "conflict", undefined],
-  // A post that names a medium collected or removed meanwhile: the draft no longer resolves, like an autosave of it.
   ["SH422", "post: media_unavailable", undefined, "unprocessable_content", { reason: "media_unavailable" }],
   ["42501", "resolve_operation: refused", undefined, "not_found", undefined],
   [
@@ -28,7 +26,6 @@ const MAPPED: [string, string, string | undefined, string, Record<string, string
     undefined,
   ],
   ["SH409", "resolve_operation: dismiss is not allowed from this state", undefined, "conflict", undefined],
-  // The channel sentence of the definer becomes the reason code the client reads (R616 (2)).
   [
     "SH409",
     "resolve_operation: the channel is not connected, reconnect it first",
@@ -48,7 +45,6 @@ describe("definerRefusal", () => {
     expect([refusal?.code, refusal?.details]).toEqual([code, details]);
   });
 
-  // R533 (A): the creation bucket's refusal is a 429 whose Retry-After is the seconds the definer put in DETAIL.
   it.each([
     ["workspace_create", "retry after 42 seconds", 42],
     ["organization_create", "retry after 3600 seconds", 3600],

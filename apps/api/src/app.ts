@@ -51,11 +51,8 @@ export interface AppOptions {
   /** The key ring: `/readyz` is not ready while a sealed row names a key it does not hold. */
   readonly keys: KeyProvider;
   readonly logger: Logger;
-  /** Sign-up, sign-in, sessions and the route policies that read them. */
   readonly auth: AuthService;
-  /** The clock of the in-process caches, in milliseconds; the system clock when absent. */
   readonly now?: () => number;
-  /** Where objects are stored; the storage routes exist only when it is given. */
   readonly storage?: StorageDriver;
   /** Signs upload URLs (the S3 driver only); absent, the app has no register or complete routes for uploads. */
   readonly presigner?: S3Presigner;
@@ -63,18 +60,10 @@ export interface AppOptions {
   readonly multipart?: S3Multipart;
   /** The egress fetch of the import of media by URL (a user URL under the operator policy); absent, there is no import route. */
   readonly mediaImportFetch?: ImportFetch;
-  /** The folder of the built web app; when set, the app serves it after every other route. */
   readonly webRoot?: string | undefined;
-  /** The release channel of this build (`stable`, `beta`, `nightly`); `stable` when absent. */
   readonly releaseChannel?: string;
-  /** The sender the admin mail check reads; absent, the check finds no domain and looks nothing up. */
   readonly mail?: MailSettings;
-  /** The plan limits of a workspace; the self-host answer (nothing is limited) when absent. */
   readonly entitlements?: Entitlements;
-  /**
-   * The providers a channel can be read through, the egress client and the pepper of the refresh digests; the channel
-   * check route exists only when it is given.
-   */
   readonly channels?: {
     readonly providers: Readonly<Record<string, HealthProvider>>;
     readonly fetch: typeof fetch;
@@ -87,9 +76,6 @@ export interface AppOptions {
   };
 }
 
-// The services of the channel routes, only when the app is given its providers: the credential service reads and
-// refreshes the sealed token as a job principal of the workspace, the checker reads the provider with it, and the connect
-// service stores a new channel through both.
 function channelServices(options: AppOptions): { check: ChannelCheck; connect: ConnectService } | undefined {
   const { channels } = options;
   if (!channels) return undefined;
@@ -145,7 +131,6 @@ const cspFor = (scriptSources: string[]) => ({
   frameAncestors: ["'none'"],
 });
 
-/** Request id on every response, one request-log line per request. */
 function requestContext(logger: Logger): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
     const requestId = crypto.randomUUID();
@@ -222,7 +207,7 @@ export function createApp(options: AppOptions): App {
   if (options.storage)
     registerMedia(app, options.storage, options, () => new Date(options.now?.() ?? Date.now()));
   app.notFound((c) => errorResponse(c, new Refusal("not_found", "no such route")));
-  // Last, so a route added before it is never shadowed by the shell (R360).
+  // Last, so a route added before it is never shadowed by the shell.
   if (options.webRoot) registerStatic(app, options.webRoot, shell);
   return app;
 }

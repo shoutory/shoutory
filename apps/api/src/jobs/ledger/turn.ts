@@ -37,29 +37,16 @@ export interface TurnOptions {
   readonly pool: AppPool;
   readonly logger: Logger;
   readonly registry: Registry;
-  /** The adapter of each registered provider; a provider with none fails its operations. */
   readonly adapters: AdapterMap;
-  /** The `fetch` an adapter of this provider is given for a channel (bound to the instance host the channel stored). */
   readonly fetchFor: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
-  /** The key ring the credentials of the claimed channels are opened with. */
   readonly keys: KeyProvider;
   readonly queue: string;
-  /** The lease owner: one value for the worker process. */
   readonly owner: string;
-  /** Aborts when the worker is closing: nothing new is claimed and a claimed row is handed back. */
   readonly closing: AbortSignal;
-  /** A monotonic clock in milliseconds; the default is `performance.now`. */
   readonly now?: () => number;
-  /** The calendar time, for the sunset of an API version; the default is the real clock. */
   readonly clock?: () => Date;
 }
 
-/**
- * One turn of a worker on a queue: it claims one due operation, keeps its lease alive, reads the channel and the target
- * again, and dispatches it: the marker, the one committing call, the result and its move. Every write is fenced by the
- * token it was handed, so a turn whose lease went elsewhere writes nothing more. It ends `lost` the moment the heartbeat
- * says so.
- */
 export async function runTurn(options: TurnOptions): Promise<TurnResult> {
   const { pool, closing, now = () => performance.now() } = options;
   if (closing.aborted) return { kind: "closed" };
@@ -92,7 +79,6 @@ export async function runTurn(options: TurnOptions): Promise<TurnResult> {
   }
 }
 
-// The channel, then the variant and the post of the target, as they are now.
 async function readTarget(pool: AppPool, operation: Operation) {
   return inJob(pool, operation.workspace_id, async (tx) => {
     const channel = await tx.query<ChannelFacts>(
@@ -130,8 +116,7 @@ async function preflightMove(pool: AppPool, held: Held, outcome: PreflightMove):
   return movedOrLost(held, outcome.to, moved, outcome.to === "paused" ? outcome.reasonCode : undefined);
 }
 
-// Spends one token of each rate limit of the manifest, in its order, and stops at the first denial (the tokens already
-// taken stay spent: a turn never sends more than the limits allow). Answers the move that denial calls for, or null.
+// Stops at the first denial; the tokens already taken stay spent, so a turn never sends more than the limits allow.
 async function takeLimits(
   pool: AppPool,
   held: Held,
@@ -160,6 +145,7 @@ async function takeLimits(
   return null;
 }
 
+// Every write is fenced by the turn's token, so a turn whose lease moved writes nothing more and ends `lost`.
 async function preflight(options: TurnOptions, held: Held): Promise<TurnResult> {
   const { pool, closing, now = () => performance.now() } = options;
   const { claim, operation, manifest, signal } = held;
@@ -167,12 +153,12 @@ async function preflight(options: TurnOptions, held: Held): Promise<TurnResult> 
   if (closing.aborted) return handBack(pool, held, "closed");
   const target = await readTarget(pool, operation);
   if (signal.aborted) return lost;
-  // A channel the worker cannot see is a removed target: the operation fails.
+  // A channel the worker cannot see is a removed target, so the operation fails.
   const { channel } = target;
   if (channel === undefined) return preflightMove(pool, held, { to: "failed" });
   const outcome = rereadOutcome({ channelState: channel.connection_state, targetLive: target.targetLive });
   if (outcome !== null) return preflightMove(pool, held, outcome);
-  // A provider whose API has retired sends nothing and spends no token: the row waits, visibly, until a live version is named.
+  // A retired API sends nothing and spends no token: the row waits, visibly, until a live version is named.
   if (pastSunset(manifest, (options.clock ?? (() => new Date()))()))
     return preflightMove(pool, held, { to: "paused", reasonCode: "api_sunset" });
   if (closing.aborted) return handBack(pool, held, "closed");
@@ -185,7 +171,6 @@ async function preflight(options: TurnOptions, held: Held): Promise<TurnResult> 
     options.logger.error({ provider: manifest.id }, "claimed operation has no adapter");
     return preflightMove(pool, held, { to: "failed" });
   }
-  // The channel's own credential, opened before any call: a channel with none fails its operation with no effect.
   const account = await accountOf(options, operation, channel.instance_host);
   if (account === null) {
     options.logger.error(

@@ -1,6 +1,5 @@
 import { isIP } from "node:net";
 
-/** A CIDR range: the address bytes (4 or 16) and the prefix length in bits. */
 export interface Cidr {
   readonly bytes: readonly number[];
   readonly bits: number;
@@ -8,7 +7,6 @@ export interface Cidr {
 
 type Bytes = readonly number[];
 
-/** The 16 bytes of an IPv6 text, dotted IPv4 tail included. */
 function v6Bytes(text: string): number[] {
   let plain = text;
   if (plain.includes(".")) {
@@ -29,7 +27,6 @@ function v6Bytes(text: string): number[] {
   });
 }
 
-/** The bytes of an IP literal in any spelling the URL parser or a resolver gives; undefined for a non-address. */
 function toBytes(address: string): Bytes | undefined {
   const bare = (address.replace(/^\[|\]$/g, "").split("%")[0] ?? "").trim();
   const family = isIP(bare);
@@ -39,10 +36,8 @@ function toBytes(address: string): Bytes | undefined {
 
 const zeroTo = (bytes: Bytes, end: number) => bytes.slice(0, end).every((byte) => byte === 0);
 
-/**
- * The IPv4 address an IPv6 address carries: IPv4-mapped, SIIT (RFC 2765), IPv4-compatible, NAT64 (RFC 6052,
- * 64:ff9b::/96) and 6to4 (2002::/16). Behind any of them the IPv4 rules decide.
- */
+// IPv4-mapped, SIIT (RFC 2765), IPv4-compatible, NAT64 (RFC 6052, 64:ff9b::/96) and 6to4 (2002::/16) addresses carry an
+// IPv4 address, and the IPv4 rules decide for them.
 function embeddedV4(bytes: Bytes): Bytes | undefined {
   const mapped = zeroTo(bytes, 10) && bytes[10] === 0xff && bytes[11] === 0xff;
   const siit =
@@ -73,8 +68,7 @@ function parseTable(rows: readonly string[]): Cidr[] {
   });
 }
 
-// The fixed refuse list (IANA special-purpose registries): private, loopback, link-local, CGNAT, unique-local,
-// multicast, unspecified, reserved, documentation and cloud metadata.
+// The refuse list follows the IANA special-purpose registries.
 const BLOCKED_V4 = parseTable([
   "0.0.0.0/8",
   "10.0.0.0/8",
@@ -112,7 +106,6 @@ const NEVER_ALLOWABLE_V4 = parseTable([
 const LINK_LOCAL_V6 = parseTable(["fe80::/10"])[0] as Cidr;
 const AWS_METADATA_V6 = parseTable(["fd00:ec2::254/128"])[0] as Cidr;
 
-/** True when the address is in a refused range, in any spelling; a text that is no address is refused too. */
 export function isBlockedAddress(address: string): boolean {
   const bytes = toBytes(address);
   if (bytes === undefined) return true;
@@ -122,7 +115,6 @@ export function isBlockedAddress(address: string): boolean {
   return inner !== undefined && BLOCKED_V4.some((range) => inPrefix(inner, range));
 }
 
-/** A literal host in a cloud metadata or link-local range, in any spelling (R332); never allowable (AGENTS 4.5). */
 export function isMetadataOrLinkLocal(address: string): boolean {
   const bytes = toBytes(address);
   if (bytes === undefined) return false;
@@ -131,7 +123,6 @@ export function isMetadataOrLinkLocal(address: string): boolean {
   return inPrefix(bytes, LINK_LOCAL_V6) || inPrefix(bytes, AWS_METADATA_V6);
 }
 
-/** Parses `address/bits`; the error never carries the text. */
 export function parseCidr(text: string): Cidr {
   const [address = "", length, ...rest] = text.split("/");
   const bytes = toBytes(address);
@@ -142,7 +133,6 @@ export function parseCidr(text: string): Cidr {
   return { bytes, bits };
 }
 
-/** True when the address is in the range; an IPv4-embedding IPv6 address is tested as its IPv4 address. */
 export function cidrContains(range: Cidr, address: string): boolean {
   const bytes = toBytes(address);
   if (bytes === undefined) return false;

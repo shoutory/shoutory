@@ -21,7 +21,6 @@ const settings = (rows: unknown[]) => ({ adminSettings: () => json({ data: rows 
 const toggle = (host: HTMLElement) => host.querySelector<HTMLInputElement>('input[role="switch"]');
 
 describe("the sign-up switch", () => {
-  // The setting row is absent until an admin writes it, and absent means off.
   it.each([
     ["no row", false, []],
     ["true", true, [{ key: "signup_enabled", value: true }]],

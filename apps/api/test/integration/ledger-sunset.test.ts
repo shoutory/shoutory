@@ -2,11 +2,6 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { type Env, makeEnv, opOf, plant, rows, useDispatchEnv } from "../support/ledger-dispatch-env.js";
 
-// Security floor of the API sunset (CAP-009): a claimed operation of a provider whose API version in force is past its
-// sunset is paused with `api_sunset` and never sent, and the tick hands the sweep only the providers that are live at the
-// time of the tick. The clock is an input of the turn and of the tick. The sunset edges (today, yesterday, every version,
-// a newer version) are the unit table of `pastSunset`; these rows only show that the turn and the tick use it. The
-// environment of the rows is `support/ledger-dispatch-env.ts`.
 useDispatchEnv();
 
 const NOW = new Date("2026-11-23T12:00:00Z");
@@ -38,14 +33,12 @@ describe("a claimed operation of a provider past its sunset", () => {
   it.each(PAST)(
     "is paused with api_sunset when %s, sends nothing, takes no bucket token and is never resent",
     async (_name, manifest) => {
-      // fails first because: no gate, so the turn dispatches the post to a retired API
       const e = await makeEnv({ manifest, clock: () => NOW });
       try {
         const id = await plant(e);
         expect(await e.turn()).toMatchObject({ kind: "moved", to: "paused", id });
         expect(await opOf(id)).toMatchObject({ state: "paused", reason_code: "api_sunset", attempts: 0 });
         expect(await bucketOf(id, e.providerId)).toBe(0);
-        // A second tick and a second turn, still past the sunset: the row stays paused and nothing is sent.
         await e.tick();
         expect(await e.turn()).toMatchObject({ kind: "idle" });
         expect(await opOf(id)).toMatchObject({ state: "paused", reason_code: "api_sunset", attempts: 0 });
@@ -63,7 +56,6 @@ const LIVE: [string, Record<string, unknown>][] = [
 ];
 describe("a claimed operation of a provider with a version in force", () => {
   it.each(LIVE)("is dispatched when %s", async (_name, manifest) => {
-    // The control of the table above: a gate that paused too much would stop these.
     const e = await makeEnv({ manifest, clock: () => NOW });
     try {
       const id = await plant(e);
@@ -81,7 +73,6 @@ const paused = (e: Env) =>
   plant(e, { state: "paused", effect: "none", reason: "api_sunset", waitSeconds: 3600 });
 describe("the live list of the tick", () => {
   it("is computed at each tick: a provider that retires between two ticks leaves it, a newer version brings it back", async () => {
-    // fails first because: the list is built once or lists every provider, so a retired provider's pause is cleared
     const e = await makeEnv({ manifest: { apiVersions: [version("v1", "2026-01-01", "2026-11-24")] } });
     try {
       const live = await paused(e);
@@ -98,7 +89,6 @@ describe("the live list of the tick", () => {
   });
 
   it("leaves a retired provider's row at its last attempt waiting, and fails it once a live version is named", async () => {
-    // fails first because: the due-move sweep is given every provider, so the row fails while the provider is retired
     const e = await makeEnv({ clock: () => NOW });
     try {
       const id = await plant(e, { state: "retry_wait", effect: "none", attempts: 5, waitSeconds: 3600 });

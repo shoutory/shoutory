@@ -24,11 +24,6 @@ function CopyReference({ id }: { id: string }) {
   );
 }
 
-/**
- * The inline error panel (ux-spec 2.1 X and 6.2): what happened (`what`, with the object named), what it means for the
- * data (`meaning`), what to do (Retry, only when it can help) and the details behind a disclosure: the request id
- * with a Copy button, never the server's own words.
- */
 export function ErrorPanel({
   what,
   meaning,
@@ -39,12 +34,10 @@ export function ErrorPanel({
 }: {
   what: ReactNode;
   meaning: ReactNode;
-  /** The failed call: its request id goes into Details, and its class decides whether Retry is offered. */
   error?: ApiError;
-  /** A node for Details of its own (a provider's words, labelled by the caller), beside the request id if any. */
   detail?: ReactNode;
   onRetry?: () => void;
-  /** A failed submit moves focus here, so the user is told what failed (WI-F07). */
+  /** A failed submit moves focus here, so the user is told what failed. */
   focusOnMount?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);

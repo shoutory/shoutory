@@ -12,15 +12,6 @@ import { FAKE_CLIENT } from "../support/oauth-fake.js";
 import { addWorkspaceMember, seedOrganization, seedWorkspace, signedUser } from "../support/tenancy.js";
 import { type Fixture, keys, ORIGIN, PEPPER, startFixture } from "./auth/harness.js";
 
-// OAuth connect: a signed-in Owner or Admin starts a connect, the provider redirects back,
-// and the callback stores one channel with its first sealed credential and a health time. Every refused state is audited
-// and answered as a 302 to one fixed web path with an enumerated reason; start and callback are rate-limited per user.
-// The provider is the `fixture_oauth` network on loopback: real HTTP, its call log is the counter of exchanges.
-// The contract the tests pin: start answers `{ data: { authorize_url } }`; the callback answers 302 to
-// `/connect/result?channel=<id>&workspace=<id>` or `?reason=<start_again|refused|provider_error|failed|wrong_account|
-// sign_in|rate_limited|unavailable>` (with `message` for a provider error, `channel` for a wrong account, and
-// `workspace` whenever the callback's flow was taken); the sealed flow object is `{"code_verifier"}` under AAD kind `oauth_flow`,
-// scope the workspace, owner the flow id, generation 1.
 type User = { id: string; cookie: string };
 const FIRST = "fixture_oauth";
 const SECOND = "fixture_oauth2";
@@ -60,7 +51,7 @@ afterAll(async () => {
 });
 
 const challengeOf = (verifier: string) => createHash("sha256").update(verifier).digest("base64url");
-// The code exchanges the provider saw (a refresh the health look may make is another grant at the same route).
+// Only code exchanges: a refresh the health look may make is another grant at the same route.
 const exchangeCalls = () =>
   sim.requests.filter(
     (r) =>
@@ -99,7 +90,6 @@ const callbackAs = async (who: User | undefined, params: URLSearchParams, provid
 };
 const authorizeUrl = async (answer: Response) =>
   ((await answer.json()) as { data: { authorize_url: string } }).data.authorize_url;
-// What the provider's redirect carries after its immediate approval of an authorization URL.
 const approved = async (url: string | URL) =>
   new URL((await fetch(url, { redirect: "manual" })).headers.get("location") ?? "").searchParams;
 
@@ -108,7 +98,6 @@ interface Begun {
   state: string;
   redirect: URLSearchParams;
 }
-// Starts a connect and lets the fake approve it; `tweak` changes the authorization request the provider sees.
 async function begin(who: User, body: object = {}, tweak?: (query: URLSearchParams) => void): Promise<Begun> {
   const answer = await startAs(who, body);
   expect(answer.status).toBe(200);
@@ -118,7 +107,6 @@ async function begin(who: User, body: object = {}, tweak?: (query: URLSearchPara
   tweak?.(target.searchParams);
   return { url, state, redirect: await approved(target) };
 }
-// A workspace of the organization with the Admin, for a test that counts what a connect stores in it.
 async function ownWorkspace(): Promise<string> {
   const ws = await seedWorkspace(fx, org);
   await addWorkspaceMember(fx, ws, admin.id, "admin");
@@ -161,8 +149,6 @@ const flowOf = async (state: string) =>
     )
   )[0];
 
-// The failed-connect log lines written since `mark` (an index into the fixture's log), reduced to the fields that name
-// the failure.
 const failureLines = (mark: number) =>
   fx.logged
     .slice(mark)
@@ -170,7 +156,6 @@ const failureLines = (mark: number) =>
     .filter((line) => line.event === "connect_failed")
     .map(({ event, providerId, step, errorClass }) => ({ event, providerId, step, errorClass }));
 
-// The verifier a flow row holds, opened with the flow id as the owner (the AAD of an `oauth_flow` object).
 async function verifierOf(state: string): Promise<string> {
   const id = (await flowOf(state))?.id ?? "";
   const [flow] = await q<Record<string, Buffer | number | string>>(
@@ -235,8 +220,6 @@ describe("start", () => {
   });
 });
 
-// Every refused state is audited with its kind, stores no channel and no credential, makes no token call, and says
-// what to do next: start again for a flow that is spent or stale, otherwise refused.
 interface Run {
   who: User | undefined;
   params: URLSearchParams;
@@ -401,7 +384,6 @@ describe("the code exchange", () => {
     expect(seen).toMatchObject({ reason: "failed", channel: null });
     expect(tokenCalls()).toBe(exchanges + 1);
     expect(await stored()).toEqual(before);
-    // One structured line names the provider, the step and the adapter's error class, and nothing else.
     expect(failureLines(mark)).toEqual([
       { event: "connect_failed", providerId: FIRST, step: "exchange", errorClass: expect.any(String) },
     ]);
@@ -466,7 +448,6 @@ describe("the callback's own checks", () => {
   }, 60_000);
 });
 
-// A flow the callback takes, with the redirect's own query changed.
 const taken = async (change: (query: URLSearchParams) => void): Promise<Run> => {
   const flow = await begin(admin);
   change(flow.redirect);
@@ -477,8 +458,7 @@ const providerError = async (): Promise<Run> => {
   return { who: admin, params: new URLSearchParams({ error: "access_denied", state: flow.state }) };
 };
 
-// The screens read the redirect as it is: `workspace` is there whenever the callback's flow was taken and only then, and it
-// is the flow's own workspace, never a value of the callback's query.
+// `workspace` is the flow's own workspace, never a value of the callback's query.
 describe("the callback redirect carries exactly the keys of its outcome", () => {
   let mine = "";
   beforeAll(async () => {
@@ -603,7 +583,6 @@ describe("a successful connect", () => {
   }, 60_000);
 });
 
-// A revoked answer right after the connect is confirmed by a second look before it is shown.
 describe("the health check after a connect", () => {
   const revoked = { kind: "respond" as const, status: 401, body: { error: { code: "grant_revoked" } } };
   it.each([
@@ -636,7 +615,6 @@ describe("the health check after a connect", () => {
   }, 60_000);
 });
 
-// A bucket per user on each route; an unknown state spends it too; another user is unaffected.
 describe("the per-user buckets of start and callback", () => {
   it("start: the 11th start of a user answers 429 with Retry-After and a second user is unaffected", async () => {
     const [first, second] = [
@@ -676,8 +654,6 @@ describe("the per-user buckets of start and callback", () => {
   }, 60_000);
 });
 
-// The canary: the verifier, the state and both tokens appear in no log line, audit row, redirect URL or oauth_flows
-// text (the forms of AGENTS 4.2).
 describe("secrets stay out of everything that is shown or logged", () => {
   it("the verifier, state and tokens are in no log, audit row, redirect URL or flow row", async () => {
     const mine = await ownWorkspace();

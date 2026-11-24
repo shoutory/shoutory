@@ -9,8 +9,6 @@ import {
 } from "../support/tenancy.js";
 import { type Fixture, startFixture } from "./auth/harness.js";
 
-// One name rule for organizations and workspaces: trimmed, not empty, and none of the control, format or separator
-// characters a list or a mail would show as something else.
 let fx: Fixture;
 let cookie: string;
 let orgId: string;

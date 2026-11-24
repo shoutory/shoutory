@@ -15,10 +15,7 @@ import { openTx } from "../support/race.js";
 
 const env = readTestEnv();
 
-// Security floor of migration 0014 (R537, R538, R539): the credential definers admit a user with channels.manage or a
-// job principal of the channel's workspace and nobody else; the salt, the lease, the compare-and-set and the state moves
-// behave as flows 1.3 says. Grants and EXECUTE are rows of runtime-grants and rls-catalog, not tests here. Rows are
-// planted as the superuser, leases are backdated as the superuser, nothing sleeps.
+// Rows are planted and leases are backdated as the superuser; nothing sleeps.
 let db: TestDatabase;
 const admin = <T>(run: (client: Client) => Promise<T>) => withAdminClient(env, db.name, run);
 const rows = (sql: string, params: unknown[] = []) =>
@@ -28,7 +25,6 @@ const call = (name: string, params: unknown[]): [string, unknown[]] => [
   params,
 ];
 const AS_ADMIN = asUser(U.admin);
-// Runs one statement under any principal and commits it (commitAs only knows users).
 async function run(
   ctx: TenantCtx,
   [sql, params]: [string, unknown[]],
@@ -116,7 +112,6 @@ const expireLease = (channel: string) =>
     [channel],
   );
 
-// What each definer needs to run once as the Admin of WA against a channel with a credential (`ch`) or without (`bare`).
 type Build = (ws: string, ch: string, bare: string) => [string, unknown[]];
 const DEFINER_CALLS: [string, Build][] = [
   ["workspace_salt_ensure", (ws) => call("workspace_salt_ensure", [ws, randomBytes(32)])],
@@ -389,7 +384,7 @@ describe("the workspace salt", () => {
 });
 
 describe("crypto-shred", () => {
-  // OPS-025: the salt row is the shred. With it gone nothing opens; a new salt cannot open the old row.
+  // The salt row is the shred. With it gone nothing opens; a new salt cannot open the old row.
   it("crypto-shred: with the salt row deleted the credential cannot be opened, now or under a new salt", async () => {
     const keys = new EnvKeyProvider({
       SHOUTORY_ACTIVE_KEY_ID: "k1",
@@ -515,7 +510,7 @@ describe("the compare-and-set", () => {
     expect((await channelOf(channel))?.token_expires_at).not.toBeNull();
   });
 
-  // R541 (5): the token lands on its digest and generation alone, but only the holder of the current lease may clear it
+  // The token lands on its digest and generation alone, but only the holder of the current lease may clear it
   // and write the marker; a stale refresher leaves a newer lease and its marker alone.
   it("a commit that lands with a stale fencing number leaves the newer lease and its marker", async () => {
     const channel = await fresh();
@@ -597,7 +592,7 @@ describe("credential_refresh_fail", () => {
   });
 });
 
-describe("channel_enable restores connected only with a usable credential (R537 (4))", () => {
+describe("channel_enable restores connected only with a usable credential", () => {
   const CASES: [string, Planted | null, string][] = [
     ["an active credential with no refresh expiry", {}, "connected"],
     ["an active credential whose refresh expiry is ahead", { refreshExpiresIn: "1 day" }, "connected"],

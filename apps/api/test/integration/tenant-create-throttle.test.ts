@@ -2,9 +2,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { seedOrganization, signedUser } from "../support/tenancy.js";
 import { type Fixture, startFixture } from "./auth/harness.js";
 
-// R532 (4), R533 (A): a user creates at most 10 organizations and workspaces together per day. The 11th answers 429
-// too_many_requests with a Retry-After of whole seconds, from either route, and creates nothing. Other users are
-// not affected: the bucket is keyed per user.
 let fx: Fixture;
 beforeAll(async () => {
   fx = await startFixture();

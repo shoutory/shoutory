@@ -1,9 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { type Fixture, Jar, PASSWORD, startFixture, totpAt } from "./harness.js";
 
-// The floor of the sign-in and step-up audit rows (NFR-SEC-18): when the instance-chain writer fails, the call
-// answers 503 and nothing that proves identity is granted.
-
 let fx: Fixture;
 beforeAll(async () => {
   fx = await startFixture();
@@ -40,7 +37,6 @@ const ageStepUps = (email: string) =>
     ),
   );
 
-/** A row prepares its user while the writer works and returns the one call that must meet the failing writer. */
 type Prepared = { call: () => Promise<Response>; jar?: Jar };
 const WRITERS: ReadonlyArray<[string, "sign_in" | "step_up", (email: string) => Promise<Prepared>]> = [
   [
@@ -127,7 +123,7 @@ describe("a failed audit write after a correct credential", () => {
       expect([answer.status, await codeOf(answer)]).toEqual([503, "service_unavailable"]);
       expect(answer.headers.getSetCookie()).toEqual([]);
       if (kind === "sign_in") {
-        // The session row stays (the accepted atomicity of the plan): only the cookie never leaves.
+        // The session row stays; only the cookie never leaves.
         expect(await fx.sessionCount(email)).toBe(sessionsBefore + 1);
         return;
       }

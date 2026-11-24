@@ -11,8 +11,6 @@ import { createFsDriver } from "../../src/storage/fs-driver.js";
 import { createS3Presigner } from "../../src/storage/s3-driver.js";
 import { createBucket, S3_ACCESS_KEY, S3_SECRET_KEY, s3Env, s3Url } from "../support/s3.js";
 
-// The drivers against real storage: the filesystem driver on a folder, the S3 driver on the simulator. The first table
-// runs on both; the rest is the filesystem driver's own (its root, its links).
 const MAX = 1024;
 const BUCKET = "driver-table-1";
 const stream = (text: string) => new Blob([text]).stream();

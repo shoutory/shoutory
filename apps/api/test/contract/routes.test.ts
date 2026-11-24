@@ -10,7 +10,6 @@ import { testAuth } from "../support/auth.js";
 
 const POLICIES = ["public", "session", "step_up"];
 
-// An app over a pool that never connects: only what is registered is looked at.
 function buildApp(extra: Partial<AppOptions> = {}) {
   const logger = createLogger({ secrets: [], stream: { write: () => undefined } });
   const pool = createAppPool("postgres://shoutory_app:app-test-secret-1@127.0.0.1:1/none", () => undefined);
@@ -37,7 +36,7 @@ describe("route registration", () => {
     const registered = registeredRoutes(app);
     expect(registered.length).toBeGreaterThanOrEqual(3);
     for (const route of registered) expect(POLICIES, `${route.method} ${route.path}`).toContain(route.policy);
-    // Exactly one route may opt out of the strict query schema: the SPA shell route (R50).
+    // Only the SPA shell route may opt out of the strict query schema.
     expect(
       registered.filter((route) => route.looseQuery).map((route) => `${route.method} ${route.path}`),
     ).toEqual(["GET /*"]);
@@ -61,7 +60,6 @@ describe("route registration", () => {
         );
     const read = "GET session library.view";
     const edit = "session library.edit";
-    // The filesystem driver takes a file in parts too: a route to sign them, and a PUT for each part.
     expect(mediaOf(buildApp({ storage }))).toEqual([
       `POST ${edit}`,
       `POST ${edit}`,

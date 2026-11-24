@@ -1,12 +1,10 @@
--- Invitations and member changes: the only write paths of invitations and of a member's role or presence.
---
--- Every function here serves a signed-in user: the caller is read from the session context, never from an argument.
--- A workspace the caller cannot reach, a missing one and an unknown id give the same 42501 message per function; a
--- reachable caller below the needed rank gets SH403, a state conflict SH409, an invitation that has ended SH410.
--- Each function locks the organization row, then the workspace row (FOR NO KEY UPDATE, lock rank 1a) before it
--- reads anything else, so counts, caps and the one-Owner rule hold under concurrent callers. The definer role holds
--- UPDATE on the id column of both tables only to take that lock: an UPDATE policy per purpose passes the lock and
--- refuses every real update (WITH CHECK false).
+-- Every function here reads the caller from the session context, never from an argument. A workspace the caller
+-- cannot reach, a missing one and an unknown id give the same 42501 message per function; a reachable caller below
+-- the needed rank gets SH403, a state conflict SH409, an invitation that has ended SH410.
+-- Each function locks the organization row, then the workspace row (FOR NO KEY UPDATE) before it reads anything
+-- else, so counts, caps and the one-Owner rule hold under concurrent callers. The definer role holds UPDATE on the
+-- id column of both tables only to take that lock: an UPDATE policy per purpose passes the lock and refuses every
+-- real update (WITH CHECK false).
 
 CREATE TABLE app.invitations (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
@@ -21,22 +19,18 @@ CREATE TABLE app.invitations (
   invited_by uuid NOT NULL REFERENCES auth."user" (id),
   CONSTRAINT invitations_workspace_token_key UNIQUE (workspace_id, token_hash)
 );
--- One pending invitation per address and workspace.
 -- shoutory:accepted-lock new empty table in this file
 CREATE UNIQUE INDEX invitations_pending_email_key ON app.invitations (workspace_id, email)
   WHERE accepted_at IS NULL AND revoked_at IS NULL;
--- The accept lookup is by digest alone.
 -- shoutory:accepted-lock new empty table in this file
 CREATE INDEX invitations_token_hash_idx ON app.invitations (token_hash);
 SELECT app.apply_rls_template('app.invitations'::regclass, 'W');
--- The runtime role reads every column but the digest and writes nothing.
+-- The runtime role cannot read the token digest.
 GRANT SELECT (id, workspace_id, email, role_id, expires_at, accepted_at, accepted_by, revoked_at, invited_by)
   ON app.invitations TO shoutory_app;
 GRANT SELECT, INSERT, UPDATE ON app.invitations TO shoutory_definer;
 GRANT UPDATE (id) ON app.organizations, app.workspaces TO shoutory_definer;
 
--- One policy per purpose, table and command, named <purpose>_<command>. A lock policy passes the row lock and
--- refuses every update; the others are open to their purpose alone.
 CREATE PROCEDURE app.grant_purposes(tbl text, cmd text, purposes text[])
 LANGUAGE plpgsql
 SET search_path = pg_catalog, pg_temp
@@ -57,9 +51,8 @@ BEGIN
 END
 $$;
 
--- The built-in role weights, and the caller's rank in a workspace: the higher of the stored active role and the
--- implicit admin of an organization Owner or Admin, exactly as resolve_workspace_access reads it (0 reaches nothing).
--- These are helpers: no runtime role may call them, and they run under the purpose of the definer that calls them.
+-- The rank is the higher of the stored active role and the implicit admin of an organization Owner or Admin,
+-- as resolve_workspace_access reads it; 0 reaches nothing. No runtime role may call these helpers.
 CREATE FUNCTION app.role_weight(key text)
 RETURNS integer
 LANGUAGE sql IMMUTABLE
@@ -82,8 +75,8 @@ AS $$
                       WHERE w.id = ws AND om.user_id = who AND om.org_role IN ('owner', 'admin')) THEN 4 ELSE 0 END)
 $$;
 
--- Lock rank 1a: the organization row, then the workspace row, FOR NO KEY UPDATE. This blocks another taker of the
--- same locks but not the foreign-key check of a concurrent insert.
+-- Lock order: the organization row, then the workspace row. FOR NO KEY UPDATE blocks another taker of the same
+-- locks but not the foreign-key check of a concurrent insert.
 CREATE FUNCTION app.tenancy_lock(ws uuid)
 RETURNS void
 LANGUAGE plpgsql
@@ -98,8 +91,7 @@ BEGIN
 END
 $$;
 
--- Refuses a caller that reaches nothing (42501), takes the locks, reads the rank again under them and refuses one
--- below `need` (SH403). Returns the rank under the locks.
+-- The rank is read again under the locks, so a concurrent change cannot slip past the check.
 CREATE FUNCTION app.tenancy_enter(fname text, ws uuid, caller uuid, need integer)
 RETURNS integer
 LANGUAGE plpgsql
@@ -124,7 +116,6 @@ ALTER FUNCTION app.tenancy_rank(uuid, uuid) OWNER TO shoutory_definer;
 ALTER FUNCTION app.tenancy_lock(uuid) OWNER TO shoutory_definer;
 ALTER FUNCTION app.tenancy_enter(text, uuid, uuid, integer) OWNER TO shoutory_definer;
 
--- invitation_create and invitation_revoke
 CALL app.grant_purposes('organizations', 'SELECT', ARRAY['invitation_create', 'invitation_revoke']);
 CALL app.grant_purposes('organizations', 'UPDATE', ARRAY['invitation_create', 'invitation_revoke']);
 CALL app.grant_purposes('workspaces', 'SELECT', ARRAY['invitation_create', 'invitation_revoke']);
@@ -136,9 +127,8 @@ CALL app.grant_purposes('invitations', 'SELECT', ARRAY['invitation_create', 'inv
 CALL app.grant_purposes('invitations', 'INSERT', ARRAY['invitation_create']);
 CALL app.grant_purposes('invitations', 'UPDATE', ARRAY['invitation_create', 'invitation_revoke']);
 
--- A new invitation: at most the caller's own rank, never owner, 1 hour to 14 days (48 hours when null), at most 100
--- unexpired pending rows per workspace (53400). An expired pending row of the same address is revoked first; an
--- unexpired one is a conflict (SH409). The address is stored lower-cased. Returns the invitation id.
+-- At most the caller's own rank, never owner; at most 100 unexpired pending rows per workspace (53400). An expired
+-- pending row of the same address is revoked first; an unexpired one is a conflict (SH409).
 CREATE FUNCTION app.invitation_create(
   workspace_id uuid, email text, role_key text, expires_in interval, token_digest bytea, request_id text,
   ip_hmac bytea)
@@ -193,8 +183,6 @@ BEGIN
 END
 $$;
 
--- Ends a pending invitation. An unknown id gives the same refusal as a foreign workspace; one that was accepted or
--- already revoked is a conflict (SH409).
 CREATE FUNCTION app.invitation_revoke(workspace_id uuid, invitation_id uuid, request_id text, ip_hmac bytea)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER
@@ -233,7 +221,6 @@ GRANT EXECUTE ON FUNCTION app.invitation_create(uuid, text, text, interval, byte
 ALTER FUNCTION app.invitation_create(uuid, text, text, interval, bytea, text, bytea) OWNER TO shoutory_definer;
 ALTER FUNCTION app.invitation_revoke(uuid, uuid, text, bytea) OWNER TO shoutory_definer;
 
--- member_role_set, member_remove and the commit-time Owner guard
 GRANT UPDATE (role_id) ON app.workspace_members TO shoutory_definer;
 GRANT DELETE ON app.workspace_members TO shoutory_definer;
 CALL app.grant_purposes('organizations', 'SELECT', ARRAY['member_role_set', 'member_remove']);
@@ -247,9 +234,8 @@ CALL app.grant_purposes('workspace_members', 'DELETE', ARRAY['member_remove']);
 CALL app.grant_purposes('organization_members', 'SELECT', ARRAY['member_role_set', 'member_remove']);
 CALL app.grant_purposes('roles', 'SELECT', ARRAY['member_role_set', 'member_remove', 'workspace_owner_guard']);
 
--- A workspace keeps exactly one stored Owner, whatever the status of the row. The check runs at commit, so one
--- transaction may hand ownership over; a workspace that no longer exists passes (its members went with it). The
--- definers refuse first, so a caller gets an answer and never this error.
+-- Exactly one stored Owner, whatever the status of the row. The check runs at commit, so one transaction may hand
+-- ownership over; a workspace that no longer exists passes. The definers refuse first, so a caller never sees this error.
 CREATE FUNCTION app.workspace_owner_guard()
 RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER
@@ -282,10 +268,9 @@ CREATE CONSTRAINT TRIGGER workspace_owner_guard
 REVOKE ALL ON FUNCTION app.workspace_owner_guard() FROM PUBLIC;
 ALTER FUNCTION app.workspace_owner_guard() OWNER TO shoutory_definer;
 
--- Changes a member's role. The caller needs admin and may change only a member strictly below them (the higher of
--- the stored and the implicit rank on both sides) to a role at most their own. Ownership moves only here: the stored
--- Owner makes an active stored member the Owner and becomes admin in the same transaction (SH403 for anyone else);
--- the Owner demoting themself is SH409.
+-- The caller may change only a member strictly below them (stored or implicit rank on both sides) to a role at most
+-- their own. Ownership moves only here: the stored Owner makes an active member the Owner and becomes admin in the
+-- same transaction (SH403 for anyone else); the Owner demoting themself is SH409.
 CREATE FUNCTION app.member_role_set(workspace_id uuid, user_id uuid, role_key text, request_id text, ip_hmac bytea)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER
@@ -347,8 +332,8 @@ BEGIN
 END
 $$;
 
--- Removes a member, or lets one leave (their own id: any rank, but never the Owner, and an implicit admin has no
--- stored row to leave). Removing another member needs admin and a member strictly below the caller.
+-- A member may leave at any rank except the Owner; an implicit admin has no stored row to leave. Removing another
+-- member needs a member strictly below the caller.
 CREATE FUNCTION app.member_remove(workspace_id uuid, user_id uuid, request_id text, ip_hmac bytea)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER
@@ -398,7 +383,6 @@ GRANT EXECUTE ON FUNCTION app.member_role_set(uuid, uuid, text, text, bytea),
 ALTER FUNCTION app.member_role_set(uuid, uuid, text, text, bytea) OWNER TO shoutory_definer;
 ALTER FUNCTION app.member_remove(uuid, uuid, text, bytea) OWNER TO shoutory_definer;
 
--- invitation_accept: the one way into a workspace without a role change
 GRANT SELECT (email) ON auth."user" TO shoutory_definer;
 CALL app.grant_purposes('organizations', 'SELECT', ARRAY['invitation_accept']);
 CALL app.grant_purposes('organizations', 'UPDATE', ARRAY['invitation_accept']);
@@ -411,13 +395,11 @@ CALL app.grant_purposes('roles', 'SELECT', ARRAY['invitation_accept']);
 CALL app.grant_purposes('invitations', 'SELECT', ARRAY['invitation_accept']);
 CALL app.grant_purposes('invitations', 'UPDATE', ARRAY['invitation_accept']);
 
--- Accepts an invitation by the digest of its token and returns the workspace id. The answers, in this order: no row
--- for the digest (or two), or a role that is owner or not built in: 42501, one message for all; the caller's address
--- is not the invited one: SH403 email_mismatch (whatever the state of the row, so another account learns nothing
--- more); the address is not verified: SH403 email_unverified; then, to the invited account only, a row that was used,
--- revoked or has expired, or whose inviter lost the right to invite (reads as revoked): SH410 with the expiry and the
--- inviter's name in DETAIL; then any existing membership: SH409 already_member. The row is consumed by a conditional
--- UPDATE under the workspace lock, so two concurrent accepts add one member. The role is the row's, nothing else is created.
+-- The checks run in this order so another account learns nothing about a row: no row for the digest (or two), or a
+-- role that is owner or not built in: 42501, one message for all; a different address: SH403 email_mismatch
+-- whatever the state of the row; an unverified address: SH403 email_unverified; only then, to the invited account,
+-- a used, revoked, expired or inviter-lost-rights row (reads as revoked): SH410; an existing membership: SH409.
+-- The row is consumed by a conditional UPDATE under the workspace lock, so two concurrent accepts add one member.
 CREATE FUNCTION app.invitation_accept(token_digest bytea, request_id text, ip_hmac bytea)
 RETURNS uuid
 LANGUAGE plpgsql SECURITY DEFINER
@@ -481,8 +463,8 @@ REVOKE ALL ON FUNCTION app.invitation_accept(bytea, text, bytea) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app.invitation_accept(bytea, text, bytea) TO shoutory_app;
 ALTER FUNCTION app.invitation_accept(bytea, text, bytea) OWNER TO shoutory_definer;
 
--- The throttle numbers of the invitation routes: 20 invitations an hour, 10 accepts in 15 minutes. The definer role
--- owns the function and the migration owner does not inherit its rights, so the replacement runs as the definer.
+-- The definer role owns the function and the migration owner does not inherit its rights, so the replacement runs
+-- as the definer.
 SET ROLE shoutory_definer;
 CREATE OR REPLACE FUNCTION app.bucket_limits(scope text)
 RETURNS TABLE (capacity integer, refill_seconds integer)
@@ -505,8 +487,8 @@ REVOKE ALL ON FUNCTION app.bucket_limits(text) FROM PUBLIC;
 ALTER FUNCTION app.bucket_limits(text) OWNER TO shoutory_definer;
 RESET ROLE;
 
--- workspace_create takes the organization row (lock rank 1a) after the authorization check and counts every workspace
--- row of the organization, archived or not: the 101st is refused (53400), and two callers at 99 admit one.
+-- workspace_create takes the organization row lock after the authorization check and counts every workspace row of
+-- the organization, archived or not: the 101st is refused (53400), and two callers at 99 admit one.
 CALL app.grant_purposes('organizations', 'SELECT', ARRAY['workspace_create']);
 CALL app.grant_purposes('organizations', 'UPDATE', ARRAY['workspace_create']);
 CALL app.grant_purposes('workspaces', 'SELECT', ARRAY['workspace_create']);

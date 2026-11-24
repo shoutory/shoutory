@@ -7,7 +7,6 @@ const body = (text: string) => new TextEncoder().encode(text);
 
 describe("fetchOf", () => {
   it("passes the request to the egress call and answers a Response from its status, headers and body", async () => {
-    // fails first because: there is no function that turns the bound egress call into the `fetch` an adapter is given
     const seen: EgressRequest[] = [];
     const answer: EgressResponse = {
       status: 201,
@@ -42,7 +41,6 @@ describe("fetchOf", () => {
   });
 
   it.each([204, 304])("answers a %i with no body as a Response without one", async (status) => {
-    // fails first because: a Response built with a body for a status that has none throws
     const send = fetchOf(async () => ({ status, headers: {}, body: new Uint8Array() }));
     expect((await send("https://api.fixture.example/v1/x")).status).toBe(status);
   });
@@ -59,7 +57,6 @@ describe("fetchOf failures", () => {
   it.each(FAILURES)(
     "rethrows an egress %s (effect %s) as an error the adapter classifies",
     async (klass, effect, shape) => {
-      // fails first because: an EgressError reaches the adapter as it is, which it cannot tell from a bug and rethrows
       const send = fetchOf(async () => {
         throw new EgressError({ class: klass, host: "api.fixture.example", effect });
       });

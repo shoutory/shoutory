@@ -11,8 +11,6 @@ import { seedMembers, WA } from "../support/members-seed.js";
 
 const env = readTestEnv();
 
-// Review round of migration 0012: the claim and mark identity, the mail lease, the purge limits and the partition
-// safety rules. Each row names the ruling it guards.
 let db: TestDatabase;
 beforeAll(async () => {
   db = await cloneTemplate(env, inject("shoutoryTemplate"));
@@ -44,7 +42,7 @@ const sealedMail = (n: number) =>
    VALUES ('${id(n)}', 'claims-${n}@example.test', 'verify_email', 'en', '{}', '\\x01', '\\x02', '\\x03', '\\x04',
      '\\x05', '\\x06', 'k1', 1, 0, '${"d".repeat(64)}')`;
 
-describe("outbox mark identity (R312)", () => {
+describe("outbox mark identity", () => {
   it("outbox_claim hands out created_at as microsecond text and outbox_mark matches it exactly", async () => {
     await rows("DELETE FROM app.outbox");
     await rows(`INSERT INTO app.outbox (id, type) VALUES ('${id(1)}', 'claims.event')`);
@@ -62,7 +60,7 @@ describe("outbox mark identity (R312)", () => {
   });
 });
 
-describe("mail lease (R311)", () => {
+describe("mail lease", () => {
   it("email_outbox has a partial index on claimed_until for sending rows", async () => {
     const found = await rows(
       `SELECT indexdef FROM pg_indexes WHERE schemaname = 'app' AND tablename = 'email_outbox'
@@ -84,7 +82,7 @@ describe("mail lease (R311)", () => {
   });
 });
 
-describe("purge limits (R309, R310)", () => {
+describe("purge limits", () => {
   it("a window purge deletes at most 5000 rows per call and counts them", async () => {
     await rows(
       `INSERT INTO app.rate_buckets (scope, key, tokens, refilled_at)
@@ -127,7 +125,7 @@ describe("purge limits (R309, R310)", () => {
   });
 });
 
-describe("audit chain head (R313)", () => {
+describe("audit chain head", () => {
   const today = new Date().toISOString().slice(0, 10);
   const check = async () =>
     (await db.pool("owner").query("SELECT id FROM app.audit_chain_check($1::date)", [today])).rows.map(
@@ -162,7 +160,7 @@ describe("audit chain head (R313)", () => {
   });
 });
 
-describe("partition safety (R308)", () => {
+describe("partition safety", () => {
   const day = (ago: number) => new Date((Math.floor(Date.now() / 864e5) - ago) * 864e5).toISOString();
   // The name ensure_partitions gives the leaf that starts `ahead` days from today (UTC): outbox_YYYYMMDD.
   const dayName = (ahead: number) => day(-ahead).slice(0, 10).replaceAll("-", "");

@@ -47,7 +47,6 @@ import {
 } from "./shell/shell-data";
 import { Button } from "./ui/button";
 
-// The page names, in the words of each page's heading (system-pages.tsx).
 const TITLES = {
   signIn: msg({ id: "system.sign_in.title", message: "Sign in" }),
   mfa: msg({ id: "auth.mfa.title", message: "Two-step verification" }),
@@ -121,7 +120,6 @@ function RouteError() {
 
 function Root() {
   const matches = useMatches();
-  // The deepest matched route that names itself; a function decides from the loader data (the workspace route).
   usePageTitleAndFocus(
     matches
       .map((match) => {
@@ -130,7 +128,6 @@ function Root() {
       })
       .findLast(Boolean),
   );
-  // The step-up dialog is one for the whole app: any screen's sensitive call may ask for the password (X-04).
   return (
     <StepUpProvider>
       <Outlet />
@@ -141,8 +138,6 @@ function Root() {
 const SKELETON_DELAY_MS = 300;
 const STILL_LOADING_MS = 10_000;
 
-// While the server is asked: nothing for 300 ms (a fast answer never flashes), then a status line, and
-// after 10 s "Still loading" with Retry.
 function Pending() {
   const [stage, setStage] = useState<"quiet" | "loading" | "slow">("quiet");
   useEffect(() => {
@@ -168,7 +163,6 @@ function Pending() {
   );
 }
 
-// The signed-in screens sit in the shell, under the guard: `/` opens a workspace, `/w/:ws` is its scope.
 export const routes: RouteObject[] = [
   {
     path: "/",

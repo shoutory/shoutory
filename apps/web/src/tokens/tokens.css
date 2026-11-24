@@ -1,6 +1,5 @@
-/* Design tokens. Components use only these roles, never raw values. Light is the base; the dark theme redefines the
-   colours under [data-theme="dark"], which the theme bootstrap always sets. A status tint is the status colour at 12%
-   over the surface; the contrast test computes the same sRGB mix. */
+/* Components use only these roles, never raw values. The dark theme redefines the colours under [data-theme="dark"];
+   the theme bootstrap always sets that attribute. The contrast test computes the same 12% sRGB mix as the status tints. */
 @theme static {
   --color-bg: #f4f1ea;
   --color-surface: #fbf9f4;
@@ -30,7 +29,7 @@
   --font-heading:
     "Bricolage Grotesque Variable", "Bricolage Grotesque Fallback", "IBM Plex Sans Arabic", system-ui,
     sans-serif;
-  /* Keys, ids and code; Tailwind's base styles give `code`, `kbd`, `samp` and `pre` this stack. */
+  /* Tailwind's base styles give `code`, `kbd`, `samp` and `pre` this stack. */
   --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
 
   --text-xs: 0.75rem;
@@ -97,7 +96,7 @@
   --color-neutral: #a39e92;
 }
 
-/* Arabic reads larger: its own size column (ux-spec 4.2), never italic, never letter-spaced. */
+/* Arabic reads larger: its own size column, never italic, never letter-spaced. */
 :root:lang(ar) {
   --text-xs: 0.875rem;
   --text-xs--line-height: 1.375rem;
@@ -115,12 +114,11 @@
   --text-3xl--line-height: 3.125rem;
 }
 
-/* Motion slides from the logical edge: --dir is 1 in LTR and -1 in RTL (ux-spec 4.4). */
+/* Motion slides from the logical edge: --dir is 1 in LTR and -1 in RTL. */
 :root:dir(rtl) {
   --dir: -1;
 }
 
-/* Reduced motion (the system value only until the profile setting exists): no animation, no slide, opacity at most. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -132,7 +130,7 @@
   }
 }
 
-/* The bottom bar (under 768 px) must never cover the focused control (SC 2.4.11). */
+/* The bottom bar (under 768 px) must never cover the focused control. */
 @media (width < 48rem) {
   html {
     scroll-padding-block-end: 5rem;

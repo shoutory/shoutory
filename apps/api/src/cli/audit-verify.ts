@@ -4,7 +4,6 @@ import type { CliIo } from "./main.js";
 const USAGE = "usage: shoutory audit verify [YYYY-MM-DD]";
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
-// A date that parses and prints back the same is a real calendar day ("2026-13-40" never is).
 function isDay(value: string): boolean {
   const parsed = new Date(`${value}T00:00:00Z`);
   return DAY.test(value) && !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;

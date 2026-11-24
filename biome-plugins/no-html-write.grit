@@ -1,7 +1,6 @@
 language js
 
-// Raw HTML is injected by writing innerHTML or outerHTML, or by document.write. The restricted-properties rule reports
-// reads only, so this plugin matches the writes: assignment and append, in dot and bracket form.
+// The restricted-properties rule reports reads only, so the writes need this plugin.
 or {
   `$el.innerHTML = $value`,
   `$el.outerHTML = $value`,

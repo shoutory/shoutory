@@ -15,20 +15,14 @@ export interface AuthSession {
 
 export interface ResolvedSession {
   readonly session: AuthSession;
-  /** The `Set-Cookie` lines the check produced (a sliding refresh), to be sent with the answer. */
   readonly cookies: readonly string[];
 }
 
-/** Reads the session from the request's cookie; nothing when there is none or it is expired or unknown. */
 export type SessionResolver = (headers: Headers) => Promise<ResolvedSession | null>;
 
-/** A session ends 30 days after it was created, however it was used or refreshed (R511). */
 export const SESSION_CAP_MS = 30 * 24 * 60 * 60 * 1000;
 
-/**
- * The session check of every `session` route. A session 30 days old or more is absent and its row is deleted, whatever
- * the library's rolling expiry says. A failing database is a 503 (the cause chain is read), never a 401.
- */
+// A failing database is a 503 (the cause chain is read), never a 401.
 export async function readSession(
   library: BetterAuthInstance,
   headers: Headers,

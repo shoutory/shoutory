@@ -1,20 +1,16 @@
 import { readFile } from "node:fs/promises";
 import { connect } from "node:net";
 
-// The optional virus scan of an upload (mode `warn`): a clamd client over TCP, speaking the INSTREAM protocol of the
-// clamd man page. The scanner's address is the operator's own setting (SHOUTORY_CLAMAV_HOST and _PORT), never a value
-// a workspace names, so this connection is an operator egress exception. In `warn` mode nothing is blocked on a scan: the
-// caller logs a verdict that is not clean, and a scanner that cannot be reached.
+// The scanner's address is the operator's own setting, never a value a workspace names, so this connection is an
+// operator egress exception. The protocol is INSTREAM, from the clamd man page.
 
 export type ScanVerdict = "clean" | "found" | "failed";
-/** Scans one file and answers a verdict. */
 export type Scan = (path: string) => Promise<ScanVerdict>;
 
 const CHUNK_BYTES = 65_536;
 const CONNECT_AND_READ_MS = 30_000;
 const MAX_REPLY_BYTES = 1024;
 
-/** The frames of an INSTREAM scan: the command, each chunk behind its length (four bytes, network order), and a zero. */
 export function encodeInstream(bytes: Uint8Array): Buffer[] {
   const frames = [Buffer.from("zINSTREAM\0")];
   for (let at = 0; at < bytes.length; at += CHUNK_BYTES) {
@@ -27,7 +23,6 @@ export function encodeInstream(bytes: Uint8Array): Buffer[] {
   return frames;
 }
 
-/** What clamd answered: `stream: OK`, `stream: <name> FOUND`, or anything else (an error, a refusal) is a failure. */
 export function parseClamdReply(reply: Buffer): ScanVerdict {
   const text = reply.toString("latin1").split("\0")[0] ?? "";
   if (/^stream: OK$/.test(text)) return "clean";
@@ -52,7 +47,6 @@ function ask(host: string, port: number, frames: Buffer[]): Promise<Buffer> {
   });
 }
 
-/** The scan hook of an operator who runs clamd at `host:port`; a scanner that cannot be reached throws, and the caller logs it. */
 export function createClamdScan(settings: { readonly host: string; readonly port: number }): Scan {
   return async (path) =>
     parseClamdReply(await ask(settings.host, settings.port, encodeInstream(await readFile(path))));

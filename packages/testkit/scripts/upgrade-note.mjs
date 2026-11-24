@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// A major release (X.0.0, X at least 1, no prerelease) needs docs/upgrade/<version>.md.
 // Usage, from the repository root: node packages/testkit/scripts/upgrade-note.mjs <version or v-tag>
 import { existsSync } from "node:fs";
 

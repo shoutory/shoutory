@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { type Resolution, type ResolvePolicy, resolveLocal } from "./resolve-local.js";
 
-// One rule with two policies: the automatic policy is Temporal "compatible", the user policy refuses a gap and
-// needs a choice for a fold. Instants are UTC; each row was worked out by hand from the zone's offsets that day.
+// Each row was worked out by hand from the zone's offsets that day.
 describe("resolveLocal automatic", () => {
   const ROWS: [string, string, string, string, Resolution][] = [
     [

@@ -50,7 +50,6 @@ beforeAll(async () => {
 afterAll(() => db.drop());
 beforeEach(() => withAdminClient(env, db.name, (admin) => admin.query("DELETE FROM app.email_outbox")));
 
-/** A row sealed under the ring's active key at `generation`. */
 async function seed(
   n: number,
   keys: EnvKeyProvider,
@@ -89,7 +88,6 @@ async function insert(
     ),
   );
 }
-/** Rows `from`..`to` at generation 0 in one statement: each is sealed on its own id, then all are unnested. */
 async function seedMany(from: number, to: number, keys: EnvKeyProvider): Promise<void> {
   const numbers = Array.from({ length: to - from + 1 }, (_, i) => from + i);
   const sealed = numbers.map((n) => seal(LINK, aad(n, null, 0), keys));

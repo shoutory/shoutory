@@ -3,10 +3,6 @@ import { Refusal } from "../../errors/refusal.js";
 import { type App, defineRoute } from "../define-route.js";
 import { pageAnswer, pageQuery } from "../input.js";
 
-// The members of one workspace: the list, a role change (ownership transfer included), removing another member and
-// leaving. Each change is a definer of migration 0010 that authorizes the caller; the route adds the step-up where
-// R247 asks for it and the one refusal of R257 (the remove route is not the leave route).
-
 const uuid = z.uuid().transform((id) => id.toLowerCase());
 const workspaceParams = z.strictObject({ workspace_id: uuid });
 const memberParams = z.strictObject({ workspace_id: uuid, user_id: uuid });
@@ -15,7 +11,7 @@ const roleBody = z.strictObject({ role_key: z.string().min(1).max(32) });
 type IpHmac = (address: string) => Buffer;
 
 // The names come from the directory definer (the app role reads no user row); the role joins by user id inside the
-// same scope transaction. Implicit organization admins hold no row and are not listed (R260, R262).
+// same scope transaction. Implicit organization admins hold no row and are not listed.
 const LIST = `
   SELECT d.user_id, d.name, d.image, r.key AS role, m.status
   FROM app.member_directory($1, $2, $3) AS d

@@ -18,8 +18,7 @@ const entitlement = z.discriminatedUnion("kind", [
 const limits = z.object({ workspaces: entitlement, members: entitlement });
 type Entitlement = z.infer<typeof entitlement>;
 
-// A limited entitlement shows its limit; the workspaces' use is shown too, as the plan counts it (the route's own
-// `used`, which can differ from the clients this person reaches). Numbers follow the digits setting.
+// The route's own `used` is shown, as the plan counts it; it can differ from the clients this person reaches.
 function Value({ value, meter }: { value: Entitlement; meter: boolean }) {
   const { t, i18n } = useLingui();
   const digits = useDigits();
@@ -48,8 +47,7 @@ function Row({ name, children }: { name: ReactNode; children: ReactNode }) {
   );
 }
 
-// The limits are read through the organization's first workspace the person reaches (the interface is keyed by
-// workspace).
+// The limits interface is keyed by workspace, so they are read through the first workspace the person reaches.
 function Usage({ workspace }: { workspace: Workspace }) {
   const { state, reload } = useLoad(limits, `/api/v1/workspaces/${workspace.id}/entitlements`);
   if (state.status === "loading")
@@ -80,7 +78,6 @@ const BillingHeading = () => (
   </h1>
 );
 
-/** O-10 (`/o/:org/billing`): what the plan allows and what is used. A personal organization has no such page. */
 export function BillingPage() {
   const { org: id } = useParams();
   const data = useShellData();

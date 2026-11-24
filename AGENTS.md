@@ -27,7 +27,9 @@ code never lands in this repository, and this repository never branches on a clo
   blanket `catch`.
 - One concept per file; no barrel files; no abstraction that has a single implementation.
 - Every tenant table has row security enabled and forced. Set the tenant only through `withTenant`.
-- Migrations are forward-only SQL in `packages/db/migrations/NNNN_name.sql`; an applied migration is never edited.
+- Comments are few: write one only where the code cannot say why, in plain words, never an internal tracking id.
+- Migrations are forward-only SQL in `packages/db/migrations/NNNN_name.sql`; an applied migration is never edited,
+  except a comment-only revision listed with its old and new checksums in the migration runner.
 - Every outbound request goes through `egressFetch`. Secrets never appear in logs, errors, URLs or test fixtures.
 - Time comes in as an input; zone arithmetic goes through the Temporal helper.
 - Tailwind logical properties only (no `left` or `right`); user-visible text goes through Lingui.

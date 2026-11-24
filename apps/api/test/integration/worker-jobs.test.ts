@@ -85,7 +85,7 @@ describe("the scheduled upkeep of the worker role", () => {
     }
   });
 
-  it("purges a class in batches until none is left (R309)", async () => {
+  it("purges a class in batches until none is left", async () => {
     await admin((a) =>
       a.query(
         `INSERT INTO app.rate_buckets (scope, key, tokens, refilled_at)
@@ -138,8 +138,6 @@ describe("the part sweep is the filesystem's alone", () => {
   });
 });
 
-// The nightly sweep of the filesystem's abandoned part files: what it removed and how many folders it walked are logged,
-// and a walk that ran out of time says so.
 describe("the sweep of upload parts", () => {
   const NOW = new Date("2026-11-24T03:23:00Z");
   const eightDays = new Date(NOW.getTime() - 8 * 86_400_000);
@@ -179,7 +177,7 @@ describe("the sweep of upload parts", () => {
   });
 });
 
-// R320: one instance-wide key serializes every statement that takes ACCESS EXCLUSIVE on a partitioned parent. The
+// One instance-wide key serializes every statement that takes ACCESS EXCLUSIVE on a partitioned parent. The
 // choice is to wait: a second run queues behind the first instead of failing, so no daily run is lost.
 describe("the maintenance lock", () => {
   const waitingOnLock = async () => {

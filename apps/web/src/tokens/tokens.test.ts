@@ -18,7 +18,6 @@ const THEMES = { light, dark };
 type Rgb = [number, number, number];
 const TINT = /^color-mix\(in srgb, var\(--([\w-]+)\) 12%, var\(--color-surface\)\)$/;
 
-// A token's colour: a hex value, or a status tint, which is the status colour at 12% over the surface in sRGB.
 function colour(theme: Tokens, name: string): Rgb {
   const value = theme.get(name) ?? "";
   const tint = TINT.exec(value);
@@ -46,7 +45,7 @@ function contrast(a: Rgb, b: Rgb) {
 
 const STATUS = ["success", "attention", "danger", "info"];
 const TINTS = [...STATUS, "neutral"];
-// [foreground, background, minimum ratio]: 4.5 for text, 3 for a boundary or an icon (WCAG 1.4.3, 1.4.11).
+// [foreground, background, minimum ratio]: 4.5 for text, 3 for a boundary or an icon .
 const PAIRS: [string, string, number][] = [
   ...["bg", "surface", "surface-2"].flatMap((bg): [string, string, number][] => [
     ["text", bg, 4.5],

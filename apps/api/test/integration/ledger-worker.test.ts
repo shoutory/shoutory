@@ -15,10 +15,6 @@ import { seedFrozenVersion, seedWorkspace } from "../support/ledger-seed.js";
 
 const env = readTestEnv();
 
-// Security floor of the worker turn: a lost lease stops every write of its holder, a closing worker claims nothing and
-// hands back what it took, and the state of the channel and of the target is read again after the claim and before any
-// work. A turn that passes every check goes on to dispatch to the fixture provider and ends `dispatched`. The module
-// names, argument lists, result kinds and column names are the contract the runtime must meet.
 let db: TestDatabase;
 const logger = createLogger({ secrets: [], stream: { write: () => undefined } });
 const admin = <T>(run: Parameters<typeof withAdminClient<T>>[2]) => withAdminClient(env, db.name, run);
@@ -26,8 +22,6 @@ const rows = (sql: string, params: unknown[] = []) =>
   admin(async (a) => (await a.query(sql, params)).rows as Record<string, unknown>[]);
 
 let ws: string;
-// The turns dispatch to the fixture provider: its adapter on its simulator, over the plain `fetch`.
-// and open the credential of each claimed channel with the key ring the test stored them under.
 let wiring: Pick<Parameters<typeof runTurn>[0], "adapters" | "fetchFor"> & { keys: typeof ledgerKeys };
 let simulator: Awaited<ReturnType<typeof startFixtureSimulator>>;
 beforeAll(async () => {
@@ -74,7 +68,6 @@ afterAll(async () => {
 
 const registry = createRegistry([fixtureManifest]);
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-/** Resolves when the signal aborts, rejects when it does not within `ms`. */
 const aborted = (signal: AbortSignal, ms: number) =>
   new Promise<void>((resolve, reject) => {
     if (signal.aborted) return resolve();
@@ -94,10 +87,8 @@ interface Scenario {
   deleted?: boolean;
   postStatus?: string;
   scheduleState?: string;
-  /** The state the operation is planted in; `pending` is due now and can be claimed. */
   state?: string;
   queue?: string;
-  /** The provider account of the channel, and the workspace it is in; both a fresh one when absent. */
   account?: string;
   workspace?: string;
   extra?: Record<string, unknown>;
@@ -107,12 +98,10 @@ interface Planted {
   queue: string;
   account: string;
 }
-// A channel, a post with one variant and an operation on them, as a claim or an admission would leave them.
 async function plant(o: Scenario = {}): Promise<Planted> {
   const account = o.account ?? `lw-${randomUUID().slice(0, 8)}`;
   const home = o.workspace ?? ws;
   const queue = o.queue ?? `publish.lw-${randomUUID().slice(0, 8)}`;
-  // Connected through the credential service, so the channel holds a credential; a state other than connected is then set.
   const channel = {
     id: await connectChannel(db.pool("worker"), { workspace: home, provider: "fixture", account }),
   };
@@ -210,7 +199,6 @@ const moveToken = (id: string) =>
 
 describe("the heartbeat of a lease", () => {
   it("a live heartbeat keeps beating for its owner and token, and a lost one aborts its signal and ends all writes", async () => {
-    // fails first because: no heartbeat, or one that goes on writing after the token moved on
     const live = await claimed();
     const kept = start(live.id);
     try {
@@ -233,7 +221,6 @@ describe("the heartbeat of a lease", () => {
     } finally {
       await stale.stop();
     }
-    // The next fenced write of the holder of token 3 finds no row.
     const write = await withTenant(
       db.pool("worker"),
       { principalKind: "job", jobPurpose: "ledger", workspaceIds: [ws] },
@@ -249,7 +236,6 @@ describe("the heartbeat of a lease", () => {
 
 describe("a heartbeat that cannot reach the database", () => {
   it("a database error is retried within the lease and then aborts the signal", async () => {
-    // fails first because: the heartbeat gives up at the first error, or goes on past the end of its lease
     const dead = createAppPool("postgres://nobody:none@127.0.0.1:1/none", () => undefined);
     const began = Date.now();
     const beating = startHeartbeat({
@@ -275,7 +261,6 @@ const bucketOf = (account: string, name = "posts") =>
   createHash("sha256").update(["fixture", name, "account", account].join("\0")).digest("hex");
 const turn = (queue: string, closing: AbortSignal) =>
   runTurn({ pool: db.pool("worker"), logger, registry, ...wiring, queue, owner: "owner-w", closing });
-/** Waits until a statement of the bucket definer is parked on a row lock. */
 async function untilParked(): Promise<void> {
   for (let tries = 0; tries < 160; tries++) {
     const parked = await rows(
@@ -289,7 +274,6 @@ async function untilParked(): Promise<void> {
 
 describe("a heartbeat that hangs", () => {
   it("aborts its signal before its lease ends, and stop() does not wait for the hung beat", async () => {
-    // fails first because: the signal waits for the database to answer, so a worker whose lease ended goes on working
     const hung = await claimed();
     await withAdminClient(env, db.name, async (holder) => {
       await holder.query("BEGIN");
@@ -311,7 +295,6 @@ describe("a heartbeat that hangs", () => {
 
 describe("a lease lost in the middle of a turn", () => {
   it("ends the turn lost and writes nothing once the heartbeat says so", async () => {
-    // fails first because: the turn goes on, or moves the row, after its heartbeat found the lease taken
     const slow = createRegistry([
       { ...fixtureManifest, leaseSeconds: { ...fixtureManifest.leaseSeconds, prepare: 12, commit: 12 } },
     ]);
@@ -337,7 +320,6 @@ describe("a lease lost in the middle of a turn", () => {
 
 describe("close() on a turn", () => {
   it("claims nothing once closing, and a turn parked on its bucket hands its row back to pending", async () => {
-    // fails first because: a closing worker still claims, or leaves the row it claimed leased until the lease runs out
     const first = await plant();
     const second = await plant({ queue: first.queue });
     const key = bucketOf(first.account);
@@ -403,7 +385,6 @@ const CASES: [string, Scenario, string, Record<string, unknown>, number | null][
 ];
 describe("the re-read after the claim", () => {
   it.each(CASES)("%s", async (_name, scenario, kind, after, wait) => {
-    // fails first because: the turn goes on after the claim without reading the channel and the target again
     const planted = await plant(scenario);
     const closing = new AbortController();
     const result = await runTurn({
@@ -424,12 +405,10 @@ describe("the re-read after the claim", () => {
       const due = new Date((await opOf(planted.id)).next_attempt_at as string).getTime();
       expect(Math.abs((due - Date.now()) / 1000 - wait)).toBeLessThan(10);
     }
-    // Only the turn that passes every check reaches the provider (a prepare and a commit); a turn that does not writes no attempt.
     expect(await attempts(planted.id)).toBe(kind === "dispatched" ? 2 : 0);
   });
 
   it("counts a wait by the database clock, not by the clock of this process", async () => {
-    // fails first because: the wait is a timestamp made from this process's clock, so a skewed clock moves the due time
     const planted = await plant();
     await setTokens(planted.account, "posts", 0);
     const skewed = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 3_600_000);
@@ -447,8 +426,6 @@ describe("the re-read after the claim", () => {
   });
 });
 
-// The bucket gate takes the limits of the manifest in their order (each applies to a publish), a denial is a pre-flight
-// move, and one provider account is one bucket whatever channel or workspace holds it.
 const limits = (...names: string[]) =>
   createRegistry([
     {
@@ -489,7 +466,6 @@ const waitOf = async (id: string) =>
 
 describe("a lease too short for a call", () => {
   it("hands the row back to pending instead of leaving it leased", async () => {
-    // fails first because: the turn ends lost and the row stays leased until the lease runs out
     const short = createRegistry([
       { ...fixtureManifest, leaseSeconds: { ...fixtureManifest.leaseSeconds, prepare: 1, commit: 1 } },
     ]);
@@ -501,7 +477,6 @@ describe("a lease too short for a call", () => {
 
 describe("a claimed row whose provider is not registered", () => {
   it("is logged with the provider id before the turn throws", async () => {
-    // fails first because: the turn throws with nothing in the log that names the provider
     const lines: string[] = [];
     const own = createLogger({ secrets: [], stream: { write: (line) => void lines.push(line) } });
     const planted = await plant({ extra: { provider_id: "nobody" } });
@@ -533,7 +508,6 @@ describe("the bucket gate", () => {
     ],
   ];
   it.each(DENIALS)("%s", async (_name, left, state, reason) => {
-    // fails first because: no gate, or a denial that is neither a wait nor a pause
     const planted = await plant({ extra: { lateness_deadline: new Date(Date.now() + left * 1000) } });
     await setTokens(planted.account, "posts", 0);
     expect(await gate(planted)).toMatchObject({ kind: "moved", to: state });
@@ -543,7 +517,6 @@ describe("the bucket gate", () => {
   });
 
   it("is one bucket for two channels on one provider account, in two workspaces", async () => {
-    // fails first because: the key includes the channel or the workspace, so each channel has a bucket of its own
     const other = await admin((a) => seedWorkspace(a));
     const account = `shared-${randomUUID().slice(0, 8)}`;
     const [first, second] = [await plant({ account }), await plant({ account, workspace: other })];
@@ -555,7 +528,6 @@ describe("the bucket gate", () => {
   });
 
   it("takes the limits in manifest order and stops at the first denial, leaving the tokens it took spent", async () => {
-    // fails first because: the limits are taken out of order or all of them after a denial
     const planted = await plant();
     await setTokens(planted.account, "posts", 0);
     expect(await gate(planted, limits("bursts", "posts", "comments"))).toMatchObject({ kind: "moved" });

@@ -23,12 +23,10 @@ const state = z.discriminatedUnion("enabled", [
 ]);
 const generated = z.object({ backupCodes: z.array(z.string()) });
 
-// The password goes with the request for new codes and is emptied after it; a stale identity check is asked for by X-04.
 function NewCodesForm({ onCodes }: { onCodes: (codes: string[]) => void }) {
   const { t } = useLingui();
   const stepUp = useStepUp();
   const [password, setPassword] = useState("");
-  // The form appears on a press of "New recovery codes": the password field takes focus.
   const form = useRef<HTMLFormElement>(null);
   useEffect(() => form.current?.querySelector("input")?.focus(), []);
   const generate = useAction(
@@ -95,7 +93,6 @@ function CodesLeft({ remaining }: { remaining: number }) {
   );
 }
 
-/** Whether two-step verification is on: off offers the setup, on shows the recovery codes left and new ones. */
 export function TwoFactorBlock() {
   const { state: loaded, reload } = useLoad(state, "/api/auth/two-factor/status");
   const [asking, setAsking] = useState(false);

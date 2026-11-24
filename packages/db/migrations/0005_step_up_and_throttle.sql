@@ -1,9 +1,6 @@
--- The first migration with SECURITY DEFINER functions. The definer role may own functions in schema app only if
--- it holds CREATE there: ALTER FUNCTION ... OWNER TO needs it, and the migration owner may switch to the role.
+-- The definer role can own functions in schema app only if it holds CREATE there: ALTER FUNCTION ... OWNER TO needs it.
 GRANT CREATE ON SCHEMA app TO shoutory_definer;
 
--- The templates U, I and D join W. The function stays a migration tool: only the owner may run it.
---
 -- U: a user-owned row outside any workspace. A session of kind user reads the rows whose key column is its own
 -- principal id. There is no write policy and no write grant: writes go through definer functions.
 -- I and D: row security is enabled and forced and no policy names a runtime role, so a runtime role is refused by
@@ -44,9 +41,8 @@ $$;
 
 REVOKE ALL ON FUNCTION app.apply_rls_template(regclass, text, text) FROM PUBLIC;
 
--- The throttle. One row per scope and key: the same digest under two scopes (one address serves login_ip and
--- link_confirm) is two buckets. Capacity and refill are constants of bucket_limits, never stored or passed in.
--- Scopes of later slices are in the CHECK already and have no numbers, so the definers refuse them until they do.
+-- One row per scope and key: the same digest under two scopes is two buckets. Capacity and refill are constants of
+-- bucket_limits, never stored or passed in. Scopes in the CHECK without numbers are refused by the definers.
 CREATE TABLE app.rate_buckets (
   scope text NOT NULL CHECK (scope IN (
     'login_account', 'login_ip', 'verification_resend', 'invite', 'invite_accept', 'unsubscribe',
@@ -63,7 +59,6 @@ CREATE POLICY bucket_take_all ON app.rate_buckets FOR ALL TO shoutory_definer
 CREATE POLICY bucket_state_select ON app.rate_buckets FOR SELECT TO shoutory_definer
   USING ((SELECT app.job_purpose()) = 'bucket_state');
 
--- Capacity in tokens and the seconds a full refill takes. Called only by the two definers below.
 CREATE FUNCTION app.bucket_limits(scope text)
 RETURNS TABLE (capacity integer, refill_seconds integer)
 LANGUAGE sql IMMUTABLE
@@ -82,9 +77,8 @@ $$;
 REVOKE ALL ON FUNCTION app.bucket_limits(text) FROM PUBLIC;
 ALTER FUNCTION app.bucket_limits(text) OWNER TO shoutory_definer;
 
--- Spends one token (cost 1) or refunds up to the capacity (cost -capacity..-1). The row is created full on first
--- use, then locked, refilled for the time that passed and updated, so two callers never spend the same token.
--- A refund on a key with no bucket writes nothing: a missing bucket is already full.
+-- The row is locked before the refill so two callers never spend the same token. A refund on a key with no bucket
+-- writes nothing: a missing bucket is already full.
 CREATE FUNCTION app.bucket_take(key text, scope text, cost integer DEFAULT 1)
 RETURNS TABLE (allowed boolean, remaining integer, retry_after_seconds integer)
 LANGUAGE plpgsql SECURITY DEFINER
@@ -127,7 +121,6 @@ BEGIN
 END
 $$;
 
--- The same answer as bucket_take for a cost of one, without spending or writing anything.
 CREATE FUNCTION app.bucket_state(key text, scope text)
 RETURNS TABLE (allowed boolean, remaining integer, retry_after_seconds integer)
 LANGUAGE plpgsql SECURITY DEFINER
@@ -162,8 +155,7 @@ GRANT EXECUTE ON FUNCTION app.bucket_take(text, text, integer), app.bucket_state
 ALTER FUNCTION app.bucket_take(text, text, integer) OWNER TO shoutory_definer;
 ALTER FUNCTION app.bucket_state(text, text) OWNER TO shoutory_definer;
 
--- A recent proof of identity, per session. The user reads their own rows (template U); only the definers write
--- and read them for the auth and app roles. session_id is a plain uuid: its retention class removes old rows.
+-- session_id is a plain uuid: old rows are removed by retention, not by a foreign key.
 CREATE TABLE app.session_step_ups (
   session_id uuid NOT NULL,
   user_id uuid NOT NULL REFERENCES auth."user" (id) ON DELETE CASCADE,
@@ -172,7 +164,6 @@ CREATE TABLE app.session_step_ups (
 );
 -- shoutory:accepted-lock new empty table in this file
 CREATE INDEX session_step_ups_session_idx ON app.session_step_ups (session_id, at DESC);
--- The template U predicate and the delete cascade from auth."user" both look rows up by user_id.
 -- shoutory:accepted-lock new empty table in this file
 CREATE INDEX session_step_ups_user_idx ON app.session_step_ups (user_id);
 SELECT app.apply_rls_template('app.session_step_ups'::regclass, 'U', 'user_id');
@@ -198,8 +189,7 @@ BEGIN
 END
 $$;
 
--- The newest record of the one session of the one user, and nothing once it is 10 minutes old. Callers hold both
--- ids from the authenticated session; a session id alone never reads another user's record.
+-- Both ids are required so a session id alone never reads another user's record.
 CREATE FUNCTION app.step_up_read(session_id uuid, user_id uuid)
 RETURNS TABLE (method text, at timestamptz)
 LANGUAGE plpgsql SECURITY DEFINER
@@ -223,8 +213,7 @@ GRANT EXECUTE ON FUNCTION app.step_up_read(uuid, uuid) TO shoutory_auth, shoutor
 ALTER FUNCTION app.step_up_record(uuid, uuid, text) OWNER TO shoutory_definer;
 ALTER FUNCTION app.step_up_read(uuid, uuid) OWNER TO shoutory_definer;
 
--- The profile of a user. last_workspace_id is a plain uuid until the workspaces table exists (0007 adds its key);
--- password_recheck_at is set only through password_recheck_set. Locale and the like come with their consumer.
+-- password_recheck_at is set only through password_recheck_set.
 CREATE TABLE app.user_profiles (
   user_id uuid PRIMARY KEY REFERENCES auth."user" (id) ON DELETE CASCADE,
   last_workspace_id uuid,
@@ -237,7 +226,6 @@ CREATE POLICY password_recheck_set_all ON app.user_profiles FOR ALL TO shoutory_
   USING ((SELECT app.job_purpose()) = 'password_recheck_set')
   WITH CHECK ((SELECT app.job_purpose()) = 'password_recheck_set');
 
--- Creates the profile row when none exists. A NULL due clears the re-check.
 CREATE FUNCTION app.password_recheck_set(user_id uuid, due timestamptz)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER
@@ -258,9 +246,8 @@ REVOKE ALL ON FUNCTION app.password_recheck_set(uuid, timestamptz) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app.password_recheck_set(uuid, timestamptz) TO shoutory_auth;
 ALTER FUNCTION app.password_recheck_set(uuid, timestamptz) OWNER TO shoutory_definer;
 
--- The instance admins. granted_by is NULL for the founder and is a plain uuid on purpose: a foreign key that sets
--- it to NULL would mint a second founder. The partial unique index allows one founder row and is the race guard of
--- instance_admin_claim.
+-- granted_by is NULL for the founder and is a plain uuid on purpose: a foreign key that sets it to NULL would mint
+-- a second founder. The partial unique index allows one founder row and is the race guard of instance_admin_claim.
 CREATE TABLE app.instance_admins (
   user_id uuid PRIMARY KEY REFERENCES auth."user" (id) ON DELETE CASCADE,
   granted_by uuid,
@@ -276,9 +263,8 @@ CREATE POLICY instance_admin_claim_select ON app.instance_admins FOR SELECT TO s
 CREATE POLICY instance_admin_claim_insert ON app.instance_admins FOR INSERT TO shoutory_definer
   WITH CHECK ((SELECT app.job_purpose()) = 'instance_admin_claim');
 
--- The first verified user becomes the instance owner, once. The row is inserted only while the table is empty; two
--- calls at the same time meet at the founder index, and the loser inserts nothing. A deleted founder does not
--- reopen the claim while any admin row exists.
+-- Inserts only while the table is empty; two simultaneous calls meet at the founder index and the loser inserts
+-- nothing. A deleted founder does not reopen the claim while any admin row exists.
 CREATE FUNCTION app.instance_admin_claim(user_id uuid)
 RETURNS boolean
 LANGUAGE plpgsql SECURITY DEFINER

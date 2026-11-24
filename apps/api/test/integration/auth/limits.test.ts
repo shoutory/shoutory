@@ -22,7 +22,6 @@ const tokensOf = (scope: string, subject: string) =>
         ])
       ).rows[0]?.tokens as number | undefined,
   );
-/** Empties a bucket as of now, so the next spend is refused with the bucket's own wait. */
 const empty = (scope: string, subject: string) =>
   fx.admin((client) =>
     client.query(

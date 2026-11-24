@@ -10,12 +10,9 @@ import {
 
 const env = readTestEnv();
 
-// Security floor: a session of organization and workspace A sees nothing of B in any tenant table and changes
-// nothing of B, whatever the statement. The tenant tables are read from the catalog (an `app` table carrying a
-// `w_select` or `o_select` policy, leaf partitions excluded) and every one needs a registry entry below: a new
-// tenant table fails this file by name until it is registered. Settings are planted raw on purpose, so a context
-// withTenant would refuse can be tried. Two clones serve the whole file: `plain` keeps the migration's grants, and
-// `planted` adds write grants on every tenant table so the policies alone must hold.
+// Tenant tables are read from the catalog and each needs a registry entry below, so a new one fails this file by
+// name. Settings are planted raw on purpose, so a context withTenant would refuse can be tried. `plain` keeps the
+// migration's grants and `planted` adds write grants on every tenant table, so the policies alone must hold.
 const OA = randomUUID();
 const OB = randomUUID();
 const WA = randomUUID();
@@ -25,27 +22,21 @@ const WI = randomUUID();
 const UA = randomUUID();
 const UB = randomUUID();
 
-// A valid built-in role id for the INSERTs, so they test row security and nothing else.
 let viewerRole = "";
 const BUILTIN = (key: string) => `(SELECT id FROM app.roles WHERE workspace_id IS NULL AND key = '${key}')`;
 
 interface Entry {
-  /** The column the row security template keys on. */
   key: string;
   a: string;
   b: string;
   seed: string[];
-  /** A statement inserting a row for B (or, for a keyed-by-id table, a row outside A). */
   insertForB: () => string;
-  /** Present only for a table with write policies (W): the writes A may make to its own rows. */
   write?: {
     /** A no-op UPDATE of every column it names, so only the rows the policy admits are counted. */
     update: string;
     insertOwn: () => string;
-    /** The workspace that is both the read set and the write set for the INSERT, and for the UPDATE and DELETE. */
     insertWs: string;
     changeWs: string;
-    /** The key value of the one row A changes and deletes. */
     changeKey: string;
   };
 }
@@ -162,7 +153,6 @@ REGISTRY["app.audit_logs"] = {
   seed: [auditRow(WA, OA, "01"), auditRow(WB, OB, "02")],
   insertForB: () => auditRow(WB, OB, "03"),
 };
-// Migration 0013: the channel tables are template W.
 const CA = randomUUID();
 const CB = randomUUID();
 const channelRow = (id: string, workspace: string, account: string) =>
@@ -219,7 +209,6 @@ REGISTRY["app.sync_cursors"] = {
     changeKey: WA,
   },
 };
-// Migration 0016: the media tables are template W (the app role only reads them; the planted grants try the policies).
 const MA = randomUUID();
 const MB = randomUUID();
 const assetRow = (id: string, workspace: string) =>
@@ -274,8 +263,6 @@ REGISTRY["app.media_uploads"] = {
     changeKey: WA,
   },
 };
-// Migration 0018: the content tables are template W (posts, variants, media, idempotency keys) and A (versions); the app
-// role only reads them and the planted grants try the policies.
 const PA = randomUUID();
 const PB = randomUUID();
 const postRow = (id: string, workspace: string) =>
@@ -359,10 +346,8 @@ REGISTRY["app.idempotency_keys"] = {
     changeKey: WA,
   },
 };
-// Migration 0019: the ledger tables with a select policy are template W (operations, operation_media) and A (attempts,
-// evidence, resolutions); the reservations and the transition table have no select policy and are not tenant tables
-// here. The app role only reads them; the planted grants try the policies. A second operation of A is a terminal
-// `missed` one, which holds no target slot.
+// The reservations and the transition table have no select policy, so they are not tenant tables here. A second
+// operation of A is a terminal `missed` one, which holds no target slot.
 const OPA = randomUUID();
 const OPB = randomUUID();
 const opRow = (id: string, workspace: string, variant: string, channel: string, state: string) =>
@@ -443,14 +428,12 @@ const contextA: Settings = {
   "app.principal_kind": "user",
   "app.principal_id": UA,
 };
-/** A's context with `workspace` as the write workspace, also in the read set. */
 const writingTo = (workspace: string): Settings => ({
   ...contextA,
   "app.workspace_ids": `{${WA},${workspace}}`,
   "app.write_workspace_id": workspace,
 });
 
-// Contexts that must read and change nothing; undefined plants no setting at all.
 const HOSTILE: [string, Settings | undefined][] = [
   ["a missing context", undefined],
   ["an empty context", { "app.organization_id": "", "app.workspace_ids": "", "app.write_workspace_id": "" }],
@@ -470,7 +453,6 @@ const HOSTILE: [string, Settings | undefined][] = [
   ],
 ];
 
-/** Runs `before` (when given) and then `sql` in one rolled-back transaction under the settings; answers for `sql`. */
 async function inTransaction(pool: Pool, settings: Settings, sql: string, before?: string) {
   const client = await pool.connect();
   try {
@@ -636,7 +618,6 @@ describe("planted write grants: A changes its own rows", () => {
 });
 
 describe("planted write grants: built-in roles and hostile contexts", () => {
-  // The built-in roles (workspace_id NULL) are readable and never writable by the app role.
   it.each([
     [
       "INSERT",

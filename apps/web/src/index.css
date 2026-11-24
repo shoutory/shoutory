@@ -11,12 +11,8 @@
 @import "./tokens/tokens.css";
 
 /*
- * Local faces that stand in for the web fonts until they arrive, sized so that text takes the same room with either
- * (a font swap then moves nothing). Arial, and its metric-compatible Liberation Sans and Arimo, are the stand-in.
- * `size-adjust` is the web face's width divided by Arial's over one English sample; each override is the face's
- * used ascent or descent (Chromium's canvas `fontBoundingBoxAscent` and `fontBoundingBoxDescent` at 1000 px) divided
- * by that em and by `size-adjust`. Method: https://web.dev/articles/css-size-adjust (read 2026-11-20). The Latin
- * range keeps Arabic text on its own face.
+ * Stand-in faces sized to take the same room as the web fonts, so the font swap moves no text. The numbers follow
+ * https://web.dev/articles/css-size-adjust (read 2026-11-20). The Latin range keeps Arabic text on its own face.
  */
 @font-face {
   font-family: "IBM Plex Sans Fallback";

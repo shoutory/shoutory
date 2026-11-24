@@ -7,9 +7,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { declaredPng, exifTags, hasExifSegment, jpeg } from "../../../test/support/images.js";
 import { runSharpChild } from "./sharp-run.js";
 
-// The sharp child process: the one place an uploaded image is decoded, so the one place its limits, its privacy
-// promise and its isolation are proved. `spawn` is wrapped, not replaced: the real child runs, and the test reads the
-// options it was started with.
+// `spawn` is wrapped, not replaced: the real child runs, and the test reads the options it was started with.
 vi.mock("node:child_process", async (importOriginal) => {
   const original = await importOriginal<typeof import("node:child_process")>();
   return { ...original, spawn: vi.fn(original.spawn) };
@@ -22,7 +20,6 @@ beforeAll(async () => {
 });
 afterAll(() => rm(dir, { recursive: true, force: true }));
 
-/** The image written as the input file, and an empty folder for what the child writes. */
 async function stage(bytes: Buffer) {
   counter += 1;
   const inputPath = join(dir, `input-${counter}`);
@@ -33,7 +30,6 @@ async function stage(bytes: Buffer) {
 }
 
 describe("sharp runs with limitInputPixels", () => {
-  // [what the header declares, why it is refused or not, the reason]
   it.each([
     [
       "10000 x 10000 (100 MP, a decompression bomb the default limit would admit)",

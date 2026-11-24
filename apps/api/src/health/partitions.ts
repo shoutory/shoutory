@@ -1,7 +1,7 @@
 import type { AppPool } from "@shoutory/db/pool";
 import { isUnavailable, Refusal } from "../errors/refusal.js";
 
-/** A partitioned table needs this many leaves that start after now, or a late write finds no partition (NFR-REL-08). */
+/** A partitioned table needs this many leaves that start after now, or a late write finds no partition. */
 const MIN_FUTURE_LEAVES = 2;
 
 // Every range-partitioned table of the `app` schema whose key is a timestamptz, from the catalog, so a table added
@@ -22,7 +22,6 @@ const SHORT_TABLES = `
   GROUP BY parent.relname
   HAVING count(*) FILTER (WHERE bound.lower > now()) < $1`;
 
-/** Throws `service_unavailable` (cause `partitions_short`) when a partitioned table has too few future leaves. */
 export async function assertPartitionRunway(pool: AppPool): Promise<void> {
   let short: string[];
   try {

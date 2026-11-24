@@ -21,7 +21,6 @@ export async function revokeSession(auth: AuthService, current: AuthSession, id:
   });
 }
 
-/** Ends every session of the user except the one making the request. */
 export async function revokeOtherSessions(auth: AuthService, current: AuthSession): Promise<void> {
   const context = await auth.library.$context;
   await context.adapter.deleteMany({
@@ -42,11 +41,6 @@ interface SessionRow {
   readonly userAgent?: string | null;
 }
 
-/**
- * The user's live sessions, newest first, at most 100, by row id. The current session is always in the answer: when it
- * is older than the newest 100 it takes the last place. The stored token digest and the address digest are never part
- * of an item.
- */
 export async function listSessions(auth: AuthService, current: AuthSession): Promise<SessionListItem[]> {
   const context = await auth.library.$context;
   const rows = await context.adapter.findMany<SessionRow>({

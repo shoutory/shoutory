@@ -11,10 +11,9 @@ import {
 } from "../support/tenancy.js";
 import { type Fixture, startFixture } from "./auth/harness.js";
 
-// Security floor of the resolve routes (R607 (15), R614, R616): who may settle a stuck operation, the step-up, the refusals
-// a definer makes, and the one audit row a resolution writes. Route A (`.../resolutions/confirmed`) has the step-up policy
-// and the kinds attest_published, attest_not_executed, supersede and confirm_removed; route B (`.../resolutions`) has the
-// session policy and publish_late, reschedule, drop and dismiss.
+// Route A (`.../resolutions/confirmed`) has the step-up policy and the kinds attest_published, attest_not_executed,
+// supersede and confirm_removed; route B (`.../resolutions`) has the session policy and publish_late, reschedule, drop
+// and dismiss.
 type User = { id: string; cookie: string };
 let fx: Fixture;
 let ws: string;
@@ -71,7 +70,6 @@ interface Plant {
   kind?: string;
   channel?: string;
 }
-// A post written by `author`, its target and one operation in a given state, planted as the definer would leave them.
 async function plantOp(o: Plant): Promise<string> {
   const home = o.workspace ?? ws;
   const channel = await seedChannel(fx, home, o.channel ?? "connected", unique("res-channel"), "fixture");
@@ -150,7 +148,6 @@ const WHO: [string, "A" | "B", string, number, string][] = ["A", "B"].flatMap((r
 );
 describe("who may resolve an operation", () => {
   it.each(WHO)("%s on route %s with %s answers %i", async (role, route, kind, status, after) => {
-    // fails first because: the routes do not exist, so every row answers 404
     const op = await plantOp({ author: role === "author" ? user("author").id : user("writer").id });
     const path = (route === "A" ? routeA : routeB)(ws, op);
     const answered = await answer(await post(user(role), path, { kind }));
@@ -168,7 +165,6 @@ describe("who may resolve an operation", () => {
 
 describe("another workspace's operation", () => {
   it("answers 404 like a missing one, and nothing changes in either workspace", async () => {
-    // fails first because: the routes do not exist, or the foreign id is read through this workspace's path
     const foreignOp = await plantOp({ author: user("foreign").id, workspace: other });
     const mine = await plantOp({ author: user("writer").id });
     const missing = await answer(await post(user("admin"), routeB(ws, randomUUID()), { kind: "dismiss" }));
@@ -221,7 +217,6 @@ describe("step-up on the resolve routes", () => {
   )(
     "a stale step-up (%s) refuses %s with 403 step_up_required and writes nothing",
     async (interval, kind, planted, body) => {
-      // fails first because: the routes do not exist, or the step-up is checked after the definer has acted
       const [who, op] = [await stale(interval), await plantOp({ author: user("writer").id, ...planted })];
       const refused = await answer(await post(who, routeA(ws, op), { kind, ...body }));
       expect([refused.status, refused.error?.code]).toEqual([403, "step_up_required"]);
@@ -230,7 +225,6 @@ describe("step-up on the resolve routes", () => {
   );
 
   it.each(FREE)("%s needs no step-up", async (kind, planted, body) => {
-    // fails first because: the routes do not exist, or the session route asks for a step-up
     const [who, op] = [await stale("11 minutes"), await plantOp({ author: user("writer").id, ...planted })];
     expect((await post(who, routeB(ws, op), { kind, ...body })).status).toBe(200);
   });
@@ -253,7 +247,6 @@ describe("the body of a resolution", () => {
     ["a permalink that is not a URL", "A", { kind: "attest_published", permalink: "javascript:alert(1)" }],
   ];
   it.each(BAD)("%s is a 400 and writes nothing", async (_name, route, body) => {
-    // fails first because: the routes do not exist, or a bad uuid reaches the definer as a 500
     const op = await plantOp({ author: user("writer").id, effect: "none" });
     const refused = await answer(await post(user("admin"), (route === "A" ? routeA : routeB)(ws, op), body));
     expect([refused.status, refused.error?.code]).toEqual([400, "validation_failed"]);
@@ -271,7 +264,6 @@ describe("a resolution the state or the channel refuses", () => {
   it.each(SENDS)(
     "%s %s on a channel that is not connected is a 409 channel_not_connected",
     async (route, kind, body) => {
-      // fails first because: the routes do not exist, or the refusal is a 500 or carries no reason
       const op = await plantOp({ author: user("writer").id, effect: "none", channel: "needs_reconnect" });
       const refused = await answer(
         await post(user("admin"), (route === "A" ? routeA : routeB)(ws, op), { kind, ...body }),
@@ -286,7 +278,6 @@ describe("a resolution the state or the channel refuses", () => {
   );
 
   it("a second call of the same kind is a 409, leaves one resolution row and writes no second audit row", async () => {
-    // fails first because: the routes do not exist, or the repeat is applied twice
     const op = await plantOp({ author: user("writer").id });
     const first = await post(user("admin"), routeB(ws, op), { kind: "dismiss" });
     const second = await answer(await post(user("admin"), routeB(ws, op), { kind: "dismiss" }));
@@ -298,7 +289,6 @@ describe("a resolution the state or the channel refuses", () => {
 
 describe("a resolution and its audit row", () => {
   it("supersede returns the new operation, links both ways and writes one audit row of ids only", async () => {
-    // fails first because: the routes do not exist, or the audit row is missing or carries the text of the person
     const op = await plantOp({ author: user("writer").id });
     const done = await answer(
       await post(user("owner"), routeA(ws, op), {
@@ -333,7 +323,6 @@ describe("a resolution and its audit row", () => {
   });
 
   it("no text of the person is in any log line or audit row", async () => {
-    // fails first because: the routes do not exist, or the ack text, the note or the link is logged
     const op = await plantOp({ author: user("writer").id });
     const text = `canary-${randomUUID()}`;
     const body = {
@@ -354,8 +343,6 @@ describe("a resolution and its audit row", () => {
   });
 });
 
-// Feature rows: each kind reaches the state the ledger says, the three refusals share one envelope, and the two bounds of
-// R617. The decisions of the definer itself are the rows of its own slice.
 // [route, kind, the plant, the body, the state after]
 const KINDS: ["A" | "B", string, Partial<Plant>, Record<string, unknown>, string][] = [
   ["A", "attest_published", {}, {}, "published"],

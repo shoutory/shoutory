@@ -22,9 +22,7 @@ import { holdThenRace, openTx } from "../support/race.js";
 
 const env = readTestEnv();
 
-// The member definers of migration 0010: member_role_set (Owner transfer included) and member_remove (leave is the
-// caller's own id). A caller's rank is the higher of the stored and the implicit organization-admin rank; the Owner
-// rules read the stored role only. Every row runs in a transaction that is rolled back, so rows share one fixture.
+// Every row runs in a transaction that is rolled back, so rows share one fixture.
 let db: TestDatabase;
 const rows = (sql: string, params?: unknown[]) =>
   withAdminClient(env, db.name, async (a) => (await a.query(sql, params)).rows);
@@ -38,7 +36,7 @@ const SET_ROLE = "SELECT app.member_role_set($1::uuid, $2::uuid, $3, NULL, NULL)
 const REMOVE = "SELECT app.member_remove($1::uuid, $2::uuid, NULL, NULL)";
 
 describe("a member changes or removes only members strictly below them; the new role is at most their own", () => {
-  // [title, caller, target, new role (null = remove), SQLSTATE of the refusal or null for success]
+  // The new role is null for a removal; the SQLSTATE is null for success.
   it.each([
     ["admin sets an editor to approver", U.admin, U.editor, "approver", null],
     ["admin sets a viewer to admin (at most their own)", U.admin, U.viewer, "admin", null],
@@ -223,7 +221,7 @@ describe("concurrent Owner transfers", () => {
   });
 });
 
-describe("rank 1a lock: the tenancy definers lock without updating; an actual UPDATE of organizations or workspaces fails", () => {
+describe("the organization row lock: the tenancy definers lock without updating; an actual UPDATE of organizations or workspaces fails", () => {
   const ORG_OF_WA = "(SELECT organization_id FROM app.workspaces WHERE id = $1)";
   it.each([
     [
@@ -277,7 +275,6 @@ describe("rank 1a lock: the tenancy definers lock without updating; an actual UP
   });
 });
 
-/** A workspace with one member of each rank and two pending invitations; returns the id of the one to revoke. */
 async function seedAuditWorkspace(admin: Client, ws: string): Promise<string> {
   await admin.query(
     "INSERT INTO app.workspaces (id, organization_id, name, slug) VALUES ($1, $2, 'audit', 'audit-m06a')",
@@ -306,7 +303,7 @@ async function seedAuditWorkspace(admin: Client, ws: string): Promise<string> {
   return String(found.rows[0]?.id);
 }
 
-describe("each definer writes its audit row with the caller as actor (R246)", () => {
+describe("each definer writes its audit row with the caller as actor", () => {
   const WS = randomUUID();
   const created: { id?: string } = {};
   const CREATE = "SELECT app.invitation_create($1::uuid, $2, 'viewer', '1 day', $3::bytea, NULL, NULL) AS id";
@@ -314,7 +311,7 @@ describe("each definer writes its audit row with the caller as actor (R246)", ()
   const REVOKE = "SELECT app.invitation_revoke($1::uuid, $2::uuid, NULL, NULL) AS id";
   const SET = "SELECT app.member_role_set($1::uuid, $2::uuid, $3, NULL, NULL) AS id";
   const DROP = "SELECT app.member_remove($1::uuid, $2::uuid, NULL, NULL) AS id";
-  // [action, caller, SQL, arguments]; each row commits, so the rows run in this order on one workspace
+  // Each row commits, so the rows run in this order on one workspace.
   const ROWS: [string, string, string, () => unknown[]][] = [
     [
       "invitation.created",

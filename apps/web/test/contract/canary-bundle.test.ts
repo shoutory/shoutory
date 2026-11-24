@@ -39,7 +39,6 @@ function scan(dir: string) {
   return { files: files.map((entry) => entry.name), hits };
 }
 
-// The text of every script element that has no `src` attribute.
 function inlineScripts(html: string) {
   return [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)]
     .filter(([, attributes]) => !/\ssrc\s*=/.test(attributes ?? ""))
@@ -57,7 +56,6 @@ writeFileSync(
   `export const a = process.env.SHOUTORY_CANARY;\nexport const b = import.meta.env.SHOUTORY_CANARY;\nexport { PASSWORD_MIN_LENGTH } from "${limits}";\n`,
 );
 
-// The real web build config plus the planted entry; `extra` is how a test changes the config to prove the check.
 async function buildWeb(outDir: string, extra: InlineConfig = {}) {
   await build({
     root: webRoot,

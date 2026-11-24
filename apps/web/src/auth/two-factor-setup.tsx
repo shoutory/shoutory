@@ -12,7 +12,6 @@ import { authCopy } from "./auth-copy";
 import { SubmitButton, useAction } from "./auth-frame";
 
 const checked = z.object({ status: z.boolean() });
-// The server's answer to a code carries the person's name, address and verified flag, and no id.
 const confirmed = z.object({ user: z.object({ email: z.string() }) });
 
 interface Qr {
@@ -55,7 +54,6 @@ function QrImage({ text }: { text: string }) {
   );
 }
 
-// A refused password or code is emptied; a failure of the server or the network keeps it for another press.
 const refused = (error: ApiError) =>
   error.code === "validation_failed" || error.code === "invalid_credentials";
 
@@ -168,10 +166,7 @@ function QrStep({ qr, onConfirmed }: { qr: Qr; onConfirmed: () => void }) {
   );
 }
 
-/**
- * A-04 setup (`/account/security/two-factor`): password, then the QR and secret with the first code, then the recovery
- * codes once. The secret and the codes live in this component's memory only, so leaving the page drops them.
- */
+// The secret and the codes live in this component's memory only, so leaving the page drops them.
 export function TwoFactorSetupPage() {
   const [qr, setQr] = useState<Qr | null>(null);
   const [codes, setCodes] = useState<string[] | null>(null);

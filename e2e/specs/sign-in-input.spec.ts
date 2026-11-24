@@ -11,7 +11,6 @@ async function paste(page: Page, id: string, text: string): Promise<void> {
   await expect(page.getByTestId(id)).toHaveValue(text);
 }
 
-// Nothing on the sign-in path blocks a password manager or an authenticator's copied code.
 test("sign-in accepts a pasted password and a pasted code, the code field has autocomplete=one-time-code, and no CAPTCHA appears", async ({
   page,
   browser,
@@ -41,7 +40,6 @@ test("sign-in accepts a pasted password and a pasted code, the code field has au
   await expect(seen.locator(CAPTCHA)).toHaveCount(0);
   await paste(seen, "mfa-code", await nextTotp(secret));
   await seen.getByTestId("mfa-submit").click();
-  // Signed in: a person with no workspace yet is shown the form that makes the first one.
   await expect(seen.getByTestId("onboarding-create")).toBeVisible();
   await guest.close();
 });

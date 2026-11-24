@@ -13,12 +13,6 @@ import { holdThenRace, openTx } from "../support/race.js";
 
 const env = readTestEnv();
 
-// Security floor of the pin of an operation's media: an operation records, in the transaction that creates it, the exact
-// derivative of each medium it sends (the ready `stripped` copy of an image, the original of a video), and locks those
-// assets for share while it does, so the collection and a later edit can never change or remove what it sends. A medium
-// that is no longer ready makes admission leave the target scheduled and the resolution of an operation refuse with
-// `media_unavailable`; the pin is written by one definer that no runtime role may call. Rows are planted as the superuser
-// (a state is planted with the triggers off), and a race is two sessions, the second seen waiting, never a sleep.
 let db: TestDatabase;
 const admin = <T>(run: (client: Client) => Promise<T>) => withAdminClient(env, db.name, run);
 const rows = (sql: string, params: unknown[] = []) =>
@@ -49,7 +43,6 @@ interface PlantedMedium {
   stripped?: boolean;
   ageDays?: number;
 }
-// An asset as the pipeline leaves it, with the stripped derivative an image is sent as.
 async function plantMedium(o: PlantedMedium = {}): Promise<Medium> {
   const [id, ws, mime] = [randomUUID(), WA, o.mime ?? "image/png"];
   const sha = digestOf(id);
@@ -80,7 +73,6 @@ async function plantMedium(o: PlantedMedium = {}): Promise<Medium> {
 }
 
 interface Target {
-  /** The media of the operation's own channel, in the order the post lists them. */
   media: Medium[];
   /** The media of another channel's variant in the same snapshot, which this operation must not pin. */
   elsewhere?: Medium[];
@@ -104,7 +96,6 @@ const variantOf = (channel: string, media: Medium[]) => ({
   settings: {},
   media: media.map((m) => ({ media_id: m.id, alt_text: null, crop: null })),
 });
-// A scheduled target on a provider of its own whose frozen version lists `media` for its channel.
 async function plantTarget(o: Target): Promise<Planted> {
   const provider = `pin-${randomUUID().slice(0, 8)}`;
   const channelOf = async () =>
@@ -171,7 +162,6 @@ const outcomeOf = async (variant: string) => ({
     (row) => row.state as string,
   ),
 });
-// What an operation of the variant pinned, in position order.
 const pinsOf = async (variant: string) =>
   (
     await rows(
@@ -193,7 +183,6 @@ const pinOf = (m: Medium, position: number) => ({
   sha256: m.derivativeSha256 ?? m.sha256,
 });
 
-// One call as a principal in its own transaction; the take answers the object keys it may remove, none when it took nothing.
 async function take(asset: string): Promise<string[]> {
   const client = await openTx(db.pool("worker"), job([WA]));
   try {
@@ -248,7 +237,6 @@ describe("media pinned by an operation is never collected while the operation ca
   });
 });
 
-// What an operation pins, one target per row: the target, the operation states it ends with and the pin rows it leaves.
 type Pinned = { target: Target; operations: string[]; pins: ReturnType<typeof pinOf>[] };
 const PINNED: [string, () => Promise<Pinned>][] = [
   [
@@ -342,7 +330,6 @@ describe("a medium that is not ready at admission leaves the target scheduled, a
 // How long a writer of a race has to be seen waiting: well under the 5 s limit of a test, so that a writer that never
 // waits fails with the lock-wait error and not with the test's timeout.
 const WAIT_MS = 3_000;
-// Some other backend is blocked on a lock of this database, `count` of them (the later writers of a race).
 async function untilWaiting(count: number): Promise<void> {
   const deadline = Date.now() + WAIT_MS;
   while (Date.now() < deadline) {
@@ -452,7 +439,6 @@ describe("a post attach joins the race of the pin and the collection (race, floo
   });
 });
 
-// An operation the resolution can act on, with the frozen version of a planted target.
 async function plantOperation(target: Planted, state: string, effect: string): Promise<string> {
   await rows("UPDATE app.post_variants SET schedule_state = 'in_progress' WHERE id = $1", [target.variant]);
   return admin(async (client) => {
@@ -479,7 +465,6 @@ async function plantOperation(target: Planted, state: string, effect: string): P
     return made.rows[0].id as string;
   });
 }
-// One resolution as the Owner, committed when it answers and rolled back when it is refused.
 async function resolve(operation: string, kind: string) {
   const client = await openTx(db.pool("app"), asUser(U.owner));
   try {

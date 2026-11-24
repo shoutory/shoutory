@@ -14,13 +14,9 @@ export interface EgressRequest {
   readonly method?: string;
   readonly headers?: Readonly<Record<string, string>>;
   readonly body?: string | Uint8Array;
-  /** Default 5 s; a connect timeout is retried once, since nothing was sent. */
   readonly connectTimeoutMs?: number;
-  /** The total time for the whole call, redirects and the connect retry included; default 15 s. */
   readonly timeoutMs?: number;
-  /** The response body cap, default 1 MiB. */
   readonly maxBytes?: number;
-  /** Cancels the call, in flight or before it starts (a lost lease), whatever time the call has left. */
   readonly signal?: AbortSignal;
 }
 
@@ -37,10 +33,8 @@ const DEFAULT_MAX_BYTES = 1024 * 1024;
 // The only caller headers a hop to another origin carries; everything else (credentials, API keys) stays with the first.
 const SAFE_CROSS_ORIGIN_HEADERS = new Set(["accept", "accept-language", "user-agent"]);
 
-/**
- * The connect-time lookup: resolve once, refuse the whole answer when any address is refused, and hand the socket only
- * checked addresses. The connection goes to that address, so a later DNS change cannot redirect it (review M8).
- */
+// The socket gets only checked addresses and the whole answer is refused when any address is refused, so a later DNS
+// change cannot redirect the connection.
 function pinnedLookup(operator: OperatorPolicy): LookupFunction {
   return (hostname: string, options: LookupOptions, callback) => {
     operator.lookup(hostname).then(
@@ -66,7 +60,7 @@ function pinnedLookup(operator: OperatorPolicy): LookupFunction {
   };
 }
 
-// One pool per operator policy and connect timeout: keep-alive reuses a connection per host (BG-18).
+// One pool per operator policy and connect timeout, so keep-alive reuses a connection per host.
 const agents = new WeakMap<OperatorPolicy, Map<number, Agent>>();
 
 function agentFor(operator: OperatorPolicy, connectTimeoutMs: number): Agent {
@@ -152,11 +146,8 @@ async function attempt(
   }
 }
 
-/**
- * The hop a redirect response asks for, or undefined when the response is no followable redirect. A hop to another
- * origin carries only the safe headers and never a body (a 307 or 308 that would carry one is refused); a hop that
- * drops the body drops its content headers; `host` is never forwarded.
- */
+// A hop to another origin carries only the safe headers and never a body (a 307 or 308 that would carry one is
+// refused); a hop that drops the body drops its content headers; `host` is never forwarded.
 export function nextHop(hop: Hop, response: EgressResponse): Hop | undefined {
   const location = response.headers.location;
   if (![301, 302, 303, 307, 308].includes(response.status) || typeof location !== "string") return undefined;
@@ -178,11 +169,7 @@ export function nextHop(hop: Hop, response: EgressResponse): Hop | undefined {
   return { url, headers, method: keepsMethod ? hop.method : "GET", body };
 }
 
-/**
- * The only network path for a user- or provider-supplied URL: checks the URL, pins the connection to a checked
- * address, follows at most three redirects and checks every hop again, caps the body and bounds the time. A failure is
- * always an `EgressError` with no part of the original error.
- */
+// A failure is always an `EgressError` with no part of the original error.
 export async function egressFetch(req: EgressRequest, policy: EgressPolicy): Promise<EgressResponse> {
   let hop: Hop = {
     url: checkUrl(req.url, policy.request, policy.operator),

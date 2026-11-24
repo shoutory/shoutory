@@ -15,7 +15,6 @@ import { Dialog } from "../ui/dialog";
 import { DirText } from "../ui/dir-text";
 import type { Workspace } from "./shell-data";
 
-/** The command palette (ux-spec X-02, M0: switch workspace): Ctrl/Cmd+K or its button, type, Enter on the first match. */
 export function Palette({ workspaces }: { workspaces: Workspace[] }) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();

@@ -4,7 +4,6 @@ import { type AppPool, createAppPool } from "@shoutory/db/pool";
 import { sealedKeyIds } from "@shoutory/db/startup";
 import type { CliIo } from "../main.js";
 
-/** What the secrets commands run with: the worker role's pool and the key ring, from the key variables alone. */
 export interface Custody {
   readonly pool: AppPool;
   readonly keys: KeyProvider;

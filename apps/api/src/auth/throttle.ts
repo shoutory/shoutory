@@ -3,7 +3,6 @@ import { pepperDigest } from "@shoutory/core/crypto/digest";
 import type { AppPool } from "@shoutory/db/pool";
 import { Refusal } from "../errors/refusal.js";
 
-/** The scopes the sign-in, second-factor and reset routes spend (the capacities live in the `bucket_take` definer). */
 type Scope =
   | "login_account"
   | "login_ip"
@@ -21,17 +20,13 @@ type Scope =
 // A successful sign-in refunds the whole account bucket: `bucket_take` accepts a cost down to minus the capacity.
 const LOGIN_ACCOUNT_CAPACITY = 100;
 
-/** The keyed digest of a mail address as the suppression list stores it: the address is lower-cased first (R323). */
 export const emailDigest = (pepper: SealedSecret, address: string): string =>
   pepperDigest(pepper, "email_suppression", address.toLowerCase());
 
 const IPV6_GROUPS = 8;
 const IPV6_PREFIX_GROUPS = 4;
 
-/**
- * What a per-address bucket is keyed on: the whole address for IPv4 and the /64 prefix for IPv6 (a host owns a whole
- * /64, so the full address is no limit at all; the library buckets IPv6 the same way).
- */
+// IPv6 is keyed on the /64 prefix: a host owns a whole /64, so the full address would be no limit at all.
 export function ipSubject(address: string): string {
   if (!address.includes(":") || address.includes(".")) return address;
   const [head = "", tail] = address.split("::");
@@ -43,13 +38,9 @@ export function ipSubject(address: string): string {
 }
 
 export interface Throttle {
-  /** Spends one token of the bucket; a refusal is a 429 whose `Retry-After` is the bucket's answer. */
   spend(scope: Scope, subject: string): Promise<void>;
-  /** `spend` for a client address (the /64 for IPv6). */
   spendIp(scope: Scope, address: string): Promise<void>;
-  /** Like `spend`, but answers whether the token was granted instead of refusing. */
   tryAccount(email: string): Promise<boolean>;
-  /** Refills the `login_account` bucket of an address, or of a user id (lowercase, as the ids are). */
   refundAccount(subject: string): Promise<void>;
 }
 
@@ -58,7 +49,6 @@ interface Taken {
   readonly retry_after_seconds: number;
 }
 
-/** The bucket calls of the sign-in routes; every key is an HMAC digest, never a raw email or address. */
 export function createThrottle(pool: AppPool, pepper: SealedSecret): Throttle {
   const take = async (scope: Scope, subject: string, cost: number): Promise<Taken> => {
     const key = pepperDigest(pepper, scope, subject);

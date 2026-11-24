@@ -80,7 +80,6 @@ describe("the workspace General page", () => {
 });
 
 describe("the workspace General page for a role that may only read", () => {
-  // A role without settings.manage reads the page and changes nothing: the controls say why and no PATCH leaves.
   it.each(["editor", "viewer"])("a %s reads the settings and cannot save", async (role) => {
     const { stub, host } = await change({ workspaces: roleOf(role) }, {});
     expect(input(host, "name")?.value).toBe("Acme One");
@@ -89,7 +88,6 @@ describe("the workspace General page for a role that may only read", () => {
     expect(patches(stub)).toHaveLength(0);
   });
 
-  // The picker is read-only too, and submitting the form (Enter in a field) sends nothing whatever the draft holds.
   it.each(["editor", "viewer"])(
     "a %s who picks another zone and submits the form sends nothing",
     async (role) => {

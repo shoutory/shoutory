@@ -17,7 +17,6 @@ const NEW_LINK = (
   </Link>
 );
 
-/** A-03 set (`/auth/reset#token`): the link opens the form and changes nothing; the press sets the password. */
 export function ResetPage() {
   const { t } = useLingui();
   const token = useMailedToken();
@@ -47,7 +46,6 @@ export function ResetPage() {
     );
   }
   if (done) {
-    // The reset ends the other sessions; it does not sign anyone in.
     return (
       <AuthFrame title={title} step="done">
         <p role="status">

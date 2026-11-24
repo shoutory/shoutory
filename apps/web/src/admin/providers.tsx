@@ -1,7 +1,6 @@
 import { Trans } from "@lingui/react/macro";
 import { EmptyState } from "../ui/empty-state";
 
-/** Z-04: the provider apps of this installation. This build has none, so the screen says so and reads nothing. */
 export function ProvidersPage() {
   return (
     <>

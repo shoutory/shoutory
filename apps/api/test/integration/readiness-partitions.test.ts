@@ -23,7 +23,7 @@ let appPool: ReturnType<typeof createAppPool>;
 beforeAll(async () => {
   db = await cloneTemplate(env, inject("shoutoryTemplate"));
   owner = db.pool("owner");
-  // A ready answer needs a worker that has beaten (R315).
+  // A ready answer needs a worker that has beaten.
   await db.pool("worker").query("SELECT app.worker_heartbeat('readiness-partitions-worker', 'worker')");
   appPool = createAppPool(db.url("app"), () => undefined);
   app = createApp({
@@ -43,7 +43,6 @@ afterAll(async () => {
 const ready = async () => {
   lines.length = 0;
   const answer = await Promise.resolve(app.request("/readyz", {}, REMOTE));
-  // The cause is in the log only (R494).
   return [answer.status, /"cause":"([a-z_]+)"/.exec(lines.join("\n"))?.[1]];
 };
 const leaf = (name: string, from: string, to: string) =>
@@ -51,7 +50,7 @@ const leaf = (name: string, from: string, to: string) =>
     `CREATE TABLE app.${name} PARTITION OF app.partition_fixture FOR VALUES FROM ('${from}') TO ('${to}')`,
   );
 
-describe("/readyz and the partition runway (NFR-REL-08)", () => {
+describe("/readyz and the partition runway", () => {
   it("is not ready with fewer than two future partitions of any time-partitioned table", async () => {
     // The first partitioned table (the audit log) has its runway: the probe is ready.
     expect(await ready()).toEqual([200, undefined]);

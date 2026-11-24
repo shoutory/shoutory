@@ -23,13 +23,11 @@ const mailSchema = z.strictObject({
 
 export type MailInput = z.input<typeof mailSchema>;
 
-/** What sealing needs: the key ring (its active key seals) and the pepper that keys the kept digest. */
 export interface MailDeps {
   readonly keys: KeyProvider;
   readonly pepper: SealedSecret;
 }
 
-/** The AAD of a sealed mail link, for enqueue, reseal and the sender: the row id owns it, the workspace scopes it. */
 export const emailLinkAad = (id: string, workspaceId: string | null, generation: number): Aad => ({
   formatVersion: FORMAT_VERSION,
   scopeId: workspaceId ?? NIL_SCOPE,
@@ -41,15 +39,10 @@ export const emailLinkAad = (id: string, workspaceId: string | null, generation:
 // The purpose separates this digest from the other uses of the pepper.
 const digestOf = (link: string, pepper: SealedSecret): string => pepperDigest(pepper, "email_link", link);
 
-/** What a mail is enqueued on: a pool, or the transaction of the change the mail follows. */
 export interface MailDb {
   query(text: string, values?: unknown[]): Promise<{ rows: Array<Record<string, unknown>> }>;
 }
 
-/**
- * Adds one mail to the outbox with its link sealed (kind `email_link`, the row id as AAD owner, generation 0) and
- * returns the row id. The table itself is reachable only through the definer. A duplicate id is a unique violation.
- */
 export async function enqueueMail(db: MailDb, input: MailInput, deps: MailDeps): Promise<string> {
   const mail = mailSchema.parse(input);
   const vars = TEMPLATES[mail.template].vars.parse(mail.vars);

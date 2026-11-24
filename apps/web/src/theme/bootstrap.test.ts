@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyLocale, detectLocale } from "../i18n/i18n.js";
 
-// The stored choice is `dark`, `light` or `system`; anything else, no value and unreadable storage all mean system.
 type Storage = string | null | "throws";
 const SCRIPT = "./bootstrap.js";
 
@@ -42,8 +41,6 @@ describe("theme bootstrap", () => {
   });
 });
 
-// The bootstrap sets `lang` and `dir` before first paint with its own copy of the locale rule (it is the inlined script
-// and imports nothing), so for every input it must reach the same page as `detectLocale` plus `applyLocale`.
 async function pageAfter(storedLocale: Storage, languages: string[]) {
   vi.stubGlobal("matchMedia", () => ({ matches: false }));
   vi.stubGlobal("navigator", { languages });

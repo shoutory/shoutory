@@ -1,9 +1,7 @@
-// The one list of screens every browser quality spec walks. It is plain data and functions of a page with type-only
-// imports, so the repository's invariant can load it with Node and check it against the app's routes.
+// Only type imports, so the repository's invariant can load this file with Node and check it against the app's routes.
 import { readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
 
-/** What a screen's address or dialog needs from the run: the founder's workspace and organization, a planted flag. */
 export interface Context {
   readonly workspace: string;
   readonly organization: string;
@@ -12,20 +10,15 @@ export interface Context {
 
 export interface Screen {
   readonly id: string;
-  /** The route path as the app's routes write it, with a leading slash (`*` for the catch-all). */
   readonly pattern: string;
-  /** Signed out screens run in an empty browser; the others as the founder. */
   readonly audience: "signed-out" | "founder";
   readonly open: (page: Page, context: Context) => Promise<void>;
-  /** The test ids of the containers on this screen that may scroll sideways; any other one is a defect. */
   readonly scrollRegions?: readonly string[];
 }
 
 export interface Dialog {
   readonly id: string;
-  /** The screen the dialog opens on (a `Screen.id`); the dialog is opened after that screen is. */
   readonly screen: string;
-  /** The message id of the dialog's title, which is also its accessible name. */
   readonly titleId: string;
   readonly open: (page: Page, context: Context) => Promise<void>;
 }
@@ -34,11 +27,9 @@ export interface ErrorPage {
   readonly id: string;
   readonly status: number;
   readonly code: string;
-  /** The message id of the page's name, which is also the start of the document title. */
   readonly titleId: string;
 }
 
-/** Routes with no screen of their own, each with the reason. */
 export const EXEMPT: Readonly<Record<string, string>> = {
   admin: "the admin frame; its index only redirects to the flags screen",
   "auth/sign-in": "a redirect to the sign-in screen, for the link in a mailed message",
@@ -48,10 +39,7 @@ export const EXEMPT: Readonly<Record<string, string>> = {
 // the screen.
 const LINK_PART = "e2e-quality-link-0123456789-ABCDEFGHIJKLMNO";
 
-/**
- * Fails when the page's content security policy refused anything since it opened (an inline style, a script, a font):
- * a refusal the person never sees but that means the page is not as built. Events are recorded by `setPreferences`.
- */
+// A refusal the person never sees still means the page is not as built. Events are recorded by `setPreferences`.
 export async function expectNoPolicyViolation(page: Page): Promise<void> {
   const refused = await page.evaluate(() => (window as unknown as { __policy?: string[] }).__policy ?? []);
   if (refused.length > 0) throw new Error(`the content security policy refused: ${refused.join(" | ")}`);
@@ -80,8 +68,7 @@ const founder = (
 ): Screen => ({ id, pattern, audience: "founder", open: visit(path), scrollRegions });
 
 // The image registers no channel routes (the app is built with no provider), so the channels hub is shown from fixed
-// answers: three channels worth a picture, with fixed check times and the zone the page names them in. The columns of a
-// channel are read from the route that writes them, so a column added there is a field here.
+// answers. The columns of a channel are read from the route that writes them, so a column added there is a field here.
 const CHANNEL_CARDS = [
   {
     id: "0190a000-0000-7000-8000-0000000001a1",
@@ -192,14 +179,13 @@ export const SCREENS: readonly Screen[] = [
   founder("signup-switch", "/admin/signup", () => "/admin/signup"),
 ];
 
-/** Pages for a failed session read, shown by answering that read: forbidden, maintenance and the start-up failure. */
 export const ERROR_PAGES: readonly ErrorPage[] = [
   { id: "forbidden", status: 403, code: "forbidden", titleId: "system.forbidden.title" },
   { id: "maintenance", status: 503, code: "service_unavailable", titleId: "system.maintenance.title" },
   { id: "startup-failure", status: 500, code: "internal_error", titleId: "system.startup_failure.title" },
 ];
 
-/** The words of a message in a language, read from the app's own catalogue, so a spec never repeats a translation. */
+// Read from the app's own catalogue, so a spec never repeats a translation.
 export function message(id: string, locale: Locale): string {
   const file = new URL(`../../apps/web/src/messages/${locale}.po`, import.meta.url);
   const catalogue = readFileSync(file, "utf8");
@@ -208,7 +194,6 @@ export function message(id: string, locale: Locale): string {
   return found[1];
 }
 
-/** Opens an error page: the guarded screen asks for the session, and the answer is the failure. */
 export async function openErrorPage(page: Page, error: ErrorPage): Promise<void> {
   await page.route("**/api/auth/get-session", (route) =>
     route.fulfill({
@@ -277,7 +262,6 @@ export const THEMES = ["light", "dark"] as const;
 export type Locale = (typeof LOCALES)[number];
 export type Theme = (typeof THEMES)[number];
 
-/** Where a screen reads the person's choices: the app's own storage keys (and the system preference for the theme). */
 export async function setPreferences(page: Page, locale: Locale, theme: Theme): Promise<void> {
   await page.addInitScript(
     ([language, scheme]) => {
@@ -299,7 +283,6 @@ export async function setPreferences(page: Page, locale: Locale, theme: Theme): 
   await page.emulateMedia({ colorScheme: theme });
 }
 
-/** The ids the founder's addresses need: its workspace and the organization the workspace belongs to. */
 export async function founderContext(page: Page, workspace: string, flagKey: string): Promise<Context> {
   const mine = (await (await page.request.get("/api/v1/workspaces")).json()) as {
     data: ReadonlyArray<{ id: string; organization_id: string }>;

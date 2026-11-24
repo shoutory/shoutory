@@ -24,10 +24,7 @@ const exchangeSchema: z.ZodType<RecordedExchange> = z.strictObject({
 
 const answersSchema = z.array(exchangeSchema).max(MAX_ENTRIES);
 
-/**
- * Parses a recorded-answers file: a JSON list of exchanges, bounded in size and in number. A file the scrubber would
- * still change is a raw capture and is refused (the message names the exchange, never its content).
- */
+// A file the scrubber would still change is a raw capture and is refused; the message names the exchange, never its content.
 export function loadRecordedAnswers(text: string): readonly RecordedExchange[] {
   if (Buffer.byteLength(text) > MAX_FILE_BYTES) throw new Error("recorded answers file is too large");
   const exchanges = answersSchema.parse(JSON.parse(text));

@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-// The one check command. Runs every step over the files it expands, prints those files, and fails a step that
-// ran nothing or was skipped unless the step is listed in .github/ci-placeholders.json.
 import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, globSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join, matchesGlob, resolve } from "node:path";
@@ -34,8 +32,7 @@ const unitTests = [
   "packages/providers/*/src/**/*.test.ts",
   "apps/web/src/**/*.test.tsx",
 ];
-// A vitest step writes a JSON report so a skipped or todo test fails the step. A step may run several
-// projects (the web app's DOM project runs beside each node unit project).
+// The JSON report lets a skipped or todo test fail the step.
 const vitestReport = (step) => `.artifacts/vitest-${step}.json`;
 const vitest = (step, ...projects) => ({
   command: node(
@@ -50,8 +47,7 @@ const vitest = (step, ...projects) => ({
 });
 const nodeTests = { command: [process.execPath, "--test", "--test-reporter=tap"], skips: "node-test" };
 
-// Every scanner runs as its project's official container, pinned by index digest. The workflow pulls the
-// same references, so a local run and a CI run are the same tool.
+// The workflow pulls the same pinned references, so a local run and a CI run are the same tool.
 export const IMAGES = {
   semgrep: "semgrep/semgrep:1.183.0@sha256:2e45517a85e13a9cca14a2a00df6bb48affd66b8ebfae1b0991cd57578362fb0",
   gitleaks:
@@ -64,7 +60,7 @@ export const IMAGES = {
     "ghcr.io/google/osv-scanner:v2.7.0@sha256:4f3b7e2c64b9d38a5febc5a7e4a3dfef1d1362f726dea7a2ef4762b46469fcd0",
 };
 
-// The repository is mounted read-only at /src. Git needs the mount trusted to read the history.
+// Git needs the read-only mount trusted to read the history.
 const container = (name, args, options = []) => [
   "docker",
   "run",
@@ -85,7 +81,6 @@ const trustMount = [
   "-e",
   "GIT_CONFIG_VALUE_0=/src",
 ];
-// The history of the checked-out branch; a pull request passes its own base..head range.
 const gitleaksRange = [`--log-opts=${process.env.GITLEAKS_LOG_OPTS || "HEAD"}`];
 const pnpm = (...args) => {
   const exe = process.env.npm_execpath ?? "pnpm";
@@ -95,9 +90,8 @@ const gitMessage = () =>
   process.env.PR_TITLE ||
   spawnSync("git", ["log", "-1", "--format=%B"], { cwd: root, encoding: "utf8" }).stdout;
 
-// What makes a local run build the image and drive the browser: the web app, the Dockerfile and the root files that fix
-// the install. A change in the api, db, core or provider packages leaves both steps to the full run on main (the
-// browser and image checks take minutes and the unit, integration and contract steps already cover those packages).
+// A change in the api, db, core or provider packages leaves the image and browser steps to the full run on main: they
+// take minutes and the unit, integration and contract steps already cover those packages.
 const IMAGE_INPUTS = [
   "apps/web/**",
   "docker/**",
@@ -136,13 +130,11 @@ export const STEPS = [
       "{apps,packages}/*/test/integration/**/*.test.ts",
       "packages/providers/*/test/integration/**/*.test.ts",
     ],
-    // The names read by readTestEnv in packages/db/src/testing/template.ts, and the S3 simulator's address (README).
     env: [
       "SHOUTORY_TEST_ADMIN_URL",
       "SHOUTORY_TEST_S3_URL",
       ...["OWNER", "APP", "WORKER", "AUTH", "READONLY"].map((role) => `SHOUTORY_DATABASE_URL_${role}`),
     ],
-    // The files that read the cluster's visibility horizon run after the others, one at a time (vitest.config.ts).
     ...vitest("integration", "integration", "integration-horizon"),
   },
   {
@@ -273,7 +265,6 @@ function expand(globs, cwd) {
   return [...new Set(files.map((file) => file.replaceAll("\\", "/")))].sort();
 }
 
-// Returns the failure reason of a step before it runs, or null when it may run.
 function refusal(step, files, isPlaceholder) {
   if (isPlaceholder)
     return files.length > 0 ? "listed as a placeholder but already has files; remove its line" : null;
@@ -282,7 +273,6 @@ function refusal(step, files, isPlaceholder) {
 
 const dockerRuns = () => spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
 
-// The number of skipped and todo tests a test step reported; NaN when it printed no count.
 function skippedTests(step, stdout, cwd) {
   if (step.skips === "node-test") {
     const count = (key) => Number(new RegExp(`^# ${key} (\\d+)\\s*$`, "m").exec(stdout)?.[1]);
@@ -347,7 +337,6 @@ function runStep(step, { cwd, placeholders, reasons, outputFile, log }) {
   return error === null;
 }
 
-// `outputFile` is the job output file of the workflow, where a placeholder step reports itself.
 export function runSteps(
   steps,
   { cwd = root, placeholders = [], reasons = {}, outputFile, log = console.log } = {},
@@ -359,10 +348,6 @@ export function runSteps(
 // A change to the check command or the workflow can affect any step, so it selects them all.
 const CHECK_FILES = ["scripts/verify.mjs", ".github/workflows/ci.yml"];
 
-/**
- * The steps a run executes. Every step runs on `--all`, on main or a tag, and when the change set is unknown; otherwise a
- * step with a `watch` list runs only when a changed path matches it, and a step without one always runs.
- */
 export function affectedSteps(steps, { changed, all = false, ref = process.env.GITHUB_REF } = {}) {
   const full =
     all ||
@@ -376,7 +361,6 @@ export function affectedSteps(steps, { changed, all = false, ref = process.env.G
   );
 }
 
-// The paths changed since this branch left origin/main, committed or not; undefined when git cannot say.
 function changedPaths() {
   const git = (...args) => spawnSync("git", args, { cwd: root, encoding: "utf8" });
   const base = git("merge-base", "origin/main", "HEAD");
@@ -388,7 +372,7 @@ function changedPaths() {
   return pathsFromNul(diff.stdout, added.stdout);
 }
 
-/** Splits git's NUL-terminated path lists (`-z`), so a name with a space, a quote or a newline stays one path. */
+// NUL-separated, so a name with a space, a quote or a newline stays one path.
 export function pathsFromNul(...outputs) {
   return outputs.flatMap((output) => output.split("\0")).filter(Boolean);
 }

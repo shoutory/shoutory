@@ -11,7 +11,6 @@ const exceptionIds: string[] = (
   ) as { id: string }[]
 ).map((row) => row.id);
 
-// The H3 list (NFR-SEC-11): a field a user or an operator can point at a host.
 const H3_IDS = [
   "server-instance-url",
   "identity-server-url",
@@ -33,7 +32,6 @@ const H3_IDS = [
   "mail-check-dns",
 ];
 
-/** What is wrong with a registry: a field with no guard route, or an exception id the exceptions list lacks. */
 function problems(fields: readonly Partial<UrlField>[], knownExceptionIds: readonly string[]): string[] {
   const seen = new Set<string>();
   return fields.flatMap((field) => {
@@ -51,8 +49,8 @@ function problems(fields: readonly Partial<UrlField>[], knownExceptionIds: reado
   });
 }
 
-describe("every URL field names a guard route (NFR-SEC-11, H3)", () => {
-  it("lists the whole H3 set, each with a route, and each exception id is in the exceptions list", () => {
+describe("every URL field names a guard route", () => {
+  it("lists the whole set of URL fields, each with a route, and each exception id is in the exceptions list", () => {
     expect(URL_FIELDS.map((field) => field.id).sort()).toEqual([...H3_IDS].sort());
     expect(problems(URL_FIELDS, exceptionIds)).toEqual([]);
   });

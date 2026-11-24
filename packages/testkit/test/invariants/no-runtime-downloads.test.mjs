@@ -12,7 +12,6 @@ const FORBIDDEN = new RegExp(`\\b(${WORDS.join("|")})\\b`);
 const SKIPPED = new Set(["node_modules", "dist", ".git", ".artifacts", ".turbo"]);
 const GLOBS = ["scripts/**/*", ".github/workflows/*", "docker/**/*", "**/Dockerfile*"];
 
-// Scripts, workflows, Dockerfiles and the scripts field of every package.json: nothing may fetch a tool at run time.
 function scanned(base) {
   const exclude = (name) => SKIPPED.has(name);
   const files = GLOBS.flatMap((pattern) => globSync(pattern, { cwd: base, exclude }));

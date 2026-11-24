@@ -13,10 +13,6 @@ import { openTx } from "../support/race.js";
 
 const env = readTestEnv();
 
-// Security floor of migration 0023, media gating (R639 (7), R644): completing an upload leaves one `media.uploaded` event
-// in the same transaction (and none for a duplicate, whose new asset is deleted), and admission leaves a target that is
-// not late `scheduled` while any medium of its frozen snapshot is not `ready` in its own workspace; a late target is
-// still missed. Rows are planted as the superuser and nothing sleeps.
 let db: TestDatabase;
 const admin = <T>(run: (client: Client) => Promise<T>) => withAdminClient(env, db.name, run);
 const rows = (sql: string, params: unknown[] = []) =>
@@ -85,7 +81,6 @@ interface Target {
   /** Seconds ago the target fell due: 30 is within the two-hour tolerance, 3 hours is late. */
   dueAgo?: number;
 }
-// A scheduled target on a provider of its own with a frozen version whose `resolved.media` lists `media`.
 async function plantTarget(o: Target): Promise<{ variant: string; provider: string; media: string[] }> {
   const provider = `gating-${randomUUID().slice(0, 8)}`;
   const channel = (

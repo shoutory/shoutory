@@ -3,11 +3,9 @@ import type { AppPool } from "@shoutory/db/pool";
 import type { withAdminClient } from "@shoutory/db/testing";
 import { connectChannel } from "./ledger-credentials.js";
 
-// The admin client of the db package's test helper (this package does not depend on the driver itself).
+// This package does not depend on the database driver, so the client type is taken from the db test helper.
 type Client = Parameters<Parameters<typeof withAdminClient>[2]>[0];
 
-// A workspace with its owner for the ledger tests, and a target the admission can take, written through the admin client
-// the runtime roles cannot use.
 export async function seedWorkspace(admin: Client): Promise<string> {
   const [user, org, workspace] = [randomUUID(), randomUUID(), randomUUID()];
   await admin.query("BEGIN");
@@ -37,7 +35,6 @@ export async function seedWorkspace(admin: Client): Promise<string> {
   return workspace;
 }
 
-/** The frozen version of a post with the text of one channel's variant, as scheduling leaves it; answers its id. */
 export async function seedFrozenVersion(
   admin: Client,
   workspace: string,
@@ -73,14 +70,12 @@ export async function seedFrozenVersion(
   return made.rows[0].id as string;
 }
 
-// The pool the channels of `seedDueTarget` are connected through (the credential service and its definers), set once by a
-// test file that seeds targets; one that forgot fails here instead of planting a channel with no credential.
+// Set once by a test file that seeds targets; one that forgot fails here instead of planting a channel with no credential.
 let credentialPool: AppPool | undefined;
 export function connectThrough(pool: AppPool): void {
   credentialPool = pool;
 }
 
-/** A channel of the `fixture` provider and a scheduled variant on it that was due `dueSecondsAgo` seconds ago. */
 export async function seedDueTarget(
   admin: Client,
   workspace: string,

@@ -1,26 +1,19 @@
 import type { SealedSecret } from "@shoutory/core/crypto";
 import type { ProviderResult } from "./result.js";
 
-/**
- * What an adapter is given besides its input: the outbound `fetch` (the egress client, passed in and never imported, so
- * an adapter cannot reach the network any other way) and the clock (code takes the time as an input).
- */
+// The egress client is passed in and never imported, so an adapter cannot reach the network any other way.
 export interface AdapterContext {
   readonly fetch: typeof fetch;
   readonly now: () => Date;
 }
 
-/**
- * What a call after the connect needs of the channel it is for: the access token, still sealed until the one call that
- * puts it on the wire, and the instance host the channel stored (a provider whose accounts live on user-chosen servers).
- * The worker fills it from the channel's own credential; an adapter that needs it refuses a call without it.
- */
+// The token stays sealed until the one call that puts it on the wire. The instance host is for providers whose accounts
+// live on user-chosen servers.
 export interface AccountAccess {
   readonly accessToken: SealedSecret;
   readonly instanceHost?: string;
 }
 
-/** The smallest commit input; later slices widen it without removing a field. */
 export interface CommitInput {
   readonly idempotencyKey: string;
   readonly text: string;
@@ -29,27 +22,21 @@ export interface CommitInput {
   readonly mediaIds?: readonly string[];
 }
 
-/** What a token refresh sends: the refresh token in use, still sealed until the one call that puts it on the wire. */
 export interface RefreshInput {
   readonly refreshToken: SealedSecret;
 }
 
-/**
- * What a channel health read sends: the access token in use, still sealed until the one call that puts it on the wire, and
- * the instance host the channel stored (a provider whose accounts live on user-chosen servers).
- */
 export interface InspectInput {
   readonly accessToken: SealedSecret;
   readonly instanceHost?: string;
 }
 
-/** The app of the provider on one instance: its client id and the secret, still sealed. */
 export interface AppCredentials {
   readonly clientId: string;
   readonly clientSecret: SealedSecret;
 }
 
-/** What the authorization URL of a connect is built from; `redirectUri` already carries any instance host. */
+// `redirectUri` already carries any instance host.
 export interface AuthorizeInput {
   readonly state: string;
   readonly codeChallenge: string;
@@ -58,7 +45,6 @@ export interface AuthorizeInput {
   readonly app?: AppCredentials;
 }
 
-/** What the code exchange sends: the code and the verifier, still sealed until the one call that puts it on the wire. */
 export interface ExchangeInput {
   readonly code: string;
   readonly codeVerifier: SealedSecret;
@@ -67,50 +53,36 @@ export interface ExchangeInput {
   readonly app?: AppCredentials;
 }
 
-/** What the registration of the provider's app on an instance sends. */
 export interface RegisterAppInput {
   readonly instanceHost: string;
   readonly redirectUri: string;
 }
 
-/** What the identity read sends: the new access token, still sealed. */
 export interface IdentityInput {
   readonly accessToken: SealedSecret;
   readonly instanceHost?: string;
 }
 
-/**
- * The connect side of an OAuth provider. `authorize` builds the URL only (no network); `exchangeCode` answers with the
- * tokens as `credential`, and `identity` with the account as `identity`. `issuer` is the one a callback must carry
- * (RFC 9207), a fact of the adapter's construction.
- */
+// `issuer` is the one a callback must carry (RFC 9207). `authorize` builds the URL only and makes no network call.
 export interface ConnectAdapter {
   readonly issuer?: string;
-  /**
-   * Only for a provider whose accounts live on user-chosen servers: checks that the instance can take part in a connect
-   * and registers the provider's app there (`app` on success; an instance that cannot take part is a result with the
-   * code `instance_unsupported`). The caller stores the app and passes it to `authorize` and `exchangeCode`.
-   */
+  // Only for a provider whose accounts live on user-chosen servers. An instance that cannot take part is a result with
+  // the code `instance_unsupported`.
   registerApp?(context: AdapterContext, input: RegisterAppInput): Promise<ProviderResult>;
   authorize(input: AuthorizeInput): string;
   exchangeCode(context: AdapterContext, input: ExchangeInput): Promise<ProviderResult>;
   identity(context: AdapterContext, input: IdentityInput): Promise<ProviderResult>;
 }
 
-/** The adapter of each registered provider, by provider id (the worker's second input beside the registry). */
 export type AdapterMap = Readonly<Record<string, ProviderAdapter>>;
 
-/** A post that already exists at the provider, found by its id or, where the provider allows it, by the key. */
 export interface RemotePost {
   readonly externalId?: string;
   readonly idempotencyKey?: string;
   readonly account?: AccountAccess;
 }
 
-/**
- * The provider side of a publish. Every method answers with a `ProviderResult` and never throws a raw error; throwing is
- * for bugs only. `edit` and `refresh` exist only where the manifest declares the capability.
- */
+// Every method answers with a `ProviderResult` and never throws a raw error; throwing is for bugs only.
 export interface ProviderAdapter {
   prepare(context: AdapterContext, input: CommitInput): Promise<ProviderResult>;
   commit(context: AdapterContext, input: CommitInput): Promise<ProviderResult>;

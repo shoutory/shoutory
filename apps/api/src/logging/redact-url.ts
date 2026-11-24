@@ -48,10 +48,6 @@ function parse(raw: string): { url: URL; absolute: boolean } | undefined {
     : undefined;
 }
 
-/**
- * A URL or request target with credentials removed: userinfo and fragment dropped, credential query values and the
- * path after a credential prefix replaced. It never throws; a target it cannot parse becomes `[unparsable]`.
- */
 export function redactUrl(raw: string): string {
   const parsed = parse(raw);
   if (!parsed) return UNPARSABLE;

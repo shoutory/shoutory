@@ -88,7 +88,6 @@ describe("the profile name", () => {
   });
 });
 
-// The three settings stay in this browser (no migration yet): each applies at once and is read back at start-up.
 describe("the profile language, theme and digits", () => {
   it("the language applies at once and is the one the next start reads", async () => {
     stubApi();
@@ -96,7 +95,6 @@ describe("the profile language, theme and digits", () => {
     choose(host, "العربية");
     await settle();
     expect([document.documentElement.lang, document.documentElement.dir]).toEqual(["ar", "rtl"]);
-    // The words follow when the catalog has loaded.
     await vi.waitFor(() => expect(host.querySelector("h1")?.textContent).toBe("الملف الشخصي"));
     expect(storedLocale()).toBe("ar");
     expect(detectLocale(storedLocale(), ["en"])).toBe("ar");
@@ -140,7 +138,6 @@ describe("the profile page when the session ends", () => {
   });
 });
 
-// UX 4.7: zones are shown by their localized city with the offset and a note when the clock changes, never by an IANA id.
 describe("the profile time zone", () => {
   const options = () =>
     [...document.querySelectorAll('[role="option"]')].map((option) => option.textContent ?? "");

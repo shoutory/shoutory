@@ -4,8 +4,6 @@ import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 
 const env = readTestEnv();
 
-// The permission matrix lives in core and the five built-in roles are seeded by a migration; the two must hold the
-// same permissions, or a role would let a user do something the code does not know about (or the other way round).
 let db: TestDatabase;
 beforeAll(async () => {
   db = await cloneTemplate(env, inject("shoutoryTemplate"));

@@ -5,15 +5,11 @@ import { Refusal } from "../../errors/refusal.js";
 import { type App, defineRoute, type InUserTx } from "../define-route.js";
 import { nameSchema, pageAnswer, pageQuery } from "../input.js";
 
-// The profile of one workspace: any member reads it (the switcher and the settings page show its name), and a role
-// with settings.manage changes it. The workspace id is the path parameter and nothing else (R205, R214).
-
 // Lowercased, as the tenant context does, so the caller's own workspace is found whatever the case of its id.
 const params = z.strictObject({ workspace_id: z.uuid().transform((id) => id.toLowerCase()) });
 
 const ZONES: ReadonlySet<string> = new Set([...Intl.supportedValuesOf("timeZone"), "UTC"]);
 
-// The bounds are those of the workspaces columns (migration 0007).
 const slug = z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/);
 const defaultTz = z.string().refine((zone) => ZONES.has(zone), "unknown time zone");
 const profile = z
@@ -21,8 +17,7 @@ const profile = z
   .partial()
   .refine((body) => Object.keys(body).length > 0, "at least one field");
 
-// The first workspace's slug is optional: it comes from the name (R231). The organization is a body field, checked by
-// the definer, which answers a foreign and a missing one alike.
+// The organization is a body field, checked by the definer, which answers a foreign and a missing one alike.
 const create = z.strictObject({
   organization_id: z.uuid().transform((id) => id.toLowerCase()),
   name: nameSchema,
@@ -30,7 +25,6 @@ const create = z.strictObject({
   default_tz: defaultTz,
 });
 
-/** Lowercase, every run outside a-z and 0-9 as one dash, trimmed, cut to 63; `workspace` when nothing is left. */
 function slugOf(name: string): string {
   const derived = name
     .toLowerCase()
@@ -77,7 +71,6 @@ const isSlugClash = (error: unknown) =>
 // The organization holds at most 100 workspaces, so no derived slug needs more than 100 tries.
 const MAX_ATTEMPTS = 100;
 
-/** The nth try of a derived slug: the base, then `base-2`, `base-3`, the base cut so the whole stays within 63. */
 function attemptOf(base: string, attempt: number): string {
   if (attempt === 1) return base;
   const suffix = `-${attempt}`;

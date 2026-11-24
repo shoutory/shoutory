@@ -11,13 +11,6 @@ import { leaks } from "../support/canary.js";
 import { addWorkspaceMember, seedOrganization, seedWorkspace, signedUser } from "../support/tenancy.js";
 import { type Fixture, ORIGIN, PEPPER, startFixture } from "./auth/harness.js";
 
-// The connect of a provider whose accounts live on user-chosen servers, through the real routes: the first connect to an
-// instance registers one app there and stores it sealed, later connects reuse it, and an instance that no longer knows
-// the app (401 invalid_client at the token step) has it replaced, by compare-and-set on the client id, before the person
-// connects again. An instance that cannot take part (no discovery document, no S256) or that resolves to a private or
-// metadata address is refused at the start with a 422 and nothing is stored. The instance is a simulator on loopback:
-// the egress client built for the channel (`fetchFor(manifest, host)`) sends the host the channel stored to it, and a
-// name or address that the operator policy refuses never reaches it. The secrets are the simulator's own.
 type User = { id: string; cookie: string };
 const PROVIDER = mastodonManifest.id;
 const INTERNAL = "internal.example.test";
@@ -28,12 +21,10 @@ let workspace: string;
 let admin: User;
 let admin2: User;
 
-// The operator policy of an instance with an empty allowlist: a name that resolves to a private address is refused.
 const operator = createOperatorPolicy({
   allowCidrs: [],
   lookup: async (host) => [{ address: host === INTERNAL ? "10.0.0.5" : "93.184.216.34", family: 4 }],
 });
-// The instance the channel stored is the simulator; any host the operator policy would refuse is sent to it unchanged.
 const toSimulator: typeof fetch = (input, init) => {
   const url = new URL(input instanceof Request ? input.url : String(input));
   return fetch(new URL(`${url.pathname}${url.search}`, sim.url), init);
@@ -86,7 +77,6 @@ const authorizeUrl = async (answer: Response) =>
   ((await answer.json()) as { data: { authorize_url: string } }).data.authorize_url;
 const errorOf = async (answer: Response) =>
   ((await answer.json()) as { error: { code: string; details?: Record<string, unknown> } }).error;
-// The instance's own approval of an authorization URL: the redirect back with the code, as the person's browser follows it.
 async function approve(url: string): Promise<URLSearchParams> {
   const target = new URL(url);
   const answer = await fetch(new URL(`${target.pathname}${target.search}`, sim.url), { redirect: "manual" });
@@ -101,7 +91,6 @@ async function callback(who: User, params: URLSearchParams): Promise<URLSearchPa
   answers.push(location);
   return new URL(location, ORIGIN).searchParams;
 }
-// A whole connect to `host`: its result parameters and the client id the authorization URL carried.
 async function connect(who: User, host: string) {
   const url = await authorizeUrl(await start(who, host));
   return {
@@ -242,7 +231,6 @@ describe("the limits of a connected channel come from the instance's own answer"
   });
 });
 
-// What a channel stores of its host and its active credential.
 const channelState = async (channel: string | null) =>
   (
     await q<{ instance_host: string | null; generation: number; token: string; expires: Date | null }>(

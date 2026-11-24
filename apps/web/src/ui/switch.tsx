@@ -1,11 +1,6 @@
 import { type ReactNode, useEffect, useRef } from "react";
 import { Switch as AriaSwitch } from "react-aria-components";
 
-/**
- * An on/off control (React Aria Switch) named by its label. While `busy` (its change is being saved) the control
- * itself is `aria-busy` and `busyText` is announced in a status, changes are ignored and it stays focusable: it is never
- * natively disabled.
- */
 export function Switch({
   label,
   isSelected,

@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-// The final job of the workflow. Fails on any job result other than success, and on a job that reported a
-// placeholder while .github/ci-placeholders.json does not list it. `needs` is the workflow's needs context.
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";

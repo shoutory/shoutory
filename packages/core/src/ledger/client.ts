@@ -1,13 +1,8 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 
-// The worker's side of the ledger: typed calls and answers for the SQL definers, and the small rules the worker applies
-// around them. It does no I/O: the SQL runner is an argument.
-
-/** Runs one statement and answers its rows. */
 type SqlRun = (text: string, values: unknown[]) => Promise<{ rows: Record<string, unknown>[] }>;
 
-/** The channel column that each key name of a manifest rate limit reads. A name outside this table is refused. */
 export const BUCKET_KEY_COLUMNS = {
   app: "provider_id",
   account: "provider_account_id",
@@ -24,10 +19,7 @@ interface ChannelColumns {
   instance_host: string | null;
 }
 
-/**
- * The key of a rate bucket: a digest of the provider, the limit name, the scope and the value of the channel column, so two
- * accounts of one provider never share a bucket and two limits of one account never share one. A null column is refused.
- */
+// The digest keeps two accounts of one provider, and two limits of one account, in separate buckets.
 export function bucketKey(input: {
   limitName: string;
   scope: string;
@@ -44,11 +36,7 @@ export function bucketKey(input: {
 }
 
 const SAFETY_MARGIN_MS = 10_000;
-/**
- * The timeout of one provider call: the manifest's, or what is left of the lease minus 10 seconds when that is less. The
- * time since the claim comes from a monotonic clock the caller started before the claim; with no time left it is null
- * and no call is made.
- */
+// The elapsed time comes from a monotonic clock the caller started before the claim; 10 seconds of the lease stay unused.
 export function callTimeoutMs(input: {
   manifestTimeoutMs: number;
   leaseSeconds: number;
@@ -58,7 +46,6 @@ export function callTimeoutMs(input: {
   return room <= 0 ? null : Math.min(input.manifestTimeoutMs, room);
 }
 
-/** A publish is claimed with the longer of the prepare and the commit lease. */
 export const publishLeaseSeconds = (lease: { prepare: number; commit: number }): number =>
   Math.max(lease.prepare, lease.commit);
 
@@ -67,7 +54,6 @@ interface ProviderFacts {
   dispatchMarginSeconds: number;
   leaseSeconds: { prepare: number; commit: number; edit?: number | undefined; delete?: number | undefined };
 }
-/** The providers argument of admission: an action the manifest does not have is left out. */
 export function providersArgument(facts: readonly ProviderFacts[]): Record<string, unknown> {
   return Object.fromEntries(
     facts.map(({ id, dispatchMarginSeconds, leaseSeconds: lease }) => [
@@ -89,16 +75,10 @@ interface SweepFacts {
   readBackMode: string;
   maxAttempts: number;
   unverifiedHorizonDays: number;
-  /** False for a provider whose API has retired at the time of the tick. */
   live: boolean;
 }
-/**
- * The arguments of the two sweeps, from the manifests: for the lease sweep, how soon a row that became unknown is first
- * read back (at once for a provider that cannot read back) and how long it is chased; for the due-move sweep, the
- * attempts a row may use, and only for a live provider: one whose API has retired is left out, so its `api_sunset` pauses
- * stay and its retry and unknown rows wait until a live version is named. A provider not listed is not touched
- * by the rules that need its manifest.
- */
+// A provider whose API has retired is left out of the due-move sweep, so its `api_sunset` pauses stay and its retry and
+// unknown rows wait until a live version is named.
 export function sweepArguments(facts: readonly SweepFacts[]): {
   leases: Record<string, unknown>;
   due: Record<string, unknown>;
@@ -129,11 +109,8 @@ export type PreflightMove =
   | { to: "blocked_reconnect" }
   | { to: "failed" };
 
-/**
- * What the worker does when it has claimed an operation and reads its channel and its target again: a target that is gone
- * or settled fails the operation; a disabled channel pauses it; a channel that lost its grant parks it until the owner
- * reconnects (OL row 13, which only the channel states `needs_reconnect`, `disconnected` and `revoked_by_provider` allow).
- */
+// A channel that lost its grant parks the operation until the owner reconnects; only the channel states
+// `needs_reconnect`, `disconnected` and `revoked_by_provider` allow that move.
 export function rereadOutcome(input: { channelState: string; targetLive: boolean }): PreflightMove | null {
   if (!input.targetLive) return { to: "failed" };
   if (input.channelState === "disabled") return { to: "paused", reasonCode: "channel_disabled" };
@@ -141,11 +118,7 @@ export function rereadOutcome(input: { channelState: string; targetLive: boolean
   return null;
 }
 
-/**
- * What the worker does when a rate bucket denies it: wait for the retry when that fits the manifest's maximum and what is
- * left of the lateness window, else pause the operation with a provider cooldown. Either way it is due again after the wait,
- * which is at least a second so a bucket that answers zero never makes the row due at once.
- */
+// The wait is at least a second so a bucket that answers zero never makes the row due at once.
 export function denialMove(input: {
   retryAfterSeconds: number;
   retryAfterMaxSeconds: number;
@@ -158,7 +131,6 @@ export function denialMove(input: {
     : { to: "paused", reasonCode: "provider_cooldown", waitSeconds };
 }
 
-// The keys a fenced move may change (the SQL refuses any other).
 export const transitionChangesSchema = z.strictObject({
   reason_code: z.string().optional(),
   next_attempt_at: z.string().optional(),
@@ -184,13 +156,11 @@ export interface TransitionCall {
   to: string;
   actor: "W" | "P" | "R";
   changes?: z.input<typeof transitionChangesSchema>;
-  /** The next attempt and the next check, in seconds from now on the database clock, set in the move's own statement. */
   attemptInSeconds?: number;
   checkInSeconds?: number;
 }
 export type TransitionResult = { outcome: "moved"; fencingToken: string } | { outcome: "lost_lease" };
 
-/** One fenced move; a move whose token or state is no longer the caller's answers `lost_lease`, never an error. */
 export async function transition(run: SqlRun, call: TransitionCall): Promise<TransitionResult> {
   const changes = transitionChangesSchema.parse(call.changes ?? {});
   const { rows } = await run(
@@ -227,7 +197,6 @@ const claimRow = z.object({
 });
 export type Claim = { id: string; workspaceId: string; fencingToken: string; kind: string; state: string };
 
-/** Claims one due operation of a queue for `owner`, or null when none is due. */
 export async function claimOperation(run: SqlRun, queue: string, owner: string): Promise<Claim | null> {
   const { rows } = await run("SELECT * FROM app.claim_operations($1, 1, $2)", [queue, owner]);
   if (rows[0] === undefined) return null;
@@ -241,10 +210,7 @@ export async function claimOperation(run: SqlRun, queue: string, owner: string):
   };
 }
 
-/**
- * Claims up to `limit` unknown outcomes of a reconcile queue that are due. A kind in `classEKinds` goes to a person at once
- * (the provider cannot read back); every other row becomes `reconciling` under a lease for `owner`.
- */
+// A kind in `classEKinds` goes to a person at once because its provider cannot read back.
 export async function claimReconciles(
   run: SqlRun,
   call: { queue: string; limit: number; owner: string; leaseSeconds: number; classEKinds: readonly string[] },
@@ -269,7 +235,6 @@ export async function claimReconciles(
     }));
 }
 
-/** Records that a read-back proved the post absent; the evidence a move back to retry needs (OL 7.3). */
 export async function recordAbsent(
   run: SqlRun,
   call: { workspaceId: string; operationId: string; externalId: string },
@@ -281,7 +246,6 @@ export async function recordAbsent(
   ]);
 }
 
-/** Extends the lease the caller holds by `extendSeconds`; `lost` when it no longer holds it. */
 export async function heartbeat(
   run: SqlRun,
   call: { id: string; token: string; owner: string; extendSeconds: number },
@@ -301,10 +265,7 @@ export type AttemptStart =
   | { outcome: "lost_lease" }
   | { outcome: "quota_denied" };
 
-/**
- * Starts one step of an attempt. A `commit` start is the effect marker: it moves the row to dispatching with the effect
- * `possible` and takes the manifest's quotas, all in the caller's transaction, which must commit before the provider is called.
- */
+// A `commit` start is the effect marker: its transaction must commit before the provider is called.
 export async function startAttempt(
   run: SqlRun,
   call: {
@@ -338,11 +299,9 @@ export interface AttemptResult {
   error_class?: string;
   provider_code?: string;
   retry_after_ms?: number;
-  /** The id the provider answered with, kept on the attempt. */
   response_excerpt?: string;
 }
 
-/** Writes what an attempt did, once; `lost_lease` when the token is no longer the caller's. */
 export async function finishAttempt(
   run: SqlRun,
   call: { workspaceId: string; attemptId: string; token: string; result: AttemptResult },
@@ -356,7 +315,6 @@ export async function finishAttempt(
   return rows[0]?.outcome === "finished" ? "finished" : "lost_lease";
 }
 
-/** Records the step a worker has reached, with no move of state. */
 export async function recordProgress(
   run: SqlRun,
   call: { workspaceId: string; operationId: string; token: string; cursor: string },
@@ -374,7 +332,6 @@ export interface BucketAnswer {
   allowed: boolean;
   retryAfterSeconds: number;
 }
-/** Spends one token of a manifest-scope bucket. */
 export async function takeBucket(
   run: SqlRun,
   call: { key: string; scope: string; capacity: number; windowSeconds: number },

@@ -13,13 +13,6 @@ import { openTx } from "../support/race.js";
 
 const env = readTestEnv();
 
-// Security floor of migration 0021, the ledger runtime: admission turns a due target into one operation, claims hand rows
-// to workers under fenced leases and never to two at once, a lease that ran out is swept back without a resend, the
-// token moves by one in two named jobs only, the buckets are separate per scope and key, and only a worker job under the
-// ledger purpose reaches any of it. Every provider of a test is its own, so the targets and rows of one test never meet
-// those of another; times are placed relative to now and nothing sleeps. The function names, argument lists, answer
-// columns and error codes are the contract the migration must meet. Each row says what it fails against once the
-// function exists; today every row fails first because the function does not exist.
 let db: TestDatabase;
 const admin = <T>(run: (client: Client) => Promise<T>) => withAdminClient(env, db.name, run);
 const rows = (sql: string, params: unknown[] = []) =>
@@ -30,7 +23,6 @@ beforeAll(async () => {
 });
 afterAll(() => db.drop());
 
-// The worker job of the runtime (no workspace, the ledger purpose) and the 0020 job that names its workspace.
 const LEDGER: TenantCtx = { principalKind: "job", principalId: randomUUID(), jobPurpose: "ledger" };
 const MAINTENANCE: TenantCtx = { principalKind: "job", principalId: randomUUID(), jobPurpose: "maintenance" };
 const USER = asUser(U.admin);
@@ -40,7 +32,6 @@ interface Answer {
   rows?: Record<string, unknown>[];
   error?: { code?: string; message?: string } | undefined;
 }
-// One call as the caller in its own transaction: committed when it answers, rolled back when it is refused.
 async function exec(ctx: TenantCtx, sql: string, params: unknown[] = [], pool = "worker"): Promise<Answer> {
   const client = await openTx(db.pool(pool as "worker"), ctx);
   try {
@@ -68,7 +59,6 @@ const mapOf = (...providers: string[]) =>
       { margin_seconds: 300, lease_seconds: { publish: 60, edit: 60, delete: 60 } },
     ]),
   );
-// A provider of its own with one channel in the given connection state.
 async function newProvider(state = "connected"): Promise<Prov> {
   const provider = `ledger-run-${randomUUID().slice(0, 8)}`;
   const [made] = await rows(
@@ -85,7 +75,6 @@ interface Target {
   postStatus?: string;
   deleted?: boolean;
 }
-// A post with one variant on the provider's channel, due `dueIn` seconds from now (negative: already due).
 async function newTarget(p: Prov, o: Target = {}): Promise<string> {
   const [post] = await rows(
     `INSERT INTO app.posts (workspace_id, author_kind, author_id, status, deleted_at)
@@ -129,12 +118,10 @@ interface Plant {
   state: string;
   effect?: string;
   token?: number;
-  /** Seconds from now for the named timestamp columns. */
   at?: Record<string, number>;
   extra?: Record<string, unknown>;
   queue?: string;
 }
-// A row in a given state, as if earlier moves had led there (triggers off); leases and deadlines come from `at`.
 async function plant(p: Prov, o: Plant): Promise<string> {
   const [post] = await rows(
     "INSERT INTO app.posts (workspace_id, author_kind, author_id) VALUES ($1, 'user', $2) RETURNING id",
@@ -190,7 +177,6 @@ const opOf = async (id: string) =>
 
 describe("admission", () => {
   it("admission takes a due target within one tick, never before its due time, and ignores other providers", async () => {
-    // fails first because: a missing admission, or one that sets next_attempt_at before due_at
     const p = await newProvider();
     const other = await newProvider();
     const [due, soon, later, foreign] = [
@@ -217,7 +203,6 @@ describe("admission", () => {
   });
 
   it("two concurrent admissions of one target give one operation, one reservation and no error", async () => {
-    // fails first because: no per-target lock or SKIP LOCKED, so the second session inserts a duplicate or fails
     const p = await newProvider();
     const variant = await newTarget(p);
     const first = await openTx(db.pool("worker"), LEDGER);
@@ -240,7 +225,6 @@ describe("admission", () => {
 
 describe("admission faults", () => {
   it("a target the target index refuses is skipped and the others are admitted", async () => {
-    // fails first because: the refusal of one target ends the call and nothing after it is admitted
     const p = await newProvider();
     const held = await newTarget(p, { dueIn: -50 });
     await plant(p, { state: "pending", extra: { variant_id: held } });
@@ -253,7 +237,6 @@ describe("admission faults", () => {
   });
 
   it("a unique violation on another index is not swallowed by the per-target block", async () => {
-    // fails first because: a handler that catches every unique_violation hides a real fault and loses the target
     const p = await newProvider();
     // A second index only this provider meets: its second operation violates it, and that is not the target index.
     await rows(
@@ -271,7 +254,6 @@ describe("admission faults", () => {
 
 describe("admission by state", () => {
   it("a missed admission books no usage, leaves the variant to the rollup (settled) and the next tick inserts nothing", async () => {
-    // fails first because: the variant stays scheduled and every tick inserts another missed row, or usage is booked
     const p = await newProvider();
     const variant = await newTarget(p, { dueIn: -3 * 3600 });
     expect((await admit(p)).rows?.map((row) => row.state)).toEqual(["missed"]);
@@ -282,7 +264,6 @@ describe("admission by state", () => {
     expect((await opsOf(variant)).length).toBe(1);
   });
 
-  // [channel state, operation state, reason, variant state, reserved]
   const BY_CHANNEL: [string, string, string | null, string, boolean][] = [
     ["connected", "pending", null, "in_progress", true],
     ["disabled", "paused", "channel_disabled", "in_progress", true],
@@ -293,7 +274,6 @@ describe("admission by state", () => {
   it.each(BY_CHANNEL)(
     "admission on a %s channel inserts %s and reserves one post of usage",
     async (channelState, state, reason, variantAfter, reserved) => {
-      // fails first because: the channel state is not read, or a blocked or paused insert books no usage
       const p = await newProvider(channelState);
       const variant = await newTarget(p);
       expect((await admit(p)).error).toBeUndefined();
@@ -311,7 +291,6 @@ describe("admission skips and events", () => {
     ["an archived post", { postStatus: "archived" }],
     ["a variant that is not scheduled", { scheduleState: "draft" }],
   ])("admission skips %s", async (_name, target) => {
-    // fails first because: admission does not look at the post or the schedule state
     const p = await newProvider();
     const variant = await newTarget(p, target);
     expect((await admit(p)).rows).toEqual([]);
@@ -319,7 +298,6 @@ describe("admission skips and events", () => {
   });
 
   it("admission writes one operation.admitted row per insert and takes the channel after the target without a deadlock", async () => {
-    // fails first because: no outbox row, or the channel is locked before the target and two sessions wait on each other
     const p = await newProvider();
     const [one, two] = [await newTarget(p, { dueIn: -20 }), await newTarget(p, { dueIn: -10 })];
     const first = await openTx(db.pool("worker"), LEDGER);
@@ -349,7 +327,6 @@ async function release(client: PoolClient): Promise<void> {
   client.release();
 }
 
-// Waits until the backend is seen waiting for a lock.
 async function waitsOnLock(pid: number): Promise<void> {
   for (let tries = 0; tries < 400; tries++) {
     if ((await rows("SELECT 1 FROM pg_locks WHERE pid = $1 AND NOT granted", [pid])).length) return;
@@ -360,7 +337,6 @@ async function waitsOnLock(pid: number): Promise<void> {
 
 describe("admission on shared channels", () => {
   it("two workers admitting targets of two channels in opposite order never wait on each other", async () => {
-    // fails first because: a channel lock that conflicts with the other worker's makes each wait for the channel the other holds
     const [one, two] = [await newProvider(), await newProvider()];
     const map = JSON.stringify({ ...one.map, ...two.map });
     // The first worker takes targets on channels one then two, the second takes two then one.
@@ -399,7 +375,6 @@ describe("admission on shared channels", () => {
 
 describe("claims", () => {
   it("two workers claim disjoint rows: a second claim runs while the first's transaction is still open", async () => {
-    // fails first because: plain FOR UPDATE makes the second claim wait for the first and take the same rows
     const p = await newProvider();
     const planted = await Promise.all(
       [1, 2, 3, 4].map((n) => plant(p, { state: "pending", at: { next_attempt_at: -n * 10 } })),
@@ -436,7 +411,6 @@ describe("claims", () => {
 
 describe("claim order and heartbeat", () => {
   it("claim_operations takes due rows of its queue inside their lateness window, oldest due first", async () => {
-    // fails first because: the claim ignores the due time, the lateness window or the queue, or its order
     const p = await newProvider();
     const [late, older, newer] = [
       await plant(p, { state: "pending", at: { next_attempt_at: -500, lateness_deadline: -10 } }),
@@ -453,7 +427,6 @@ describe("claim order and heartbeat", () => {
   });
 
   it("heartbeat extends a live lease for its owner and token and answers lost for any other call", async () => {
-    // fails first because: the heartbeat is not fenced or accepts a lease that already ran out
     const p = await newProvider();
     const live = await plant(p, { state: "claimed", token: 3, at: { lease_expires_at: 30 }, extra: LEASED });
     const dead = await plant(p, { state: "claimed", token: 3, at: { lease_expires_at: -5 }, extra: LEASED });
@@ -471,7 +444,6 @@ describe("claim order and heartbeat", () => {
 
 describe("poll claims", () => {
   it("claim_polls leases due processing and provider_accepted rows without a state change and raises the token by one", async () => {
-    // fails first because: the poll claim moves the state, leaves the token or takes a row that holds a live lease
     const p = await newProvider();
     const due = { next_check_at: -30 };
     const [proc, accepted, expired] = [
@@ -502,7 +474,6 @@ describe("poll claims", () => {
 
 describe("a stale poller and the reconcile claim", () => {
   it("a stale poller is refused after a poll claim, and the claim's own token carries the move", async () => {
-    // fails first because: the claim keeps the old token, so two pollers hold the same fence
     const p = await newProvider();
     const id = await plant(p, { state: "processing", at: { next_check_at: -5 } });
     const claimed = await ledger("SELECT * FROM app.claim_polls($1, 1, 'p1', 60)", [`publish.${p.provider}`]);
@@ -517,8 +488,7 @@ describe("a stale poller and the reconcile claim", () => {
     expect((await move(token)).rows?.[0]).toMatchObject({ outcome: "moved" });
   });
 
-  it("claim_reconciles leases due unknown rows, sends class E kinds to needs_human with no lease, and skips the rest", async () => {
-    // fails first because: class E gets a lease or no token bump, or a not-due or other-state row is taken
+  it("claim_reconciles leases due unknown rows, sends kinds with no read-back to needs_human with no lease, and skips the rest", async () => {
     const p = await newProvider();
     const queue = `reconcile.${p.provider}`;
     const base = { queue, effect: "possible", at: { next_check_at: -30 } };
@@ -552,7 +522,6 @@ describe("a stale poller and the reconcile claim", () => {
 });
 
 describe("the fencing token", () => {
-  // [purpose, new token as a function of the old one, whether the update passes]
   const BUMPS: [string, string, boolean][] = [
     ["claim_polls", "fencing_token + 1", true],
     ["sweep_expired_leases", "fencing_token + 1", true],
@@ -565,7 +534,6 @@ describe("the fencing token", () => {
     ["", "fencing_token + 1", false],
   ];
   it.each(BUMPS)("a same-state token change under purpose '%s' to %s %s", async (purpose, value, passes) => {
-    // fails first because: the guard lets any rise of the token through, whoever writes it
     const p = await newProvider();
     const id = await plant(p, { state: "processing", token: 3 });
     const outcome = await admin(async (client) => {
@@ -584,7 +552,6 @@ describe("the fencing token", () => {
   });
 
   it("a stale poller is refused after the poll-lease sweep raised the token by one", async () => {
-    // fails first because: the sweep clears the lease without raising the token
     const p = await newProvider();
     const id = await plant(p, {
       state: "processing",
@@ -604,7 +571,6 @@ describe("the fencing token", () => {
 });
 
 describe("sweeps", () => {
-  // [state, effect, queue it moves to, state it moves to]
   const LEASE_SWEEP: [string, string, string, string][] = [
     ["claimed", "none", "publish", "pending"],
     ["dispatching", "possible", "reconcile", "unknown_external_state"],
@@ -613,7 +579,6 @@ describe("sweeps", () => {
   it.each(LEASE_SWEEP)(
     "sweep_expired_leases moves an expired %s lease to %s, drops the lease, raises the token and writes its event",
     async (state, effect, queueKind, to) => {
-      // fails first because: a dispatching lease goes back to pending (a resend) or the token and queue stay as they were
       const p = await newProvider();
       const expired = await plant(p, {
         state,
@@ -641,7 +606,6 @@ describe("sweeps", () => {
 
 describe("a swept dispatching row", () => {
   it("a swept dispatching row is taken by claim_reconciles in the same tick and never resent", async () => {
-    // fails first because: the swept row keeps its publish queue, so no reconcile claim ever sees it
     const p = await newProvider();
     const id = await plant(p, {
       state: "dispatching",
@@ -663,7 +627,6 @@ describe("a swept dispatching row", () => {
 });
 
 describe("due moves", () => {
-  // [state, planted columns, state after one sweep]
   const DUE_MOVES: [string, Plant, string][] = [
     ["a pending row past its lateness", { state: "pending", at: { lateness_deadline: -10 } }, "missed"],
     ["a retry_wait row past its lateness", { state: "retry_wait", at: { lateness_deadline: -10 } }, "missed"],
@@ -700,7 +663,6 @@ describe("due moves", () => {
   it.each(DUE_MOVES)(
     "sweep_due_moves handles %s once, and a second sweep changes nothing",
     async (_name, planted, after) => {
-      // fails first because: no sweep, or one that moves rows whose pause is not the one it clears
       const p = await newProvider();
       const id = await plant(p, planted);
       expect((await ledger("SELECT app.sweep_due_moves()")).error).toBeUndefined();
@@ -720,7 +682,6 @@ describe("the pause of a disabled channel", () => {
   ])(
     "a paused row for channel_disabled on a %s channel is %s after the sweep",
     async (channelState, after) => {
-      // fails first because: the pause is cleared whatever the channel state is
       const p = await newProvider(channelState);
       const id = await plant(p, { state: "paused", extra: { reason_code: "channel_disabled" } });
       expect((await ledger("SELECT app.sweep_due_moves()")).error).toBeUndefined();
@@ -751,7 +712,6 @@ describe("sweep isolation", () => {
   it.each(ISOLATION)(
     "%s: one row whose move is refused does not stop the others",
     async (_name, call, move, refused, fine) => {
-      // fails first because: the failing row's error ends the whole sweep and nothing after it moves
       const p = await newProvider();
       const [bad, good] = [await plant(p, refused), await plant(p, fine)];
       const saved = await rows(
@@ -788,7 +748,6 @@ describe("the buckets", () => {
     ledger("SELECT app.bucket_pause($1, $2, now() + $3::interval, $4)", [k, scope, until, reason]);
 
   it("the same scope and key is one bucket, another scope or key is separate", async () => {
-    // fails first because: the scope is left out of the bucket, so two scopes of one key share tokens
     const [one, two] = [key(), key()];
     const answers = [
       await take(one, "account"),
@@ -802,7 +761,6 @@ describe("the buckets", () => {
   });
 
   it("a pause refuses until its time, never shortens an earlier pause, and a bucket created by a pause starts full", async () => {
-    // fails first because: the pause is not read by the take, is replaced by a shorter one, or leaves a pause-made bucket empty
     const [paused, fresh] = [key(), key()];
     await take(paused, "account");
     await pause(paused, "account", "60 seconds");
@@ -822,7 +780,6 @@ describe("the buckets", () => {
 
 const lease = (publish: number) =>
   JSON.stringify({ any: { margin_seconds: 300, lease_seconds: { publish, edit: 60, delete: 60 } } });
-// Each bound of the runtime definers is one row: the call, and the SQL of the call with its arguments.
 const BAD_KEY = "not-a-digest";
 const BAD: [string, string, unknown[]][] = [
   [
@@ -892,7 +849,6 @@ const BAD: [string, string, unknown[]][] = [
 ];
 describe("argument bounds", () => {
   it.each(BAD)("refuses %s", async (_name, sql, params) => {
-    // fails first because: the argument is not bounded
     expect((await ledger(sql, params)).error?.code).toBe("22023");
   });
 });
@@ -907,7 +863,6 @@ describe("the worker's read of channels", () => {
       [channel],
     );
   it("the worker reads the seven columns of a channel of its workspace, no other column, and no channel of another workspace", async () => {
-    // fails first because: the worker role holds no column grant on channels
     const p = await newProvider();
     const own = await read(WA, COLUMNS, p.channel);
     expect(own.rows?.[0]).toMatchObject({
@@ -924,7 +879,6 @@ describe("the worker's read of channels", () => {
   });
 });
 
-// Every runtime definer with a call that is valid for a worker job under the ledger purpose.
 const CALLS: [string, string, unknown[]][] = [
   ["admit_due_targets", "SELECT * FROM app.admit_due_targets(1, '{}'::jsonb)", []],
   ["claim_operations", "SELECT * FROM app.claim_operations('publish.none', 1, 'w')", []],
@@ -958,12 +912,10 @@ describe("who may run the runtime definers", () => {
     CALLERS.map(([who, ctx, pool]) => [name, who, sql, ctx, pool] as const),
   );
   it.each(CASES)("%s refuses %s with 42501", async (_name, _who, sql, ctx, pool) => {
-    // fails first because: the function does not check the principal and the purpose, or the app role may execute it
     expect((await exec(ctx, sql, [], pool)).error?.code).toBe("42501");
   });
 
   it("the admission purpose changes post_variants.schedule_state and a maintenance job cannot", async () => {
-    // fails first because: the column is not granted to the admission purpose, or a maintenance job may write it
     const p = await newProvider();
     const variant = await newTarget(p, { scheduleState: "scheduled" });
     const write = (purpose: string) =>

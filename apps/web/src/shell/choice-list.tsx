@@ -6,7 +6,6 @@ export interface Choice {
   name: string;
 }
 
-/** The pop-up list of a switcher: the choices, named by their own (user-written) names. */
 export function ChoiceList() {
   return (
     <Popover className="w-(--trigger-width) rounded-md border border-border bg-surface shadow-lg">

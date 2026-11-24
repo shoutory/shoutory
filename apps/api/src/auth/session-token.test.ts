@@ -35,9 +35,8 @@ const build = () => {
 };
 
 describe("the session token wrapper", () => {
-  // The create, read and sliding-refresh rows live in the integration level (session-token.test.ts there). Kept
-  // here: the `in` clause and the digest pass-through, and the transaction's adapter, which no route of this
-  // slice reaches.
+  // The create, read and sliding-refresh rows live in the integration level. Kept here: the `in` clause and the
+  // digest pass-through, and the transaction's adapter, which no route reaches.
   it.each([
     ["a list of tokens", [RAW], [tokenDigest(RAW)]],
     ["a value that is already a digest", [tokenDigest(RAW)], [tokenDigest(RAW)]],

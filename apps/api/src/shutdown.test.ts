@@ -20,13 +20,10 @@ async function listen(handler: (request: IncomingMessage, response: ServerRespon
   });
   servers.push(server);
   const url = `http://127.0.0.1:${await listenLoopback(server)}/`;
-  // The process's own close: the server stops accepting and waits for the requests in flight.
   return { url, arrived, close: () => closeServer(server) };
 }
 
 describe("draining on SIGTERM", () => {
-  // The floor: a write that is in flight when the signal arrives finishes before the process exits, and nothing new
-  // is accepted once the stop began.
   it("lets a request in flight finish and refuses a new connection, then reports a clean exit", async () => {
     const { url, arrived, close } = await listen((_request, response) => {
       setTimeout(() => response.end("written"), 300);

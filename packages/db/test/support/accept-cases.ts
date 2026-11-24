@@ -1,7 +1,6 @@
 import { type Planted, U } from "./members-seed.js";
 
-// The accept table of R242: who asks, in what state the row is, and the one answer each case gets. `mutate` runs as
-// the superuser before the call and changes the inviter's standing.
+// `mutate` runs as the superuser before the call and changes the inviter's standing.
 export interface AcceptCase {
   title: string;
   planted: Planted | null;

@@ -3,10 +3,6 @@ import { cloneTemplate, readTestEnv, type TestDatabase } from "../../src/testing
 
 const env = readTestEnv();
 
-// Two earlier tables hold a workspace id as a plain uuid until the workspaces table exists. Those keys are added
-// without a scan and validated in the same migration. Every key of the tenancy tables states what it does when its
-// parent row is deleted: a membership follows its organization or workspace, and a user or a role is never removed
-// from under a membership.
 let db: TestDatabase;
 beforeAll(async () => {
   db = await cloneTemplate(env, inject("shoutoryTemplate"));

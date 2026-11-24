@@ -6,10 +6,6 @@ import { snapshotOf } from "@shoutory/provider-sdk/snapshot";
 import type { HealthProvider } from "../../channels/health.js";
 import { Refusal } from "../../errors/refusal.js";
 
-// What a draft needs from the server before it can be stored: the channels it names (they must exist in the workspace and
-// have a provider the app holds), the media it uses (ready, and inside the rules of its channel) and the settings each channel
-// accepts. One function turns a draft into the snapshot a version keeps and its hash, inside the transaction of the write.
-
 type Providers = Readonly<Record<string, HealthProvider>>;
 type Defaults = Readonly<Record<string, string | number | boolean>>;
 
@@ -54,14 +50,10 @@ interface ReadyMedium {
   height: number;
   /** The size of the `stripped` copy of an image, or of the original of a video: the bytes a provider receives. */
   bytes: number;
-  /** The length of a video in milliseconds; null for an image. */
   durationMs: number | null;
 }
 
-/**
- * The media a draft names, each one `ready` in this workspace with its `stripped` copy (an image) or as an original that
- * is sent as it is (a video, which has no derivative); any other is unavailable.
- */
+// A video has no derivative and is sent as the original; an image needs its `stripped` copy.
 async function readyMedia(
   tx: TenantTx,
   workspaceId: string,
@@ -83,7 +75,7 @@ async function readyMedia(
   return new Map(found.rows.map((row) => [row.id, row]));
 }
 
-/** The one rule set of core, with the manifest of each variant's channel: a medium it refuses is refused here, not at publish. */
+// A medium the channel's rules refuse is refused here, not at publish.
 function checkMediaRules(
   draft: Draft,
   media: Map<string, ReadyMedium>,
@@ -100,20 +92,17 @@ function checkMediaRules(
   }
 }
 
-/** The settings of the draft against what each channel's provider declares; a refusal names the caller's own keys. */
 function checkSettings(draft: Draft, defaults: Record<string, Defaults>): void {
   const issues = settingsIssues(draft, defaults);
   const first = issues[0];
   if (!first) return;
   const reason = first.reason === "undeclared" ? "settings_undeclared" : "settings_type";
-  // The answer lists at most MAX_ISSUES, and says so when it cut the list.
   const cut = issues.length > MAX_ISSUES;
   throw new Refusal("unprocessable_content", "draft refused: settings", {
     details: { reason, issues: issues.slice(0, MAX_ISSUES), ...(cut ? { truncated: true } : {}) },
   });
 }
 
-/** The snapshot of a draft and its hash, or the refusal that says which part of the draft the server cannot take. */
 export async function resolveDraft(
   tx: TenantTx,
   workspaceId: string,

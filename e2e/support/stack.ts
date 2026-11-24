@@ -4,27 +4,24 @@ import { rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
-/** Where a run keeps the founder's saved session; removed with the stack. */
 export const STATE_DIR = `${ROOT}.artifacts/e2e`;
-/** The one address the app answers on: the compose file publishes this port, and the secure cookies need `localhost`. */
+// The secure cookies need `localhost`.
 export const APP_ORIGIN = "http://localhost:3000";
 const ROLES = ["owner", "app", "worker", "auth", "readonly"] as const;
 const FILES = ["-f", "docker/compose.yml", "-f", "e2e/support/compose.e2e.yml"];
 const STACK_TIMEOUT_MS = 600_000;
 
 export interface Stack {
-  /** The compose project of this run, which names its containers for the log reader. */
   readonly project: string;
-  /** Where the mail catcher's API answers on this machine. */
   readonly mailUrl: string;
-  /** The environment the stack runs with, secrets included; only the restore drill hands it on, to run compose itself. */
+  // Secrets included; only the restore drill hands it on, to run compose itself.
   readonly env: NodeJS.ProcessEnv;
   down(): void;
 }
 
 const secret = () => randomBytes(24).toString("hex");
 
-/** Every secret of one run, made fresh here and handed to compose through its process environment only. */
+// Secrets go to compose through its process environment only.
 function runEnvironment(image: string): NodeJS.ProcessEnv {
   const passwords = Object.fromEntries(ROLES.map((role) => [role, secret()]));
   const roleVariables = ROLES.flatMap((role) => {
@@ -64,10 +61,8 @@ function compose(project: string, env: NodeJS.ProcessEnv, args: string[], allowF
   return result;
 }
 
-/**
- * Runs compose against the run's own stack from a spec. It needs the stack's environment in the process's own, which
- * global setup provides only for the restore drill, so any other spec that calls it fails here, not in compose.
- */
+// Global setup puts the stack's environment in the process's own only for the restore drill, so any other spec that
+// calls this fails here, not in compose.
 export function composeInStack(args: string[], allowFailure = false, extra: NodeJS.ProcessEnv = {}) {
   const project = process.env.SHOUTORY_E2E_PROJECT;
   if (!project || !process.env.SHOUTORY_POSTGRES_PASSWORD) {
@@ -101,13 +96,10 @@ function removeStale(): void {
 const OWNER = "e2e-owner";
 export const REMOVE_BY_VARIABLE = "SHOUTORY_E2E_FLAG_REMOVE_BY";
 
-/** The removal date of the live flags: 90 days ahead, read once per run (global setup) and handed to every spec. */
 export const flagRemovalDate = () => new Date(Date.now() + 90 * 86_400_000).toISOString().slice(0, 10);
 
-/**
- * The flag rows the stack plants: the migrations seed none, so the flags screen would have nothing to show. The
- * specs call it without an argument and get the run's date from the environment.
- */
+// The migrations seed no flags, so the flags screen would have nothing to show. The specs call this without an
+// argument and get the run's date from the environment.
 export function plantedFlags(removeBy = process.env[REMOVE_BY_VARIABLE]) {
   if (!removeBy) throw new Error("the stack has not published the flags' removal date");
   return {
@@ -117,7 +109,7 @@ export function plantedFlags(removeBy = process.env[REMOVE_BY_VARIABLE]) {
   } as const;
 }
 
-/** Inserts the planted flags as the database superuser, through the running container (the tables have no app grant). */
+// The flag table has no app grant, so the rows go in as the database superuser.
 function plantFlags(project: string, env: NodeJS.ProcessEnv, removeBy: string): void {
   const rows = Object.values(plantedFlags(removeBy)).map(
     (flag) =>
@@ -140,7 +132,6 @@ function startSidecar(project: string, env: NodeJS.ProcessEnv): NodeJS.ProcessEn
   return { ...env, SHOUTORY_E2E_DNS_IP: address };
 }
 
-/** Builds the image from this checkout and starts the self-host stack with a mail catcher; `down` removes it all. */
 export function startStack(removeBy: string): Stack {
   removeStale();
   const project = `${PREFIX}${randomBytes(4).toString("hex")}`;
@@ -165,7 +156,6 @@ export function startStack(removeBy: string): Stack {
 
 const LOG_BUFFER_BYTES = 64 * 1024 * 1024;
 
-/** A docker command's output; a command that fails to run or exits non-zero is an error, never an empty answer. */
 function dockerOutput(args: string[]): { stdout: string; stderr: string } {
   const result = spawnSync("docker", args, { encoding: "utf8", maxBuffer: LOG_BUFFER_BYTES });
   if (result.error || result.status !== 0) {
@@ -175,11 +165,8 @@ function dockerOutput(args: string[]): { stdout: string; stderr: string } {
   return result;
 }
 
-/**
- * Every name the app looked up outside the stack since it started, from the sidecar's query log (each name once,
- * lower case, without its trailing dot). Names of the stack's own services never reach the sidecar. Nothing is
- * filtered out here: an unexpected name is for the caller to see.
- */
+// Names of the stack's own services never reach the sidecar. Nothing is filtered out here: an unexpected name is for
+// the caller to see.
 export function lookedUpNames(): string[] {
   const logs = dockerOutput(["logs", containerOf("dns")]);
   const queries = `${logs.stdout}${logs.stderr}`.matchAll(/"[A-Z0-9]+ IN (\S+) (?:udp|tcp) /g);
@@ -199,11 +186,8 @@ function containerOf(service: string): string {
   return id;
 }
 
-/**
- * The search domains the app container inherited from its host (the last `search` line of its resolv.conf, lower
- * case). A resolver that is refused a name may retry it under each of them, so the sidecar sees those forms too. No
- * `search` line is a valid answer: there are none. The image has no shell, so its own node reads the file.
- */
+// A resolver that is refused a name may retry it under each search domain, so the sidecar sees those forms too. No
+// `search` line is a valid answer: there are none. The image has no shell, so its own node reads the file.
 export function appSearchDomains(): string[] {
   const read = "process.stdout.write(require('node:fs').readFileSync('/etc/resolv.conf', 'utf8'))";
   const file = dockerOutput(["exec", containerOf("shoutory"), "/nodejs/bin/node", "-e", read]).stdout;

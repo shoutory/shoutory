@@ -20,14 +20,6 @@ import { setZone } from "../../account/prefs";
 
 afterEach(closeApp);
 
-// The channels hub (H-01): the paged list of a workspace's channels as cards, with state and health in words, and
-// Check now. Elements are selected by test id and `data-` attribute, never by copy: `hub-state` (`data-state`: loading,
-// empty, list, failed, forbidden), `hub-heading`, `hub-retry`, `hub-more`, `hub-more-error`, `hub-notice`
-// (`data-reason`), and per card `channel-card` (`data-channel-id`), `card-initials`, `card-display-name`,
-// `card-nickname`, `card-handle`, `card-provider`, `card-state` (`data-state`, `unknown` for a value not known),
-// `card-health` (`data-health`: ok, degraded, failing, unknown; absent unless the channel is connected), `card-checked`,
-// `card-deadline`, `card-check` and `card-check-error` (`data-reason`).
-
 const PATH = `/w/${CONNECT_WS}/channels`;
 const UNLISTED = "0190a000-0000-7000-8000-0000000000c2";
 const idOf = (n: number) => `0190a000-0000-7000-8000-00000000e${String(n).padStart(3, "0")}`;
@@ -178,8 +170,6 @@ describe("the provider of a card", () => {
 });
 
 const CHECKED = "2026-11-22T10:00:00.000Z";
-// Security floor: a state or health the page does not know is never Connected or Healthy; health is read only on a
-// connected channel, and "ok" without a check time is not Healthy.
 describe("the state and health words of a card", () => {
   it.each<[string, string, string | null, string | null, string | null]>([
     ["connected", "ok", CHECKED, "connected", "ok"],
@@ -202,7 +192,6 @@ describe("the state and health words of a card", () => {
       );
       expect(part(host, 1, "card-state")?.dataset.state).toBe(wantState);
       expect(part(host, 1, "card-health")?.dataset.health ?? null).toBe(wantHealth);
-      // "Checked" shows exactly when the health is known and a check time is present.
       const known = wantHealth !== null && wantHealth !== "unknown";
       expect(part(host, 1, "card-checked") !== null).toBe(known && checked !== null);
     },
@@ -371,7 +360,6 @@ describe("Check now, when the channel changed or went away", () => {
   });
 });
 
-// A 404 of the fresh read drops the card like the check's own 404; any other failure is the other failure line.
 describe("Check now, when the fresh read after a 409 not_connected fails", () => {
   it.each([
     ["a 404", () => refusal("not_found", 404), null],
@@ -412,7 +400,6 @@ describe("Check now, for a person using a screen reader or a session that ended"
   });
 });
 
-// Focus must not fall to the page when the control that had it goes away.
 describe("where focus goes when a control disappears", () => {
   it.each<[string, () => Api, (host: HTMLElement) => HTMLElement | null | undefined]>([
     [
@@ -443,7 +430,6 @@ describe("where focus goes when a control disappears", () => {
   });
 });
 
-// Tenant class: a workspace change must not carry the old workspace's rows, pages or answers into the new one.
 describe("a change of workspace", () => {
   const workspace = (id: string, name: string) => ({
     id,

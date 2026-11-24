@@ -3,16 +3,14 @@ import { Refusal } from "../../errors/refusal.js";
 import { type App, defineRoute } from "../define-route.js";
 import { definerRefusal } from "../definer-refusal.js";
 
-// A person settles an operation the ledger could not: one route for the kinds that ask for a step-up and one for the rest
-// (R607 (15), R614). The definer `resolve_operation` is the authority on rank and on the post's author; the workspace access
-// only narrows the transaction, which lets the audit row be written with the resolution in the same transaction (R616).
+// The definer `resolve_operation` is the authority on rank and on the post's author; the workspace access
+// only narrows the transaction, which lets the audit row be written with the resolution in the same transaction.
 
 const uuid = z.uuid().transform((id) => id.toLowerCase());
 const params = z.strictObject({ workspace_id: uuid, operation_id: uuid });
 
 const STEP_UP_KINDS = ["attest_published", "attest_not_executed", "supersede", "confirm_removed"] as const;
 const SESSION_KINDS = ["publish_late", "reschedule", "drop", "dismiss"] as const;
-// The kinds that say what the person checked before the definer will move.
 const NEEDS_ACK: readonly string[] = ["attest_not_executed", "supersede"];
 
 // Text the database can keep: no NUL (a text column refuses it) and no half of a character (it cannot be stored as UTF-8).

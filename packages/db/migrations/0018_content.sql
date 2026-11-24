@@ -1,20 +1,13 @@
--- The content schema: posts, their versions, their per-channel variants with media, and the idempotency keys of the public
--- API (a table only), and the four definers that are the only writers of the content tables. The runtime roles read the
--- tables and never write them (0013, 0015, 0016): every change goes through a definer under its own purpose policy.
-
--- A post. Its text lives in the variants; `current_version_id` is the version the live variants were last built from and
--- is also the ETag of the post (an autosave that does not name it is stale). Soft deleted through `deleted_at`.
+-- `current_version_id` is also the ETag of the post: an autosave that does not name it is stale.
 CREATE TABLE app.posts (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   workspace_id uuid NOT NULL REFERENCES app.workspaces (id),
   author_kind text NOT NULL CHECK (author_kind IN ('user', 'service')),
   author_id uuid NOT NULL,
-  -- Widened by the migration of the slice that first writes another origin (data model 3.5).
   origin text NOT NULL DEFAULT 'ui' CHECK (origin = 'ui'),
   status text NOT NULL DEFAULT 'draft' CHECK (status IN (
     'draft', 'in_review', 'changes_requested', 'approved', 'scheduled', 'publishing', 'published',
     'partially_published', 'needs_attention', 'failed', 'missed', 'archived')),
-  -- The count triple of the ledger projection (operation ledger section 9); no writer before the ledger exists.
   targets_total integer NOT NULL DEFAULT 0 CHECK (targets_total >= 0),
   targets_published integer NOT NULL DEFAULT 0 CHECK (targets_published >= 0),
   targets_published_not_live integer NOT NULL DEFAULT 0 CHECK (targets_published_not_live >= 0),
@@ -32,8 +25,6 @@ CREATE INDEX posts_status_idx ON app.posts (workspace_id, status, updated_at DES
 CREATE INDEX posts_published_idx ON app.posts (workspace_id, published_at DESC) WHERE published_at IS NOT NULL;
 SELECT app.apply_rls_template('app.posts'::regclass, 'W');
 
--- One row per saved state of a post: the snapshot holds the `draft` the variants and media are rebuilt from, so a restore
--- needs no other input. Rows are inserted and never changed or removed (template A; the definer holds SELECT and INSERT).
 CREATE TABLE app.post_versions (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   workspace_id uuid NOT NULL,
@@ -52,13 +43,11 @@ CREATE TABLE app.post_versions (
 );
 SELECT app.apply_rls_template('app.post_versions'::regclass, 'A');
 
--- Both tables are new and empty in this file, so the key is validated at once and the lock is brief.
 -- shoutory:accepted-lock new empty tables in this file
 ALTER TABLE app.posts ADD CONSTRAINT posts_current_version_fkey
   FOREIGN KEY (workspace_id, id, current_version_id) REFERENCES app.post_versions (workspace_id, post_id, id);
 
--- One row per post and channel (and locale; NULL is the base text). Its id is the publish target the ledger names, so a
--- save keeps the id of a variant it matches by channel and locale.
+-- The id is the publish target the ledger names, so a save keeps the id of a variant it matches by channel and locale.
 CREATE TABLE app.post_variants (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   workspace_id uuid NOT NULL,
@@ -87,11 +76,10 @@ CREATE TABLE app.post_variants (
   CONSTRAINT post_variants_workspace_id_key UNIQUE (workspace_id, id),
   CONSTRAINT post_variants_target_key UNIQUE NULLS NOT DISTINCT (workspace_id, post_id, channel_id, locale),
   FOREIGN KEY (workspace_id, post_id) REFERENCES app.posts (workspace_id, id) ON DELETE CASCADE,
-  -- Like every other child of a channel; the operations that will name a variant block a channel delete in their turn.
+  -- Like every other child of a channel; operations that name a variant block a channel delete in their turn.
   FOREIGN KEY (workspace_id, channel_id) REFERENCES app.channels (workspace_id, id) ON DELETE CASCADE,
   FOREIGN KEY (workspace_id, post_id, frozen_version_id) REFERENCES app.post_versions (workspace_id, post_id, id)
 );
--- The admission scan reads the scheduled variants by due time; the calendar reads a workspace by due time.
 -- shoutory:accepted-lock new empty table in this file
 CREATE INDEX post_variants_admission_idx ON app.post_variants (due_at) WHERE schedule_state = 'scheduled';
 -- shoutory:accepted-lock new empty table in this file
@@ -103,7 +91,6 @@ CREATE INDEX post_variants_published_idx ON app.post_variants (workspace_id, pub
 CREATE INDEX post_variants_channel_idx ON app.post_variants (channel_id, schedule_state);
 SELECT app.apply_rls_template('app.post_variants'::regclass, 'W');
 
--- The media of a variant in order (at most 32 positions), each an asset of the same workspace; they go with the variant.
 CREATE TABLE app.post_media (
   workspace_id uuid NOT NULL,
   variant_id uuid NOT NULL,
@@ -119,8 +106,6 @@ CREATE TABLE app.post_media (
 CREATE INDEX post_media_asset_idx ON app.post_media (workspace_id, media_id);
 SELECT app.apply_rls_template('app.post_media'::regclass, 'W');
 
--- The keys of the public API (a table only here; the begin and finish definers arrive with the API). A key is kept for 24
--- hours and removed one hour after that by the retention registry.
 CREATE TABLE app.idempotency_keys (
   workspace_id uuid NOT NULL REFERENCES app.workspaces (id),
   principal_kind text NOT NULL CHECK (principal_kind IN ('user', 'service')),
@@ -139,17 +124,16 @@ CREATE TABLE app.idempotency_keys (
 CREATE INDEX idempotency_keys_expiry_idx ON app.idempotency_keys (expires_at);
 SELECT app.apply_rls_template('app.idempotency_keys'::regclass, 'W');
 
--- The runtime roles read the content tables and write nothing; the idempotency keys have no runtime grant at all.
+-- The idempotency keys have no runtime grant at all.
 GRANT SELECT ON app.posts, app.post_versions, app.post_variants, app.post_media TO shoutory_app, shoutory_worker;
 GRANT SELECT, INSERT ON app.posts, app.post_versions TO shoutory_definer;
 GRANT SELECT, INSERT, DELETE ON app.post_variants, app.post_media TO shoutory_definer;
 GRANT SELECT, DELETE ON app.idempotency_keys TO shoutory_definer;
--- Never the workspace, the post, the channel or the author of a row; a version is never updated at all.
+-- Not the workspace, the post, the channel or the author of a row; a version is never updated.
 GRANT UPDATE (current_version_id, updated_at) ON app.posts TO shoutory_definer;
 GRANT UPDATE ("text", post_type, parts, settings, updated_at) ON app.post_variants TO shoutory_definer;
 
--- A key is removed one hour after its expiry (the 0016 way of seeding the registry under a policy that exists only for
--- this statement).
+-- The seed policy exists only for this insert.
 CREATE POLICY retention_seed_insert ON app.retention_classes FOR INSERT TO shoutory_owner WITH CHECK (true);
 INSERT INTO app.retention_classes (class, table_name, kind, event_column, retain, partition_unit) VALUES
   ('app.idempotency_keys', 'app.idempotency_keys', 'window', 'expires_at', interval '1 hour', NULL);
@@ -157,7 +141,7 @@ DROP POLICY retention_seed_insert ON app.retention_classes;
 CALL app.grant_purposes('idempotency_keys', 'SELECT', ARRAY['purge_expired']);
 CALL app.grant_purposes('idempotency_keys', 'DELETE', ARRAY['purge_expired']);
 
--- One purpose per definer. The principal check reads the tenancy tables under the purpose of the definer that calls it.
+-- One purpose per definer; the principal check reads the tenancy tables under the calling definer's purpose.
 DO $$
 DECLARE
   t text;
@@ -177,18 +161,14 @@ BEGIN
   FOREACH t IN ARRAY ARRAY['posts', 'post_variants'] LOOP
     CALL app.grant_purposes(t, 'UPDATE', all_purposes);
   END LOOP;
-  -- The versions are read to number the next one and to copy the one a restore names.
   CALL app.grant_purposes('post_versions', 'SELECT', ARRAY['post_autosave', 'post_save', 'post_restore']);
 END
 $$;
 
 SET ROLE shoutory_definer;
 
--- Rebuilds the variants and media of a post from a draft (`{"variants": [{channel_id, locale, post_type, text, parts,
--- settings, media: [{media_id, alt_text, crop}]}]}`), inside the caller's purpose; it is no entry point and no runtime
--- role may run it. A variant is matched by channel and locale, kept with its id and updated, added when new and removed
--- when absent; the media of a kept variant are replaced. The caller holds the post row lock; the existing variants are
--- locked by ascending id before any is written.
+-- Not an entry point: no runtime role may run it. The caller holds the post row lock; the existing variants are locked
+-- by ascending id before any is written.
 CREATE FUNCTION app.post_apply_draft(workspace_id uuid, post_id uuid, draft jsonb)
 RETURNS void
 LANGUAGE plpgsql
@@ -241,8 +221,6 @@ BEGIN
 END
 $$;
 
--- Creates a post for a user Editor or above with its first version (kind save) and the variants of the draft in the
--- snapshot, and points the post at the version.
 CREATE FUNCTION app.post_create(workspace_id uuid, snapshot jsonb, snapshot_hash bytea)
 RETURNS TABLE (post_id uuid, version_id uuid)
 LANGUAGE plpgsql SECURITY DEFINER
@@ -269,11 +247,9 @@ BEGIN
 END
 $$;
 
--- The one write of an existing post, inside the caller's purpose (no entry point, no runtime EXECUTE): it locks the post
--- row, which orders concurrent writers, and compares the expected version with the current one. A caller whose expected
--- version is not the current one gets `stale` and the current version, and nothing changes. Otherwise it numbers and
--- writes the new version of `kind`, rebuilds the variants and media from the draft of the snapshot and moves the pointer.
--- A post that is unknown, deleted or in another workspace is refused like any other foreign row.
+-- Not an entry point: no runtime EXECUTE. The post row lock orders concurrent writers. A stale expected version
+-- changes nothing and returns the current version. An unknown, deleted or foreign post is refused like any other
+-- foreign row.
 CREATE FUNCTION app.post_write_version(
   workspace_id uuid, post_id uuid, expected_version uuid, snapshot jsonb, snapshot_hash bytea, kind text)
 RETURNS TABLE (outcome text, version_id uuid)
@@ -313,7 +289,6 @@ BEGIN
 END
 $$;
 
--- Writes an autosave version of a post for a user Editor or above.
 CREATE FUNCTION app.post_autosave(
   workspace_id uuid, post_id uuid, expected_version uuid, snapshot jsonb, snapshot_hash bytea)
 RETURNS TABLE (outcome text, version_id uuid)
@@ -332,7 +307,6 @@ BEGIN
 END
 $$;
 
--- The same as post_autosave, but the version is a deliberate save (kind save).
 CREATE FUNCTION app.post_save(
   workspace_id uuid, post_id uuid, expected_version uuid, snapshot jsonb, snapshot_hash bytea)
 RETURNS TABLE (outcome text, version_id uuid)
@@ -350,9 +324,7 @@ BEGIN
 END
 $$;
 
--- Restores a version of the post: a new version (kind save) copies the snapshot and hash of the source version, and the
--- variants and media are rebuilt from its draft. No old version is touched. A source that is not a version of this post
--- is refused like an unknown post.
+-- A source that is not a version of this post is refused like an unknown post.
 CREATE FUNCTION app.post_restore(workspace_id uuid, post_id uuid, expected_version uuid, source_version uuid)
 RETURNS TABLE (outcome text, version_id uuid)
 LANGUAGE plpgsql SECURITY DEFINER

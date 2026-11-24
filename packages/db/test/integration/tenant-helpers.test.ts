@@ -4,13 +4,12 @@ import { cloneTemplate, readTestEnv, type TestDatabase } from "../../src/testing
 
 const env = readTestEnv();
 
-// Security floor: a helper that reads a missing, empty or malformed setting must answer NULL (or an empty array),
-// never an error and never a wider value. Settings are planted raw: withTenant would refuse most of these.
+// Settings are planted raw: withTenant would refuse most of these.
 const ID = randomUUID();
 const ID2 = randomUUID();
 const manyIds = (n: number) => Array.from({ length: n }, () => randomUUID());
 
-// Rows: [helper, setting, raw value (undefined = never set), expected answer].
+// A raw value of undefined means the setting was never set.
 const UUID_SCALARS = [
   ["org", "app.organization_id"],
   ["write_ws", "app.write_workspace_id"],

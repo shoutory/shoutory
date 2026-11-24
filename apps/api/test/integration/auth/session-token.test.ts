@@ -30,7 +30,6 @@ const signed = (value: string): string =>
 describe("a forged session cookie", () => {
   it("a cookie signed with the server secret whose value is a stored digest is refused", async () => {
     const cookie = await fx.signedIn("forged-1@example.test");
-    // The signing helper is right: the real raw token, signed here, opens a session.
     const genuine = await fx.request("/api/auth/sessions", { headers: { cookie: signed(rawToken(cookie)) } });
     expect(genuine.status).toBe(200);
     const [row] = await fx.admin(
@@ -54,7 +53,7 @@ describe("session tokens at rest", () => {
     const raw = rawToken(cookie);
     expect(raw).not.toBe("");
     const before = (await tokensOf("sliding-1@example.test"))[0];
-    // Age the session so the next read is past the update age and BA slides it.
+    // Age the session so the next read is past the update age and the library slides it.
     await fx.admin((client) =>
       client.query("UPDATE auth.session SET expires_at = now() + interval '5 days'"),
     );

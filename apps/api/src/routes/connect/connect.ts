@@ -5,27 +5,22 @@ import type { ConnectOutcome, ConnectService } from "../../channels/connect.js";
 import { toRefusal } from "../../errors/refusal.js";
 import { type App, type AppEnv, defineRoute } from "../define-route.js";
 
-// The OAuth connect routes. `start` is a workspace route for a member who can manage channels and answers
-// the URL to send the person to. The callback is a browser navigation, so it answers a 302 to one fixed web path, never
-// JSON: a reason code, or the new channel's id. Each call spends a per-user bucket first: the start's bucket also caps
-// the unspent flows.
+// The callback is a browser navigation, so it answers a 302 to one fixed web path, never JSON. The start's bucket also
+// caps the unspent flows.
 
 const uuid = z.uuid().transform((id) => id.toLowerCase());
 const providerId = z.string().regex(/^[a-z][a-z0-9_]{0,31}$/);
-// An instance host is a bare lower-case host name; the provider adapter decides what it may name.
 const instanceHost = z
   .string()
   .min(1)
   .max(253)
   .regex(/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/);
 
-// The fixed web path of every callback answer (the connect result screen of the web slice).
 const RESULT_PATH = "/connect/result";
 
 // A provider may add parameters (RFC 6749 section 4.1.2), so the callback is the one route besides the shell with a loose
 // query: only these keys are read, each bounded, and a value that does not fit is read as absent, never as a 400.
 const field = (max: number) => z.string().max(max).optional().catch(undefined);
-// The state is the 43-character base64url form of 256 random bits; any other spelling is read as absent.
 const state = z
   .string()
   .regex(/^[A-Za-z0-9_-]{43}$/)
@@ -74,7 +69,6 @@ const paramsOf = (outcome: ConnectOutcome): Record<string, string> => {
   return { reason: outcome.kind, ...workspace };
 };
 
-// The answer of every callback: a 302 that is never cached, with the wait when a bucket refused.
 function redirectTo(
   c: Context<AppEnv>,
   params: Record<string, string>,

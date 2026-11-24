@@ -1,17 +1,14 @@
 import { createServer, type Server, type Socket } from "node:net";
 
-/** A local SMTP server that records each message it takes; `reject` makes it answer 554 with the whole message echoed. */
 export interface SmtpSink {
   readonly url: string;
-  /** The messages taken, soft line breaks and `=3D` of quoted-printable undone. */
   readonly messages: string[];
   connections: number;
+  /** Answers 554 with the whole message echoed. */
   reject: boolean;
   /** While set, a finished message is not answered: the sender sees a server that hangs. */
   hold: boolean;
-  /** Called when a message is taken, before the server answers it. */
   onMessage: (() => void) | undefined;
-  /** Answers every held message. */
   release(): void;
   close(): Promise<void>;
 }
@@ -26,7 +23,6 @@ const decoded = (raw: string): string =>
 
 const REPLIES: Readonly<Record<string, string>> = { EHLO: "250 sink.test\r\n" };
 
-/** Answers one command line; DATA switches the connection to collecting the message. */
 function command(socket: Socket, line: string, startData: () => void): void {
   const verb = line.slice(0, 4).toUpperCase();
   if (verb === "DATA") {

@@ -5,7 +5,6 @@ import { PLANTED, problemWith } from "./kit.js";
 export type MatrixOperation = "commit" | "readBack" | "delete" | "edit";
 export type MatrixCapability = "edit" | "thread" | "first_comment";
 
-/** What a simulator is asked to do to the next request of an operation. The harness shapes the provider's own answer. */
 export type MatrixFault =
   | {
       readonly kind: "respond";
@@ -28,29 +27,20 @@ export interface StoredPost {
   readonly replyToExternalId?: string;
 }
 
-/** One provider's adapter wired to its simulator. `context.fetch` must reach that simulator. */
 export interface MatrixHarness {
   readonly adapter: ProviderAdapter;
   readonly context: AdapterContext;
   arm(operation: MatrixOperation, fault: MatrixFault): void;
-  /** How many effects the simulator has produced so far. */
   effects(): number;
-  /** Waits until effects scheduled to appear late have happened. */
   settle(): Promise<void>;
-  /** What the simulator holds, in the order it was created. */
   stored(): readonly StoredPost[];
-  /** How many requests the simulator has received so far. */
   requestCount(): number;
 }
 
 export interface MatrixProfile {
-  /** The provider's documented 400 error codes; each is played once. */
   readonly badRequestCodes: readonly string[];
-  /** The status the manifest's `absentAnswers` lists for a post that is not there. */
   readonly absentStatus: number;
-  /** The refresh error code the manifest's `refreshErrorMap` marks `revoked`; a 401 carries it. */
   readonly revokedCode: string;
-  /** The capabilities the manifest declares among those the matrix has rows for. */
   readonly capabilities: readonly MatrixCapability[];
 }
 
@@ -94,8 +84,8 @@ const connectFailure = (context: AdapterContext): AdapterContext => ({
     )) as typeof fetch,
 });
 
-// Plays one fault on one call and returns the answer with how many effects the simulator produced meanwhile. One adapter
-// call sends at most one request: a resend after an unknown outcome is the ledger's decision, never the adapter's.
+// One adapter call sends at most one request: a resend after an unknown outcome is the ledger's decision, never the
+// adapter's.
 async function played(
   harness: MatrixHarness,
   operation: MatrixOperation,
@@ -112,7 +102,6 @@ async function played(
   return { result, delta: harness.effects() - before };
 }
 
-// An error answer is sound, its pair is one the situation allows, and "none" never follows an effect that happened.
 function expectError(
   situation: string,
   played_: { result: ProviderResult; delta: number },
@@ -168,7 +157,6 @@ const respond = (
   rest: { providerCode?: string; retryAfter?: string; afterEffect?: boolean } = {},
 ): MatrixFault => ({ kind: "respond", status, echoId: PLANTED, ...rest });
 
-// A commit that meets a fault, and the answers the situation allows.
 const commitRow = (
   id: string,
   title: string,
@@ -235,7 +223,6 @@ function rateLimitRows(): FaultRow[] {
   ];
 }
 
-// An edit or delete whose answer is a 503 after the change happened is never reported as no effect.
 function afterEffectRow(operation: "edit" | "delete"): FaultRow {
   const title = `a 503 after a ${operation} took effect is unknown or retryable after send, never none`;
   return {
@@ -255,7 +242,6 @@ function afterEffectRow(operation: "edit" | "delete"): FaultRow {
   };
 }
 
-// A read-back or delete of a post the provider no longer has, answered with the status its manifest lists for that.
 function targetRows(profile: MatrixProfile): FaultRow[] {
   return [
     {
@@ -328,11 +314,8 @@ function capabilityRows(capabilities: readonly MatrixCapability[]): FaultRow[] {
   return rows.filter(([capability]) => capabilities.includes(capability)).map(([, row]) => row);
 }
 
-/**
- * The rows every provider's simulator runs. Each asserts the adapter's effect and class pair is valid, that no error
- * carries an id, and that "no effect" is never reported when the simulator counted one. The 401, 403 and 409 rows name
- * the situation played and accept only the classes that situation allows; no row maps a status to a class.
- */
+// The 401, 403 and 409 rows name the situation played and accept only the classes that situation allows; no row maps a
+// status to a class.
 export function faultMatrixRows(profile: MatrixProfile): readonly FaultRow[] {
   return [
     { id: "success", title: "a commit, read-back and delete that succeed", run: successRow },
@@ -344,7 +327,6 @@ export function faultMatrixRows(profile: MatrixProfile): readonly FaultRow[] {
   ];
 }
 
-// Answers that say the provider did not act (or, for a duplicate, acted once before).
 function refusalRows(profile: MatrixProfile): FaultRow[] {
   return [
     ...profile.badRequestCodes.map((code) =>

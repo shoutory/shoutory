@@ -1,12 +1,3 @@
--- The media schema: the uploaded files of a workspace, their upload sessions and their derivatives, and the definers that
--- are their only writers (a later file adds the post and operation references). The runtime roles read the tables and
--- never write them: every change is a definer under its own purpose policy, so an original is named once, kept per
--- workspace and moved only through checked states.
-
--- One row per uploaded original. The state moves pending_upload -> uploaded -> (scanning) -> processing -> ready, to
--- rejected from scanning or processing, and to deleted from the states the move table of media_advance names. The
--- object key is `ws/<workspace>/<asset>/1/original` (version 1 until the editor makes new versions) and always starts
--- with its own workspace prefix. A hash is unique among the live states of one workspace.
 CREATE TABLE app.media_assets (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   workspace_id uuid NOT NULL REFERENCES app.workspaces (id),
@@ -23,7 +14,7 @@ CREATE TABLE app.media_assets (
     'pending_upload', 'uploaded', 'scanning', 'processing', 'ready', 'rejected', 'deleted')),
   reject_reason text CHECK (char_length(reject_reason) <= 200),
   in_library boolean NOT NULL DEFAULT false,
-  -- At most 32 tags of 1 to 64 characters: the array text with an unprintable separator is matched as a whole.
+  -- The tags are joined with an unprintable separator and matched as one string.
   tags text[] NOT NULL DEFAULT '{}' CHECK (
     cardinality(tags) <= 32 AND array_position(tags, '') IS NULL AND array_position(tags, NULL) IS NULL
     AND array_to_string(tags, E'\x1f') ~ E'^[^\x1f]{0,64}(\x1f[^\x1f]{0,64}){0,31}$'),
@@ -42,17 +33,14 @@ CREATE TABLE app.media_assets (
 -- shoutory:accepted-lock new empty table in this file
 CREATE UNIQUE INDEX media_assets_live_hash_key ON app.media_assets (workspace_id, sha256)
   WHERE state IN ('uploaded', 'scanning', 'processing', 'ready');
--- The pending-upload arm of the garbage collection reads the old ones by age.
 -- shoutory:accepted-lock new empty table in this file
 CREATE INDEX media_assets_pending_idx ON app.media_assets (state, created_at) WHERE state = 'pending_upload';
--- The deleted arm reads the assets whose object is still stored by the day they were deleted.
 -- shoutory:accepted-lock new empty table in this file
 CREATE INDEX media_assets_deleted_idx ON app.media_assets (deleted_at) WHERE state = 'deleted' AND object_removed_at IS NULL;
 -- shoutory:accepted-lock new empty table in this file
 CREATE INDEX media_assets_tags_idx ON app.media_assets USING gin (tags);
 SELECT app.apply_rls_template('app.media_assets'::regclass, 'W');
 
--- One row per upload (the multipart id and the parts are empty for a single request); it goes with its asset.
 CREATE TABLE app.media_uploads (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   workspace_id uuid NOT NULL,
@@ -70,8 +58,6 @@ CREATE INDEX media_uploads_open_idx ON app.media_uploads (expires_at) WHERE comp
 CREATE INDEX media_uploads_asset_idx ON app.media_uploads (workspace_id, media_id);
 SELECT app.apply_rls_template('app.media_uploads'::regclass, 'W');
 
--- A processed copy of an original (a thumbnail, a transcode for one provider): one per profile, pending until the
--- pipeline marks it ready or failed once; it goes with its asset.
 CREATE TABLE app.media_derivatives (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   workspace_id uuid NOT NULL,
@@ -90,24 +76,22 @@ CREATE TABLE app.media_derivatives (
 );
 SELECT app.apply_rls_template('app.media_derivatives'::regclass, 'W');
 
--- The runtime roles read the media tables and write nothing (0013, 0015): the definers below are the only writers.
 GRANT SELECT ON app.media_assets, app.media_uploads, app.media_derivatives TO shoutory_app, shoutory_worker;
 GRANT SELECT, INSERT ON app.media_assets, app.media_derivatives TO shoutory_definer;
 GRANT SELECT, INSERT, DELETE ON app.media_uploads TO shoutory_definer;
--- Never the key or the workspace of a row: an original is named once.
+-- Not the key or the workspace: an original keeps its name.
 GRANT UPDATE (file_name, mime, byte_size, width, height, duration_ms, codec_facts, sha256, state, reject_reason,
   in_library, tags, deleted_at, object_removed_at) ON app.media_assets TO shoutory_definer;
 GRANT UPDATE (parts_done, completed_at) ON app.media_uploads TO shoutory_definer;
 GRANT UPDATE (state, sha256, byte_size, error) ON app.media_derivatives TO shoutory_definer;
 
--- The workspace's avatar is one of its own assets. Existing rows hold no avatar, so the key is added NOT VALID here and
--- validated by the first expand migration (the lock is brief: workspaces is small and the asset table is empty).
+-- NOT VALID because existing rows hold no avatar; it is validated in its own migration.
 -- shoutory:accepted-lock a brief SHARE ROW EXCLUSIVE on workspaces and the new empty media_assets
 ALTER TABLE app.workspaces ADD CONSTRAINT workspaces_avatar_fkey
   FOREIGN KEY (id, avatar) REFERENCES app.media_assets (workspace_id, id) NOT VALID;
 
--- An upload session is removed 7 days after the later of its completion and its expiry, which outlives the 7-day
--- multipart abort (the 0012 registry; the 0015 way of seeding it under a policy that exists only for this statement).
+-- Removed 7 days after completion or expiry, which outlives the 7-day multipart abort. The seed policy exists only
+-- for this insert.
 CREATE POLICY retention_seed_insert ON app.retention_classes FOR INSERT TO shoutory_owner WITH CHECK (true);
 INSERT INTO app.retention_classes (class, table_name, kind, event_column, retain, partition_unit) VALUES
   ('app.media_uploads', 'app.media_uploads', 'window', 'GREATEST(completed_at, expires_at)', interval '7 days', NULL);
@@ -115,7 +99,7 @@ DROP POLICY retention_seed_insert ON app.retention_classes;
 CALL app.grant_purposes('media_uploads', 'SELECT', ARRAY['purge_expired']);
 CALL app.grant_purposes('media_uploads', 'DELETE', ARRAY['purge_expired']);
 
--- The principal check reads the tables of the tenancy rank, under the purpose of the definer that calls it.
+-- The principal check reads the tenancy tables under the purpose of the definer that calls it.
 DO $$
 DECLARE
   t text;
@@ -126,7 +110,7 @@ BEGIN
   END LOOP;
 END
 $$;
--- The workspace row lock of media_register passes the lock policy (0010) and refuses every real update.
+-- The workspace row lock of media_register passes the lock policy and refuses every real update.
 CALL app.grant_purposes('workspaces', 'UPDATE', ARRAY['media_register']);
 CALL app.grant_purposes('media_assets', 'SELECT', ARRAY['media_register', 'media_mark_uploaded']);
 CALL app.grant_purposes('media_assets', 'INSERT', ARRAY['media_register']);
@@ -135,13 +119,12 @@ CALL app.grant_purposes('media_uploads', 'SELECT', ARRAY['media_mark_uploaded'])
 CALL app.grant_purposes('media_uploads', 'INSERT', ARRAY['media_register']);
 CALL app.grant_purposes('media_uploads', 'UPDATE', ARRAY['media_mark_uploaded']);
 
--- The guard function is created by the definer role, which needs the right to attach it; the right goes again after.
+-- The definer creates the guard triggers, so it needs TRIGGER on the tables until they exist.
 GRANT TRIGGER ON app.media_assets, app.media_derivatives TO shoutory_definer;
 SET ROLE shoutory_definer;
 
--- The one principal check of the media writers (R551): a user whose rank in the workspace is `min_rank` or more, or (when
--- `job_ok`) a job principal whose workspace set holds it. Any other kind, a lower rank and a foreign workspace get the
--- same refusal. It takes no lock: the media writers lock one asset row each, and a workspace lock would serialise them.
+-- Every refusal looks the same, so a caller cannot tell a foreign workspace from a low rank. It takes no lock: a
+-- workspace lock would serialise the media writers.
 CREATE FUNCTION app.media_caller(workspace_id uuid, min_rank integer, job_ok boolean)
 RETURNS void
 LANGUAGE plpgsql
@@ -163,8 +146,7 @@ BEGIN
 END
 $$;
 
--- An original is immutable: once an asset is no longer pending its key and hash cannot change, and a derivative's cannot
--- once it is no longer pending, whoever runs the statement (the table owner and a superuser included).
+-- Once no longer pending, the key and hash cannot change, whoever runs the statement.
 CREATE FUNCTION app.media_guard()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -183,9 +165,6 @@ CREATE TRIGGER media_assets_guard BEFORE UPDATE OF sha256, object_key ON app.med
 CREATE TRIGGER media_derivatives_guard BEFORE UPDATE OF sha256, object_key ON app.media_derivatives
   FOR EACH ROW EXECUTE FUNCTION app.media_guard();
 
--- Starts an upload for a user Editor or above: a pending asset with its derived key and its upload session (24 hours).
--- A workspace holds at most 100 pending uploads, counted under the workspace row lock so that concurrent registers
--- cannot pass the cap together.
 CREATE FUNCTION app.media_register(
   workspace_id uuid, file_name text, mime text, source text, source_ref text, multipart_upload_id text,
   part_size integer)
@@ -199,7 +178,7 @@ DECLARE
 BEGIN
   PERFORM set_config('app.job_purpose', 'media_register', true);
   PERFORM app.media_caller(media_register.workspace_id, 3, false);
-  -- The workspace row, FOR NO KEY UPDATE (lock rank 1a), orders concurrent registers: the count below sees the last one.
+  -- The workspace row lock orders concurrent registers, so the cap count sees the last one.
   PERFORM 1 FROM app.workspaces AS w WHERE w.id = media_register.workspace_id FOR NO KEY UPDATE;
   IF (SELECT count(*) FROM app.media_assets AS a
       WHERE a.workspace_id = media_register.workspace_id AND a.state = 'pending_upload') >= 100 THEN
@@ -217,10 +196,8 @@ BEGIN
 END
 $$;
 
--- Completes an upload for a user Editor or above: the pending asset takes its hash and facts and becomes uploaded. A hash
--- that is already live in the workspace is answered as `duplicate` with the live asset's id, and the new asset is
--- deleted ("already in your library"). The unique index decides, so two callers marking the same hash at once end with
--- one `ok` and one `duplicate`: the loser's unique violation is caught here and never reaches the caller.
+-- The unique index decides a race: of two callers marking the same hash, one gets `ok` and the other `duplicate`;
+-- the loser's unique violation is caught here and never reaches the caller.
 CREATE FUNCTION app.media_mark_uploaded(workspace_id uuid, asset_id uuid, digest bytea, byte_size bigint, mime text)
 RETURNS TABLE (outcome text, live_id uuid)
 LANGUAGE plpgsql SECURITY DEFINER
@@ -254,7 +231,7 @@ BEGIN
     SELECT a.id INTO existing FROM app.media_assets AS a
       WHERE a.workspace_id = media_mark_uploaded.workspace_id AND a.sha256 = media_mark_uploaded.digest
         AND a.state IN ('uploaded', 'scanning', 'processing', 'ready') ORDER BY a.created_at LIMIT 1;
-    -- The live asset was deleted between the violation and this read: the caller tries again.
+    -- The live asset was deleted between the violation and this read: the caller retries.
     IF NOT FOUND THEN
       RAISE EXCEPTION 'media_mark_uploaded: the live asset is gone, try again' USING ERRCODE = 'SH409';
     END IF;
@@ -279,8 +256,6 @@ GRANT EXECUTE ON FUNCTION app.media_register(uuid, text, text, text, text, text,
 RESET ROLE;
 REVOKE TRIGGER ON app.media_assets, app.media_derivatives FROM shoutory_definer;
 
--- The remaining writers: the state moves, the derivatives, the upload progress, the metadata, the closing step of the
--- garbage collection and its candidate list.
 CALL app.grant_purposes('media_assets', 'SELECT', ARRAY['media_advance', 'media_derivative_put',
   'media_upload_progress', 'media_set_metadata', 'media_object_removed', 'media_gc_candidates']);
 -- A row lock (FOR UPDATE) passes the UPDATE policy, so the two writers that only lock the asset hold it too.
@@ -294,11 +269,9 @@ CALL app.grant_purposes('media_derivatives', 'UPDATE', ARRAY['media_derivative_p
 
 SET ROLE shoutory_definer;
 
--- The one move table (R551), enforced here and nowhere else. Every move needs a member of the workspace (a user Editor or
--- above, or a job of it); the pipeline moves are job-only, so a user never reaches scanning, processing, ready or
--- rejected, and only a job frees a stuck asset (and its hash) by deleting it from uploaded, scanning or processing.
--- `deleted` is terminal, and pending_upload -> uploaded is only media_mark_uploaded's. A move that is not in
--- the table, or whose from_state is not the row's state, is SH409 and changes nothing.
+-- The one move table. Pipeline moves are job-only, so a user never reaches scanning, processing, ready or rejected,
+-- and only a job frees a stuck asset (and its hash) by deleting it. `deleted` is terminal, and pending_upload ->
+-- uploaded belongs to media_mark_uploaded alone.
 CREATE FUNCTION app.media_advance(
   workspace_id uuid, asset_id uuid, from_state text, to_state text, reject_reason text, facts jsonb)
 RETURNS void
@@ -333,7 +306,6 @@ BEGIN
   IF media_advance.to_state = 'rejected' AND media_advance.reject_reason IS NULL THEN
     RAISE EXCEPTION 'media_advance: a rejection needs its reason' USING ERRCODE = '22023';
   END IF;
-  -- Facts are the pipeline's: a person's move carries none, and a fact that is malformed or out of range is 22023.
   IF media_advance.facts IS NOT NULL AND (app.principal_kind() <> 'job'
      OR jsonb_typeof(media_advance.facts) <> 'object') THEN
     RAISE EXCEPTION 'media_advance: facts are the pipeline''s and an object' USING ERRCODE = '22023';
@@ -355,9 +327,6 @@ BEGIN
 END
 $$;
 
--- The pipeline's derivative of an original, for a job: a pending row is inserted (its key is derived like the
--- original's) and moved once to ready or failed. A second pending row for the profile, or a move of a row that is no
--- longer pending, is SH409: nothing is overwritten.
 CREATE FUNCTION app.media_derivative_put(
   workspace_id uuid, asset_id uuid, profile text, state text, digest bytea, byte_size bigint, error text)
 RETURNS uuid
@@ -376,7 +345,7 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'media: refused' USING ERRCODE = '42501';
   END IF;
-  -- `original` is the key of the original itself; a ready derivative has its hash and size, a failed one its error.
+  -- `original` is the key of the original itself, so it cannot be a profile.
   IF media_derivative_put.state NOT IN ('pending', 'ready', 'failed')
      OR media_derivative_put.profile !~ '^[a-z0-9][a-z0-9_.-]{0,63}$' OR media_derivative_put.profile = 'original'
      OR (media_derivative_put.state = 'ready' AND (octet_length(media_derivative_put.digest) IS DISTINCT FROM 32
@@ -412,8 +381,6 @@ BEGIN
 END
 $$;
 
--- The parts of a multipart upload done so far, for a user Editor or above or a job, on the open session of a pending
--- upload; any other call is SH409, never a silent no-op.
 CREATE FUNCTION app.media_upload_progress(workspace_id uuid, asset_id uuid, parts_done integer[])
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER
@@ -443,8 +410,6 @@ BEGIN
 END
 $$;
 
--- A person's edit of the file name, the tags and the library flag, for a user Editor or above; a NULL argument leaves
--- that field as it is. The bounds are the table's.
 CREATE FUNCTION app.media_set_metadata(workspace_id uuid, asset_id uuid, file_name text, tags text[], in_library boolean)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER
@@ -467,7 +432,6 @@ BEGIN
 END
 $$;
 
--- The closing step of the garbage collection, for a job: the object of a deleted asset has been removed from storage.
 CREATE FUNCTION app.media_object_removed(workspace_id uuid, asset_id uuid)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER
@@ -493,9 +457,6 @@ BEGIN
 END
 $$;
 
--- The assets whose objects the garbage collection may remove, for a job, in the workspaces of the job: a pending upload
--- older than 24 hours, and a deleted asset 30 days after its deletion whose object is still stored. A later migration
--- adds the arm of the unreferenced asset, which needs the tables that reference media.
 CREATE FUNCTION app.media_gc_candidates(lim integer)
 RETURNS TABLE (workspace_id uuid, asset_id uuid, object_key text, arm text)
 LANGUAGE plpgsql SECURITY DEFINER

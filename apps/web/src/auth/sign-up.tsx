@@ -15,7 +15,7 @@ const mode = z.object({ open: z.boolean() });
 // The answer is alike for a new, a known and a closed address, so only its shape is checked.
 const created = z.object({ user: z.object({ emailVerified: z.boolean() }) });
 
-/** Whether the operator closed sign-up. A failed read is a normal answer: the form stays, the server decides. */
+// A failed read is a normal answer: the form stays, the server decides.
 function useInvitationOnly(): boolean {
   const [closed, setClosed] = useState(false);
   useEffect(() => {
@@ -95,7 +95,6 @@ function SignUpForm({ onSent }: { onSent: () => void }) {
   );
 }
 
-/** A-02 sign up (`/sign-up`): the answer is alike for every address, so it never says whether one exists. */
 export function SignUpPage() {
   const closed = useInvitationOnly();
   const [sent, setSent] = useState(false);

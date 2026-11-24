@@ -1,5 +1,3 @@
-// The spellings a secret can take in a log line, a body or a dump (AGENTS 4.2): raw, percent-encoded, hex, base64,
-// base64url and JSON-escaped.
 const FORMS: [string, (secret: string) => string][] = [
   ["raw", (s) => s],
   ["percent-encoded", (s) => encodeURIComponent(s)],
@@ -9,7 +7,6 @@ const FORMS: [string, (secret: string) => string][] = [
   ["JSON-escaped", (s) => JSON.stringify(s).slice(1, -1)],
 ];
 
-/** The spellings of the secrets that the haystack holds; empty when none leaked. */
 export const leaks = (haystack: string, secrets: string[]): string[] =>
   secrets.flatMap((secret) =>
     FORMS.filter(([, form]) => haystack.includes(form(secret))).map(

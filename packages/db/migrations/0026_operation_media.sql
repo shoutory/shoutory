@@ -1,13 +1,6 @@
--- The pin of an operation's media: the exact object each medium of an operation is sent as, recorded in the transaction
--- that creates the operation, so the collection and a later edit can never change or remove what it sends. One definer
--- locks the media and another writes the rows; the two functions that create operations (admission and the resolutions
--- that send again) call them. Nothing else writes `operation_media`; no runtime role may call either.
-
 GRANT INSERT ON app.operation_media TO shoutory_definer;
 
--- What the two functions read and write, each under its own purpose. Both read the operation and its variant (the channel
--- and the locale pick the variant of the frozen snapshot), the snapshot, the media and their stripped copies. The lock
--- takes the assets for share (a row lock passes the UPDATE policy); the pin inserts the rows and takes no lock.
+-- A row lock passes the UPDATE policy, so the lock function holds it to lock the assets for share.
 CALL app.grant_purposes('operations', 'SELECT', ARRAY['operation_media_lock', 'operation_media_pin']);
 CALL app.grant_purposes('post_variants', 'SELECT', ARRAY['operation_media_lock', 'operation_media_pin']);
 CALL app.grant_purposes('post_versions', 'SELECT', ARRAY['operation_media_lock', 'operation_media_pin']);
@@ -18,13 +11,11 @@ CALL app.grant_purposes('operation_media', 'INSERT', ARRAY['operation_media_pin'
 
 SET ROLE shoutory_definer;
 
--- Locks the media of the frozen version for the operation's channel and locale FOR SHARE, in ascending id (OL 4.4 row 7a),
--- which conflicts with the take of the collection and with a post attach, so the pin and either of them are serialized
--- whichever comes first; the assets are read again once locked. A medium that is missing, in another workspace, not ready,
--- or an image with no ready `stripped` copy raises SH422: admission leaves the target scheduled, and a resolution answers
--- `media_unavailable`. A version that is not frozen (NULL) has nothing to lock. It is called before an operation that
--- sends again is moved, because the move fires triggers that write ranks above the assets (OL 4.4 row 7a), and it takes
--- the operation that carries the channel and the locale, which a resolution has before the new one exists.
+-- FOR SHARE in ascending id conflicts with the collection's take and with a post attach, so the pin and either of
+-- them are serialized; the assets are read again once locked. A medium that is missing, in another workspace, not
+-- ready, or an image with no ready `stripped` copy raises SH422: admission leaves the target scheduled, and a
+-- resolution answers `media_unavailable`. It is called before an operation that sends again is moved, because the
+-- move fires triggers that write tables locked after the assets.
 CREATE FUNCTION app.operation_media_lock(p_ws uuid, p_version uuid, p_op uuid)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER
@@ -41,8 +32,7 @@ BEGIN
     RETURN;
   END IF;
   PERFORM set_config('app.job_purpose', 'operation_media_lock', true);
-  -- The media the version's draft lists for the channel and locale of the operation; a key that is no uuid is a medium that
-  -- cannot be ready.
+  -- A key that is no uuid is a medium that cannot be ready.
   SELECT array_agg(DISTINCT (m.item ->> 'media_id')::uuid) FILTER (WHERE valid.ok), count(*),
       count(*) FILTER (WHERE NOT valid.ok) INTO ids, total, bad
     FROM app.operations AS o
@@ -70,11 +60,9 @@ BEGIN
 END
 $$;
 
--- Pins the media of the frozen version for the operation: for each medium the version's draft lists for the operation's
--- own channel and locale, in the order it lists them, one row with the id of the ready `stripped` copy and its hash (an
--- image), or no copy and the hash of the original (a video, which is sent as it is). A version that is not frozen (NULL)
--- pins nothing. It takes no lock (the lock above is called first, so nothing it reads can change) and checks that it wrote
--- one row for every medium, and raises the same SH422 when it did not.
+-- An image pins its ready `stripped` copy and hash; a video, which is sent as it is, pins the original's hash. It takes
+-- no lock because the lock function is called first, so nothing it reads can change, and it raises the same SH422 when
+-- it did not write one row for every medium.
 CREATE FUNCTION app.operation_media_pin(p_ws uuid, p_op uuid, p_version uuid)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER
@@ -89,8 +77,7 @@ BEGIN
     RETURN;
   END IF;
   PERFORM set_config('app.job_purpose', 'operation_media_pin', true);
-  -- The media the version's draft lists for this operation's channel and locale, with their positions; a key that is no
-  -- uuid is a medium that cannot be ready.
+  -- A key that is no uuid is a medium that cannot be ready.
   SELECT coalesce(jsonb_agg(jsonb_build_object('pos', m.ord - 1,
       'media_id', CASE WHEN m.item ->> 'media_id' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
         THEN m.item ->> 'media_id' END) ORDER BY m.ord), '[]'::jsonb) INTO items
@@ -118,9 +105,8 @@ BEGIN
 END
 $$;
 
--- Admission of 0023, with one change: the operation it creates locks and pins its media in the same subtransaction, and a
--- medium that is no longer ready (SH422) leaves the target `scheduled` like the unlocked check of the row query, which
--- stays as the cheap filter. A missed operation sends nothing and pins nothing.
+-- A medium that is no longer ready (SH422) leaves the target `scheduled`, like the unlocked check of the row query,
+-- which stays as the cheap filter. A missed operation sends nothing and pins nothing.
 CREATE OR REPLACE FUNCTION app.admit_due_targets(p_limit integer, p_providers jsonb)
 RETURNS TABLE (operation_id uuid, workspace_id uuid, queue text, state text)
 LANGUAGE plpgsql SECURITY DEFINER
@@ -145,7 +131,7 @@ BEGIN
   IF p_limit IS NULL OR p_limit NOT BETWEEN 1 AND 500 OR jsonb_typeof(p_providers) IS DISTINCT FROM 'object' THEN
     RAISE EXCEPTION 'admit_due_targets: the limit is 1 to 500 and the providers an object' USING ERRCODE = '22023';
   END IF;
-  -- The lease of a provider is a positive whole number of seconds; a value that is not is the caller's defect and no target is read.
+  -- A bad lease is the caller's defect, so no target is read.
   IF EXISTS (SELECT 1 FROM jsonb_each(p_providers) AS e (provider, facts)
       WHERE NOT coalesce(jsonb_typeof(e.facts -> 'lease_seconds' -> 'publish') = 'number'
         AND (e.facts -> 'lease_seconds' ->> 'publish') ~ '^[1-9][0-9]{0,8}$', false)) THEN
@@ -153,7 +139,7 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
   -- Only the target row is locked (OF v). The workspace row is read, not locked; it is named first because the
-  -- lock-order check counts every table of a locking statement and the workspace rank comes before the target's.
+  -- lock-order check counts every table of a locking statement and the workspace comes before the target.
   FOR r IN
     SELECT v.id AS variant_id, v.workspace_id AS ws, v.channel_id, v.due_at, v.frozen_version_id, c.provider_id,
         p.author_id, p.id AS post_id
@@ -236,9 +222,9 @@ BEGIN
 END
 $$;
 
--- Resolution of 0022, with one change: the operation that a `supersede` or a `publish_late` of a missed operation creates
--- locks (before the old operation is moved) and pins the media of the frozen snapshot of the operation it replaces, in the
--- same transaction; a medium that is no longer ready raises SH422 and nothing the call did is kept.
+-- The operation a `supersede` or a `publish_late` of a missed operation creates locks (before the old one is moved)
+-- and pins the media of the replaced operation's frozen snapshot in the same transaction; a medium that is no longer
+-- ready raises SH422 and nothing the call did is kept.
 CREATE OR REPLACE FUNCTION app.resolve_operation(p_ws uuid, p_op uuid, p_kind text, p_args jsonb DEFAULT '{}'::jsonb)
 RETURNS TABLE (new_operation_id uuid)
 LANGUAGE plpgsql SECURITY DEFINER
@@ -290,8 +276,8 @@ BEGIN
   END IF;
   SELECT o.state, o.effect INTO st, eff FROM app.operations AS o
     WHERE o.workspace_id = p_ws AND o.id = p_op FOR NO KEY UPDATE;
-  -- OL 6.1 row 44: a drop or a reschedule of a post that may have been sent needs `absent` evidence of this operation
-  -- that was read after its latest attempt began (any, when it has no attempt); the move then resets the effect.
+  -- A drop or reschedule of a post that may have been sent needs `absent` evidence read after its latest attempt began
+  -- (any, when it has no attempt); the move then resets the effect.
   absent_ok := jsonb_exists(p_args, 'absence_evidence_id') AND EXISTS (SELECT 1 FROM app.operation_evidence AS e
     WHERE e.workspace_id = p_ws AND e.operation_id = p_op AND e.id = (p_args ->> 'absence_evidence_id')::uuid
       AND e.kind = 'absent' AND e.observed_at > coalesce((SELECT a.started_at FROM app.operation_attempts AS a
@@ -311,8 +297,8 @@ BEGIN
     RAISE EXCEPTION 'resolve_operation: % is not allowed from this state', p_kind USING ERRCODE = 'SH409';
   END IF;
   SELECT w.lateness_tolerance, w.organization_id INTO tol, org FROM app.workspaces AS w WHERE w.id = p_ws;
-  -- The operation that sends again pins the media of this one's frozen snapshot, so they are locked now, after this
-  -- operation's row lock and before it is moved: the move fires triggers that write ranks above the assets.
+  -- The operation that sends again pins this one's media, so they are locked now, after this operation's row lock and
+  -- before it is moved: the move fires triggers that write tables locked after the assets.
   IF p_kind = 'supersede' OR (p_kind = 'publish_late' AND st = 'missed') THEN
     PERFORM app.operation_media_lock(p_ws, seen.frozen_version_id, p_op);
   END IF;
@@ -368,8 +354,7 @@ BEGIN
 END
 $$;
 
--- The lock and the writer of the pin have no runtime caller, like the writer of operations: only the two functions above
--- call them, as the definer role, after their own checks.
+-- No runtime caller: only the two functions above call these, as the definer, after their own checks.
 REVOKE ALL ON FUNCTION app.operation_media_lock(uuid, uuid, uuid), app.operation_media_pin(uuid, uuid, uuid),
   app.admit_due_targets(integer, jsonb), app.resolve_operation(uuid, uuid, text, jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app.admit_due_targets(integer, jsonb) TO shoutory_worker;

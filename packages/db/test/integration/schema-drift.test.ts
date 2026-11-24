@@ -7,8 +7,7 @@ import { cloneTemplate, readTestEnv, type TestDatabase } from "../../src/testing
 
 const env = readTestEnv();
 
-// The Drizzle metadata is hand-written next to the migrations, so a column that differs from the migrated catalog
-// in name, type or nullability is drift. drizzle-kit has no read-only live diff at the pin, so the catalog is read here.
+// drizzle-kit has no read-only live diff at the pin, so the catalog is read here.
 const declared: PgTable[] = [];
 for (const value of Object.values(schema)) if (is(value, PgTable)) declared.push(value as PgTable);
 const nameOf = (table: PgTable): string => `${getTableConfig(table).schema}.${getTableConfig(table).name}`;
@@ -33,7 +32,6 @@ async function drift(pool: Pool, table: PgTable): Promise<string[]> {
   return [...problems, ...(await primaryKeyDrift(pool, table))];
 }
 
-// The primary key columns, in key order, as the catalog has them and as the metadata declares them.
 async function primaryKeyDrift(pool: Pool, table: PgTable): Promise<string[]> {
   const config = getTableConfig(table);
   const found = await pool.query(

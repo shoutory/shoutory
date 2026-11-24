@@ -4,11 +4,8 @@ import { Refusal } from "../errors/refusal.js";
 const SAFE_METHODS: ReadonlySet<string> = new Set(["GET", "HEAD", "OPTIONS"]);
 const BEARER = /^Bearer\s+\S+$/i;
 
-/**
- * CSRF for unsafe methods (OWASP CSRF cheat sheet, MDN Sec-Fetch-Site). A browser request passes only when it is
- * same-origin by fetch metadata, or carries no fetch metadata and the exact public origin, and in both cases the
- * `X-Shoutory-Client: web` header. A bearer credential is not sent by a browser on its own, so it is exempt.
- */
+// Follows the OWASP CSRF cheat sheet and MDN Sec-Fetch-Site. A browser never sends a bearer credential on its own, so
+// it is exempt.
 export function csrf(publicOrigin: string): MiddlewareHandler {
   return async (c, next) => {
     if (SAFE_METHODS.has(c.req.method) || BEARER.test(c.req.header("authorization") ?? "")) return next();

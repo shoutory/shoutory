@@ -1,8 +1,5 @@
--- Organizations, workspaces, members, roles and the instance settings, with the row security templates they need.
---
 -- A FORCE row security table gives its owner no access without a policy, so the built-in roles are seeded before
--- the template is applied to their table. The runtime role reads these tables and writes only the profile columns
--- of a workspace; every other write comes from a definer function.
+-- the template is applied to their table. Every write except a workspace profile comes from a definer function.
 
 CREATE TABLE app.organizations (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
@@ -21,7 +18,6 @@ CREATE TABLE app.organization_members (
   org_role text NOT NULL CHECK (org_role IN ('owner', 'admin', 'member', 'billing')),
   PRIMARY KEY (organization_id, user_id)
 );
--- The memberships of a user are looked up by user_id, and a deleted user checks this table.
 -- shoutory:accepted-lock new empty table in this file
 CREATE INDEX organization_members_user_idx ON app.organization_members (user_id);
 
@@ -40,7 +36,7 @@ CREATE TABLE app.workspaces (
   CONSTRAINT workspaces_organization_slug_key UNIQUE (organization_id, slug)
 );
 
--- workspace_id is NULL for a built-in role. Custom roles come later and are unique by key inside a workspace.
+-- workspace_id is NULL for a built-in role.
 CREATE TABLE app.roles (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   workspace_id uuid REFERENCES app.workspaces (id),
@@ -70,7 +66,7 @@ CREATE TABLE app.instance_settings (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
 
--- The five built-in roles. The same lists are in the permission matrix of the core package; a test compares them.
+-- The same lists are in the permission matrix of the core package; a test compares them.
 INSERT INTO app.roles (workspace_id, key, name, permissions) VALUES
   (NULL, 'owner', 'Owner', ARRAY[
     'posts.view', 'posts.edit', 'approval.decide', 'publish.override', 'publish.resolve', 'channels.view',
@@ -86,8 +82,6 @@ INSERT INTO app.roles (workspace_id, key, name, permissions) VALUES
   (NULL, 'approver', 'Approver', ARRAY['posts.view', 'approval.decide', 'library.view', 'analytics.view']),
   (NULL, 'viewer', 'Viewer', ARRAY['posts.view', 'library.view', 'inbox.view', 'analytics.view']);
 
--- Two templates join W, U, I and D. The function stays a migration tool: only the owner may run it.
---
 -- W_builtin: W, except that a built-in row (key column NULL) is readable while the read set is not empty, so an
 -- empty, missing or forged context reads no built-in. A write needs the write workspace, which a NULL never equals.
 -- O: an organization row, read when it belongs to the session's organization. There is no write policy.
@@ -143,32 +137,28 @@ SELECT app.apply_rls_template('app.roles'::regclass, 'W_builtin');
 SELECT app.apply_rls_template('app.workspace_members'::regclass, 'W');
 SELECT app.apply_rls_template('app.instance_settings'::regclass, 'I');
 
--- The runtime role reads the tenancy tables and changes the profile of a workspace; no other column of a workspace
--- (its organization, region, deletion and archive marks) is writable by it. The worker holds nothing here yet.
+-- The runtime role may change only the profile columns of a workspace, never its organization, region, deletion or
+-- archive marks.
 GRANT SELECT ON app.organizations, app.organization_members, app.workspaces, app.workspace_members, app.roles
   TO shoutory_app;
 GRANT UPDATE (name, slug, colour, default_tz) ON app.workspaces TO shoutory_app;
 
--- The foreign keys of two earlier tables to the workspaces table, now that it exists. Both tables are empty here,
--- so the validation scan costs nothing.
 ALTER TABLE app.user_profiles ADD CONSTRAINT user_profiles_last_workspace_id_fkey
   FOREIGN KEY (last_workspace_id) REFERENCES app.workspaces (id) ON DELETE SET NULL NOT VALID;
--- shoutory:accepted-lock tables empty at M0
+-- shoutory:accepted-lock tables are empty when this file runs
 ALTER TABLE app.user_profiles VALIDATE CONSTRAINT user_profiles_last_workspace_id_fkey;
--- A deleted workspace looks up the rows that point at it.
--- shoutory:accepted-lock table empty at M0
+-- shoutory:accepted-lock table is empty when this file runs
 CREATE INDEX user_profiles_last_workspace_idx ON app.user_profiles (last_workspace_id);
 
 ALTER TABLE app.email_outbox ADD CONSTRAINT email_outbox_workspace_id_fkey
   FOREIGN KEY (workspace_id) REFERENCES app.workspaces (id) NOT VALID;
--- shoutory:accepted-lock tables empty at M0
+-- shoutory:accepted-lock tables are empty when this file runs
 ALTER TABLE app.email_outbox VALIDATE CONSTRAINT email_outbox_workspace_id_fkey;
--- shoutory:accepted-lock table empty at M0
+-- shoutory:accepted-lock table is empty when this file runs
 CREATE INDEX email_outbox_workspace_idx ON app.email_outbox (workspace_id) WHERE workspace_id IS NOT NULL;
 
--- An organization keeps at least one owner. The check runs at commit so one transaction may hand ownership over,
--- and it reads the members through its own purpose, so the answer never depends on who changed them. An
--- organization that no longer exists passes: its members went with it.
+-- The check runs at commit so one transaction may hand ownership over, and it reads the members through its own
+-- purpose, so the answer never depends on who changed them. An organization that no longer exists passes.
 CREATE FUNCTION app.organization_owner_guard()
 RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER
@@ -200,15 +190,14 @@ CREATE POLICY organization_owner_guard_select ON app.organizations FOR SELECT TO
   USING ((SELECT app.job_purpose()) = 'organization_owner_guard');
 CREATE POLICY organization_owner_guard_select ON app.organization_members FOR SELECT TO shoutory_definer
   USING ((SELECT app.job_purpose()) = 'organization_owner_guard');
--- The trigger is created while the migration owner still owns the function; a trigger needs no EXECUTE to fire.
+-- Created while the migration owner still owns the function; a trigger needs no EXECUTE to fire.
 CREATE CONSTRAINT TRIGGER organization_owner_guard
   AFTER INSERT OR UPDATE OR DELETE ON app.organization_members
   DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION app.organization_owner_guard();
 REVOKE ALL ON FUNCTION app.organization_owner_guard() FROM PUBLIC;
 ALTER FUNCTION app.organization_owner_guard() OWNER TO shoutory_definer;
 
--- Sets one instance setting. The caller is the signed-in user of the session context, never an argument, and must be
--- an instance admin. The key list is closed and each key has one value type.
+-- The caller is the signed-in user of the session context, never an argument, and must be an instance admin.
 GRANT SELECT, INSERT, UPDATE ON app.instance_settings TO shoutory_definer;
 CREATE POLICY instance_setting_set_all ON app.instance_settings FOR ALL TO shoutory_definer
   USING ((SELECT app.job_purpose()) = 'instance_setting_set')

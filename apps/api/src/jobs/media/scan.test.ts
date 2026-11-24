@@ -4,9 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createClamdScan, encodeInstream, parseClamdReply } from "./scan.js";
 
-// The clamd INSTREAM protocol (clamd man page): the command `zINSTREAM\0`, then chunks each led by its length as four
-// bytes in network order, then a chunk of length zero. The encoder and the reply reader are pure; the socket is the
-// operator's scanner and is not faked here.
+// The socket is the operator's scanner and is not faked here.
 const u32 = (n: number) => Buffer.from([(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255]);
 
 describe("the clamd frame encoder", () => {

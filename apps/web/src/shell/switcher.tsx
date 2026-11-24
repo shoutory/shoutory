@@ -6,7 +6,6 @@ import { type Choice, ChoiceList } from "./choice-list";
 import { Palette } from "./palette";
 import type { Organization, Workspace } from "./shell-data";
 
-// A ComboBox with search (ux-spec X-01); the label is the caller's own words.
 function Switcher({
   label,
   testId,
@@ -42,11 +41,6 @@ function Switcher({
   );
 }
 
-/**
- * The top bar's scope controls (ux-spec X-01, X-02): the organization switcher only filters the workspace list by
- * organization_id (R397 2); the workspace switcher lists the workspaces of the chosen organization and is absent when
- * there is nothing else to choose; the palette searches the same list.
- */
 export function Switchers({
   organizations,
   workspaces,
@@ -66,7 +60,6 @@ export function Switchers({
 
   return (
     <>
-      {/* A personal organization is the person's own space: there is nothing to switch between. */}
       {organization && organization.type !== "personal" ? (
         <Switcher
           label={<Trans id="shell.switcher.organization">Organization</Trans>}

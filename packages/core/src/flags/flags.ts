@@ -1,14 +1,8 @@
-// The one read path of feature flags. Core does no I/O: the caller loads a snapshot of the flags and the
-// overrides it may see, and `isOn` resolves one key over it. The most specific scope wins: workspace, organization,
-// instance, then the flag's default.
-
+// The most specific scope wins: workspace, organization, instance, then the flag's default.
 export interface FlagState {
   readonly defaultOn: boolean;
-  /** The instance override, when one is set. */
   readonly instance?: boolean;
-  /** Organization overrides by organization id. */
   readonly organizations: ReadonlyMap<string, boolean>;
-  /** Workspace overrides by workspace id. */
   readonly workspaces: ReadonlyMap<string, boolean>;
 }
 
@@ -27,7 +21,7 @@ function resolve(state: FlagState, organizationId?: string, workspaceId?: string
 }
 
 export const flags = {
-  /** Whether the flag is on for the context. A key missing from the snapshot is a programming error, never "off". */
+  // A key missing from the snapshot is a programming error, never "off".
   isOn(ctx: FlagContext, key: string): boolean {
     const state = ctx.snapshot.get(key);
     if (!state) throw new Error(`unknown feature flag: ${key}`);

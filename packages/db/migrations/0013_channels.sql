@@ -1,13 +1,7 @@
--- Channels. First, two repairs to what M0 left behind, then the creation limit, the channel tables and the definers
--- that change a channel's connection state.
-
--- Every leaf of audit_logs gets row security enabled and forced. A query through the parent applies the parent's
--- policies and ignores the leaf's; a query that names a leaf applies the leaf's, and a leaf with none denies it to
--- every role (PostgreSQL 18, ddl-inherit and ddl-rowsecurity, accessed 2026-11-21). The three leaves of 0008 were made
--- without it; ensure_partitions already does it for every later leaf. The leaves belong to the definer role, so it
--- runs the statements; the loop reads the catalog, so no leaf is missed whatever month the database was made in.
--- Lock levels: ALTER TABLE ... ENABLE and FORCE ROW LEVEL SECURITY take ACCESS EXCLUSIVE on each leaf for the length
--- of the migration transaction; the leaves are small by design at this point.
+-- A query through the parent applies the parent's policies and ignores the leaf's; a query that names a leaf applies
+-- the leaf's, and a leaf with no row security would be readable by any role holding a grant (PostgreSQL 18, ddl-inherit
+-- and ddl-rowsecurity, accessed 2026-11-21). The loop reads the catalog, so no leaf is missed. The leaves belong to
+-- the definer role, so it runs the statements. They take ACCESS EXCLUSIVE on each leaf for this transaction only.
 SET ROLE shoutory_definer;
 -- shoutory:accepted-lock three small leaves, held only for this migration transaction
 DO $$
@@ -21,16 +15,12 @@ BEGIN
 END
 $$;
 
--- No code calls audit_insert from the worker; a later slice that needs it grants it again with its own test.
 REVOKE EXECUTE ON FUNCTION app.audit_insert(text, text, text, text, bytea, jsonb) FROM shoutory_worker;
 RESET ROLE;
 
--- The creation limit: one user creates at most 10 organizations and workspaces together per day (capacity 10, a full
--- refill over 86400 seconds). The route passes the bucket key, a keyed digest of the user id that only the application
--- can compute; bucket_take refuses a key that is not 64 lower-case hex digits. The same migration widens the scope list
--- of rate_buckets for the provider scopes that get their numbers later: bucket_limits has none, so bucket_take refuses them
--- until then. The constraint is replaced the way 0007 does it (NOT VALID, then VALIDATE in the same file) on the small
--- table that holds only throttle rows.
+-- The route passes the bucket key, a keyed digest of the user id that only the application can compute; bucket_take
+-- refuses a key that is not 64 lower-case hex digits. The scope list is widened for scopes whose numbers come later:
+-- bucket_limits has none, so bucket_take refuses them until then.
 -- shoutory:accepted-lock the throttle table is small and its rows expire; the lock is held for this migration only
 ALTER TABLE app.rate_buckets DROP CONSTRAINT rate_buckets_scope_check;
 -- shoutory:accepted-lock same small table, same transaction
@@ -41,8 +31,8 @@ ALTER TABLE app.rate_buckets ADD CONSTRAINT rate_buckets_scope_check CHECK (scop
 -- shoutory:accepted-lock VALIDATE takes SHARE UPDATE EXCLUSIVE and scans the same small table, in the same transaction
 ALTER TABLE app.rate_buckets VALIDATE CONSTRAINT rate_buckets_scope_check;
 
--- The definer role owns bucket_limits and the migration owner does not inherit its rights, so the replacement runs as
--- the definer, as 0012 does.
+-- The definer role owns bucket_limits and the migration owner does not inherit its rights, so the replacement runs
+-- as the definer.
 SET ROLE shoutory_definer;
 CREATE OR REPLACE FUNCTION app.bucket_limits(scope text)
 RETURNS TABLE (capacity integer, refill_seconds integer)
@@ -64,15 +54,13 @@ AS $$
   ) AS l (name, capacity, refill_seconds) WHERE l.name = scope
 $$;
 REVOKE ALL ON FUNCTION app.bucket_limits(text) FROM PUBLIC;
--- The two creation definers take the bucket key as a new last argument, so the old signatures go (their grants with them).
 DROP FUNCTION app.workspace_create(uuid, text, text, text, text, bytea);
 DROP FUNCTION app.organization_create(text, text, text, bytea);
 RESET ROLE;
 
--- A refusal is SQLSTATE SH429 under the definer's name, with the whole seconds to wait in DETAIL; the transaction rolls
--- back, so a refused call creates nothing and a later failure of the same call gives the token back. workspace_create
--- is 0010's body (the organization lock and the cap of 100) with the spend added after them, so a call the cap refuses
--- never reaches the bucket.
+-- A refusal is SQLSTATE SH429 with the whole seconds to wait in DETAIL; the transaction rolls back, so a refused
+-- call creates nothing and a later failure of the same call gives the token back. The spend comes after the
+-- organization lock and the workspace cap, so a call the cap refuses never reaches the bucket.
 CREATE FUNCTION app.organization_create(name text, type text, request_id text, ip_hmac bytea, bucket_key text)
 RETURNS uuid
 LANGUAGE plpgsql SECURITY DEFINER
@@ -166,13 +154,11 @@ GRANT EXECUTE ON FUNCTION app.organization_create(text, text, text, bytea, text)
 ALTER FUNCTION app.organization_create(text, text, text, bytea, text) OWNER TO shoutory_definer;
 ALTER FUNCTION app.workspace_create(uuid, text, text, text, text, bytea, text) OWNER TO shoutory_definer;
 
--- A connected account of a workspace. The identity (provider, account) is unique inside the workspace, and a connect
--- definer (0014) inserts the row; no runtime role inserts or deletes one. connection_state and state_reason change only
--- through definers that check the move (R533 (D)); the app role may write the nickname column alone. The default state
--- is the safe one: admission trusts `connected`, and only a definer that holds a usable credential sets it.
--- provider_id and account_kind are open text bounded in length: the provider portfolio and its account kinds belong to
--- the provider manifests, not to a constraint here. The columns of later slices (granted scopes, the provider app, the
--- share link) are added by their own migrations.
+-- No runtime role inserts or deletes a row. connection_state and state_reason change only through definers that
+-- check the move; the app role may write the nickname column alone. The default state is the safe one: admission
+-- trusts `connected`, and only a definer that holds a usable credential sets it.
+-- provider_id and account_kind are open text bounded in length: providers and their account kinds belong to the
+-- provider manifests, not to a constraint here.
 CREATE TABLE app.channels (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   workspace_id uuid NOT NULL REFERENCES app.workspaces (id),
@@ -203,7 +189,6 @@ SELECT app.apply_rls_template('app.channels'::regclass, 'W');
 GRANT SELECT ON app.channels TO shoutory_app;
 GRANT UPDATE (nickname) ON app.channels TO shoutory_app;
 
--- The capability answer a channel gave at one epoch (the last 5 per channel are kept). A snapshot goes with its channel.
 CREATE TABLE app.channel_capability_snapshots (
   workspace_id uuid NOT NULL,
   channel_id uuid NOT NULL,
@@ -220,7 +205,6 @@ CREATE TABLE app.channel_capability_snapshots (
 SELECT app.apply_rls_template('app.channel_capability_snapshots'::regclass, 'W');
 GRANT SELECT ON app.channel_capability_snapshots TO shoutory_app;
 
--- Where a channel's incoming streams stand. M6 extends the stream list and the columns; a cursor goes with its channel.
 CREATE TABLE app.sync_cursors (
   workspace_id uuid NOT NULL,
   channel_id uuid NOT NULL,
@@ -235,10 +219,8 @@ CREATE TABLE app.sync_cursors (
 SELECT app.apply_rls_template('app.sync_cursors'::regclass, 'W');
 GRANT SELECT ON app.sync_cursors TO shoutory_app;
 
--- The platform's OAuth application per provider and environment, and the per-instance application of an
--- instance-based provider. Template I: instance-level, read and written only by definers; no definer exists yet (the
--- first writers arrive with the Mastodon adapter and the Meta apps), so the explicit policy denies the runtime roles.
--- The client secret is stored sealed, one column per field of the sealed secret.
+-- Instance-level, read and written only by definers; the explicit policy denies the runtime roles. The client secret
+-- is stored sealed, one column per field of the sealed secret.
 CREATE TABLE app.provider_apps (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   provider_id text NOT NULL CHECK (char_length(provider_id) BETWEEN 1 AND 64),
@@ -283,10 +265,9 @@ SELECT app.apply_rls_template('app.provider_instance_apps'::regclass, 'I');
 CREATE POLICY provider_instance_apps_deny_runtime ON app.provider_instance_apps FOR ALL
   TO shoutory_app, shoutory_worker USING (false) WITH CHECK (false);
 
--- channel_disable and channel_enable: the only writers of a channel's connection state in this migration. Each takes
--- the tenancy locks (rank 1a), then the channel row (rank 5), then the audit head inside audit_append (rank 11), and
--- needs channels.manage, which is the admin rank (owners and organization admins included). A caller outside the
--- workspace, a channel of another workspace and a missing channel all get the same 42501.
+-- Locks are taken in rank order: the tenancy locks, then the channel row, then the audit head inside audit_append.
+-- The caller needs channels.manage (the admin rank). A caller outside the workspace, a channel of another workspace
+-- and a missing channel all get the same 42501.
 GRANT SELECT ON app.channels TO shoutory_definer;
 GRANT UPDATE (connection_state, state_reason, reconnect_deadline) ON app.channels TO shoutory_definer;
 CALL app.grant_purposes('channels', 'SELECT', ARRAY['channel_disable', 'channel_enable']);
@@ -299,7 +280,6 @@ CALL app.grant_purposes('workspace_members', 'SELECT', ARRAY['channel_disable', 
 CALL app.grant_purposes('organization_members', 'SELECT', ARRAY['channel_disable', 'channel_enable']);
 CALL app.grant_purposes('roles', 'SELECT', ARRAY['channel_disable', 'channel_enable']);
 
--- Disable: from any state but disabled (a second disable is SH409). The reason is admin_disabled.
 CREATE FUNCTION app.channel_disable(workspace_id uuid, channel_id uuid, request_id text, ip_hmac bytea)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER
@@ -334,10 +314,8 @@ BEGIN
 END
 $$;
 
--- Enable: only from disabled (any other state is SH409). The channel never returns to `connected` here, because this
--- migration holds no credential to prove it usable: it becomes needs_reconnect, with a 30-day reconnect window counted
--- from the first needs_reconnect (an earlier deadline is kept). The credential slice restores `connected` where its
--- credential is usable.
+-- Enabling never sets `connected`: nothing here proves a credential usable, so the channel becomes needs_reconnect,
+-- with a 30-day reconnect window counted from the first needs_reconnect (an earlier deadline is kept).
 CREATE FUNCTION app.channel_enable(workspace_id uuid, channel_id uuid, request_id text, ip_hmac bytea)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER

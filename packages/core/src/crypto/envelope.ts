@@ -10,10 +10,7 @@ export const CREDENTIAL_KINDS = [
 ] as const;
 export type CredentialKind = (typeof CREDENTIAL_KINDS)[number];
 
-/**
- * Whether a kind's DEK is wrapped under a key derived from the workspace salt (the credential kind table).
- * Deleting the salt shreds every row of a salted kind; an unsalted kind takes no salt at all.
- */
+// Deleting the workspace salt shreds every row of a salted kind.
 export const CREDENTIAL_SALT_POLICY: Readonly<Record<CredentialKind, "salted" | "unsalted">> = {
   channel_token: "salted",
   email_link: "unsalted",
@@ -21,13 +18,11 @@ export const CREDENTIAL_SALT_POLICY: Readonly<Record<CredentialKind, "salted" | 
   provider_instance_app: "unsalted",
 };
 
-/** The salt length (HKDF-SHA256 HashLen, RFC 5869 section 3.1). */
+// HKDF-SHA256 HashLen, RFC 5869 section 3.1.
 export const SALT_BYTES = 32;
 
-/** The all-zero UUID: the scope of an instance-wide secret. */
 export const NIL_SCOPE = "00000000-0000-0000-0000-000000000000";
 
-/** The one layout the envelope seals and opens; callers that build an AAD use it. */
 export const FORMAT_VERSION = 1;
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
@@ -45,7 +40,6 @@ export interface Aad {
   generation: number;
 }
 
-/** The stored fields, kept separate (no packed string). */
 export interface StoredSecret {
   formatVersion: number;
   keyId: string;
@@ -57,7 +51,6 @@ export interface StoredSecret {
   wrapTag: Buffer;
 }
 
-/** A refused seal or open; the message never carries key material or the value. */
 export class EnvelopeError extends Error {
   constructor(message: string) {
     super(message);
@@ -65,7 +58,7 @@ export class EnvelopeError extends Error {
   }
 }
 
-/** A decrypted value. Nothing prints it: only `expose()` returns it, for the one call site that needs it. */
+// Nothing prints the value: only `expose()` returns it.
 export class SealedSecret {
   readonly #value: string;
 
@@ -121,8 +114,6 @@ function decrypt(key: Buffer, iv: Buffer, data: Buffer, tag: Buffer, aad: Buffer
   }
 }
 
-// A salted kind needs a salt of exactly SALT_BYTES, an unsalted (or unknown) kind refuses one; the key that wraps the
-// DEK is the KEK itself or, for a salted kind, the subkey derived from the KEK and the salt.
 function wrapKeyOf(aad: Aad, kek: Buffer, salt: Uint8Array | undefined): Buffer {
   const salted = CREDENTIAL_SALT_POLICY[aad.credentialKind] === "salted";
   if (!salted) {
@@ -135,7 +126,6 @@ function wrapKeyOf(aad: Aad, kek: Buffer, salt: Uint8Array | undefined): Buffer 
   return deriveKey(kek, salt, aad.credentialKind, aad.formatVersion);
 }
 
-/** Seals under the active KEK: a random DEK encrypts the value and the KEK (or its salted subkey) wraps the DEK. */
 export function seal(plaintext: string, aad: Aad, keys: KeyProvider, salt?: Uint8Array): StoredSecret {
   if (aad.formatVersion !== FORMAT_VERSION) throw new EnvelopeError("unsupported format version");
   if (!CREDENTIAL_KINDS.includes(aad.credentialKind)) throw new EnvelopeError("unknown credential kind");
@@ -181,7 +171,6 @@ function checkShape(stored: StoredSecret, aad: Aad, keys: KeyProvider): void {
   if (!keys.has(stored.keyId)) throw new EnvelopeError("no key is loaded for the secret's key id");
 }
 
-/** Opens a stored secret; any wrong byte, key, key id, salt, format version or AAD field raises `EnvelopeError`. */
 export function open(stored: StoredSecret, aad: Aad, keys: KeyProvider, salt?: Uint8Array): SealedSecret {
   checkShape(stored, aad, keys);
   const wrapKey = wrapKeyOf(aad, keys.getKey(stored.keyId), salt);

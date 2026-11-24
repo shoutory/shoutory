@@ -3,9 +3,6 @@ import { seedFrozenVersion } from "../support/ledger-seed.js";
 import { seedChannel, seedOrganization, seedWorkspace, signedUser, unique } from "../support/tenancy.js";
 import { cookieOf, type Fixture, PASSWORD, startFixture } from "./auth/harness.js";
 
-// Security floor of the ledger counts on the admin queue route (NFR-OBS-03, OPS-004): one value per state and
-// nothing of any workspace. The instance admin is the first user to sign up; who else may reach the route is the table
-// of `admin-ops-routes.test.ts`.
 const QUEUE = "/api/v1/admin/queue";
 const STATES = [
   "blocked_reconnect",
@@ -92,7 +89,6 @@ const queue = async () => {
 
 describe("the ledger counts of the admin queue route", () => {
   it("are exactly the 17 {state, total} pairs and hold no workspace id, post text or channel name", async () => {
-    // fails first because: the route has no `ledger` field, or a per-workspace breakdown leaks what the counts must not
     const { status, text } = await queue();
     expect(status).toBe(200);
     const { ledger } = (JSON.parse(text) as { data: { ledger?: Record<string, unknown>[] } }).data;

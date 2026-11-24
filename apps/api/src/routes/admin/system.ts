@@ -7,10 +7,7 @@ import { asAdmin } from "./admin.js";
 
 const rootPackage = z.object({ version: z.string().min(1) });
 
-/**
- * The version of the root package, read once at start-up from the file the image ships beside the build; null when it
- * cannot be read or has no version, so the screen says "not available" instead of a guess.
- */
+// Null when the file is missing or has no version, so the screen says "not available" instead of a guess.
 function readVersion(): string | null {
   try {
     const text = readFileSync(new URL("../../../../../package.json", import.meta.url), "utf8");
@@ -22,7 +19,6 @@ function readVersion(): string | null {
   }
 }
 
-/** The release information of the Z-07 screen: the version, the release channel and the migration status. */
 export function registerSystem(app: App, pool: AppPool, channel: string): void {
   const version = readVersion();
   defineRoute(app, {

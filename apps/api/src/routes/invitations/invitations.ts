@@ -6,9 +6,6 @@ import { enqueueMail } from "../../mail/enqueue.js";
 import { type App, defineRoute } from "../define-route.js";
 import { pageAnswer, pageQuery } from "../input.js";
 
-// Invitations of one workspace: create (with its mail), list and revoke. Every change is a definer of migration 0010,
-// which authorizes the caller; the route adds the throttle, the token and the mail (R243, R244, R255, R256, R258).
-
 const workspaceId = z.uuid().transform((id) => id.toLowerCase());
 const params = z.strictObject({ workspace_id: workspaceId });
 const revokeParams = z.strictObject({ workspace_id: workspaceId, invitation_id: workspaceId });
@@ -21,7 +18,6 @@ const create = z.strictObject({
   expires_in: z.number().int().min(HOUR).max(MAX_EXPIRY).optional(),
 });
 
-// The token is 32 random bytes in base64url: anything else is a malformed request, not a lookup.
 const accept = z.strictObject({ token: z.string().regex(/^[A-Za-z0-9_-]{43}$/) });
 
 const PAGE = 100;
@@ -50,7 +46,7 @@ interface Created {
   readonly ipHmac: Buffer;
 }
 
-// The invitation row and its mail are one transaction: a rollback sends nothing and a commit loses nothing (the outbox pattern).
+// The invitation row and its mail are one transaction: a rollback sends nothing and a commit loses nothing.
 async function createInvitation(
   auth: AuthService,
   inUserTx: <T>(run: (tx: TenantTx) => Promise<T>) => Promise<T>,
@@ -114,7 +110,7 @@ function registerCreate(app: App, auth: AuthService): void {
   });
 }
 
-// The link opens the SPA page, which reads nothing; only this POST consumes the token (NFR-SEC-08). The guess
+// The link opens the SPA page, which reads nothing; only this POST consumes the token. The guess
 // throttle is per address, the account throttle per signed-in user.
 function registerAccept(app: App, auth: AuthService): void {
   defineRoute(app, {

@@ -5,7 +5,6 @@ import { waitForLink } from "./mail";
 import { STATE_DIR } from "./stack";
 import { nextTotp } from "./totp";
 
-/** The founder's browser session, saved by the journey that creates it and used by the specs that depend on it. */
 export const FOUNDER_STATE = `${STATE_DIR}/founder-session.json`;
 const FOUNDER_FACTS = `${STATE_DIR}/founder.json`;
 
@@ -19,14 +18,11 @@ export interface Founder {
   readonly account: Account;
   readonly secret: string;
   readonly workspace: { readonly id: string; readonly name: string };
-  /** The person the first journey invited: a member of the workspace, not an administrator of the instance. */
   readonly member: Account;
 }
 
-/**
- * A person with an address and a password made for this run only. The tag is eight decimal digits, which the page's
- * font sets at one width each, so a name or address is as wide in every run and a table's columns do not move.
- */
+// The tag is eight decimal digits, which the page's font sets at one width each, so a name or address is as wide in
+// every run and a table's columns do not move.
 export function newAccount(label: string): Account {
   const tag = Array.from(randomBytes(8), (byte) => byte % 10).join("");
   return {
@@ -48,14 +44,12 @@ export async function signUp(page: Page, account: Account): Promise<void> {
   await expect(field(page, "sign-up-sent")).toBeVisible();
 }
 
-/** Opens the mailed link and presses its one button. */
 export async function confirmEmail(page: Page, link: string): Promise<void> {
   await page.goto(link);
   await field(page, "verify-confirm").click();
   await expect(field(page, "verify-done")).toBeVisible();
 }
 
-/** Submits the password form and waits until the page leaves the sign-in screen. */
 export async function signIn(page: Page, account: Account): Promise<void> {
   await page.goto("/sign-in");
   await field(page, "sign-in-email").fill(account.email);
@@ -64,7 +58,6 @@ export async function signIn(page: Page, account: Account): Promise<void> {
   await page.waitForURL((url) => !url.pathname.startsWith("/sign-in"));
 }
 
-/** Signs in and answers the second-factor challenge with a code from a step the server has not seen yet. */
 export async function signInWithCode(page: Page, account: Account, secret: string): Promise<void> {
   await signIn(page, account);
   await page.waitForURL(/\/mfa/);
@@ -79,7 +72,6 @@ export const workspaceIdOf = (url: string): string => {
   return id;
 };
 
-/** The first organization and workspace of a person who has none; ends on the workspace. */
 export async function createOrganization(
   page: Page,
   names: { organization: string; workspace: string },
@@ -96,7 +88,6 @@ interface Listed {
   readonly data: ReadonlyArray<{ id: string; name: string; organization_id: string }>;
 }
 
-/** Adds a client (a workspace) to the signed-in person's organization and ends on it. */
 export async function createClient(
   page: Page,
   name: string,
@@ -116,7 +107,6 @@ export async function createClient(
   return { id: added.id, name, organization };
 }
 
-/** The TOTP enrolment of the signed-in person; returns the secret the server showed as text. */
 export async function enrolTotp(page: Page, account: Account): Promise<string> {
   await page.goto("/account/security/two-factor");
   await field(page, "setup-password").fill(account.password);
@@ -138,15 +128,9 @@ export async function inviteMember(page: Page, workspaceId: string, email: strin
   await expect(field(page, "invite-email")).toBeHidden();
 }
 
-/** The file a member's facts are kept in; its time is when the member's last code was used (enrolment). */
+// The file's modification time is when the member's last code was used (enrolment).
 export const memberStatePath = (label: string): string => `${STATE_DIR}/member-${label}.json`;
 
-/**
- * A new person with the second factor on: `inviter` (a signed-in administrator's page) invites them to every
- * workspace, they sign up through the first invitation, accept each one (unless `accept` is false: the invitation stays
- * pending and the person has no workspace), and enrol. Ends signed out; the caller signs in as them, with the next
- * code of the returned secret.
- */
 export async function createMember(options: {
   browser: Browser;
   inviter: Page;
@@ -182,7 +166,6 @@ export async function createMember(options: {
   }
 }
 
-/** A member `createMember` made earlier in this run, by its label; later specs reuse it instead of signing up again. */
 export function loadMember(label: string): { account: Account; secret: string } {
   const file = memberStatePath(label);
   if (!existsSync(file)) {

@@ -12,7 +12,6 @@ import {
 } from "../support/journey";
 import { waitForLink } from "../support/mail";
 
-// The first journey, with real mail and a real second factor, on the production image.
 test("J1: sign up, confirm by mail, enrol TOTP, sign in with a code, create a workspace, invite, the member accepts and sees it", async ({
   page,
   browser,
@@ -28,7 +27,6 @@ test("J1: sign up, confirm by mail, enrol TOTP, sign in with a code, create a wo
   });
   const secret = await enrolTotp(page, founder);
 
-  // A new browser session has to present the code: the cookie is gone, the password alone no longer opens it.
   await page.context().clearCookies();
   await signInWithCode(page, founder, secret);
   await expect(page.getByTestId("workspace-name")).toHaveText(workspace.name);

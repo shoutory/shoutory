@@ -5,8 +5,6 @@ import { SealedSecret } from "./envelope.js";
 
 const PEPPER = new SealedSecret("digest-pepper-for-tests-0123456789abcdef");
 
-// The one keyed-HMAC helper: bucket keys, address digests and refresh-token digests all come from it, so its output
-// is fixed (HMAC-SHA256 over "purpose:value") and a purpose keeps two uses of one value apart.
 describe("pepperDigest", () => {
   it("is the HMAC-SHA256 of purpose:value under the pepper, in lower-case hex", () => {
     const expected = createHmac("sha256", Buffer.from(PEPPER.expose()))

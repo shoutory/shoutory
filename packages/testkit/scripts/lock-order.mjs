@@ -1,16 +1,7 @@
-// The lock-order check: a function body must take its row locks in the order of the rank table below and never a lower
-// rank after a higher one, so two definers can never wait for each other. It reads the SQL of the migrations, takes every
-// function body, and lists in text order the statements that lock or write a ranked table: a locking SELECT (FOR UPDATE,
-// FOR NO KEY UPDATE, FOR SHARE, FOR KEY SHARE), an UPDATE, a DELETE and an INSERT with ON CONFLICT. A plain SELECT is no
-// event, and neither is a plain INSERT: a new row cannot be locked by anyone before it commits. A call to another
-// function of the scanned files takes that function's events at the place of the call. A table already locked or written
-// earlier in the same function may be touched again (it is the row already held). Tables outside the table are
-// ignored. An UPDATE that can fire an AFTER row trigger of its table counts the trigger function's events at its place, so
-// a function that ends an operation must lock the post and the target before it. Not modelled: the order of rows within one
-// rank, and the key-share lock a foreign-key check takes on a parent.
+// A plain SELECT and a plain INSERT are no lock event: a new row cannot be locked by anyone before it commits. Not
+// modelled: the order of rows within one rank, and the key-share lock a foreign-key check takes on a parent.
 
-// Table to rank. 1.5 is the organization and workspace rows, 7.5 the media rows. The counters of rank 9 keep the order
-// in which the table lists them, so each has its own fraction.
+// The counters of rank 9 keep the order in which this list has them, so each has its own fraction.
 const COUNTERS = [
   "rate_buckets",
   "provider_quota_ledger",
@@ -54,7 +45,7 @@ const WRITES = [
   /\bDELETE\s+FROM\s+(?:ONLY\s+)?(?:\w+\.)?(\w+)/g,
 ];
 
-// The bodies of the functions in the files, by name; a later definition replaces an earlier one.
+// A later definition of a function replaces an earlier one.
 export function functionBodies(files) {
   const bodies = new Map();
   for (const file of files) {
@@ -68,8 +59,8 @@ const withoutComments = (body) => body.replace(/--[^\n]*/g, (found) => " ".repea
 const withoutText = (body) =>
   withoutComments(body).replace(/'(?:[^']|'')*'/g, (found) => `''${" ".repeat(found.length - 2)}`);
 
-// The AFTER row triggers by table: the function each runs and the literals of its WHEN clause (null: no WHEN, it fires on
-// every change). A trigger's writes happen inside the statement that fires it.
+// `literals` null means the trigger has no WHEN and fires on every change. A trigger's writes happen inside the statement
+// that fires it.
 const TRIGGER =
   /CREATE\s+TRIGGER\s+\w+\s+AFTER\s[\s\S]*?\sON\s+(?:\w+\.)?(\w+)\s+(?:FOR\s+EACH\s+ROW\s*)?(?:WHEN\s*\(([\s\S]*?)\)\s*)?EXECUTE\s+(?:FUNCTION|PROCEDURE)\s+(?:\w+\.)?(\w+)\s*\(/gi;
 export function triggersOf(files) {
@@ -101,7 +92,6 @@ function firesTrigger(setClause, triggers) {
   );
 }
 
-// The calls of the trigger functions an UPDATE (the match of the first write pattern) can fire, at its place.
 function triggerCalls(text, raw, match, triggerMap) {
   const triggers = triggerMap.get(match[1].toLowerCase());
   if (!triggers) return [];
@@ -111,7 +101,6 @@ function triggerCalls(text, raw, match, triggerMap) {
   return triggers.map(({ fn }) => [match.index, fn, "call"]);
 }
 
-// The writes of a body ([position, table]) and, for an UPDATE that can fire a trigger, the call of its function.
 function writes(text, raw, triggerMap) {
   const found = [];
   for (const pattern of WRITES) {
@@ -123,7 +112,6 @@ function writes(text, raw, triggerMap) {
   return found;
 }
 
-// The table events of one body in text order, as [position, table]; a call is [position, name, "call"].
 function events(body, names, triggerMap) {
   const text = withoutText(body);
   const found = writes(text, withoutComments(body), triggerMap);
@@ -147,7 +135,6 @@ function events(body, names, triggerMap) {
   return found.sort((a, b) => a[0] - b[0]);
 }
 
-// The ranked tables a function touches, in order, with the calls it makes taken in at their place.
 function touches(name, bodies, triggers, seen = [], depth = 0) {
   if (depth > CALL_DEPTH || seen.includes(name)) return [];
   return events(bodies.get(name), bodies, triggers).flatMap(([, target, call]) =>
@@ -155,7 +142,6 @@ function touches(name, bodies, triggers, seen = [], depth = 0) {
   );
 }
 
-// A message for each place where a table is touched below a rank already reached and not held already.
 export function lockOrderViolations(files) {
   const bodies = functionBodies(files);
   const triggers = triggersOf(files);

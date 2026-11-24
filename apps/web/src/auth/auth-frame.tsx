@@ -4,10 +4,7 @@ import { ApiError } from "../http/client";
 import { useOnline } from "../shell/offline-banner";
 import { Button } from "../ui/button";
 
-/**
- * The page of an auth screen: the brand, one heading, the form. When `step` changes (the form gives way to its
- * confirmation, a dead link or a success) focus moves to the heading, so a screen reader is told the page changed.
- */
+// When `step` changes, focus moves to the heading, so a screen reader is told the page changed.
 export function AuthFrame({
   title,
   step,
@@ -37,7 +34,6 @@ export function AuthFrame({
   );
 }
 
-/** A mailed link that cannot be used (unknown, used, expired, or opened with no token): what to do instead is `action`. */
 export function BadLink({ action }: { action: ReactNode }) {
   return (
     <section className="flex flex-col gap-3">
@@ -54,10 +50,7 @@ export function BadLink({ action }: { action: ReactNode }) {
   );
 }
 
-/**
- * One submit of a form or an action: it ignores a second press while it runs (Enter in a field submits even when the
- * button is aria-disabled) and while the browser is offline, and a failure of the server is the screen's to show.
- */
+// Ignores a second press while it runs (Enter in a field submits even when the button is aria-disabled).
 export function useAction(act: () => Promise<void>, onFailure?: (error: ApiError) => void) {
   const running = useRef(false);
   const online = useOnline();
@@ -82,7 +75,6 @@ export function useAction(act: () => Promise<void>, onFailure?: (error: ApiError
   return { run, pending, failure, online, reset: () => setFailure(null) };
 }
 
-/** The submit button: busy while it runs, aria-disabled with its reason while it cannot (NFR-A11Y-05). */
 export function SubmitButton({
   pending,
   online,

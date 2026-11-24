@@ -1,7 +1,5 @@
 #!/usr/bin/env node
-// The image tags, the debug image tags and the channel of a release tag (v1.2.3, v1.3.0-beta.2) or of a nightly date
-// (2026-11-21). Only a stable tag gives `stable`; the major tag is skipped while the major is 0, since it would move
-// with every minor.
+// The major tag is skipped while the major is 0, since it would move with every minor.
 // Usage, from the repository root: node packages/testkit/scripts/release-tags.mjs <tag or date> [image name]
 // It prints channel=, tags= and debug_tags= lines for $GITHUB_OUTPUT; with an image name each tag is image:tag.
 // Numeric identifiers have no leading zero (semver), so v01.2.3 is not a version.

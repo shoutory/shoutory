@@ -1,9 +1,3 @@
--- The guards of the OAuth connect routes: a per-user bucket on the start and on the callback, and the flow writer taking the
--- flow id the service sealed the verifier under and refusing a channel of another provider.
-
--- The two connect scopes join the throttle. `connect_start` also caps a user's unspent flows (10 per 600 seconds). The
--- scope list and the limits are replaced whole, every earlier row carried (the 0013 way: NOT VALID, then VALIDATE in the
--- same file, on the table that holds only throttle rows).
 -- shoutory:accepted-lock the throttle table is small and its rows expire; the lock is held for this migration only
 ALTER TABLE app.rate_buckets DROP CONSTRAINT rate_buckets_scope_check;
 -- shoutory:accepted-lock same small table, same transaction
@@ -38,10 +32,8 @@ AS $$
 $$;
 REVOKE ALL ON FUNCTION app.bucket_limits(text) FROM PUBLIC;
 
--- The flow writer takes the flow id: the service reads it before it seals the verifier, because the sealed object is
--- bound to the flow id as its owner, and the row must carry that id. The checks are the old ones and one more: a channel (a
--- reconnect) must belong to the workspace and to the provider of the flow, and any other channel is refused exactly as
--- a channel of another workspace is.
+-- The caller supplies the flow id because the sealed verifier is bound to it, so the row must carry that same id. A
+-- reconnect channel of another workspace or provider is refused the same way.
 DROP FUNCTION app.oauth_flow_put(uuid, text, bytea, uuid, text, integer, text, bytea, bytea, bytea, bytea, bytea,
   bytea, text);
 CREATE FUNCTION app.oauth_flow_put(

@@ -59,7 +59,6 @@ async function refuseLocked(ctx: Ctx): Promise<never> {
   throw new Refusal("invalid_credentials", "the account bucket is empty");
 }
 
-/** A hit of the re-check ends the session the password step just made; the challenge cookie is never forwarded. */
 async function refuseBreached(ctx: Ctx, cookies: readonly string[]): Promise<never> {
   if (liveSessionCookie(cookies)) {
     const created = await sessionAfter(ctx, cookies);
@@ -78,7 +77,6 @@ const signIn: Handler = async (ctx) => {
   if (userId && (await ctx.auth.passwords.recheckHit(userId, text(ctx, "password")))) {
     return refuseBreached(ctx, cookies);
   }
-  // The second step of the challenge records the step-up and claims the owner place.
   if (data.twoFactorRedirect) return respond(ctx.c, data, cookies);
   const created = await sessionAfter(ctx, cookies);
   if (created) {
@@ -161,7 +159,6 @@ const HANDLERS: Readonly<Record<string, Handler>> = {
   [`POST ${AUTH_BASE}/sessions/revoke-others`]: revokeOthers,
 };
 
-/** Registers every `AUTH_PATHS` row through `defineRoute`: cookie only, strict body, its policy and its throttle. */
 export function registerAuthRoutes(app: App, auth: AuthService): void {
   for (const row of AUTH_PATHS) {
     const handler = HANDLERS[`${row.method} ${row.path}`];
@@ -170,7 +167,6 @@ export function registerAuthRoutes(app: App, auth: AuthService): void {
       method: row.method === "GET" ? "get" : "post",
       path: row.path,
       policy: row.policy,
-      // The library handles these paths and reaches no workspace: a signed-in call runs as the user alone.
       access: row.policy === "public" ? "none" : "user",
       cookieOnly: true,
       ...(row.body ? { body: row.body } : {}),

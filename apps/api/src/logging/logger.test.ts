@@ -2,7 +2,8 @@ import { SealedSecret } from "@shoutory/core/crypto";
 import { describe, expect, it } from "vitest";
 import { createLogger, type Logger, logRequest } from "./logger.js";
 
-// Planted values are descriptive and low-entropy (AGENTS 4.13). The canary holds characters that every encoding changes.
+// Planted values are descriptive and low-entropy so the secret scanner stays quiet. The canary holds characters
+// that every encoding changes.
 const CANARY = 'log-canary"v\\1/a b+c=d';
 const KEK = Buffer.from("planted-kek-for-logger-tests-0001").toString("base64");
 const SUBKEY = Buffer.from("planted-subkey-for-logger-tests!").toString("hex");

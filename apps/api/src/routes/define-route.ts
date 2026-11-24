@@ -19,32 +19,24 @@ export interface AppEnv {
 }
 export type App = OpenAPIHono<AppEnv>;
 
-/** The closed list of route policies. The API-key slice adds its own. */
 const POLICIES = ["public", "session", "step_up"] as const;
 type Policy = (typeof POLICIES)[number];
 
-/** What a `session` or `step_up` route needs from the authentication service. */
 export interface RouteAuth {
   readonly resolveSession: SessionResolver;
   /** Refuses with `step_up_required` unless the session proved its identity again in the last ten minutes. */
   readonly requireStepUp: (session: AuthSession) => Promise<void>;
 }
 
-/**
- * What data a route may reach. `none` is for a public route; `user` needs a signed-in user and holds a transaction only inside `inUserTx`; a workspace
- * access names the path parameter that holds the workspace id and the permission the caller needs there (none: any
- * member). The handler never sees a workspace id that did not come through this declaration.
- */
+// A workspace access without a permission lets any member in. The handler never sees a workspace id that did not come
+// through this declaration.
 export type Access =
   | "none"
   | "user"
   | { readonly workspace: string; readonly permission?: Permission; readonly split?: true };
 
-/**
- * What a `split` workspace route calls instead of holding one transaction: each call is its own short scoped
- * transaction (read, or write), authorized like the single one, so the handler may call outside the database between
- * them (AGENTS 3.7). A denial of the scope is an answer, and the callback does not run.
- */
+// Each call is its own short scoped transaction, so the handler may call outside the database between them (no
+// external call inside a transaction).
 export type Scoped = <T>(
   write: boolean,
   run: (tx: TenantTx, scope: AuthorizedScope) => Promise<T>,
@@ -64,10 +56,7 @@ const MAX_BODY_BYTES = 1024 * 1024;
 type Shape = z.ZodType<Record<string, unknown>>;
 const noInput = z.strictObject({});
 
-/**
- * What a `user` route may call: it opens a principal-only transaction when called, and nothing is held before. `run`
- * calls only definers and makes no outbound call (AGENTS 3.7).
- */
+// `run` calls only definers and makes no outbound call (no external call inside a transaction).
 export type InUserTx = <T>(run: (tx: TenantTx) => Promise<T>) => Promise<T>;
 
 interface Input<B, Q, P, A extends Access> {
@@ -76,17 +65,13 @@ interface Input<B, Q, P, A extends Access> {
   readonly params: P extends Shape ? z.infer<P> : undefined;
   readonly clientAddress: string;
   readonly c: Context<AppEnv>;
-  /** The transaction the scope narrowed; absent on a `none` or `user` route. */
   readonly tx: A extends "none" | "user" | { split: true } ? undefined : TenantTx;
-  /** The proof of the workspace the route reached; present only on a workspace access that holds one transaction. */
   readonly scope: A extends { split: true }
     ? undefined
     : A extends { workspace: string }
       ? AuthorizedScope
       : undefined;
-  /** The short scoped transactions of a `split` workspace access; absent on every other access. */
   readonly scoped: A extends { split: true } ? Scoped : undefined;
-  /** The one way a `user` route reaches a definer; absent on every other access. */
   readonly inUserTx: A extends "user" ? InUserTx : undefined;
 }
 
@@ -101,32 +86,21 @@ export interface RouteSpec<
   readonly policy: Policy;
   readonly access: A;
   readonly body?: B;
-  /**
-   * The route reads the request body itself, as a stream (`c.req.raw.body`), instead of a JSON schema: an upload. The
-   * JSON checks are skipped; CSRF, the policy and the access stay central. A PUT only, on a workspace access with a
-   * permission. The request must declare its `content-length` (digits, above zero, at most `maxBytes`) and no
-   * `transfer-encoding`, so the limit rests on the declared length and nothing is buffered here; the handler bounds
-   * the stream it reads at that length, since a body can lie about it.
-   */
+  // The request must declare its `content-length` and no `transfer-encoding`, so the limit rests on the declared
+  // length and nothing is buffered here; the handler bounds the stream it reads at that length, since a body can lie.
   readonly rawBody?: { readonly maxBytes: number };
-  /** Strict by default: an unknown query key is refused. */
   readonly query?: Q;
-  /**
-   * The opt-out of a strict query, for the SPA shell route and the OAuth callback (a provider may add parameters,
-   * RFC 6749 section 4.1.2): the route's schema names the keys it reads and the rest is ignored.
-   */
+  // For the SPA shell route and the OAuth callback (a provider may add parameters, RFC 6749 section 4.1.2).
   readonly looseQuery?: boolean;
   readonly params?: P;
   /** The route authenticates by its cookie alone: a request carrying an `Authorization` header is refused. */
   readonly cookieOnly?: boolean;
   /**
-   * The one opt-out of the web-client CSRF check (R321), only for a `public` route whose path token is the credential:
+   * The one opt-out of the web-client CSRF check, only for a `public` route whose path token is the credential:
    * a mail client's one-click POST carries neither the origin nor the client header, and no ambient credential.
    */
   readonly csrf?: "token";
-  /** The success status; 200 unless the route creates something. */
   readonly status?: 200 | 201;
-  /** A returned `Response` is sent as is; anything else is wrapped as `{ data }`. */
   readonly handler: (input: Input<B, Q, P, A>) => unknown;
 }
 
@@ -139,10 +113,6 @@ interface RouteState {
 }
 const states = new WeakMap<App, RouteState>();
 
-/**
- * Called once by `createApp`: the public origin the CSRF check compares with, the session reader of the policies, the
- * pool the scoped routes run on and the logger of what a route does after it has answered.
- */
 export function initRoutes(
   app: App,
   publicOrigin: string,
@@ -161,10 +131,7 @@ const refuseAuthorization: MiddlewareHandler = async (c, next) => {
   await next();
 };
 
-/**
- * The `session` policy. It runs after the input is validated (a malformed request is a 400 whoever sends it) and
- * before the handler; the cookies a sliding refresh produced are returned to ride the answer.
- */
+// It runs after the input is validated, so a malformed request is a 400 whoever sends it.
 async function authenticate(auth: RouteAuth, c: Context<AppEnv>, policy: Policy): Promise<readonly string[]> {
   const found = await auth.resolveSession(c.req.raw.headers);
   if (!found) throw new Refusal("unauthenticated", "no valid session");
@@ -173,14 +140,12 @@ async function authenticate(auth: RouteAuth, c: Context<AppEnv>, policy: Policy)
   return found.cookies;
 }
 
-/** Every route registered through `defineRoute`, for the contract test and the strict-input test. */
 export function registeredRoutes(app: App): readonly RegisteredRoute[] {
   return states.get(app)?.routes ?? [];
 }
 
 const JSON_TYPE = /^application\/json\s*(;|$)/i;
 
-/** The route declares JSON, so a body (or its absence) with any other media type is a 415, never skipped. */
 const requireJson: MiddlewareHandler = async (c, next) => {
   if (!JSON_TYPE.test(c.req.header("content-type") ?? "")) {
     throw new Refusal("unsupported_media_type", "the body is not application/json");
@@ -231,7 +196,6 @@ type ValidTarget = "json" | "query" | "param";
 const validated = (c: Context<AppEnv>, target: ValidTarget): unknown =>
   (c.req as unknown as { valid(target: ValidTarget): unknown }).valid(target);
 
-/** Refuses at registration a schema that would let an unknown key through (Zod 4: an object whose catchall is never). */
 function assertStrict(where: string, schema: Shape | undefined): void {
   if (!schema) return;
   const def = schema._zod.def as z.core.$ZodObjectDef;
@@ -240,7 +204,6 @@ function assertStrict(where: string, schema: Shape | undefined): void {
   }
 }
 
-/** Refuses at registration an access that could reach data without a principal, a workspace or a known permission. */
 function assertAccess(spec: RouteSpec<Shape | undefined, Shape, Shape | undefined, Access>): void {
   const { access, policy, method, params } = spec;
   if (spec.rawBody && (method !== "put" || spec.body || typeof access !== "object" || !access.permission)) {
@@ -310,11 +273,6 @@ function scopeRequest(
     : { target, permission: access.permission, write };
 }
 
-/**
- * Runs the handler as its access declares. `none` and `user` mean no transaction and no scope: a user route may call
- * outside the database, and holds a connection only inside `inUserTx`. The workspace comes only from the declared path
- * parameter; a denial of the scope is an answer, and the handler does not run.
- */
 async function runScoped(
   state: RouteState,
   spec: RouteSpec<Shape | undefined, Shape, Shape | undefined, Access>,
@@ -360,10 +318,6 @@ function withPolicyHeaders(response: Response, policy: Policy, cookies: readonly
   return response;
 }
 
-/**
- * The only way to add a route. The policy and the access are declared, CSRF and the body limit run first, every input
- * schema is a strict object and a failed validation answers with the error envelope.
- */
 export function defineRoute<
   B extends Shape | undefined = undefined,
   Q extends Shape = typeof noInput,

@@ -39,7 +39,7 @@ const html = (element) => `export const View = ({ x }) => (\n  ${element}\n);\n`
 const longBody = Array.from({ length: 52 }, (_, i) => `  const v${i} = ${i};`).join("\n");
 const nested = Array.from({ length: 12 }, (_, i) => `if (a > ${i}) { if (b > ${i}) { c += 1; } }`).join("\n");
 
-// Each row must be refused by the named rule; a rule missing from biome.json makes its row pass and fail the test.
+// A rule missing from biome.json makes its row pass the lint and fail the test.
 const REFUSED = [
   ["console in src", src, 'console.log("x");\n', "suspicious/noConsole"],
   ["Math.random in src", src, "export const n = Math.random();\n", "noJsRestrictedProperties"],
@@ -59,7 +59,6 @@ const REFUSED = [
   ["hono aws-lambda", src, imp("hono/aws-lambda"), "noRestrictedImports"],
   ["react-router dev", src, imp("@react-router/dev/vite"), "noRestrictedImports"],
   ["a plugin outside the allowlist", src, imp("better-auth/plugins/organization"), "noRestrictedImports"],
-  // The web app renders text through React and talks to the server through one typed fetch wrapper (NFR-SEC-17).
   [
     "dangerouslySetInnerHTML",
     web,

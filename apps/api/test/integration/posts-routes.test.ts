@@ -23,11 +23,6 @@ import {
 } from "../support/tenancy.js";
 import { type Fixture, PEPPER, startFixture } from "./auth/harness.js";
 
-// Security floor of the posts routes: who may read and who may change a post, the one 404 for what the caller may not
-// see (another workspace, a deleted post), the ETag and If-Match rules of autosave, save and restore, a double submit,
-// no post text in any log line, the refusals of a draft the database could not store, and the exact byte limits as
-// PostgreSQL measures them. The routes read the draft through core and write through the four post definers.
-
 type User = { id: string; cookie: string };
 const DEFAULTS = { max_length: 280, sensitive: false, tag: "x" };
 // The channel takes video too, within 10 MB, one minute and 2 MP (the image limits are the fixture's own).
@@ -70,7 +65,6 @@ interface Facts {
   /** A video as the pipeline leaves it: its type, the size of its original and its length; it has no derivative. */
   video?: { bytes: number; durationMs: number };
 }
-// An asset as the pipeline leaves it: a ready one has its sniffed type, its size in pixels and a ready `stripped` derivative.
 async function plantMedia(workspace: string, state: string, facts: Facts = {}): Promise<string> {
   const id = randomUUID();
   const ready = state === "ready";
@@ -179,7 +173,6 @@ interface Planted {
   post: string;
   version: string;
 }
-// A post written as the superuser, so a test of the routes does not depend on the create route.
 async function plant(workspace = ws, channel = c1, deleted = false): Promise<Planted> {
   const snapshot = {
     version: 1,
@@ -613,7 +606,7 @@ const refusedDetails = async (answer: Response) => [
   ((await answer.json()) as { error?: { details?: unknown } }).error?.details,
 ];
 
-describe("only ready media is attached, and only media the channel's rule takes (BG-8)", () => {
+describe("only ready media is attached, and only media the channel's rule takes", () => {
   const STATES: [string, () => Promise<string>][] = [
     ["uploaded", () => plantMedia(ws, "uploaded")],
     ["processing", () => plantMedia(ws, "processing")],

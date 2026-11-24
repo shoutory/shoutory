@@ -68,13 +68,11 @@ test("every placeholder entry names a real step and gives a reason in words", ()
   }
 });
 
-// The selection of a local run: the steps a change can affect.
 const FEATURE = "refs/heads/feature";
 const selected = (changed, options = {}) =>
   affectedSteps(STEPS, { changed, ref: FEATURE, ...options }).map((step) => step.name);
 const ALWAYS = ["unit", "lint", "typecheck", "gitleaks"];
 
-// Each row: what changed, the options, the steps that must run and the steps that must not.
 const SELECTIONS = [
   ["docs only", ["docs/guide/x.md"], {}, ["unit", ...ALWAYS], ["e2e", "image-smoke"]],
   ["a web source", ["apps/web/src/a.tsx"], {}, ["e2e", "image-smoke"], []],
@@ -122,7 +120,6 @@ test("each changed path selects exactly its steps", () => {
 
 test("every workspace the Dockerfile COPYs still gets the browser and image steps on main", () => {
   const dockerfile = readFileSync(join(root, "docker/Dockerfile"), "utf8");
-  // `COPY --from=build /app/<dir>/<name> ...`: the first two segments name the workspace the image takes from.
   const copied = [...dockerfile.matchAll(/^COPY --from=build \/app\/((?:apps|packages)\/[^/\s]+)\//gm)].map(
     (match) => match[1],
   );

@@ -1,13 +1,12 @@
 import { z } from "zod";
 
-/** `transactional`: mail to a person who just acted (links, alerts). `marketing`: anything else; it has its own sender. */
+// `marketing` mail has its own sender.
 type MailClass = "transactional" | "marketing";
 
 export interface MailTemplate {
   readonly class: MailClass;
-  /** What the template may carry besides the sealed link; a secret never goes in it, and every schema is strict. */
+  // A secret never goes in vars, and every schema is strict.
   readonly vars: z.ZodType;
-  /** The plain-text mail of one row: the link opened from the sealed column and the variables the row stored. */
   render(link: string, vars: unknown): { readonly subject: string; readonly text: string };
 }
 
@@ -29,7 +28,6 @@ function template<S extends z.ZodType>(spec: {
 
 const IGNORE = "If you did not expect this message, you can ignore it.";
 
-// The mail templates of M0, English only.
 export const TEMPLATES = {
   verify_email: template({
     class: "transactional",

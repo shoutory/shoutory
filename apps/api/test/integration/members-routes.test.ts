@@ -8,15 +8,11 @@ import {
 } from "../support/tenancy.js";
 import { type Fixture, startFixture } from "./auth/harness.js";
 
-// The floor of the member routes (R247, R253-R257, R260): who may list and change members, the step-up, and the
-// answers a definer refusal becomes. The happy paths are in the feature rows of the same slice.
-
 type User = { id: string; cookie: string };
 let fx: Fixture;
 let ws: string;
 let other: string;
 const users: Record<string, User> = {};
-// A user by name; the roles are those of the seeded workspace (the owner is `owner`).
 const user = (name: string): User => {
   const found = users[name];
   if (!found) throw new Error(`no user ${name}`);
@@ -123,7 +119,7 @@ describe("a definer refusal keeps its own status", () => {
   });
 });
 
-describe("step-up on member changes (R247)", () => {
+describe("step-up on member changes", () => {
   it("a role change and a removal after 11 minutes give 403 step_up_required; leaving needs none", async () => {
     const [admin, viewer] = [user("admin"), user("viewer")];
     const leaver = await signedUser(fx, "mem-leaver");

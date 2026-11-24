@@ -1,8 +1,5 @@
 import sharp from "sharp";
 
-// Image bytes for the media tests, built here so that no binary fixture is committed.
-
-/** A small JPEG; with `gps` its EXIF carries a copyright and GPS latitude and longitude (the privacy canary). */
 export async function jpeg(
   options: { gps?: boolean; width?: number; height?: number } = {},
 ): Promise<Buffer> {
@@ -77,7 +74,6 @@ export function declaredPng(width: number, height: number): Buffer {
   ]);
 }
 
-/** The tag numbers of IFD0 and of the GPS IFD (through tag 0x8825) of a raw EXIF buffer; null when there is no GPS IFD. */
 export function exifTags(exif: Buffer): { ifd0: number[]; gps: number[] | null } {
   const body = exif.subarray(0, 6).toString("latin1") === "Exif\0\0" ? exif.subarray(6) : exif;
   const little = body.toString("latin1", 0, 2) === "II";
@@ -96,6 +92,5 @@ export function exifTags(exif: Buffer): { ifd0: number[]; gps: number[] | null }
   };
 }
 
-/** True when the file holds an EXIF segment at all (a JPEG APP1 "Exif" or a WebP/PNG EXIF chunk), whoever parses it. */
 export const hasExifSegment = (bytes: Buffer): boolean =>
   bytes.includes(Buffer.from("Exif\0\0", "latin1")) || bytes.includes(Buffer.from("EXIF", "latin1"));

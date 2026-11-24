@@ -1,9 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { type Fixture, PASSWORD, startFixture } from "./harness.js";
 
-// R511 and R545 Q2: a session ends 30 days after it was created, whatever its use. The cap is read where the API reads
-// the session, so an older session is absent and its row is deleted; the library's 7-day rolling expiry and its daily
-// refresh keep running and may push `expires_at` past the cap, which the read then ignores. The injected clock moves
+// The library's rolling expiry may push `expires_at` past the cap, which the read ignores. The injected clock moves
 // the "now" of the cap only: the library keeps the real clock, so the rows the cap judges keep a live `expires_at`.
 let fx: Fixture;
 let clock: number | undefined;
@@ -28,7 +26,7 @@ const sessionRow = (email: string) =>
     );
     return found.rows[0] as { id: string; created_at: Date; expires_at: Date } | undefined;
   });
-// Whether the very row the test signed in with is still stored (a count by user would miss a replaced row).
+// A count by user would miss a replaced row, so this checks the very row the test signed in with.
 const stored = (id: string | undefined) =>
   fx.admin(
     async (client) => (await client.query("SELECT 1 FROM auth.session WHERE id = $1", [id])).rowCount === 1,
@@ -120,7 +118,6 @@ describe("an over-cap cookie (security floor)", () => {
   }, 30_000);
 });
 
-// R550 (2): what a live session reports never runs past the cap, and the list shows no session at or over it.
 describe("what a session near the cap reports (security floor)", () => {
   it("a refreshed session's expiry is clamped to the cap, and the list drops a session over it", async () => {
     const email = "cap-report-1@example.test";

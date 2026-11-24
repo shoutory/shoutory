@@ -13,7 +13,6 @@ const sources = readdirSync(migrations)
 
 const define = (name, body) =>
   `CREATE FUNCTION app.${name}() RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN ${body} END $$;`;
-// The one writer of the audit chain head, the only table of the last rank.
 const AUDIT = define("audit_append", "UPDATE app.audit_heads SET head_hash = 'x' WHERE id = 1;");
 const LOCK = (table, clause = "FOR UPDATE") => `PERFORM 1 FROM app.${table} AS t WHERE t.id = 1 ${clause};`;
 
@@ -22,7 +21,6 @@ test("every definer takes row locks in rank order", () => {
   assert.deepEqual(lockOrderViolations(sources), []);
 });
 
-// [case, function body, the files the body is read with, whether it is flagged]
 const FIXTURES = [
   ["operations before channels", `${LOCK("operations")} ${LOCK("channels")}`, [], true],
   [
@@ -75,7 +73,7 @@ const FIXTURES = [
   ],
 ];
 // A trigger on operations that writes the post: its write counts for every function that updates operations, so a definer
-// that ends an operation must have locked the post and the variant (rank 3) before the operation (rank 6) itself.
+// that ends an operation must have locked the post and the variant before the operation itself.
 const ROLLUP = `CREATE FUNCTION app.rollup_fixture() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
   BEGIN UPDATE app.posts AS p SET status = 'x' WHERE p.id = NEW.post_id; RETURN NULL; END $$;
   CREATE TRIGGER operations_c_rollup AFTER INSERT OR UPDATE ON app.operations

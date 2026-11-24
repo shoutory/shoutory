@@ -29,7 +29,6 @@ const listenOnce = (server: Server, host: string): Promise<number> =>
 const closeOnce = (server: Server): Promise<void> =>
   new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
 
-/** Listens on an assigned port that `fetch` accepts: a blocked port is released and another one is asked for. */
 export async function listenLoopback(server: Server, host = "127.0.0.1"): Promise<number> {
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const port = await listenOnce(server, host);

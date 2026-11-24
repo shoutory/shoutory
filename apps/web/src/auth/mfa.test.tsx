@@ -22,7 +22,6 @@ async function verify(path: string, api: Parameters<typeof stubApi>[0] = {}, val
 const callsTo = (stub: ReturnType<typeof stubApi>, name: string) =>
   stub.mock.calls.filter(([path]) => path.includes(name));
 
-// R410: return-to rides through the challenge as the same parameter and is checked again at the final navigation.
 describe("after the challenge succeeds (security floor)", () => {
   it.each([
     ["a path on this origin", "/w/w2", "/w/w2"],
@@ -35,7 +34,6 @@ describe("after the challenge succeeds (security floor)", () => {
   });
 });
 
-// A-04 challenge: the wrong code and the expired challenge are told apart by their codes (R404), never by status.
 describe("the challenge failures", () => {
   it.each([
     ["a wrong code", "invalid_credentials", 401, /code is not right/i],

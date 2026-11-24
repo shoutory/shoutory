@@ -1,7 +1,5 @@
 import { CreateBucketCommand, S3Client } from "@aws-sdk/client-s3";
 
-// The S3-compatible simulator of the integration tests (README "local database"). Its keys are low-entropy test values
-// that the simulator is started with; a test fails, never skips, when the simulator's address is not set.
 export const S3_ACCESS_KEY = "shoutory-s3-access-1";
 export const S3_SECRET_KEY = "shoutory-s3-secret-1";
 const REGION = "us-east-1";
@@ -12,7 +10,6 @@ export function s3Url(): string {
   return url;
 }
 
-/** The environment of an operator who chose the s3 driver, pointed at the simulator. */
 export const s3Env = (bucket: string, overrides: Record<string, string> = {}): Record<string, string> => ({
   SHOUTORY_STORAGE_DRIVER: "s3",
   SHOUTORY_S3_ENDPOINT: s3Url(),
@@ -24,7 +21,7 @@ export const s3Env = (bucket: string, overrides: Record<string, string> = {}): R
   ...overrides,
 });
 
-/** Creates the bucket the driver will use; the driver never creates one. An existing bucket of ours is fine. */
+// The driver never creates a bucket; one that already exists is fine.
 export async function createBucket(name: string): Promise<void> {
   const client = new S3Client({
     region: REGION,

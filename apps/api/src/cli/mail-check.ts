@@ -4,7 +4,7 @@ import type { CliIo } from "./main.js";
 export type { TxtResolver } from "../mail/dns-check.js";
 
 /**
- * Checks the SPF, DMARC and DKIM records of the sending domain (V-268). A missing record is advice, not a failure:
+ * Checks the SPF, DMARC and DKIM records of the sending domain. A missing record is advice, not a failure:
  * the command exits 0, and exits 1 only when it has no sender to take the domain from. The numbers a mail provider
  * asks for (bounce rate, warm-up, DMARC ramp) are guidance in the self-host guide, never checked here.
  */

@@ -14,10 +14,6 @@ import { openTx } from "../support/race.js";
 
 const env = readTestEnv();
 
-// Security floor of migration 0012 (M0-09a): the new tables are reachable only through definers, both claim
-// definers hand a row to one claimer at a time and fence a stale claimer, a late commit is never skipped, a sealed
-// link ends with the mail, retention removes what it names, and the sign-up gate and chain verifier answer as ruled.
-
 let db: TestDatabase;
 beforeAll(async () => {
   db = await cloneTemplate(env, inject("shoutoryTemplate"));
@@ -152,7 +148,6 @@ describe("audit_chain_check", () => {
   });
 });
 
-/** Seeds rows into one claim table and returns the ids; `app.outbox` rows are plain and `email_outbox` rows sealed. */
 const SEED = {
   outbox: (a: Client, n: number) =>
     a.query(`INSERT INTO app.outbox (id, created_at, type, payload) VALUES ($1, now(), 'test.event', '{}')`, [
@@ -255,7 +250,6 @@ describe("outbox visibility horizon and partitions", () => {
         ),
       );
       later = String(second.rows[0]?.xid);
-      // While the first writer is open the second row is above the horizon: nothing is claimable.
       expect((await pool("worker").query("SELECT * FROM app.outbox_claim(10)")).rows).toEqual([]);
       await slow.query("COMMIT");
     } finally {
@@ -325,7 +319,6 @@ describe("email_outbox lifecycle", () => {
       expect(await claim()).toMatchObject({ attempts: attempt + 1 });
     }
     await worker.query("SELECT app.email_outbox_mark($1, 5, false)", [id(1)]);
-    // The fifth failure is terminal.
     expect((await state())[0]).toMatchObject({ state: "failed", sealed: false, link_digest: "d".repeat(64) });
     await admin(async (a) => {
       await a.query("DELETE FROM app.email_outbox");
@@ -337,10 +330,8 @@ describe("email_outbox lifecycle", () => {
   });
 });
 
-// Each class has one row just past its window (removed) and one just inside it (kept). Windows are those of
-// data-model 3 ("Retention"): session expired + 7 d, verification expired + 1 d, step-up 1 d after `at`, idle bucket
-// 30 d, unverified account 7 d after creation, invitation 30 d after expiry. A 1-day window is probed one hour
-// either side; the others one day either side. The removed row has id 1, the kept row id 2 (`n`).
+// Each class has one row just past its window (removed, id 1) and one just inside it (kept, id 2). A 1-day window
+// is probed one hour either side; the others one day either side.
 const ago = (interval: string) => `now() - interval '${interval}'`;
 const purgeUser = (n: number, verified: boolean, created = "now()") =>
   `INSERT INTO auth."user" (id, name, email, email_verified, created_at)

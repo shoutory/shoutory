@@ -12,11 +12,9 @@ import { authCopy } from "./auth-copy";
 import { SubmitButton, useAction } from "./auth-frame";
 
 type StepUp = <T>(call: () => Promise<T>) => Promise<T>;
-/** What the server asks for: the password, or a code of the authenticator app when the account has the second factor. */
 type Method = "password" | "totp";
 const StepUpContext = createContext<StepUp | null>(null);
 
-/** Runs a sensitive call; a 403 `step_up_required` asks for the password or a code once and replays the call once (X-04). */
 export function useStepUp(): StepUp {
   const stepUp = useContext(StepUpContext);
   if (!stepUp) throw new Error("useStepUp is used outside the StepUpProvider");
@@ -35,8 +33,7 @@ const verifyCode = (code: string, recovery: boolean) =>
     envelope: false,
   });
 
-// A refused call asks once and runs once more; a second refusal, a cancel and a failed check return the original
-// refusal. The refusal says which proof the account needs; anything but a code means the password.
+// A second refusal, a cancel and a failed check return the original refusal. Anything but a code means the password.
 async function replayOnce<T>(
   call: () => Promise<T>,
   confirm: (method: Method) => Promise<boolean>,
@@ -57,7 +54,6 @@ const StepUpTitle = ({ method }: { method: Method }) =>
     <Trans id="auth.step_up.title">Confirm your password</Trans>
   );
 
-/** What the person types, by what the server asked for: the password, a TOTP code, or a recovery code (no length cap). */
 type Proof = "password" | "code" | "recovery";
 const proofOf = (method: Method, recovery: boolean): Proof =>
   method === "password" ? "password" : recovery ? "recovery" : "code";
@@ -178,13 +174,8 @@ function StepUpDialog({ open, form }: { open: boolean; form: FormProps }) {
   );
 }
 
-/**
- * X-04: one dialog serves every call that needs a recent identity check, however many are refused together. A call
- * is replayed once after the check; a second refusal, a cancel and a failed check return the original refusal and
- * retry nothing. A 401 `unauthenticated` while checking means the session is over: sign-in, and signing in again
- * brings the person back to where they were (checked by safeReturnTo at the end). Every end of the dialog empties it
- * (`clear`): no password or code and no old error stay for the next time it opens.
- */
+// A 401 `unauthenticated` while checking means the session is over: sign-in, which brings the person back afterwards.
+// Every end of the dialog empties it, so no password, code or old error stays for the next time it opens.
 export function StepUpProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();

@@ -78,7 +78,6 @@ describe("a planted canary never leaves the process through the sign-in routes",
         [...response.headers.entries()].join("\n"),
         fx.logged.join(""),
       ];
-      // The failure was logged, and it was the library's query that failed.
       expect(surfaces[2]).toContain("request failed");
       for (const surface of surfaces) {
         for (const form of spellings(MAIL_CANARY)) expect(surface).not.toContain(form);

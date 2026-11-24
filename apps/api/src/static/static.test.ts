@@ -39,7 +39,7 @@ beforeAll(() => {
   const base = mkdtempSync(join(tmpdir(), "shoutory-static-"));
   root = join(base, "dist");
   mkdirSync(join(root, "assets"), { recursive: true });
-  // A file under api/ exists in the build folder; the api prefix is never a static path (R387).
+  // A file under api/ exists in the build folder; the api prefix is never a static path.
   mkdirSync(join(root, "api"));
   writeFileSync(join(root, "api", "inside.txt"), SECRET);
   writeFileSync(join(root, "index.html"), SHELL);
@@ -154,7 +154,6 @@ describe("static route ordering", () => {
   });
 });
 
-// V-76: the page's one inline script is allowed by its hash, never by `unsafe-inline`.
 const sha256 = (text: string) => `'sha256-${createHash("sha256").update(text, "utf8").digest("base64")}'`;
 const MODULE = '<script type="module" src="/assets/main-abc123.js"></script>';
 const shellWith = (...inline: string[]) =>
@@ -177,7 +176,7 @@ const scriptSrcOf = async (webRoot: string) => {
   return csp.split(";").find((part) => part.trim().startsWith("script-src")) ?? "";
 };
 
-describe("the served CSP and the inline script (V-76)", () => {
+describe("the served CSP and the inline script", () => {
   it.each([
     ["a one-line script", "window.a=1;"],
     ["comments, CRLF (hashed as LF) and surrounding newlines", "\n  // theme\r\n  window.a=1;\n"],
@@ -206,7 +205,7 @@ describe("the served CSP and the inline script (V-76)", () => {
     expect(() => newApp({ webRoot })).toThrow(/SHOUTORY_WEB_ROOT/);
   });
 
-  // R387: the shell is read once at start; a build replaced under the running process is never served with a hash
+  // The shell is read once at start; a build replaced under the running process is never served with a hash
   // that no longer matches it.
   it.each(["/", "/index.html", "/calendar"])("serves the shell read at start for %s", async (path) => {
     const webRoot = webRootWith(shellWith("window.a=1;"));

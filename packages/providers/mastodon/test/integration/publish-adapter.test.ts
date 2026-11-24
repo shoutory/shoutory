@@ -4,11 +4,6 @@ import { createMastodonAdapter } from "../../src/adapter.js";
 import { type MastodonSimulator, startMastodonSimulator } from "../../src/simulator.js";
 import { accountOf, recorder } from "../support/instance.js";
 
-// What the fault matrix does not prove about publishing, read-back and delete (the matrix plays every status and fault
-// class against the adapter, so none of that is repeated here). The Idempotency-Key is the one the caller gave and is the
-// same on every send of it; a call that is not given its channel's token and host is refused before anything is sent; a
-// read-back and a delete name only the id they were asked about; and the token is in no answer the adapter gives. The
-// simulator is built from docs.joinmastodon.org/methods/statuses (read 2026-11-24).
 let sim: MastodonSimulator;
 beforeAll(async () => {
   sim = await startMastodonSimulator({ now: () => new Date() });
@@ -26,7 +21,7 @@ const publish = (text: string, key: string, token: string) => {
 };
 
 describe("the Idempotency-Key of a commit (floor)", () => {
-  it("is the key the caller gave on every send, and the simulator, which assumes a repeated key answers the same status (VERIFY, V-58), keeps one status", async () => {
+  it("is the key the caller gave on every send, and the simulator, which assumes a repeated key answers the same status (VERIFY), keeps one status", async () => {
     sim.reset();
     const token = sim.issueToken();
     const [first, second] = [publish("hello", "admit-key-1", token), publish("hello", "admit-key-1", token)];
@@ -164,13 +159,10 @@ describe("a read-back that fails is never an absent answer, and an answer that i
     expect(answer.absent).not.toBe(true);
     expect(answer.httpStatus).not.toBe(404);
     expect(answer.effect).toBe("none");
-    // The ones the instance did answer with a 200 are unusable, not a refusal of the call.
     if (answered) expect(answer).toMatchObject({ errorClass: "unknown" });
   });
 });
 
-// A 404 on a delete is taken as "gone" only when one read of the same id agrees (a stale or proxied 404 on the delete
-// alone proves nothing); a post that is still there, or a read that cannot say, is an unknown outcome for a person.
 describe("a delete answered 404 is confirmed by one read of the id", () => {
   const FOLLOWING_READ: [string, object | undefined, object][] = [
     ["404", undefined, { ok: true, effect: "none" }],
@@ -206,8 +198,7 @@ describe("a delete answered 404 is confirmed by one read of the id", () => {
   });
 });
 
-// A status answer is read up to 512 KB; a longer one is no answer, so it confirms nothing (the page of the statuses
-// methods documents no size, so the bound is ours).
+// The statuses page documents no answer size, so the 512 KB bound is ours.
 describe("an oversized answer is no answer", () => {
   const PAD = "x".repeat(600_000);
   it("a create answered 200 with an oversized body is an unknown outcome, never a success", async () => {
@@ -265,7 +256,7 @@ describe("an id that came from an instance is checked before it is put in a path
   );
 });
 
-describe("a read-back and a delete name only the id asked (BG-16)", () => {
+describe("a read-back and a delete name only the id asked", () => {
   // The documented 404 body, `{"error":"Record not found"}` (docs.joinmastodon.org/methods/statuses, accessed 2026-11-24),
   // is played by the matrix. This body is test input only, not a Mastodon fact: it proves the status alone decides absence.
   it("a 404 whose body is some other text is reported with its status, for the id asked and no other", async () => {
@@ -307,7 +298,6 @@ describe("a read-back and a delete name only the id asked (BG-16)", () => {
       account: accountOf(token),
     });
     expect(gone).toMatchObject({ ok: true, effect: "confirmed" });
-    // A 200 is the whole answer: no read follows it.
     expect(seen.length - before).toBe(1);
     expect(sim.stored().map((post) => post.externalId)).toEqual([b.externalId]);
     const deletes = sim.requests.filter((request) => request.method === "DELETE");
@@ -319,7 +309,6 @@ describe("a read-back and a delete name only the id asked (BG-16)", () => {
 });
 
 describe("the token is in no answer of the adapter (floor)", () => {
-  // The raw token, then the spellings it can take in a log line, a body or a dump (AGENTS 4.2).
   const FORMS = (secret: string) => [
     secret,
     encodeURIComponent(secret),

@@ -12,34 +12,26 @@ import { intervalLoop } from "./outbox-relay.js";
 export interface MailSenderOptions {
   readonly pool: AppPool;
   readonly keys: KeyProvider;
-  /** Keys the unsubscribe token of a marketing mail. */
   readonly pepper: SealedSecret;
   readonly smtpUrl: SealedSecret;
-  /** The transactional sender (`SHOUTORY_MAIL_FROM`). */
   readonly from: string;
-  /** The marketing sender (`SHOUTORY_MAIL_MARKETING_FROM`); marketing mail is refused without a different one. */
+  // Marketing mail is refused without a sender different from `from`.
   readonly marketingFrom?: string | undefined;
-  /** The origin of the https unsubscribe URL; a worker may lack it, and then marketing mail is refused. */
+  // A worker may lack it, and then marketing mail is refused.
   readonly publicOrigin?: string | undefined;
   readonly logger: Logger;
-  /** The template registry. */
   readonly templates?: Readonly<Record<string, MailTemplate>>;
   readonly batch?: number;
   readonly intervalMs?: number;
-  /** One send, from connect to the server's answer; a row is not started when this would pass its lease. */
+  // A row is not started when its send could pass the lease.
   readonly sendTimeoutMs?: number;
-  /** How long `stop` waits for a tick in flight. */
   readonly stopTimeoutMs?: number;
-  /** The clock in milliseconds (AGENTS 3.10); the lease check reads it. */
   readonly now?: () => number;
 }
 
 export interface MailSender {
-  /** Claims due mails, sends them and marks each; answers how many were sent. */
   tick(): Promise<number>;
-  /** Ticks until stopped (an interval loop, like the relay). Once only. */
   start(): void;
-  /** Stops the loop, waits a bounded time for a tick in flight and closes the transport. */
   stop(): Promise<void>;
 }
 
@@ -67,7 +59,7 @@ const DEFAULT_SEND_TIMEOUT_MS = 60_000;
 const DEFAULT_STOP_TIMEOUT_MS = 10_000;
 const CONNECT_TIMEOUT_MS = 10_000;
 const SOCKET_TIMEOUT_MS = 30_000;
-/** The lease `email_outbox_claim` gives a row (migration 0012: five minutes). */
+// The lease `email_outbox_claim` gives a row: five minutes.
 const LEASE_MS = 5 * 60_000;
 const SAFE_CODE = /^[A-Z0-9_]{1,32}$/;
 
@@ -75,7 +67,6 @@ class SendTimeout extends Error {
   override readonly name = "SendTimeout";
 }
 
-/** The sealed link of a claimed row, opened under the AAD of the row; a row that lost its link cannot be sent. */
 function openLink(row: Claimed, keys: KeyProvider): string {
   const { link_ciphertext: ciphertext, link_iv: iv, link_auth_tag: tag, link_wrap_iv: wrapIv } = row;
   const { link_wrap_tag: wrapTag, link_wrapped_dek: wrappedDek } = row;
@@ -89,7 +80,6 @@ function openLink(row: Claimed, keys: KeyProvider): string {
   return open(stored, aad, keys).expose();
 }
 
-/** Runs the send under a timeout: on expiry the promise rejects first. */
 function within<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   const expired = new Promise<never>((_resolve, reject) => {
@@ -98,7 +88,7 @@ function within<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([promise, expired]).finally(() => clearTimeout(timer));
 }
 
-/** A marketing mail the sender may not send; `reason` is one of a fixed few, never text from a row. */
+// `reason` is one of a fixed few, never text from a row.
 class MarketingRefused extends Error {
   override readonly name = "MarketingRefused";
   constructor(readonly reason: "no_marketing_sender" | "same_sender" | "no_https_origin") {
@@ -113,11 +103,8 @@ interface Envelope {
   readonly headers?: Readonly<Record<string, string>>;
 }
 
-/**
- * The sender and headers of one mail by its class (rule 100). Transactional mail uses `from` and carries no marketing
- * headers. Marketing mail needs its own sender and an https unsubscribe URL, and carries both List-Unsubscribe headers
- * (RFC 8058); any gap refuses it here, before an SMTP connection.
- */
+// Marketing mail needs its own sender and an https unsubscribe URL (both List-Unsubscribe headers, RFC 8058); any gap
+// refuses it here, before an SMTP connection.
 function envelopeOf(options: MailSenderOptions, template: MailTemplate, recipient: string): Envelope {
   const { from, marketingFrom, publicOrigin, pepper } = options;
   if (template.class === "transactional") return { from };
@@ -134,7 +121,7 @@ function envelopeOf(options: MailSenderOptions, template: MailTemplate, recipien
   };
 }
 
-/** The row id, the error class and a safe code: an SMTP answer may echo the message and its link, so no text (R323). */
+// Only the row id, the error class and a safe code: an SMTP answer may echo the message and its link.
 function logFailure(logger: Logger, row: Claimed, error: unknown): void {
   if (error instanceof MarketingRefused) {
     logger.error({ id: row.id, reason: error.reason }, "marketing mail refused before SMTP");
@@ -151,7 +138,6 @@ function logFailure(logger: Logger, row: Claimed, error: unknown): void {
   );
 }
 
-/** What one send needs: the options, the template registry and the SMTP transport, made on first use. */
 interface Sending {
   readonly options: MailSenderOptions;
   readonly templates: Readonly<Record<string, MailTemplate>>;
@@ -171,7 +157,7 @@ async function send(ctx: Sending, row: Claimed): Promise<void> {
   );
 }
 
-/** Sends one claimed row and marks the attempt with the claim's fencing token; true when it was sent and marked. */
+// The link is opened only inside send, once per attempt, and the mark erases it.
 async function deliver(ctx: Sending, row: Claimed): Promise<boolean> {
   const { pool, logger } = ctx.options;
   let ok = true;
@@ -188,13 +174,9 @@ async function deliver(ctx: Sending, row: Claimed): Promise<boolean> {
   return ok && marked.rows[0]?.ok === true;
 }
 
-/**
- * Drains `email_outbox`. A claim is a short transaction that leases the rows; the SMTP send runs after it ended
- * (AGENTS 3.7); the mark names the attempt the claim handed out. The link is opened only here, once per attempt, and
- * the mark erases it on a send. Rows are sent one by one, so a later row could outlive the lease of the claim: the
- * batch stops before a row whose send could pass it (the rows return when the lease lapses), and after a stop no
- * further row starts (R325).
- */
+// The SMTP send runs after the claim transaction ended (no external call inside a transaction). Rows are sent one by
+// one, so a later row could outlive the lease: the batch stops before a row whose send could pass it, and the rows
+// return when the lease lapses.
 export function createMailSender(options: MailSenderOptions): MailSender {
   const { pool, logger, batch = DEFAULT_BATCH, now = Date.now } = options;
   const { sendTimeoutMs = DEFAULT_SEND_TIMEOUT_MS } = options;
@@ -225,6 +207,7 @@ export function createMailSender(options: MailSenderOptions): MailSender {
     const claimedAt = now();
     let sent = 0;
     for (const row of claimed.rows) {
+      // After a stop no further row starts.
       if (stopped) break;
       if (now() - claimedAt + sendTimeoutMs > LEASE_MS) {
         logger.warn({ id: row.id }, "mail batch stopped before the claim lease could lapse");

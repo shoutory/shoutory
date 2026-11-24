@@ -8,10 +8,6 @@ import {
 } from "../support/tenancy.js";
 import { type Fixture, startFixture } from "./auth/harness.js";
 
-// Security floor of the channel routes (R532 (0), R533 (B), (D)): who may read and who may change a channel,
-// the one 404 for what the caller may not see, the answer allowlist (no credential field ever), and the audit row of
-// each state change. The permissions are channels.view (owner, admin, editor) and channels.manage (owner, admin).
-
 type User = { id: string; cookie: string };
 let fx: Fixture;
 let ws: string;

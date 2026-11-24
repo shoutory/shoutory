@@ -23,12 +23,11 @@ import { createStepUp, type StepUp } from "./step-up.js";
 import { createThrottle, type Throttle } from "./throttle.js";
 import { secondFactorThrottle } from "./two-factor.js";
 
-/** The header our mount sets from the resolved client address; the library reads the session address only from it. */
+// The auth library reads the client address only from this header.
 export const CLIENT_IP_HEADER = "x-shoutory-client-ip";
 
 const SESSION_SECONDS = 7 * 24 * 60 * 60;
 const SESSION_REFRESH_SECONDS = 24 * 60 * 60;
-// The model keys are the library's; the tables are ours.
 const SCHEMA = {
   user: authUser,
   session: authSession,
@@ -42,49 +41,41 @@ const LIBRARY_MAX_PASSWORD = 256;
 
 export interface AuthOptions {
   readonly publicOrigin: string;
-  /** `SHOUTORY_SESSION_SECRET`. */
   readonly secret: string;
   readonly pepper: SealedSecret;
   readonly keys: KeyProvider;
   readonly db: AuthDb;
-  /** The pool of the `shoutory_auth` role: throttle buckets, the owner claim and the mail queue. */
+  /** The `shoutory_auth` role: throttle buckets, the owner claim and the mail queue. */
   readonly pool: AppPool;
-  /** The pool of the `shoutory_app` role: a user's own re-check mark is read through it (template U). */
+  /** The `shoutory_app` role: a user reads their own re-check mark through it. */
   readonly appPool: AppPool;
-  /** The breached-password range lookup: the egress client with its policy bound. */
   readonly fetch: (request: EgressRequest) => Promise<EgressResponse>;
   readonly logger: Logger;
-  /** The clock of the 30-day session cap, in milliseconds; the system clock when absent (AGENTS 3.10). */
   readonly now?: () => number;
 }
 
 export type BetterAuthInstance = ReturnType<typeof createLibrary>;
 
-/** What the mount and the route policies use: the library, our throttle and the session reader. */
 export interface AuthService extends RouteAuth {
   readonly library: BetterAuthInstance;
   readonly publicOrigin: string;
   readonly throttle: Throttle;
-  /** What a route needs to enqueue a mail in its own transaction. */
   readonly mail: MailDeps;
   readonly stepUp: StepUp;
   readonly passwords: PasswordGuard;
-  /** The first verified user becomes instance owner; the call is idempotent (a no-op once any admin exists). */
+  /** The first verified user becomes instance owner; the call is idempotent. */
   claimOwner(userId: string): Promise<void>;
-  /** Whether the address may sign up: sign-up is open, or a pending invitation is addressed to it. */
   signupGate(email: string): Promise<boolean>;
-  /** Mails the owner of an address that sign-up is closed; the sign-up answer does not differ from an allowed one. */
-  notifySignupClosed(email: string): Promise<void>;
-  /** The keyed digest of a client address that the audit log stores, never the address itself. */
-  ipHmac(clientAddress: string): Buffer;
-  /** The clock of the 30-day session cap, in milliseconds. */
-  now(): number;
-  /** The keyed digest of a rate-limit subject (64 hex digits), as `bucket_take` and the creation definers take it. */
-  bucketKey(scope: string, subject: string): string;
   /**
-   * Writes one instance-chain row for a person's sign-in or step-up. A failed write answers 503: an identity proof is
-   * never granted without its record.
+   * The sign-up answer is the same open or closed, so a caller cannot learn which addresses exist; the mail goes
+   * to the address owner instead.
    */
+  notifySignupClosed(email: string): Promise<void>;
+  /** The keyed digest the audit log stores, never the address itself. */
+  ipHmac(clientAddress: string): Buffer;
+  now(): number;
+  bucketKey(scope: string, subject: string): string;
+  /** A failed write answers 503: an identity proof is never granted without its record. */
   audit(entry: AuditEntry): Promise<void>;
 }
 
@@ -116,7 +107,6 @@ const ADVANCED = {
   defaultCookieAttributes: COOKIE,
   cookies: {
     session_token: { name: SESSION_COOKIE, attributes: COOKIE },
-    // The challenge cookie between the password and the code: `__Host-` like the session cookie.
     two_factor: { name: TWO_FACTOR_COOKIE, attributes: COOKIE },
   },
   ipAddress: { ipAddressHeaders: [CLIENT_IP_HEADER] },
@@ -135,7 +125,7 @@ interface Effects {
 const afterCommit = (queue: Effects["queue"], mail: QueuedMail): Promise<void> =>
   queueAfterTransactionHook(() => queue(mail));
 
-/** The mailed links open a page of the SPA with the token in the fragment: it never reaches a server log. */
+// The token rides in the link's fragment, so it never reaches a server log.
 function mailOptions({ queue, claimOwner }: Effects, publicOrigin: string) {
   const pageLink = (path: string, token?: string): string =>
     `${publicOrigin}${path}${token ? `#token=${token}` : ""}`;
@@ -176,7 +166,6 @@ function createLibrary(options: AuthOptions, effects: Effects, throttle: Throttl
     database: digestSessionTokens(
       drizzleAdapter(options.db, { provider: "pg", schema: SCHEMA, transaction: true }),
     ),
-    // Every `/api/auth` path that is not a mount row answers the envelope's 404 before the library sees it.
     disabledPaths: [...DISABLED_PATHS],
     ...mailOptions(effects, options.publicOrigin),
     plugins: [twoFactor({ issuer: ISSUER, backupCodeOptions: { storeBackupCodes: "encrypted" } })],
@@ -189,12 +178,10 @@ function createLibrary(options: AuthOptions, effects: Effects, throttle: Throttl
     advanced: ADVANCED,
     databaseHooks: {
       user: {
-        // Refuses a user the mount's gate did not let through (false ends the creation, the sign-up answers 400).
         create: { before: async (user) => (signupAllowed(user.email) ? undefined : false) },
       },
       session: {
         create: {
-          // The column holds the keyed digest of the client address, never the address.
           before: async (session) => ({
             data: {
               ipAddress: session.ipAddress
@@ -207,14 +194,13 @@ function createLibrary(options: AuthOptions, effects: Effects, throttle: Throttl
     },
     logger: {
       level: "warn",
-      // The library's level is kept: a warn stays a warn. The arguments are named so none shadows the log's own keys.
+      // The arguments are named so none shadows the log's own keys.
       log: (level, message, ...args) =>
         (level === "error" ? options.logger.error : options.logger.warn)({ args }, message),
     },
   });
 }
 
-/** Builds the authentication service over the `shoutory_auth` pool. */
 export function createAuth(options: AuthOptions): AuthService {
   const deps = { keys: options.keys, pepper: options.pepper };
   const effects: Effects = {
@@ -264,7 +250,6 @@ export function createAuth(options: AuthOptions): AuthService {
           JSON.stringify({ method }),
         ]);
       } catch (error) {
-        // The app's error handler logs a 503 with the request id.
         throw new Refusal("service_unavailable", "the audit write failed", {
           cause: error,
           details: { cause: "audit_unavailable" },

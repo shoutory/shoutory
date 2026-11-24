@@ -37,7 +37,6 @@ describe("the feature flags screen", () => {
     expect(row(host).getAttribute("data-expired")).toBeNull();
   });
 
-  // The removal date is a UTC calendar date: a flag is expired from the day after it, whatever the local clock.
   it.each([
     ["2026-11-19T23:30:00Z", false],
     ["2026-11-20T00:30:00Z", true],
@@ -66,8 +65,6 @@ describe("the feature flags screen", () => {
 });
 
 describe("overriding a flag", () => {
-  // Choosing an option asks for the password once, replays once, then reads the list again. The default is chosen on
-  // a flag that is forced off: choosing what is already chosen changes nothing.
   it.each([
     ["new-composer", "On", true],
     ["new-composer", "Off", false],
@@ -139,7 +136,6 @@ describe("a flag's override list while it cannot be used", () => {
     },
   );
 
-  // The server refuses any change to a flag past its removal date, so no call and no password prompt is made.
   it("an expired flag's list is unavailable with its reason and sends nothing", async () => {
     const { host, stub } = await openAdmin(PATH);
     const old = row(host, "old-thing");

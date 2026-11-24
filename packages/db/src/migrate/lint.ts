@@ -26,7 +26,6 @@ export interface LintFinding {
 interface Statement {
   text: string;
   comments: string[];
-  /** Bodies of a DO block in this statement, linted like top-level SQL. */
   bodies: string[];
 }
 
@@ -75,7 +74,6 @@ function splitStatements(sql: string): Statement[] {
   return statements;
 }
 
-// The comma-separated actions of an ALTER TABLE, split outside parentheses.
 function tableActions(text: string): string[] {
   const head = /\bALTER TABLE (IF EXISTS )?(ONLY )?\S+ /i.exec(text);
   if (!head) return [];

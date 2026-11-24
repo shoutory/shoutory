@@ -9,8 +9,6 @@ import {
 } from "../support/tenancy.js";
 import { type Fixture, startFixture } from "./auth/harness.js";
 
-// The profile routes of a workspace: what PATCH accepts and refuses (R214) and what the answers hold (R219).
-
 let fx: Fixture;
 let cookie: string;
 let orgId: string;

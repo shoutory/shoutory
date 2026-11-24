@@ -1,15 +1,9 @@
--- The record of a large upload: a file above 64 MiB goes to storage in parts, so its storage upload id, which only
--- exists once storage has created the upload, and the sha256 and size its sender declared are written to the upload
--- session once, by one definer. Nothing else writes them, so the digest the pipeline later proves cannot change between
--- register and complete.
-
--- The declared digest and size of the whole file; both stay empty for an upload of one request.
+-- Both stay empty for an upload of one request. One definer writes them, so the digest the pipeline later proves cannot
+-- change between register and complete.
 ALTER TABLE app.media_uploads ADD COLUMN declared_sha256 bytea;
 ALTER TABLE app.media_uploads ADD COLUMN declared_size bigint;
 GRANT UPDATE (multipart_upload_id, declared_sha256, declared_size) ON app.media_uploads TO shoutory_definer;
 
--- The definer reads the asset and its session under its own purpose, takes the row locks of both (the asset first, the
--- order of media_upload_progress), and reads the tenancy tables of the principal check.
 CALL app.grant_purposes('media_assets', 'SELECT', ARRAY['media_set_multipart']);
 -- A row lock (FOR UPDATE) passes the UPDATE policy, so the writer that only locks the asset holds it too.
 CALL app.grant_purposes('media_assets', 'UPDATE', ARRAY['media_set_multipart']);
@@ -27,10 +21,8 @@ $$;
 
 SET ROLE shoutory_definer;
 
--- Records the storage upload id, the declared sha256 and the declared size on the open session of a pending upload, for a
--- user Editor or above (there is no job path). The first writer wins on all three: the same values again answer the stored
--- upload id, any other value is SH409 and changes nothing, so the caller that loses aborts its own storage upload. The
--- size is 1 byte to 5 GiB, the digest 32 bytes. The asset row is locked first (rank 7a), then its session.
+-- The first writer wins on all three values: the same values again answer the stored upload id, any other value is
+-- refused, so the caller that loses aborts its own storage upload. The asset row is locked first, then its session.
 CREATE FUNCTION app.media_set_multipart(
   workspace_id uuid, asset_id uuid, upload_id text, digest bytea, byte_size bigint)
 RETURNS text

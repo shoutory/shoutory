@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { cidrContains, isBlockedAddress, isMetadataOrLinkLocal, parseCidr } from "./address.js";
 
-describe("the shared address classifier (NFR-SEC-11)", () => {
-  // The fixed refuse list: private, loopback, link-local, CGNAT, ULA, multicast, unspecified, reserved, metadata.
+describe("the shared address classifier", () => {
   it.each([
     ["unspecified v4", "0.0.0.0"],
     ["private 10/8", "10.1.2.3"],

@@ -5,9 +5,7 @@ import type { AppCredentials } from "@shoutory/provider-sdk/adapter";
 import { z } from "zod";
 import { sealedParams } from "./credentials.js";
 
-// The per-instance app of a provider whose accounts live on user-chosen servers: the client id in the clear, the client
-// secret sealed under the row's own id (an instance-wide secret, so the nil scope and no salt). The table is reached only
-// through two definers for a user who may manage the workspace's channels; nothing here makes an outbound call.
+// The client secret is sealed under the row's own id; it is an instance-wide secret, so the nil scope and no salt.
 
 const bytes = z.instanceof(Buffer);
 const appRowSchema = z.object({
@@ -35,14 +33,12 @@ const aadOf = (ownerId: string): Aad => ({
   generation: 1,
 });
 
-/** Where an app is stored: the workspace of the caller (who must manage its channels), the provider and the instance. */
 export interface AppKey {
   readonly workspaceId: string;
   readonly providerId: string;
   readonly instanceHost: string;
 }
 
-/** The stored app of an instance, opened, or none. */
 export async function readApp(
   tx: TenantTx,
   keys: KeyProvider,
@@ -64,11 +60,8 @@ export async function readApp(
   return { clientId: row.client_id, clientSecret: open(stored, aadOf(row.id), keys) };
 }
 
-/**
- * Seals and stores an app; true when the stored row is this one. The first writer of an instance wins and a later one is
- * told false (it rereads the winner); a replace names the client id it replaces and changes nothing when that id is no
- * longer the stored one.
- */
+// The first writer of an instance wins and a later one gets false (it rereads the winner); a replace changes nothing
+// when the client id it names is no longer the stored one.
 export async function writeApp(
   tx: TenantTx,
   keys: KeyProvider,

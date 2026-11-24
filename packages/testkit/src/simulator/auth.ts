@@ -7,16 +7,15 @@ function sameText(left: string, right: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-// RFC 7636 section 4.1: 43 to 128 characters from the unreserved set.
+// RFC 7636: a verifier is 43 to 128 unreserved characters, and only S256 is accepted, never `plain`.
 const VERIFIER_SHAPE = /^[A-Za-z0-9\-._~]{43,128}$/;
 
-/** RFC 7636 section 4.6, method S256: the challenge is base64url(SHA-256(ASCII verifier)); `plain` is never accepted. */
 export function pkceMatches(verifier: string, challenge: string): boolean {
   if (!VERIFIER_SHAPE.test(verifier)) return false;
   return sameText(createHash("sha256").update(verifier, "ascii").digest("base64url"), challenge);
 }
 
-// RFC 9449 section 4.2: typ dpop+jwt, an asymmetric alg and the public key in the header (never a private member).
+// RFC 9449: the header carries the public key only, never a private member.
 const publicJwk = z.strictObject({
   kty: z.literal("EC"),
   crv: z.literal("P-256"),
@@ -38,12 +37,10 @@ export type DpopVerdict = "ok" | "invalid_dpop_proof" | "use_dpop_nonce";
 
 export interface DpopExpectation {
   readonly method: string;
-  /** The request URL without query or fragment. */
+  /** Without query or fragment. */
   readonly url: string;
   readonly now: Date;
-  /** The nonce the server last gave out. */
   readonly nonce: string;
-  /** The `jti` values already used; a proof that passes is added. */
   readonly seen: Set<string>;
 }
 
@@ -68,10 +65,7 @@ function signatureHolds(parts: readonly string[], jwk: z.infer<typeof publicJwk>
   );
 }
 
-/**
- * RFC 9449 sections 4.3 and 8: the proof's type, algorithm and key, its signature, `htm`, `htu`, `iat` window, a `jti`
- * never seen before, and the server's `nonce`. A well-formed proof without the current nonce answers `use_dpop_nonce`.
- */
+// RFC 9449: a well-formed proof without the current nonce answers `use_dpop_nonce`.
 export function checkDpopProof(proof: string, expected: DpopExpectation): DpopVerdict {
   const parts = proof.split(".");
   const header = proofHeader.safeParse(decodedJson(parts[0] ?? ""));

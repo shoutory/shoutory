@@ -3,7 +3,6 @@ import type { DBAdapter, DBAdapterInstance, DBTransactionAdapter } from "better-
 
 const PREFIX = "h1:";
 
-/** What a session row stores for a token: the prefix and the SHA-256 of the raw value (a stored value is kept as is). */
 export const tokenDigest = (raw: string): string =>
   raw.startsWith(PREFIX) ? raw : `${PREFIX}${createHash("sha256").update(raw).digest("hex")}`;
 
@@ -23,7 +22,6 @@ type Known = Map<string, string>;
 const isTokenClause = (call: Call, clause: Clause): boolean =>
   call.model === "session" && clause.field === "token";
 
-/** Digests the token clauses of a call and remembers which raw value each digest stands for. */
 function digestWhere(call: Call): { where: Clause[] | undefined; known: Known } {
   const known: Known = new Map();
   const digest = (value: unknown): unknown => {
@@ -76,11 +74,8 @@ const WHERE_METHODS = [
 ] as const;
 const ONE_ROW_METHODS = ["consumeOne", "incrementOne"] as const;
 
-/**
- * Patches the adapter instance in place (the library's schema check is registered against this very object) so a
- * session token is stored as its digest and read back as the raw value it was looked up by. A transaction hands its
- * callback a fresh adapter, which is patched too.
- */
+// Patched in place because the library's schema check is registered against this very object. A transaction hands
+// its callback a fresh adapter, which is patched too.
 function patch<A extends DBAdapter | DBTransactionAdapter>(adapter: A): A {
   const target = adapter as unknown as Record<string, Method>;
   for (const name of [...WHERE_METHODS, ...ONE_ROW_METHODS]) {

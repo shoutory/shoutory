@@ -22,7 +22,6 @@ async function openAccount(path = "/w/w1") {
   return { ...opened, signOut: () => byText<HTMLButtonElement>(document.body, "button", "Sign out") };
 }
 
-// Security floor (csrf.ts): the sign-out call is a POST that carries the client header; the stored workspace is cleared.
 describe("sign out", () => {
   it("sends a POST with X-Shoutory-Client and an empty body, clears the stored workspace and lands on /sign-in", async () => {
     const stub = stubApi();

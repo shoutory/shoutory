@@ -8,11 +8,6 @@ import { createBucket, s3Env } from "../support/s3.js";
 import { addWorkspaceMember, seedOrganization, seedWorkspace, signedUser } from "../support/tenancy.js";
 import { type Fixture, startFixture } from "./auth/harness.js";
 
-// Security floor of the media upload routes (register, complete): who may start and finish an upload, the one 404 for
-// what the caller may not see, a digest that storage proves and the client never supplies, and a complete that is
-// idempotent and moves nothing when it is refused. The bytes go to the S3 simulator through the presigned URL, as a
-// browser sends them.
-
 type User = { id: string; cookie: string };
 const BUCKET = "media-routes-1";
 const SEATS = ["owner", "admin", "editor", "approver", "viewer"] as const;
@@ -94,7 +89,6 @@ async function started(who = user("editor"), text = "12345", workspace = ws): Pr
   expect(answer.status).toBeLessThan(300);
   return (await dataOf(answer)) as unknown as Started;
 }
-/** What a browser does with the answer of register: one PUT to the URL with exactly the headers it was given. */
 async function upload(info: Started, text: string) {
   const answer = await fetch(info.url, { method: "PUT", body: text, headers: info.headers });
   return { status: answer.status, code: /<Code>([^<]*)<\/Code>/.exec(await answer.text())?.[1] };

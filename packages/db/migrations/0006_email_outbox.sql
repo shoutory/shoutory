@@ -1,9 +1,5 @@
--- The mail outbox. A link that signs someone in or resets a password is stored only sealed (the fields of
--- StoredSecret, one column each); the sender sets every sealed column to NULL after it sends and keeps the digest.
--- No runtime role holds a grant on the table (template D): the definers below are the only way in. The sender,
--- claim and mark come with 0012; this file holds what the sealed queue and the key custody tools need.
---
--- workspace_id is a plain uuid until the workspaces table exists (0007 adds its key).
+-- A link that signs someone in or resets a password is stored only sealed; the sender sets every sealed column to
+-- NULL after it sends and keeps the digest. No runtime role holds a grant on the table: the definers are the only way in.
 CREATE TABLE app.email_outbox (
   id uuid PRIMARY KEY,
   workspace_id uuid,
@@ -28,7 +24,6 @@ CREATE TABLE app.email_outbox (
   CONSTRAINT email_outbox_link_whole CHECK (num_nonnulls(link_ciphertext, link_iv, link_auth_tag, link_wrap_iv,
     link_wrap_tag, link_wrapped_dek, link_key_id, link_format_version, link_generation) IN (0, 9))
 );
--- sealed_key_ids() and the reseal batch both read the rows that still hold a link, by key id.
 -- shoutory:accepted-lock new empty table in this file
 CREATE INDEX email_outbox_sealed_key_idx ON app.email_outbox (link_key_id) WHERE link_ciphertext IS NOT NULL;
 SELECT app.apply_rls_template('app.email_outbox'::regclass, 'D');
@@ -48,9 +43,7 @@ CREATE POLICY email_outbox_reseal_write_update ON app.email_outbox FOR UPDATE TO
   USING ((SELECT app.job_purpose()) = 'email_outbox_reseal_write')
   WITH CHECK ((SELECT app.job_purpose()) = 'email_outbox_reseal_write');
 
--- Adds one row, already sealed (generation 0). A duplicate id is a unique violation. The caller seals with the id
--- as the AAD owner, so the id comes from the caller. Nothing here reads a suppression: all three templates of
--- M0 are transactional.
+-- The caller seals with the row id as the AAD owner, so the id comes from the caller.
 CREATE FUNCTION app.email_outbox_enqueue(
   id uuid, workspace_id uuid, recipient text, template text, locale text, vars jsonb,
   link_ciphertext bytea, link_iv bytea, link_auth_tag bytea, link_wrap_iv bytea, link_wrap_tag bytea,
@@ -76,7 +69,6 @@ BEGIN
 END
 $$;
 
--- The distinct key ids of the rows that still hold a sealed link; a sent row holds none.
 CREATE FUNCTION app.sealed_key_ids()
 RETURNS TABLE (key_id text)
 LANGUAGE plpgsql SECURITY DEFINER
@@ -91,8 +83,6 @@ BEGIN
 END
 $$;
 
--- The next rows (by id, after the cursor) that hold a link sealed under another key than the active one. The
--- limit is bounded: 1 to 500.
 CREATE FUNCTION app.email_outbox_reseal_batch(lim integer, active_key_id text, after_id uuid)
 RETURNS TABLE (
   id uuid, workspace_id uuid, link_ciphertext bytea, link_iv bytea, link_auth_tag bytea, link_wrap_iv bytea,
@@ -119,8 +109,7 @@ BEGIN
 END
 $$;
 
--- Replaces the sealed link of one row, and only if its generation is still the one the caller opened and the link
--- is not gone. The new generation is the expected one plus one, set here. False means another writer won.
+-- Compare-and-set on the generation: false means another writer won.
 CREATE FUNCTION app.email_outbox_reseal_write(
   id uuid, expected_generation integer, link_ciphertext bytea, link_iv bytea, link_auth_tag bytea,
   link_wrap_iv bytea, link_wrap_tag bytea, link_wrapped_dek bytea, link_key_id text, link_format_version integer)

@@ -7,7 +7,6 @@ import { assertJobsHealthy } from "./jobs.js";
 import { migrationStatus } from "./migrations.js";
 import { assertPartitionRunway } from "./partitions.js";
 
-/** Every key id a sealed row holds must have a loaded key, or those rows could never be opened again. */
 async function assertKeysHeld(pool: AppPool, keys: KeyProvider): Promise<void> {
   try {
     assertKeyIdsLoaded(await sealedKeyIds(pool), keys);
@@ -28,11 +27,6 @@ async function assertKeysHeld(pool: AppPool, keys: KeyProvider): Promise<void> {
   }
 }
 
-/**
- * The unauthenticated probe must stay cheap: the shipped names are read once and a probe is six queries (applied
- * migrations, held key ids, partition runway, outbox lag, workers, job lag), each after the one before passed.
- * Concurrent requests share one probe.
- */
 function readiness(pool: AppPool, keys: KeyProvider): () => Promise<void> {
   let inFlight: Promise<void> | undefined;
 
@@ -56,7 +50,6 @@ function readiness(pool: AppPool, keys: KeyProvider): () => Promise<void> {
   };
 }
 
-/** `/healthz` says the process is up and touches nothing; `/readyz` says it can serve. */
 export function registerHealth(app: App, pool: AppPool, keys: KeyProvider): void {
   const ready = readiness(pool, keys);
   defineRoute(app, {

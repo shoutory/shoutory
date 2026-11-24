@@ -1,19 +1,10 @@
--- The runtime of the publishing ledger: admission of due targets, the claims that hand operations to workers under
--- fenced leases, the heartbeat, the sweeps of leases and of due moves, and the scoped rate buckets. A worker job calls
--- them under the ledger purpose and nothing else may: each definer refuses any other principal or purpose before it
--- sets a purpose of its own, and no other role may execute them.
-
--- What the definer role may write beyond the 0020 writers: the usage reserved when an operation is admitted, and the
--- schedule state of the target it admits. Admission is the one purpose whose policy lets the column change.
 GRANT INSERT ON app.usage_reservations TO shoutory_definer;
 GRANT UPDATE (schedule_state) ON app.post_variants TO shoutory_definer;
--- The worker reads what it needs of a channel to act on an operation: no secret and no display column. The W-template
--- read policy admits it by its workspaces, as for the other tenant tables it reads.
+-- The worker reads no secret and no display column of a channel.
 GRANT SELECT (id, workspace_id, provider_id, provider_account_id, instance_host, connection_state, capability_epoch)
   ON app.channels TO shoutory_worker;
 
--- Admission reads the target, its post, its version, its channel and its workspace, and writes the target's state and
--- the reservation; the target row and the channel row are locked, so both policies come with the UPDATE.
+-- The target row and the channel row are locked, so the SELECT policy comes with the UPDATE one.
 CALL app.grant_purposes('post_variants', 'SELECT', ARRAY['admit_due_targets']);
 CALL app.grant_purposes('post_variants', 'UPDATE', ARRAY['admit_due_targets']);
 CALL app.grant_purposes('posts', 'SELECT', ARRAY['admit_due_targets']);
@@ -23,7 +14,6 @@ CALL app.grant_purposes('channels', 'SELECT', ARRAY['admit_due_targets']);
 CALL app.grant_purposes('channels', 'UPDATE', ARRAY['admit_due_targets']);
 CALL app.grant_purposes('usage_reservations', 'INSERT', ARRAY['admit_due_targets']);
 
--- A pause per bucket: the time it lasts to and why. The manifest scopes are in the scope list since 0013.
 ALTER TABLE app.rate_buckets ADD COLUMN paused_until timestamptz;
 ALTER TABLE app.rate_buckets ADD COLUMN pause_reason text;
 -- shoutory:accepted-lock a small throttle table whose rows are removed after 30 days; the new column is empty, so the scan is brief
@@ -33,21 +23,19 @@ CALL app.grant_purposes('rate_buckets', 'SELECT', ARRAY['bucket_take_scoped', 'b
 CALL app.grant_purposes('rate_buckets', 'INSERT', ARRAY['bucket_take_scoped', 'bucket_pause']);
 CALL app.grant_purposes('rate_buckets', 'UPDATE', ARRAY['bucket_take_scoped', 'bucket_pause']);
 
--- The claims and the heartbeat read and write operation rows, each under a purpose of its own; a row lock needs the SELECT
--- policy as well as the UPDATE one.
+-- A row lock needs the SELECT policy as well as the UPDATE one.
 CALL app.grant_purposes('operations', 'SELECT', ARRAY['claim_operations', 'ledger_heartbeat', 'claim_polls',
   'claim_reconciles', 'sweep_expired_leases', 'sweep_due_moves']);
 CALL app.grant_purposes('operations', 'UPDATE', ARRAY['claim_operations', 'ledger_heartbeat', 'claim_polls',
   'claim_reconciles', 'sweep_expired_leases', 'sweep_due_moves']);
--- The sweep of due moves reads the channel of a paused row to see whether its pause is over.
 CALL app.grant_purposes('channels', 'SELECT', ARRAY['sweep_due_moves']);
--- A poll claim raises the token with no change of state, so the token is a column the definer role may write; the guard
--- below lets it change by one in the two jobs that do this and in no other.
+-- A poll claim raises the token without a state change, so the definer may write it; the guard below allows that only
+-- in the two jobs that do it.
 GRANT UPDATE (fencing_token) ON app.operations TO shoutory_definer;
 
 SET ROLE shoutory_definer;
 
--- The outbox belongs to the definer role (0012); its insert policies are created by the owner of the table.
+-- The outbox belongs to the definer, so its insert policies are created here.
 CREATE POLICY admit_due_targets_insert ON app.outbox FOR INSERT TO shoutory_definer
   WITH CHECK ((SELECT app.job_purpose()) = 'admit_due_targets');
 CREATE POLICY claim_operations_insert ON app.outbox FOR INSERT TO shoutory_definer
@@ -59,10 +47,8 @@ CREATE POLICY sweep_expired_leases_insert ON app.outbox FOR INSERT TO shoutory_d
 CREATE POLICY sweep_due_moves_insert ON app.outbox FOR INSERT TO shoutory_definer
   WITH CHECK ((SELECT app.job_purpose()) = 'sweep_due_moves');
 
--- The transition guard of 0019 with one more rule for a change that leaves the state as it is: the token may rise by exactly
--- one, and only under the purpose of the poll claim or of the lease sweep; any other change of the token, up or down,
--- is refused. It reads the purpose of the caller at entry, before it sets its own. A move of the state is as before:
--- the token is set from the transition table whatever the statement says.
+-- A same-state change may raise the token by exactly one, and only under the poll claim or the lease sweep purpose;
+-- any other token change is refused. The caller's purpose is read at entry, before the guard sets its own.
 CREATE OR REPLACE FUNCTION app.ledger_guard()
 RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER
@@ -114,9 +100,8 @@ BEGIN
 END
 $$;
 
--- The one caller check of the runtime definers: a worker job under the ledger purpose. It reads the purpose the caller
--- set, so every definer calls it first, before it sets its own. A user, a service, a portal, a job of another purpose
--- and an unset purpose get the same refusal. No role runs it; the definers do.
+-- Reads the purpose the caller set, so every definer calls it before setting its own. Every other principal or
+-- purpose gets the same refusal.
 CREATE FUNCTION app.ledger_caller()
 RETURNS void
 LANGUAGE plpgsql
@@ -129,16 +114,11 @@ BEGIN
 END
 $$;
 
--- Turns the targets that are due into operations, at most `p_limit` per call, one transaction step per target. A provider
--- that is not in `p_providers` (provider id to `{margin_seconds, lease_seconds: {publish, edit, delete}}`) is not
--- admitted. The margin lets admission run early; the operation is never due before the target's own time. A target is
--- taken with FOR UPDATE SKIP LOCKED (rank 3), then its channel is held FOR SHARE (rank 5), as the fenced move does: a
--- session that finds the target taken skips it, so two callers never admit one target, and two admitting callers never
--- wait on each other's channels (the writers that hold a channel FOR UPDATE take no target after it). The operation is `missed` when the workspace's lateness window has
--- passed, else `pending` on a connected channel, `paused` on a disabled one and `blocked_reconnect` on any other, and
--- every one but `missed` reserves one post of usage. A target the target index or the settled guard refuses is skipped
--- and the others go on; any other fault ends the call. The target leaves `scheduled` in every case, so the next tick
--- does not meet it again. Approval is not read before M3 (no approval table exists), and part 0 only is admitted.
+-- The margin lets admission run early; the operation is never due before the target's own time. The target is taken
+-- with FOR UPDATE SKIP LOCKED, then its channel FOR SHARE, as the fenced move does: two callers never admit one
+-- target, and never wait on each other's channels (writers that hold a channel FOR UPDATE take no target after it).
+-- A target the target index or the settled guard refuses is skipped and the others go on; any other fault ends the
+-- call. The target leaves `scheduled` in every case, so the next tick does not meet it again.
 CREATE FUNCTION app.admit_due_targets(p_limit integer, p_providers jsonb)
 RETURNS TABLE (operation_id uuid, workspace_id uuid, queue text, state text)
 LANGUAGE plpgsql SECURITY DEFINER
@@ -162,7 +142,7 @@ BEGIN
   IF p_limit IS NULL OR p_limit NOT BETWEEN 1 AND 500 OR jsonb_typeof(p_providers) IS DISTINCT FROM 'object' THEN
     RAISE EXCEPTION 'admit_due_targets: the limit is 1 to 500 and the providers an object' USING ERRCODE = '22023';
   END IF;
-  -- The lease of a provider is a positive whole number of seconds; a value that is not is the caller's defect and no target is read.
+  -- A bad lease is the caller's defect, so no target is read.
   IF EXISTS (SELECT 1 FROM jsonb_each(p_providers) AS e (provider, facts)
       WHERE NOT coalesce(jsonb_typeof(e.facts -> 'lease_seconds' -> 'publish') = 'number'
         AND (e.facts -> 'lease_seconds' ->> 'publish') ~ '^[1-9][0-9]{0,8}$', false)) THEN
@@ -231,10 +211,8 @@ BEGIN
 END
 $$;
 
--- Hands pending operations of a queue to a worker: the due ones inside their lateness window (blocked time not counted),
--- oldest due first, taken with SKIP LOCKED so two workers never claim one row. Each becomes `claimed` for `p_owner`, with
--- a lease of the operation's own length measured on the database clock; the token rises by the move (OL row 4).
--- An operation carries its lease length; 60 seconds is the default when the row has none.
+-- SKIP LOCKED keeps two workers from claiming one row. The lease is measured on the database clock; 60 seconds when
+-- the row carries no length.
 CREATE FUNCTION app.claim_operations(p_queue text, p_limit integer, p_owner text)
 RETURNS TABLE (id uuid, workspace_id uuid, fencing_token bigint, lease_expires_at timestamptz, kind text, state text)
 LANGUAGE plpgsql SECURITY DEFINER
@@ -268,8 +246,6 @@ BEGIN
 END
 $$;
 
--- Extends the lease of the caller that still holds it: the token and the owner are the ones given and the lease has not
--- run out yet, else `lost` and nothing changes. The new end is measured on the database clock.
 CREATE FUNCTION app.heartbeat(p_id uuid, p_token bigint, p_owner text, p_extend_seconds integer)
 RETURNS TABLE (outcome text, lease_expires_at timestamptz)
 LANGUAGE plpgsql SECURITY DEFINER
@@ -292,9 +268,7 @@ BEGIN
 END
 $$;
 
--- Leases the due polls of a queue: `processing` and `provider_accepted` rows whose check is due and that hold no live lease
--- (none, or one that ran out), in due order, with SKIP LOCKED. The state does not change; the token rises by one, so a
--- poller that held the earlier lease is fenced out (the guard allows this one change of the token under this purpose).
+-- The state does not change; the token rises by one, so a poller that held the earlier lease is fenced out.
 CREATE FUNCTION app.claim_polls(p_queue text, p_limit integer, p_owner text, p_lease_seconds integer)
 RETURNS TABLE (id uuid, workspace_id uuid, fencing_token bigint, lease_expires_at timestamptz, kind text, state text)
 LANGUAGE plpgsql SECURITY DEFINER
@@ -327,9 +301,8 @@ BEGIN
 END
 $$;
 
--- Claims the due read-backs of a queue: `unknown_external_state` rows whose check is due, with SKIP LOCKED. A kind in
--- `p_class_e_kinds` (its provider cannot read the outcome back) goes straight to `needs_human` and is never leased or
--- resent; any other becomes `reconciling` for `p_owner` with a lease of `p_lease_seconds`. Both raise the token by the move.
+-- A kind in `p_class_e_kinds` (its provider cannot read the outcome back) goes straight to `needs_human` and is never
+-- leased or resent.
 CREATE FUNCTION app.claim_reconciles(p_queue text, p_limit integer, p_owner text, p_lease_seconds integer,
   p_class_e_kinds text[])
 RETURNS TABLE (id uuid, workspace_id uuid, fencing_token bigint, lease_expires_at timestamptz, kind text, state text)
@@ -368,11 +341,9 @@ BEGIN
 END
 $$;
 
--- Takes back what an expired lease holds, at most 500 rows a call, one row at a time: a failure of one row's move (the guard's
--- refusal) leaves the others moved. Every move raises the token, so the holder of the dead lease is fenced out:
--- `claimed` goes back to `pending` (it had no effect); `dispatching` and `reconciling` go to `unknown_external_state`
--- (the call may have been sent, so never `pending` and never a resend) on the reconcile queue, due now; a `processing` or
--- `provider_accepted` row keeps its state and loses its lease. Returns the number of rows changed.
+-- One row at a time, so the guard's refusal of one row leaves the others moved. Every move raises the token, fencing
+-- out the holder of the dead lease. `dispatching` and `reconciling` go to `unknown_external_state`, never `pending`:
+-- the call may have been sent, so it must never be resent.
 CREATE FUNCTION app.sweep_expired_leases()
 RETURNS integer
 LANGUAGE plpgsql SECURITY DEFINER
@@ -415,9 +386,8 @@ BEGIN
 END
 $$;
 
--- One due move of a locked row, inside the caller's purpose (no entry point): the row becomes `missed` when its lateness
--- window has passed with no effect, else `pending`; the pause or retry reason goes, and a retried row is put back on its
--- publish queue (a read-back may have moved it to the reconcile one). Writes its outbox row.
+-- Not an entry point. A retried row goes back on its publish queue because a read-back may have moved it to the
+-- reconcile one.
 CREATE FUNCTION app.ledger_due_move(p_ws uuid, p_id uuid)
 RETURNS void
 LANGUAGE plpgsql
@@ -440,11 +410,8 @@ BEGIN
 END
 $$;
 
--- Moves the rows whose wait is over, at most 500 of each kind a call, one row at a time (the guard's refusal of one row's
--- move leaves the others moved): a pending, retry_wait or paused row with no effect past its lateness window becomes
--- missed, a retry_wait row whose retry is due becomes pending, a paused row whose pause is over becomes pending. Only two
--- pauses end here: a provider cooldown whose time came, and a disabled channel that is connected again; every other
--- reason stays until the slice that writes it clears it. A row that is both due and late is missed. Returns the count.
+-- One row at a time, so the guard's refusal of one row leaves the others moved. Only two pauses end here: a provider
+-- cooldown whose time came, and a disabled channel that is connected again. A row that is both due and late is missed.
 CREATE FUNCTION app.sweep_due_moves()
 RETURNS integer
 LANGUAGE plpgsql SECURITY DEFINER
@@ -489,10 +456,8 @@ BEGIN
 END
 $$;
 
--- Spends one token of a manifest-scope bucket (cost 1) or refunds up to its capacity (cost -capacity..-1), as bucket_take
--- does, with the capacity and the length of a full refill given by the caller, not looked up. The scope is one of the five
--- manifest scopes, the key a 64-hex digest, the capacity 1 to 10000 and the window 1 to 86400 seconds. A bucket that is
--- paused refuses a spend until its pause ends and answers the rest of the pause as the wait.
+-- Like bucket_take, but the capacity and the full-refill window come from the caller, not a lookup. A paused bucket
+-- refuses a spend until its pause ends and answers the rest of the pause as the wait.
 CREATE FUNCTION app.bucket_take_scoped(
   p_key text, p_scope text, p_capacity integer, p_window_seconds integer, p_cost integer DEFAULT 1)
 RETURNS TABLE (allowed boolean, remaining integer, retry_after_seconds integer)
@@ -538,9 +503,8 @@ BEGIN
 END
 $$;
 
--- Pauses a bucket until `p_until` (at most 24 hours ahead) for the stated reason (1 to 64 characters), for a provider's
--- Retry-After. A later pause never shortens an earlier one. A bucket that does not exist yet is created full: its tokens
--- are infinite, which the next take caps at its capacity, so a missing bucket and a paused one start alike.
+-- For a provider's Retry-After. A later pause never shortens an earlier one. A missing bucket is created with infinite
+-- tokens, which the next take caps at its capacity.
 CREATE FUNCTION app.bucket_pause(p_key text, p_scope text, p_until timestamptz, p_reason text)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER

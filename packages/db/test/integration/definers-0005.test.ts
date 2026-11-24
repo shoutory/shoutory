@@ -10,10 +10,6 @@ import {
 
 const env = readTestEnv();
 
-// Security floor of migration 0005: each definer reads or writes only the table its purpose policy names. The
-// owner, search path and caller checks of every definer are in the catalog test.
-//
-// The table each purpose policy opens for reading, with the purpose that opens it.
 const POLICIES = [
   ["rate_buckets", "bucket_take"],
   ["rate_buckets", "bucket_state"],
@@ -39,7 +35,6 @@ async function seed(admin: Client): Promise<void> {
   ]);
 }
 
-/** One clone per describe, seeded with one row in each table a definer touches when `seeded`. */
 function useClone(seeded: boolean): () => TestDatabase {
   let db: TestDatabase;
   beforeAll(async () => {
@@ -54,7 +49,7 @@ describe("definers of migration 0005: index and caller", () => {
   const clone = useClone(false);
   const db = { pool: (role: "owner" | "readonly") => clone().pool(role) };
 
-  it("session_step_ups has an index led by user_id, the key of the template U predicate and the cascade", async () => {
+  it("session_step_ups has an index led by user_id, the key of the own-rows predicate and the cascade", async () => {
     const found = await db.pool("owner").query(
       `SELECT count(*)::int AS n FROM pg_index i
        WHERE i.indrelid = 'app.session_step_ups'::regclass AND i.indkey[0] = (
@@ -71,8 +66,6 @@ describe("definers of migration 0005: index and caller", () => {
   });
 });
 
-// The definer runs the statement, so the purpose policy decides what it sees: the right purpose sees the seeded
-// row, any other purpose and no purpose see nothing.
 describe("definers of migration 0005: purpose policies", () => {
   const clone = useClone(true);
   const countAs = async (table: string, purpose: string | undefined) => {

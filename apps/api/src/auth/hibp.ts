@@ -13,10 +13,10 @@ const RANGE_URL = `https://${RANGE_HOST}/range/`;
 const TIMEOUT_MS = 2_000;
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 
-/** `unavailable`: the service did not answer in time or well; the password is accepted and checked again later. */
+// `unavailable`: the service did not answer in time or well; the password is accepted and checked again later.
 type Outcome = "clean" | "breached" | "unavailable";
 
-/** Looks the password up in the range of its hash prefix. Padding lines (count 0) never count as a hit. */
+// Padding lines (count 0) never count as a hit.
 async function checkBreached(
   fetchRange: (request: EgressRequest) => Promise<EgressResponse>,
   password: string,
@@ -42,20 +42,16 @@ async function checkBreached(
 }
 
 export interface PasswordGuard {
-  /** Refuses a breached password (400, generic message); answers `unavailable` when the service could not say. */
   screen(password: string): Promise<Outcome>;
-  /** After a password was set: `unavailable` marks a re-check at the next sign-in, `clean` clears the mark. */
+  /** `unavailable` marks a re-check at the next sign-in, `clean` clears the mark. */
   settle(userId: string, outcome: Outcome): Promise<void>;
-  /** At sign-in, once the password is proven: whether a marked user's password is now found breached. */
   recheckHit(userId: string, password: string): Promise<boolean>;
 }
 
 interface GuardDeps {
-  /** The egress client with its policy bound (`main.ts`); every refusal or failure it throws is an `EgressError`. */
   readonly fetch: (request: EgressRequest) => Promise<EgressResponse>;
   /** The `shoutory_auth` pool: it may call `password_recheck_set`. */
   readonly pool: AppPool;
-  /** The `shoutory_app` pool: a user reads their own mark under template U. */
   readonly appPool: AppPool;
   readonly logger: Logger;
 }

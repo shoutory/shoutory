@@ -11,7 +11,6 @@ import { ErrorPanel } from "../ui/error-panel";
 import { forgetWorkspace } from "./last-workspace";
 import { useOnline } from "./offline-banner";
 
-// The account menu holds the address, the profile link and sign out.
 export function AccountMenu() {
   const { t } = useLingui();
   const session = useRouteLoaderData<Session>(SESSION_ROUTE_ID);
@@ -21,8 +20,7 @@ export function AccountMenu() {
   const [signingOut, setSigningOut] = useState(false);
   const [failure, setFailure] = useState<ApiError | null>(null);
 
-  // No guard against a second press or against being offline: while either holds the Button is aria-disabled, and an
-  // aria-disabled Button passes no handler on.
+  // No guard against a second press or being offline: an aria-disabled Button passes no handler on.
   async function signOut() {
     setSigningOut(true);
     setFailure(null);

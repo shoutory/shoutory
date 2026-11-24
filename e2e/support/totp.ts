@@ -4,11 +4,8 @@ import { createOTP } from "@better-auth/utils/otp";
 const STEP_MS = 30_000;
 const used = new Map<string, number>();
 
-/**
- * A code for an enrolment secret shown as text. The server accepts a code once per user and also accepts the code of
- * the next step (a window of one), so a second call takes the next step's code instead of waiting for the clock. A
- * third call inside the same step has no code left that the server accepts and fails at once.
- */
+// The server accepts a code once per user and also the next step's code (a window of one), so a second call takes the
+// next step's code instead of waiting for the clock. A third call inside the same step fails at once.
 export async function nextTotp(secret: string): Promise<string> {
   const current = Math.floor(Date.now() / STEP_MS);
   const step = Math.max(current, (used.get(secret) ?? -1) + 1);

@@ -1,7 +1,6 @@
 import { type Permission, ROLE_PERMISSIONS, type WorkspaceRole } from "./matrix.js";
 
-// An AuthorizedScope is proof that a caller reached one workspace with one permission. The brand is a symbol that is
-// declared here and never exported, so the only way to hold a scope is to get it from `mintScope`.
+// The brand symbol is never exported, so the only way to hold a scope is to get it from `mintScope`.
 
 declare const scopeBrand: unique symbol;
 
@@ -10,11 +9,9 @@ export interface AuthorizedScope {
   readonly principalId: string;
   readonly workspaceId: string;
   readonly organizationId: string;
-  /** What the caller's role holds in this workspace; a role the matrix does not know holds none. */
   readonly permissions: ReadonlySet<Permission>;
 }
 
-/** One row of `resolve_workspace_access()`: a workspace the caller reaches and the role it holds there. */
 export interface ResolvedAccess {
   readonly workspace_id: string;
   readonly organization_id: string;
@@ -31,11 +28,8 @@ function permissionsOf(roleKey: string): ReadonlySet<Permission> {
   return new Set(ROLE_PERMISSIONS[roleKey as WorkspaceRole]);
 }
 
-/**
- * The only constructor of a scope. A workspace outside the resolved rows is `not_found` (the caller may not learn it
- * exists); a reached workspace whose role lacks `permission` is `forbidden`. Without a permission any resolved row
- * grants (membership only). A role key the matrix does not know holds no permission.
- */
+// A workspace outside the resolved rows is `not_found`, so the caller cannot learn it exists. Without a permission any
+// resolved row grants (membership only).
 export function mintScope(
   rows: readonly ResolvedAccess[],
   principalId: string,

@@ -4,7 +4,6 @@ import { Dialog } from "./dialog";
 
 afterEach(closeApp);
 
-// ux-spec 4.8 and 4.10: the title is the dialog's accessible name (Escape and focus return are React Aria's own).
 describe("Dialog", () => {
   it("has its title as accessible name", () => {
     mount(

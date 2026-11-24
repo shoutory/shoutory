@@ -1,9 +1,8 @@
 import { z } from "zod";
 
-// The one document the post definers accept (the database function that applies a draft, and the post table CHECKs), checked in full
-// before it reaches the database: Postgres would drop an unknown key, and `jsonb` takes a float. Text bounds count code
-// points like `char_length`; byte bounds count the UTF-8 bytes of the text Postgres renders for the `jsonb` value, so
-// core and the database agree at the limit (the database stays the authority and a `23514` from it is still mapped).
+// Checked in full before it reaches the database: Postgres would drop an unknown key, and `jsonb` takes a float. Text
+// bounds count code points like `char_length`; byte bounds count the UTF-8 bytes of the text Postgres renders for the
+// `jsonb` value, so core and the database agree at the limit.
 
 const POST_TYPES = [
   "text",
@@ -38,7 +37,6 @@ const textBytes = (text: string) => encoder.encode(text).length;
 // Postgres writes `, ` between members and `: ` after a key; the escapes inside strings are those of JSON.stringify.
 const SEPARATOR = 2;
 
-/** The bytes of a string, number, boolean or null as `jsonb::text` renders it; undefined for any other value. */
 function scalarBytes(value: unknown): number | undefined {
   if (value === null) return 4;
   if (typeof value === "boolean") return value ? 4 : 5;
@@ -46,7 +44,6 @@ function scalarBytes(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? String(value).length : undefined;
 }
 
-/** The members of an array or plain object (a null key marks an array item); undefined for anything else. */
 function membersOf(node: object): [string | null, unknown][] | undefined {
   if (Array.isArray(node)) return Array.from(node, (item): [null, unknown] => [null, item]);
   const prototype = Object.getPrototypeOf(node);
@@ -55,11 +52,7 @@ function membersOf(node: object): [string | null, unknown][] | undefined {
   return entries.some(([key]) => key === "__proto__") ? undefined : entries;
 }
 
-/**
- * The UTF-8 bytes `value` takes as `jsonb::text`, counted without building the text and without recursion, so a very
- * deep value cannot overflow the stack. Undefined when the value is not plain JSON (a bigint, a function, a hole, a
- * `__proto__` key, a class instance) or nests deeper than `maxDepth`.
- */
+// Counted without building the text and without recursion, so a very deep value cannot overflow the stack.
 export function jsonbBytes(value: unknown, maxDepth = 32): number | undefined {
   let total = 0;
   const pending: [unknown, number][] = [[value, 0]];
@@ -82,7 +75,7 @@ export function jsonbBytes(value: unknown, maxDepth = 32): number | undefined {
   return total;
 }
 
-/** Checks the size of the raw value first, so a huge value is refused before it is walked by the schema. */
+// The raw size is checked first, so a huge value is refused before the schema walks it.
 const withinBytes = <T extends z.ZodType>(schema: T, max: number) =>
   z
     .unknown()
@@ -144,10 +137,8 @@ export interface SettingsIssue {
   reason: "undeclared" | "type";
 }
 
-/**
- * The settings a channel does not declare, or declares with another primitive type. The channel's `providerDefault`
- * map arrives as a plain record keyed by the lower-case channel id, so core imports nothing from the provider package.
- */
+// The channel's `providerDefault` map arrives as a plain record keyed by the lower-case channel id, so core imports
+// nothing from the provider package.
 export function settingsIssues(
   draft: Draft,
   providerDefaults: Readonly<Record<string, Readonly<Record<string, string | number | boolean>>>>,

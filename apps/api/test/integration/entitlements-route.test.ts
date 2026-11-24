@@ -3,8 +3,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { addWorkspaceMember, seedOrganization, seedWorkspace, signedUser } from "../support/tenancy.js";
 import { type Fixture, startFixture } from "./auth/harness.js";
 
-// The plan limits of a workspace, read by any member: the self-host answer is "unlimited" for every key, and a
-// workspace the caller does not reach answers like one that does not exist.
 const limited: Entitlements = {
   check: async (_workspace, key) =>
     key === "workspaces" ? { kind: "limited", limit: 5, used: 2 } : { kind: "unlimited" },
@@ -45,7 +43,6 @@ describe("GET /api/v1/workspaces/{workspace_id}/entitlements", () => {
     });
   });
 
-  // An implementation that answers a kind the route does not know must not read as unlimited.
   it("answers 500 for an unknown kind of entitlement, never unlimited", async () => {
     const { cookie, workspace } = await member(unknown, "viewer");
     expect((await unknown.request(path(workspace), { headers: { cookie } })).status).toBe(500);

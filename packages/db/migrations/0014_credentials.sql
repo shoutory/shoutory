@@ -1,10 +1,7 @@
--- Sealed channel credentials, the workspace salts that crypto-shred them, and the definers that connect a channel, read a
--- credential, record its health and (further down) refresh it under a lease. Template D: no runtime role holds a grant
--- on either table; every access is a definer with its own purpose policy (as 0006 and 0013 do).
+-- No runtime role holds a grant on either table; every access is a definer with its own purpose policy.
 
--- One 32-byte salt per workspace. The data key of every credential of the workspace is wrapped under a key derived from
--- the key-encryption key and this salt, so deleting the row (the purge, a later slice) makes every copy of the
--- credentials unreadable, backups included. No definer deletes it here.
+-- The data key of every credential of the workspace is wrapped under a key derived from the key-encryption key and
+-- this salt, so deleting the row makes every copy of the credentials unreadable, backups included (crypto-shred).
 CREATE TABLE app.workspace_key_salts (
   workspace_id uuid PRIMARY KEY REFERENCES app.workspaces (id),
   salt bytea NOT NULL CHECK (octet_length(salt) = 32),
@@ -12,11 +9,10 @@ CREATE TABLE app.workspace_key_salts (
 );
 SELECT app.apply_rls_template('app.workspace_key_salts'::regclass, 'D');
 
--- One row per channel and kind while it is active or read_only; a reconnect or a refresh replaces the sealed fields in
--- place and moves `generation`, which the AAD of the seal binds. The refresh lease (`refreshing_until`, `refresh_owner`,
--- `refresh_fencing`) only keeps two refreshers from calling the provider at once; the compare-and-set key is the digest
--- of the refresh token in use together with the generation. The attempt marker records that a rotating refresh
--- token may already have been spent (flows 1.3).
+-- A reconnect or a refresh replaces the sealed fields in place and moves `generation`, which the AAD of the seal
+-- binds. The refresh lease only keeps two refreshers from calling the provider at once; the compare-and-set key is
+-- the digest of the refresh token in use together with the generation. The attempt marker records that a rotating
+-- refresh token may already have been spent.
 CREATE TABLE app.channel_credentials (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   workspace_id uuid NOT NULL,
@@ -45,7 +41,6 @@ CREATE TABLE app.channel_credentials (
 -- shoutory:accepted-lock new empty table in this file
 CREATE UNIQUE INDEX channel_credentials_current_key ON app.channel_credentials (workspace_id, channel_id, kind)
   WHERE state IN ('active', 'read_only');
--- The sweep reads the active rows by the time their access token runs out.
 -- shoutory:accepted-lock new empty table in this file
 CREATE INDEX channel_credentials_access_expiry_idx ON app.channel_credentials (access_expires_at)
   WHERE state = 'active';
@@ -58,8 +53,6 @@ GRANT UPDATE (instance_host, display_name, handle, avatar, token_expires_at, hea
   capability_epoch, disconnected_at) ON app.channels TO shoutory_definer;
 GRANT SELECT, INSERT, DELETE ON app.channel_capability_snapshots TO shoutory_definer;
 
--- One policy per purpose, table and command (grant_purposes). Every definer of this file that checks its caller reads
--- the membership tables under its own purpose.
 CALL app.grant_purposes('workspace_key_salts', 'SELECT', ARRAY['workspace_salt_ensure', 'credential_open']);
 CALL app.grant_purposes('workspace_key_salts', 'INSERT', ARRAY['workspace_salt_ensure']);
 CALL app.grant_purposes('channel_credentials', 'SELECT', ARRAY['channel_connect', 'credential_put', 'credential_open',
@@ -81,7 +74,6 @@ DO $$
 DECLARE
   t text;
 BEGIN
-  -- The principal check reads the tables of the tenancy rank, and the audit row reads the workspace's organization.
   FOREACH t IN ARRAY ARRAY['workspaces', 'workspace_members', 'organization_members', 'roles'] LOOP
     CALL app.grant_purposes(t, 'SELECT', ARRAY['workspace_salt_ensure', 'channel_connect', 'credential_put',
       'credential_open', 'credential_refresh_begin', 'credential_refresh_commit', 'credential_refresh_fail',
@@ -90,13 +82,12 @@ BEGIN
 END
 $$;
 
--- Every function below is created by the definer role, so it is owned by it without a later ALTER OWNER (the definer role
--- already holds the table grants and policies set above).
+-- Every function below is created by the definer role, so it is owned by it without a later ALTER OWNER.
 SET ROLE shoutory_definer;
 
--- The one principal check of the credential definers (R537 (2)): a user whose rank in the workspace is admin or above
--- (channels.manage, organization admins included), or a job principal whose workspace set holds the workspace. A service
--- or portal principal, an Editor and a job of another workspace all get the same refusal.
+-- The one principal check of the credential definers: a user whose rank in the workspace is admin or above, or a job
+-- principal whose workspace set holds the workspace. A service or portal principal, an Editor and a job of another
+-- workspace all get the same refusal.
 CREATE FUNCTION app.credential_caller(workspace_id uuid)
 RETURNS void
 LANGUAGE plpgsql
@@ -117,9 +108,8 @@ BEGIN
 END
 $$;
 
--- Inserts the workspace's salt when it has none and answers the salt the workspace holds, so two first-credential
--- callers end with one salt and the loser receives the winner's. The application draws the 32 random bytes (PostgreSQL
--- has no cryptographic random bytes in core).
+-- Two first-credential callers end with one salt: the loser receives the winner's. The application draws the 32
+-- random bytes because PostgreSQL has no cryptographic random bytes in core.
 CREATE FUNCTION app.workspace_salt_ensure(workspace_id uuid, salt bytea)
 RETURNS bytea
 LANGUAGE plpgsql SECURITY DEFINER
@@ -143,9 +133,9 @@ BEGIN
 END
 $$;
 
--- Records the capability answer and the health of a channel. A snapshot is written only when the answer changed from the
--- latest one (the epoch of the channel moves with it) and the last 5 are kept; a NULL health leaves the health columns
--- alone, so credential_put can use this for the first snapshot. True means a snapshot was written.
+-- A snapshot is written only when the answer changed from the latest one (the channel epoch moves with it) and the
+-- last 5 are kept; a NULL health leaves the health columns alone, so credential_put can use this for the first
+-- snapshot. True means a snapshot was written.
 CREATE FUNCTION app.channel_health_record(
   workspace_id uuid, channel_id uuid, health text, manifest_digest text, api_version text, sunset_at timestamptz,
   capabilities jsonb, limits jsonb)
@@ -195,11 +185,9 @@ BEGIN
 END
 $$;
 
--- Step one of a connect, in the connect transaction: inserts the channel of this identity or locks the existing one (the
--- identity key makes a concurrent first connect wait for the first and reuse its row, lock rank 5, so no retry exists) and
--- answers its id with the generation the next credential must carry, which the application needs before it can seal. A
--- reconnect names the channel it reconnects: an account that is another identity is refused with the generic SH409 that
--- names nothing (data-model 1.5 rule 2).
+-- The identity key makes a concurrent first connect wait for the first and reuse its row, so no retry exists. The
+-- answer carries the generation the next credential must carry, which the application needs before it can seal. A
+-- reconnect that names a different identity is refused with the generic SH409, which names nothing.
 CREATE FUNCTION app.channel_connect(
   workspace_id uuid, provider_id text, account_kind text, provider_account_id text, instance_host text,
   display_name text, handle text, avatar text, reconnect_channel_id uuid, request_id text, ip_hmac bytea)
@@ -247,10 +235,8 @@ BEGIN
 END
 $$;
 
--- Step two of a connect: stores the sealed credential as the generation the caller expects (expected_generation is the
--- current one, 0 for none, and the row moves to the next), marks the channel connected with its token expiry and records
--- the first or a changed capability snapshot. A generation that is not the next is refused (SH409): the AAD binds it, so a
--- stale seal must never land. The salt is the application's to ensure before it seals.
+-- expected_generation is the current one (0 for none) and the row moves to the next. A generation that is not the next
+-- is refused (SH409): the AAD binds it, so a stale seal must never land. The application ensures the salt before it seals.
 CREATE FUNCTION app.credential_put(
   workspace_id uuid, channel_id uuid, expected_generation integer, format_version integer, key_id text, iv bytea,
   ciphertext bytea, auth_tag bytea, wrap_iv bytea, wrap_tag bytea, wrapped_dek bytea, access_expires_at timestamptz,
@@ -278,7 +264,6 @@ BEGIN
   IF coalesce(current_generation, 0) <> credential_put.expected_generation THEN
     RAISE EXCEPTION 'credential_put: not the next generation' USING ERRCODE = 'SH409';
   END IF;
-  -- The first generation inserts; a reconnect replaces the current one in place, with no lease and no marker.
   INSERT INTO app.channel_credentials (workspace_id, channel_id, generation, kind, format_version, key_id, iv,
       ciphertext, auth_tag, wrap_iv, wrap_tag, wrapped_dek, access_expires_at, refresh_expires_at,
       refresh_token_digest)
@@ -308,9 +293,8 @@ BEGIN
 END
 $$;
 
--- The active credential of a channel with the workspace salt that opens it, or nothing: with no active row or with the
--- salt row deleted (crypto-shred) it answers no row at all, so no sealed field leaves without its salt. It also names
--- the channel's provider, which the refresh needs and the worker role cannot read from the channel row.
+-- With no active row or with the salt row deleted (crypto-shred) it answers no row at all, so no sealed field leaves
+-- without its salt. It also names the channel's provider, which the worker role cannot read from the channel row.
 CREATE FUNCTION app.credential_open(workspace_id uuid, channel_id uuid)
 RETURNS TABLE (
   generation integer, format_version integer, key_id text, iv bytea, ciphertext bytea, auth_tag bytea, wrap_iv bytea,
@@ -336,8 +320,8 @@ BEGIN
 END
 $$;
 
--- Enable now restores `connected` when the channel holds a usable credential: an active channel_token row whose refresh
--- token has not expired. Otherwise it is needs_reconnect as before, with the 30-day window of the data model.
+-- Enable restores `connected` only when the channel holds a usable credential: an active channel_token row whose
+-- refresh token has not expired. Otherwise it is needs_reconnect with a 30-day window.
 CREATE OR REPLACE FUNCTION app.channel_enable(workspace_id uuid, channel_id uuid, request_id text, ip_hmac bytea)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER
@@ -380,8 +364,7 @@ BEGIN
 END
 $$;
 
--- The key ids a sealed row names now include the credential rows, so a key-encryption key is retired only when no mail
--- link and no credential still uses it.
+-- A key-encryption key is retired only when no mail link and no credential still uses it.
 CREATE OR REPLACE FUNCTION app.sealed_key_ids()
 RETURNS TABLE (key_id text)
 LANGUAGE plpgsql SECURITY DEFINER
@@ -399,14 +382,12 @@ BEGIN
 END
 $$;
 
--- Token refresh. Three short transactions around a provider call that holds no lock: begin takes the
--- lease and writes the attempt marker (outcome unknown) in its own commit, the application calls the provider, then
--- commit or fail ends it. The channel row (rank 5) is locked before the credential row (rank 8) wherever both change.
+-- Token refresh is three short transactions around a provider call that holds no lock: begin takes the lease and
+-- writes the attempt marker (outcome unknown) in its own commit, the application calls the provider, then commit or
+-- fail ends it. The channel row is locked before the credential row wherever both change.
 
--- Takes the lease when none is live (one conditional step under the row lock, the clock is clock_timestamp()), bumps the
--- fencing number and writes the marker for the digest in use. The answer carries the generation and digest the caller
--- started from and the marker that stood before this attempt, so the caller can tell an earlier attempt that is still
--- unknown. Lease holders that lose see won = false with the current row. No active credential answers no row.
+-- The answer carries the marker that stood before this attempt, so the caller can tell an earlier attempt that is
+-- still unknown. A caller that loses the lease sees won = false with the current row.
 CREATE FUNCTION app.credential_refresh_begin(workspace_id uuid, channel_id uuid, lease_owner text, lease_seconds integer)
 RETURNS TABLE (
   won boolean, fencing integer, generation integer, refresh_token_digest text, prior_attempt_digest text,
@@ -453,13 +434,10 @@ BEGIN
 END
 $$;
 
--- Lands a refresh result only while the credential is still the one the refresh started from: the digest of the refresh
--- token and the generation (which the AAD of the new seal binds) must both be unchanged. The lease is not part of the key,
--- so a result obtained from the current token lands even after its lease ran out; a competing late commit fails because
--- its digest or generation moved, and a second commit of an answer that kept the old refresh token fails because the
--- generation moved. Clears the lease and records the attempt as ok only while refresh_fencing is still the caller's
--- (the number begin answered), so a stale refresher never clears a newer lease or its marker; it also moves the
--- channel's token expiry.
+-- Lands only while the refresh token digest and the generation (which the AAD of the new seal binds) are unchanged.
+-- The lease is not part of the key, so a result from the current token lands even after its lease ran out; a
+-- competing late commit fails because its digest or generation moved. The lease and marker are cleared only while
+-- refresh_fencing is still the caller's, so a stale refresher never clears a newer lease or its marker.
 CREATE FUNCTION app.credential_refresh_commit(
   workspace_id uuid, channel_id uuid, expected_digest text, expected_generation integer, expected_fencing integer,
   format_version integer, key_id text, iv bytea, ciphertext bytea, auth_tag bytea, wrap_iv bytea, wrap_tag bytea, wrapped_dek bytea,
@@ -514,11 +492,9 @@ BEGIN
 END
 $$;
 
--- Ends a failed attempt: records its outcome (unknown after a timeout, 5xx or 429, failed otherwise) and clears the lease,
--- and for a confirmed revocation moves a connected channel to needs_reconnect with its reason. Only while the digest is
--- still the one the attempt started from and the lease is still the caller's (the fencing number begin answered): a
--- digest or a lease that moved answers 'changed' and writes nothing, so a competing commit or a newer refresher is never
--- overridden. A channel that is disabled or disconnected keeps its state.
+-- The outcome is unknown after a timeout, 5xx or 429, failed otherwise. Only a confirmed revocation moves a connected
+-- channel to needs_reconnect. A digest or lease that moved answers 'changed' and writes nothing, so a competing
+-- commit or a newer refresher is never overridden. A disabled or disconnected channel keeps its state.
 CREATE FUNCTION app.credential_refresh_fail(
   workspace_id uuid, channel_id uuid, expected_digest text, expected_fencing integer, outcome text,
   state_reason text)
@@ -571,10 +547,8 @@ BEGIN
 END
 $$;
 
--- The channels whose active access token runs out within the margin and that no live lease covers, soonest first, for the
--- sweep. Only credentials that hold a refresh token (a NULL digest never reaches the provider), and only in the
--- workspaces the job principal holds: the sweep job's own cross-workspace purpose arrives with that job. It answers ids
--- and nothing secret. The margin is the service's one constant, passed in, bounded 60 to 3600 seconds, the limit 1 to 500.
+-- Only credentials that hold a refresh token (a NULL digest never reaches the provider), and only in the workspaces
+-- the job principal holds. It answers ids and nothing secret. The margin is bounded 60 to 3600 seconds, the limit 1 to 500.
 CREATE FUNCTION app.due_token_refreshes(lim integer, margin_seconds integer)
 RETURNS TABLE (workspace_id uuid, channel_id uuid)
 LANGUAGE plpgsql SECURITY DEFINER

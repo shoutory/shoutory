@@ -11,8 +11,7 @@ beforeAll(async () => {
 afterAll(() => db.drop());
 
 describe("the worker role's queue client", () => {
-  // Closes the VERIFY row "pg-boss schema grants": the owner installed the schema and the registry queues, and the
-  // runtime role needs DML and function EXECUTE only.
+  // The owner installed the queue schema and queues; the runtime role needs DML and function EXECUTE only.
   it("starts, sends, works and supervises as shoutory_worker, which holds no DDL privilege", async () => {
     const errors: Error[] = [];
     const boss = createBoss(db.url("worker"), (error) => errors.push(error));

@@ -6,7 +6,6 @@ import { expectNoPolicyViolation, message, SCREENS } from "../support/screens";
 import { plantedFlags } from "../support/stack";
 import { nextTotp } from "../support/totp";
 
-/** A promise a test settles when it lets a held server answer through. */
 function gate(): { held: Promise<void>; release: () => void } {
   let release: () => void = () => undefined;
   const held = new Promise<void>((resolve) => {
@@ -15,8 +14,6 @@ function gate(): { held: Promise<void>; release: () => void } {
   return { held, release };
 }
 
-// The checks of the UX acceptance block that a browser can make; the others are covered by axe, the visual baselines
-// and the component tests.
 test("the loading status stays quiet for 300 ms, then says loading, and offers a retry after 10 s", async ({
   page,
 }) => {
@@ -167,7 +164,6 @@ interface Target {
   inline: boolean;
 }
 
-/** Every control with its size and whether the guideline exempts it: hidden from assistive technology, or a link in a sentence. */
 const targets = (page: Page): Promise<Target[]> =>
   page.evaluate(() => {
     const SELECTOR = 'button, input:not([type="hidden"]), select, textarea, [role="combobox"], a[href]';
@@ -206,9 +202,8 @@ for (const screen of SCREENS) {
   });
 }
 
-// A page that moves under the reader as it loads is a defect; web.dev calls a total of 0.1 or less good. The server's
-// answers are held for longer than the 300 ms the loading placeholder waits, so a slow machine's case is the case
-// on every machine.
+// web.dev calls a total shift of 0.1 or less good. The server's answers are held for longer than the 300 ms the loading
+// placeholder waits, so a slow machine's case is the case on every machine.
 const SHIFT_LIMIT = 0.1;
 const HOLD_MS = 600;
 for (const id of ["workspace", "members", "flags", "security"]) {
@@ -269,9 +264,7 @@ for (const id of ["workspace", "members", "flags", "security"]) {
 // moves the whole page when the web font arrives. The web fonts are blocked and the text is spaced wider than any
 // face would set it, so the check is the same on every machine.
 const WIDE_TEXT = 0.1;
-// The smallest an organization or workspace switcher input may be in any layout (5 rem).
 const MIN_INPUT = 80;
-// With a second workspace, the bar holds both switchers, the widest case.
 let secondWorkspace: Promise<unknown> | undefined;
 const withSecondWorkspace = (browser: Browser) => {
   secondWorkspace ??= inPage(browser, { audience: "founder", locale: "en", theme: "light" }, (page) =>

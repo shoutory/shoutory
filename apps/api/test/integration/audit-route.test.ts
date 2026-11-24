@@ -8,9 +8,6 @@ import {
 } from "../support/tenancy.js";
 import { type Fixture, startFixture } from "./auth/harness.js";
 
-// The floor of the audit read route (NFR-SEC-18, R270): only the workspace Owner reads, only that workspace's rows,
-// and a row shows its allowlisted fields. The rows are written by the real invitation route.
-
 type User = { id: string; cookie: string };
 let fx: Fixture;
 let ws: string;
@@ -86,7 +83,6 @@ describe("GET /api/v1/workspaces/{workspace_id}/audit-logs", () => {
   });
 
   it("a non-member and a member of another workspace get the 404 of a missing workspace, with no row", async () => {
-    // The route exists: the Owner reads the same path.
     expect((await audit(ws, owner)).status).toBe(200);
     const missing = await audit(MISSING, outsider);
     const missingError = ((await missing.json()) as { error: { code: string; message: string } }).error;
@@ -101,7 +97,6 @@ describe("GET /api/v1/workspaces/{workspace_id}/audit-logs", () => {
 
 describe("the audit page's cursor and fields", () => {
   it("a cursor that is the id of a row of another workspace gives no row of this workspace and no foreign row", async () => {
-    // The route exists: the Owner's own cursor pages.
     expect((await rowsOf(await audit(ws, owner, "?limit=1"))).data).toHaveLength(1);
     const answer = await audit(ws, owner, `?cursor=${foreignRowId}`);
     expect(answer.status).toBe(200);

@@ -5,12 +5,6 @@ import { createMastodonAdapter } from "../../src/adapter.js";
 import { mastodonManifest } from "../../src/manifest.js";
 import { type MastodonSimulator, startMastodonSimulator } from "../../src/simulator.js";
 
-// The connect side of the adapter against the simulator of a Mastodon instance (built from docs.joinmastodon.org, each
-// endpoint with its URL and access date in the simulator). The adapter is given only the instance host a channel stored:
-// its fetch, here a recorder that rewrites every request onto the simulator, must be asked for that host and no other,
-// whatever a document the instance answers names. A refusal of the instance is the adapter's call, answered as a result
-// with the code `instance_unsupported`, never thrown. The shapes of `registerApp` and its result are the contract the
-// adapter must meet: `{ ok, app?: { clientId, clientSecret }, providerCode? }` with the secret still sealed.
 let sim: MastodonSimulator;
 beforeAll(async () => {
   sim = await startMastodonSimulator({ now: () => new Date() });
@@ -20,7 +14,7 @@ afterAll(() => sim.close());
 const HOST = "social.example";
 const REDIRECT = "https://app.example.test/api/v1/connect/mastodon/callback";
 
-// A fetch that records the host each request asked for and sends it to the simulator, whatever the host.
+// Sends every request to the simulator whatever host it asked for, and records that host.
 function recorder() {
   const hosts: string[] = [];
   const send: typeof fetch = (input, init) => {
@@ -94,8 +88,7 @@ describe("registerApp (floor)", () => {
   );
 });
 
-// A read-back of a private or direct status needs read:statuses, so the scope is asked for at the authorize step and
-// declared by the manifest (docs.joinmastodon.org/methods/statuses, accessed 2026-11-24).
+// A read-back of a private or direct status needs read:statuses (docs.joinmastodon.org/methods/statuses, accessed 2026-11-24).
 describe("authorize asks for the scopes that publishing, read-back and delete need", () => {
   it("names read:statuses, write:statuses and read:accounts in the scope of the authorization URL", async () => {
     sim.reset();
@@ -116,8 +109,6 @@ describe("authorize asks for the scopes that publishing, read-back and delete ne
   });
 });
 
-// BG-14: the health of a channel is what `verify_credentials` says of its token. A body that is no account (a stub, a
-// proxy's page) is refused, never read as healthy; a 401 is a revoked token.
 describe("inspect: verify_credentials decides health", () => {
   const inspectWith = async (verify: "ok" | "revoked" | "stub" | "not_json") => {
     sim.reset({ verify });
@@ -134,7 +125,7 @@ describe("inspect: verify_credentials decides health", () => {
     });
   });
 
-  // A limit an instance states is bounded (characters 1,000,000, attachments 100, bytes 16 GiB): one beyond is no limit.
+  // Each value is one past the adapter's bound (1,000,000 characters, 100 attachments, 16 GiB).
   it.each([
     ["maxCharacters", 1_000_001],
     ["maxMedia", 101],

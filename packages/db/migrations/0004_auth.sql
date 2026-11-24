@@ -1,6 +1,4 @@
--- The identity tables the authentication library reads and writes, in schema auth. They sit on the row-security
--- allowlist: no row security, and the grants below are the whole defence (only shoutory_auth holds any privilege).
--- Names are snake_case through the Drizzle keys; ids are generated here, so the library omits them on insert.
+-- These tables have no row security: the grants below are the whole defence (only shoutory_auth holds any privilege).
 -- Every email is stored lower-case: the library lower-cases what it writes and looks up, and the CHECK refuses
 -- any other writer.
 CREATE TABLE auth."user" (
@@ -62,7 +60,6 @@ CREATE TABLE auth.two_factor (
   locked_until timestamptz
 );
 
--- The foreign keys and the lookup column cascade deletes and sign-in reads; the tables are new and empty here.
 -- shoutory:accepted-lock new empty table in this file
 CREATE INDEX session_user_id_idx ON auth.session (user_id);
 -- shoutory:accepted-lock new empty table in this file

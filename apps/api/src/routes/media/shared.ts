@@ -5,10 +5,6 @@ import { z } from "zod";
 import { Refusal } from "../../errors/refusal.js";
 import { definerRefusal } from "../definer-refusal.js";
 
-// What the single-request and the multipart media routes share: the paths and access of the routes, the asset and its
-// upload session as the routes read them, the definer calls whose refusals are answers, and the one way an upload is
-// marked uploaded, whichever way its bytes arrived.
-
 const uuid = z.uuid().transform((id) => id.toLowerCase());
 export const workspaceParams = z.strictObject({ workspace_id: uuid });
 export const mediaParams = z.strictObject({ workspace_id: uuid, media_id: uuid });
@@ -19,10 +15,9 @@ export const EDIT_SPLIT = { ...EDIT, split: true } as const;
 export const VIEW_SPLIT = { workspace: "workspace_id", permission: "library.view", split: true } as const;
 export const LIVE = ["uploaded", "scanning", "processing", "ready"];
 
-/** The largest single upload (one PUT, or one import by URL); larger files go to storage in parts. */
 export const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
 
-/** The content type of every upload body: the type of the file comes from its bytes, never from the sender. */
+// The type of the file comes from its bytes, never from the sender, so every upload body is plain octet-stream.
 export const OCTET_STREAM = /^application\/octet-stream\s*(;|$)/i;
 
 // The key the register definer derives for version 1 of an original.
@@ -46,17 +41,14 @@ export async function assetOf(tx: TenantTx, workspaceId: string, id: string): Pr
   return row;
 }
 
-/** The upload session of an asset: the storage upload and the digest and size its sender declared (large uploads only). */
 export interface UploadSession {
   multipart_upload_id: string | null;
   part_size: number | null;
   declared_sha256: string | null;
   declared_size: number | null;
-  /** False once the session's 24 hours are over. */
   open: boolean;
 }
 
-/** The session of the asset, or undefined for one that has none. */
 export async function uploadOf(
   tx: TenantTx,
   workspaceId: string,
@@ -72,7 +64,6 @@ export async function uploadOf(
   ).rows[0];
 }
 
-/** A definer call whose refusals are answers (the cap of pending uploads, a state that is not allowed). */
 export async function callDefiner<T extends Record<string, unknown>>(
   tx: TenantTx,
   sql: string,
@@ -85,7 +76,6 @@ export async function callDefiner<T extends Record<string, unknown>>(
   }
 }
 
-/** What a `split` route calls: each call is its own short scoped transaction. */
 export type Scope = <T>(
   write: boolean,
   run: (tx: TenantTx, scope: AuthorizedScope) => Promise<T>,
@@ -94,7 +84,6 @@ export type Scope = <T>(
 export const conflict = (reason: string) =>
   new Refusal("conflict", `upload not completed: ${reason}`, { details: { reason } });
 
-/** What a complete after the first answers: the live asset of the same bytes, or a refusal. */
 export async function settled(
   storage: StorageDriver,
   workspaceId: string,

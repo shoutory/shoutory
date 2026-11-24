@@ -1,7 +1,5 @@
-// Runs inline in the page head, before first paint, so the theme never flashes and the page has its language and
-// direction at once. The stored theme is "dark", "light" or "system" (key "shoutory.theme"); anything else, no value and
-// unreadable storage all mean "system". The locale rule is the one of `detectLocale` in i18n/i18n.ts (the stored
-// choice, else the first supported browser language, else English); a test keeps the two equal.
+// Runs inline in the page head, before first paint, so the theme never flashes. It repeats `detectLocale` of
+// i18n/i18n.ts because an inline script imports nothing; a test keeps the two equal.
 (() => {
   const read = (key) => {
     try {

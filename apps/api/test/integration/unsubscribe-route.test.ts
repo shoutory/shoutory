@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type Fixture, PEPPER, startFixture } from "./auth/harness.js";
 
 // RFC 8058 one-click: a mail client POSTs the URL of the List-Unsubscribe header with a form body and no cookie, no
-// origin and no client header. The token in the path is the only credential (R306, R321, R323).
+// origin and no client header. The token in the path is the only credential.
 
 let fx: Fixture;
 beforeAll(async () => {

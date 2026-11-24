@@ -29,7 +29,6 @@ const has = (host: Element, name: string) =>
       .some((id) => document.getElementById(id)?.textContent?.includes(name)),
   );
 
-// ux-spec X-01 and 0.3: a switcher exists only when there is something to choose.
 describe("the switchers", () => {
   it.each<[string, Organization[], Workspace[], boolean, boolean]>([
     ["an agency with two workspaces", ORGS, WORKSPACES.slice(0, 2), true, true],

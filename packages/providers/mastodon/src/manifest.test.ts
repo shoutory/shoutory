@@ -2,8 +2,6 @@ import { manifestSchema } from "@shoutory/provider-sdk/manifest";
 import { describe, expect, it } from "vitest";
 import { mastodonManifest } from "./manifest.js";
 
-// The manifest is the documented default of a provider whose limits each instance overrides: it parses, and every number
-// names the page it was read from and the day it was read (AGENTS 5.4).
 describe("the manifest of the instance provider", () => {
   const parsed = manifestSchema.parse(mastodonManifest);
 

@@ -1,5 +1,3 @@
-// Scheduled mutation testing of the authorization and counting modules (never run per commit). A survived mutant is a
-// test that cannot fail against a realistic defect; the report is the job's output.
 export default {
   // pnpm keeps the runner outside the core package's own folder, where Stryker looks for plugins by default.
   plugins: ["@stryker-mutator/vitest-runner"],

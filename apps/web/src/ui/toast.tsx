@@ -1,4 +1,4 @@
-// React Aria's toast is exported only as `UNSTABLE_*` in react-aria-components 1.22.1 (R385). The exact pin guards it;
+// React Aria's toast is exported only as `UNSTABLE_*` in react-aria-components 1.22.1. The exact pin guards it;
 // any upgrade of the package re-checks these imports and the toast tests (docs/dependencies.md).
 import {
   UNSTABLE_ToastRegion as AriaToastRegion,
@@ -11,7 +11,6 @@ import {
 
 export interface ToastMessage {
   kind: "success" | "info" | "error";
-  /** Already translated words (the caller owns the copy). */
   title: string;
   description?: string;
 }
@@ -21,7 +20,6 @@ const LIFETIME = 6 * SECONDS;
 const queue = new ToastQueue<ToastMessage>({ maxVisibleToasts: 3 });
 
 export const toasts = {
-  /** Shows a toast: a success or info for 6 s, an error until it is closed (ux-spec 6.5). Returns its key. */
   show: (message: ToastMessage): string =>
     queue.add(message, message.kind === "error" ? {} : { timeout: LIFETIME }),
   close: (key: string): void => queue.close(key),
@@ -33,7 +31,6 @@ const TONES: Record<ToastMessage["kind"], string> = {
   error: "border-danger",
 };
 
-/** The one live region of toasts; mount it once at the app root. The clock pauses on hover and on focus. */
 export function ToastRegion() {
   return (
     <AriaToastRegion

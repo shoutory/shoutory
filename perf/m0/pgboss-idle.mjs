@@ -1,6 +1,4 @@
-// Measurement script only (V-31, run alone in the baseline run after a build, AGENTS 6.19): the idle cost of the job queue with
-// many queues being polled. It installs the queue's schema into a scratch database, creates N queues, works each of
-// them and counts the transactions the database commits while nothing is queued.
+// Run alone after a build:
 //
 //   SHOUTORY_PERF_DATABASE_URL=postgres://owner:...@localhost:5432/scratch node perf/m0/pgboss-idle.mjs [queues] [poll s] [seconds]
 //

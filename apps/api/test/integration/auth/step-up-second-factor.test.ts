@@ -8,8 +8,6 @@ import {
 } from "../../support/tenancy.js";
 import { type Enrolled, type Fixture, type Jar, PASSWORD, startFixture, totpAt } from "./harness.js";
 
-// R489: an account with the second factor on opens a `step_up` route only with a totp step-up; a password check
-// made later is not enough. One row per route family: the auth paths, a member route and an instance admin route.
 let fx: Fixture;
 let workspace: string;
 let viewerId: string;
@@ -93,8 +91,6 @@ describe("a step_up route for an account with the second factor on (security flo
   }, 30_000);
 });
 
-// R512 and R545: a backup code with a live session proves identity again as a totp code does; the record, the audit
-// row and the throttle follow the same path. A person who lost the device can still reach the same routes.
 const BACKUP = "/api/auth/two-factor/verify-backup-code";
 const recordedMethods = (email: string) =>
   fx.admin(async (client) => {
@@ -165,8 +161,7 @@ describe("a backup code that is refused, and one that finishes a sign-in (securi
       expect(refused.status).toBe(status);
       expect(await recordedMethods(email)).not.toContain("backup_code");
       expect(await auditedMethods(email)).not.toContain("auth.step_up/backup_code");
-      // The control that keeps the two assertions above honest: once the bucket is empty of the test's doing, the
-      // real code records exactly one step-up and one audit row, so the path can record at all.
+      // Control: with the bucket emptied, the real code records one step-up and one audit row, so the path can record at all.
       await fx.admin(async (client) =>
         client.query("DELETE FROM app.rate_buckets WHERE scope = 'two_factor' AND key = $1", [
           fx.auth.bucketKey("two_factor", await userIdOf(fx, email)),

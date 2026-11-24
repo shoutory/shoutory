@@ -3,8 +3,6 @@ import { fixtureManifest } from "../test/fixture-manifest.js";
 import { type Manifest, manifestSchema } from "./manifest/manifest.js";
 import { pastSunset, snapshotOf } from "./snapshot.js";
 
-// The capability snapshot a channel records (R542 (7)): a digest of the manifest, the API version in force at `now` and
-// when it sunsets, and the capabilities and limits as the manifest lists them. The clock is an input.
 const NOW = new Date("2026-11-21T00:00:00Z");
 const version = (name: string, introduced: string, sunset?: string) => ({
   version: name,
@@ -84,7 +82,6 @@ describe("pastSunset", () => {
     ],
   ];
   it.each(ROWS)("%s", (_name, overrides, past) => {
-    // fails first because: a sunset day counts as live all day, or only the version and never the provider is read
     expect(pastSunset(manifestWith(overrides), NOW)).toBe(past);
   });
 });

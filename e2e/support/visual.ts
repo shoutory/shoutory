@@ -1,25 +1,17 @@
 import type { Locator, Page } from "@playwright/test";
 
-/**
- * Where a visual cell's baseline lives: Playwright's own layout, with the part its default takes from the project's name
- * kept as `-visual` for both language projects, so the committed pictures keep their paths whatever the projects are called.
- */
+// The part Playwright's default takes from the project's name is fixed as `-visual` for both language projects, so the
+// committed pictures keep their paths whatever the projects are called.
 export const VISUAL_SNAPSHOT_PATH =
   "{snapshotDir}/{testFileDir}/{testFileName}-snapshots/{arg}-visual{-snapshotSuffix}{ext}";
 
-/** Where the founder's top bar shows names the run made up. */
 const TOP_BAR = ['[data-testid="switcher-organization"]', '[data-testid="switcher-workspace"]'];
 const HEADING = '[data-testid="workspace-name"]';
 
-/**
- * What differs from one run to the next on a screen, by selector: names with a random tag, people's addresses, times,
- * counts and a date that moves with the day. Only these are masked; everything else is compared.
- */
 const cells = (table: string, ...columns: number[]): string[] =>
   columns.map((column) => `[data-testid="${table}"] tbody td:nth-child(${column})`);
 
-// A table's headers, other columns, buttons and alignment stay in the picture: only the cells that hold a name, an
-// address, a time or a measure are covered.
+// Only what differs from run to run is masked (random names, addresses, times, counts); the rest is compared.
 const VOLATILE: Readonly<Record<string, readonly string[]>> = {
   start: [HEADING],
   workspace: [HEADING],
@@ -33,9 +25,8 @@ const VOLATILE: Readonly<Record<string, readonly string[]>> = {
   releases: ['[data-testid="release-migrations"]'],
 };
 
-// The server's own values that change from run to run, in the same shape every run: a time is shown at its length,
-// a worker's id is as long and made of the same marks, and the version is the one the baselines were taken with. The
-// values are fixed in the answers the page reads.
+// The server's own values that change from run to run keep the same shape every run: a time is shown at its length, a
+// worker's id is as long and made of the same marks.
 const FIXED_PAST = "2026-01-01T10:00:00.000Z";
 const FIXED_FUTURE = "2099-01-01T10:00:00.000Z";
 const FIXED_VERSION = "0.0.0";
@@ -46,7 +37,6 @@ const rowsOf = (body: unknown): Json[] => {
   return Array.isArray(inner) ? (inner as Json[]) : [];
 };
 
-/** Answers of the pages' lists with their times and worker ids replaced by fixed ones (call before opening a screen). */
 export async function freezeVolatileValues(page: Page): Promise<void> {
   const rewrite = async (pattern: RegExp, change: (body: Json, rows: Json[]) => void) => {
     await page.route(pattern, async (route) => {
@@ -78,7 +68,6 @@ export async function freezeVolatileValues(page: Page): Promise<void> {
   });
 }
 
-/** The regions of a screen to cover in its screenshot. */
 export function masksFor(page: Page, screenId: string, signedIn: boolean): Locator[] {
   const selectors = [...(signedIn ? TOP_BAR : []), ...(VOLATILE[screenId] ?? [])];
   return selectors.map((selector) => page.locator(selector));

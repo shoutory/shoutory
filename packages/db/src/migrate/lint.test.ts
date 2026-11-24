@@ -4,8 +4,6 @@ import { type LintRule, lintMigration } from "./lint.js";
 const ADD =
   "ALTER TABLE posts ADD CONSTRAINT posts_ws_fk FOREIGN KEY (workspace_id) REFERENCES workspaces (id)";
 
-// Each row: what the file holds and the rules it must trip. Security floor: an unsafe long lock reaching a
-// shipped migration blocks writes on a live table, so every statement form is a row.
 const cases: [string, string, LintRule[]][] = [
   ["a foreign key added validated", `${ADD};`, ["add-constraint-without-not-valid"]],
   ["a foreign key added NOT VALID", `${ADD} NOT VALID;`, []],

@@ -1,6 +1,4 @@
-// What each role may do. The permission keys are the closed list a built-in role holds and a custom role is built
-// from. Rules that depend on a policy or on who wrote a post are checked where the action happens and are not keys.
-
+// Rules that depend on a policy or on who wrote a post are checked where the action happens and are not keys.
 export const PERMISSIONS = [
   "posts.view",
   "posts.edit",
@@ -26,7 +24,6 @@ export type WorkspaceRole = (typeof WORKSPACE_ROLES)[number];
 
 const ADMIN_LACKS: readonly Permission[] = ["publish.override", "keys.auto_approve", "workspace.danger"];
 
-/** The permissions of each built-in role; the seeded role rows hold the same lists. */
 export const ROLE_PERMISSIONS: Readonly<Record<WorkspaceRole, readonly Permission[]>> = {
   owner: PERMISSIONS,
   admin: PERMISSIONS.filter((permission) => !ADMIN_LACKS.includes(permission)),

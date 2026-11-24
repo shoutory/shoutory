@@ -2,7 +2,7 @@ import { BlockList, isIP } from "node:net";
 
 const MAPPED_PREFIX = "::ffff:";
 
-/** `::ffff:10.0.0.1` is the IPv4 address 10.0.0.1 as a dual-stack socket reports it; both spellings are one client. */
+// A dual-stack socket reports `::ffff:10.0.0.1` for 10.0.0.1; both spellings are one client.
 function normalise(address: string): string {
   const mapped = address.toLowerCase().startsWith(MAPPED_PREFIX)
     ? address.slice(MAPPED_PREFIX.length)
@@ -19,13 +19,8 @@ function trustedList(cidrs: readonly string[]): BlockList {
   return list;
 }
 
-/**
- * The client address behind trusted reverse proxies (MDN X-Forwarded-For, "Selecting an IP address"), with the
- * trusted list built once for the configuration. The peer is checked first: when it is not a trusted proxy the header
- * is ignored. Otherwise all header lines are joined and scanned from the right, skipping trusted entries; the first
- * untrusted entry is the client. When every entry is trusted the client is the leftmost one. An entry that is not an
- * IP address stops the scan: the peer is used. The answer is always the normalised address.
- */
+// Follows MDN X-Forwarded-For, "Selecting an IP address". The header is ignored unless the peer is a trusted proxy;
+// it is scanned from the right so a spoofed leftmost entry is never the client.
 export function clientAddressResolver(
   trusted: readonly string[],
 ): (peer: string, forwardedFor: readonly string[]) => string {
@@ -44,9 +39,11 @@ export function clientAddressResolver(
       .filter(Boolean)
       .map(normalise);
     for (const entry of entries.toReversed()) {
+      // An entry that is not an IP stops the scan and the peer address is used.
       if (isIP(entry) === 0) return peer;
       if (!isTrusted(entry)) return entry;
     }
+    // Every entry is trusted: the leftmost is the client.
     return entries[0] ?? peer;
   };
 }

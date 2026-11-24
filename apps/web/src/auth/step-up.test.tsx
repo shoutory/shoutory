@@ -11,7 +11,6 @@ const PASSWORD = "correct horse battery 7";
 const settle = () => act(async () => undefined);
 const done = z.object({ ok: z.boolean() });
 
-// Two sensitive calls started together; each answers 403 step_up_required until the password was verified.
 function Probe() {
   const stepUp = useStepUp();
   const [results, setResults] = useState<string[]>([]);
@@ -79,7 +78,6 @@ async function confirm(value = PASSWORD) {
   await settle();
 }
 
-// X-04, R410: one dialog for parallel 403s, each call replayed once, no loop, and nothing retried on a refusal.
 describe("the step-up dialog (security floor)", () => {
   it("opens once for two 403s, verifies the password once and replays each call once", async () => {
     const stub = setup();
@@ -110,7 +108,6 @@ describe("the step-up dialog (security floor)", () => {
     expect([calls(stub, "/api/v1/a").length, calls(stub, "/api/v1/b").length]).toEqual([2, 2]);
     expect(host.querySelector("output")?.textContent).toBe("step_up_required,step_up_required");
     expect(dialogs()).toHaveLength(0);
-    // The password is gone from the page, and the calls keep refusing, so the next run asks again with an empty field.
     expect(document.body.innerHTML).not.toContain(PASSWORD);
     click(byText(host, "button", "Run both"));
     await settle();
@@ -166,7 +163,6 @@ describe("the step-up dialog when the password is not confirmed", () => {
   });
 });
 
-// X-04 code mode: an account with the second factor on is refused with `details.method: "totp"` and asked for a code.
 const CODE = "123456";
 const codeField = () => document.querySelector<HTMLInputElement>('[role="dialog"] input[name="code"]');
 const submit = async (value: string) => {
@@ -222,8 +218,6 @@ describe("the step-up dialog for an account with the second factor on", () => {
   });
 });
 
-// R512 (Q4): a person who lost the device offers a recovery code in the same dialog; it goes to the backup-code route
-// instead of the TOTP one and the refused calls are replayed once, as for a TOTP code.
 describe("the step-up dialog's recovery code", () => {
   it("posts a recovery code to verify-backup-code and replays each call once", async () => {
     const RECOVERY = "abcd-efgh-1234";
@@ -246,7 +240,6 @@ describe("the step-up dialog's recovery code", () => {
     await settle();
     click(byText(document.body, '[role="dialog"] button', "Use a recovery code"));
     await settle();
-    // A recovery code is longer than six characters: the field takes it whole.
     expect(codeField()?.maxLength).not.toBe(6);
     await submit(RECOVERY);
     const [, init] = calls(stub, "verify-backup-code")[0] ?? [];

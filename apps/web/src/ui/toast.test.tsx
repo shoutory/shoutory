@@ -36,8 +36,6 @@ const show = (content: Parameters<typeof toasts.show>[0]) => {
 const wait = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
 const text = () => document.body.textContent ?? "";
 
-// ux-spec 6.5: a toast lasts 6 s, an error stays until closed, hover or focus pauses the clock, and the live region
-// announces a success politely and an error assertively (WI-F11, WI-F12, WI-F14; WCAG 2.2.1).
 describe("toasts", () => {
   it("a success disappears after 6 s and not before", async () => {
     show({ kind: "success", title: "Saved" });

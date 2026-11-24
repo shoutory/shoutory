@@ -11,9 +11,6 @@ import { asUser, attempt, commitAs, digestOf, seedMembers, U, WA, WB } from "../
 
 const env = readTestEnv();
 
-// Security floor of the multipart record: `media_set_multipart` stores the storage upload id with the declared digest
-// and size of a large upload, once, for an Editor user of the workspace and for nobody else. The second writer finds
-// the first one's values and is refused, so the digest the pipeline later proves cannot be changed after register.
 let db: TestDatabase;
 const admin = <T>(run: (client: Client) => Promise<T>) => withAdminClient(env, db.name, run);
 const rows = (sql: string, params: unknown[] = []) =>
@@ -34,7 +31,6 @@ afterAll(() => db.drop());
 interface Planted {
   ws?: string;
   state?: string;
-  /** `false` plants an asset with no upload session. */
   session?: boolean;
 }
 async function plantUpload(o: Planted = {}): Promise<string> {
@@ -99,7 +95,7 @@ describe("media_set_multipart records the upload id, digest and size once", () =
 });
 
 describe("media_set_multipart refuses who may not record and what is not an open pending upload", () => {
-  // [who calls, the asset it names, the code]; a refusal for another workspace's asset is the one an unknown asset gets.
+  // A refusal for another workspace's asset is the same one an unknown asset gets.
   const WORKER_JOB = { principalKind: "job", principalId: randomUUID(), workspaceIds: [WA] } as const;
   it.each([
     ["a viewer", asUser(U.viewer), {}, "42501"],

@@ -16,7 +16,6 @@ const callsTo = (stub: ReturnType<typeof stubApi>, name: string) =>
   stub.mock.calls.filter(([path]) => path.includes(name));
 const accept = (host: ParentNode) => byText(host, "button", "Accept invitation");
 
-// NFR-SEC-08: opening the link changes nothing; the press consumes the token, and the token is in no URL but the path.
 describe("the invitation page (security floor)", () => {
   it("opens with no accept call, sends the token only in the body of one POST on press, and joins the workspace", async () => {
     const stub = stubApi({ acceptInvitation: () => json({ data: { workspace_id: JOINED } }) });
@@ -60,8 +59,7 @@ const INVITER = "Someone Else";
 const ended = (reason: string, extra: Record<string, string> = {}) =>
   refused("invitation_unusable", 410, { reason, ...extra });
 const blocked = (reason: string) => refused("forbidden", 403, { reason });
-// name, the answer, the words it must show, and whether it tells the person to ask for a new invitation. The inviter
-// name, if an answer ever carried it, is never shown.
+// name, the answer, the words it must show, and whether it tells the person to ask for a new invitation.
 const STATES: [string, Response, string, boolean][] = [
   ["expired", ended("expired", { invited_by: INVITER }), "This invitation has expired", true],
   ["used", ended("used"), "This invitation was already used", true],

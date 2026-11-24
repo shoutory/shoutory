@@ -16,16 +16,14 @@ import { isPolicyRefusal } from "@shoutory/provider-sdk/egress/errors";
 import { errorResult, type ProviderResult, type ReadLimit } from "@shoutory/provider-sdk/result";
 import { z } from "zod";
 
-// The Mastodon API as docs.joinmastodon.org documents it (pages read 2026-11-24): `methods/apps` (register an app),
-// `spec/oauth` (the discovery document, the authorization code flow with PKCE S256, from 4.3.0), `methods/oauth` (the
-// token route), `methods/accounts` (verify_credentials) and `methods/instance` (the v2 instance answer). Every call goes
-// to the one instance host the channel stored, through the fetch of the context, on paths fixed here: no URL an instance
+// Built from https://docs.joinmastodon.org/methods/apps/, /spec/oauth/ (discovery document, PKCE S256 from 4.3.0),
+// /methods/oauth/, /methods/accounts/, /methods/instance/, /methods/statuses/ and /api/rate-limits/ (all read
+// 2026-11-24). Every call goes to the one instance host the channel stored, on paths fixed here: no URL an instance
 // answers with (a discovery document's endpoints included) is ever followed.
 
 const SCOPES = "read:accounts read:statuses write:statuses write:media";
 const CLIENT_NAME = "Shoutory";
 const NO_EFFECT = { effect: "none" } as const;
-// The codes undici and Node give a failure of the connection before anything was sent.
 const NOT_SENT = new Set(["UND_ERR_CONNECT_TIMEOUT", "ECONNREFUSED"]);
 
 const discoveryDocument = z.object({ code_challenge_methods_supported: z.array(z.string()).max(16) });
@@ -41,7 +39,7 @@ const account = z.object({
   display_name: z.string().max(512).optional(),
   avatar: z.string().max(2048).optional(),
 });
-// A limit an instance states is bounded (AGENTS 6.6): a number beyond its bound is no limit, whatever the instance says.
+// A number beyond these bounds is no limit, whatever the instance says.
 const MAX_CHARACTERS = 1_000_000;
 const MAX_ATTACHMENTS = 100;
 const MAX_IMAGE_BYTES = 16 * 1024 ** 3;
@@ -56,8 +54,8 @@ const instanceAnswer = z.object({
   }),
 });
 const oauthError = z.object({ error: z.string().max(64) });
-// The codes of RFC 6749 section 5.2, the only error texts an instance's answer is allowed to hand on as a provider code:
-// any other text (a message, or a value an instance echoes back from the request) is never carried into a result.
+// Only these OAuth error codes (RFC 6749 section 5.2) are handed on; any other text an instance sends, including a value
+// it echoes back from the request, is never carried into a result.
 const OAUTH_CODES: ReadonlySet<string> = new Set([
   "invalid_request",
   "invalid_client",
@@ -71,15 +69,13 @@ type Reply =
   | { readonly ok: true; readonly status: number; readonly json: unknown }
   | { readonly ok: false; readonly status: number | undefined; readonly result: ProviderResult };
 
-/** What a read found, or the failure result to answer with. */
 type Found<T> =
   | { readonly found: true; readonly value: T }
   | { readonly found: false; readonly result: ProviderResult };
 
 const MAX_ANSWER_BYTES = 512 * 1024;
 
-// The answer's body as JSON, read up to the bound: a longer body (or one that is not JSON) is no answer, so it is
-// `undefined` and the caller classes it as unusable, never as a status. The rest of the stream is dropped, not read.
+// A body longer than the bound, or one that is not JSON, is no answer: the caller classes it as unusable, never as a status.
 async function answerJson(response: Response): Promise<unknown> {
   const reader = response.body?.getReader();
   if (reader === undefined) return undefined;
@@ -107,12 +103,11 @@ const textToJson = (text: string): unknown => {
   }
 };
 
-// A send is told apart from a read (docs.joinmastodon.org/methods/statuses, read 2026-11-24): an answer that can be lost
-// after the status exists (a cut connection, a timeout after the request went out, a 409 or a 5xx) is an unknown outcome,
-// never "no effect". A read changes nothing, so its effect is always none. A refusal before the request left, or one the
-// instance gave as its answer (401, 403, 404, 422, 429), is no effect for both.
+// A send is told apart from a read (docs.joinmastodon.org/methods/statuses, read 2026-11-24): an answer lost after the
+// status may exist (a cut connection, a timeout after the request went out, a 409 or a 5xx) is an unknown outcome, never
+// "no effect". A read changes nothing.
 
-// The codes of a connection cut after the request may have been read: the status may exist.
+// A connection cut after the request may have been read: the status may exist.
 const CUT_OFF = new Set([
   "UND_ERR_SOCKET",
   "UND_ERR_HEADERS_TIMEOUT",
@@ -122,8 +117,7 @@ const CUT_OFF = new Set([
 ]);
 const unknown = (): ProviderResult => errorResult({ effect: "possible", errorClass: "unknown" });
 
-// A failure of the network: a refused address is a permanent answer for this host, an unreachable one may be retried, a
-// send that may have left is unknown, anything else is a bug and throws.
+// Anything not classed here is a bug and throws.
 function networkFailure(error: unknown, sent: boolean): ProviderResult {
   if (isPolicyRefusal(error)) {
     return errorResult({ ...NO_EFFECT, errorClass: "permanent", providerCode: "address_not_allowed" });
@@ -141,9 +135,8 @@ function networkFailure(error: unknown, sent: boolean): ProviderResult {
   throw error;
 }
 
-// The delay of a 429: a Retry-After (whole seconds or an HTTP date, RFC 9110 10.2.3) a proxy or instance may send, else the
-// documented X-RateLimit-Reset (an ISO time, docs.joinmastodon.org/api/rate-limits, accessed 2026-11-24), as the time
-// left; none when neither reads.
+// Retry-After (seconds or an HTTP date) when a proxy or instance sends one, else the documented X-RateLimit-Reset, an ISO
+// time (docs.joinmastodon.org/api/rate-limits, accessed 2026-11-24).
 function delayMs(headers: Headers, now: Date): number | undefined {
   const after = headers.get("retry-after");
   if (after !== null && /^\d+$/.test(after)) return Number(after) * 1000;
@@ -162,9 +155,7 @@ function rateLimited(headers: Headers, now: Date): ProviderResult {
   });
 }
 
-// The class of a failed answer, by the status alone: a refusal of the token is a revoked one, a refusal of the call is
-// permanent, and a busy or broken instance is retried; after a send a 409 or a 5xx may follow a created status, so it is
-// unknown. Only a read carries the instance's OAuth code.
+// After a send a 409 or a 5xx may follow a created status, so it is unknown. Only a read carries the instance's OAuth code.
 function failureOf(
   status: number,
   headers: Headers,
@@ -191,7 +182,7 @@ interface CallInit {
   readonly body?: string;
 }
 
-/** The one request of the adapter: `sent` is true for a call that changes something, whose lost answer is unknown. */
+/** `sent` is true for a call that changes something, whose lost answer is unknown. */
 async function call(
   context: AdapterContext,
   host: string,
@@ -221,7 +212,6 @@ const form = (fields: Record<string, string>) => ({
 });
 const bearer = (token: SealedSecret) => ({ authorization: `Bearer ${token.expose()}` });
 
-// The instance's own limits, each with the page it was read from and the day (never the documented default).
 async function instanceLimits(
   context: AdapterContext,
   host: string,
@@ -244,8 +234,7 @@ async function instanceLimits(
   };
 }
 
-// The instance can take part in a connect only when its discovery document lists S256 (4.3.0 and later; a fork keeps its
-// own version string, so the feature is tested, not the version).
+// PKCE S256 exists from Mastodon 4.3.0; a fork keeps its own version string, so the discovery document is tested.
 async function discover(context: AdapterContext, host: string): Promise<ProviderResult | undefined> {
   const answer = await call(context, host, "/.well-known/oauth-authorization-server");
   if (!answer.ok) return answer.status === 404 ? unsupported() : answer.result;
@@ -319,7 +308,6 @@ async function exchangeCode(context: AdapterContext, input: ExchangeInput): Prom
   };
 }
 
-// verify_credentials: the account the token belongs to. A body that is no account is never read as one.
 async function verified(
   context: AdapterContext,
   host: string,
@@ -343,8 +331,7 @@ async function identity(context: AdapterContext, input: IdentityInput): Promise<
     ...NO_EFFECT,
     limits: limits.value,
     identity: {
-      // An account id is local to its instance, so the channel's identity is the instance and the id together: the same
-      // id on two instances is two accounts, and an instance can never name a channel it does not own.
+      // An account id is local to its instance: the same id on two instances is two accounts.
       providerAccountId: `${input.instanceHost}/${id}`,
       accountKind: "profile",
       displayName: shown || username,
@@ -354,7 +341,6 @@ async function identity(context: AdapterContext, input: IdentityInput): Promise<
   };
 }
 
-// The health of a channel is what verify_credentials says of its token; the instance's limits ride along when it states them.
 async function inspect(context: AdapterContext, input: InspectInput): Promise<ProviderResult> {
   if (input.instanceHost === undefined) throw new Error("a channel read needs the instance host");
   const who = await verified(context, input.instanceHost, input.accessToken);
@@ -370,11 +356,6 @@ const connect: ConnectAdapter = {
   identity,
 };
 
-// ---- Publishing (docs.joinmastodon.org/methods/statuses, read 2026-11-24) ----
-// A call that changes something goes through `call` with `sent` set; a lost answer to it is an unknown outcome, and a body
-// that holds no status may follow a created one.
-
-/** The channel's token and its stored host, both present, or the refusal that nothing was sent (no effect). */
 type ChannelAccess = { readonly accessToken: SealedSecret; readonly instanceHost: string };
 const refusedInput = (): ProviderResult =>
   errorResult({ ...NO_EFFECT, errorClass: "permanent", providerCode: "invalid_input" });
@@ -386,7 +367,6 @@ function channelAccessOf(access: AccountAccess | undefined): ChannelAccess | und
 
 const createdStatus = z.object({ id: z.string().min(1).max(64), url: z.string().max(2048).optional() });
 
-// The key is the one the caller gave, the same on every send of the operation (the instance keeps it for up to an hour).
 async function commit(context: AdapterContext, input: CommitInput): Promise<ProviderResult> {
   const channel = channelAccessOf(input.account);
   // An empty key would be sent as no key, and the instance would then create a second status on a resend.
@@ -421,18 +401,15 @@ async function commit(context: AdapterContext, input: CommitInput): Promise<Prov
 
 const statusAnswer = z.object({ id: z.string().min(1).max(64) });
 
-// An id came from an instance and is put in a path: only the characters an id is made of are let through, so no id can
-// name another route, climb out of the statuses path or add a query.
+// An id from an instance goes into a path: only id characters pass, so it cannot name another route or add a query.
 const STATUS_ID = /^[A-Za-z0-9_-]{1,64}$/;
 function targetOf(post: RemotePost): { readonly id: string; readonly path: string } | undefined {
   const id = post.externalId;
   return id !== undefined && STATUS_ID.test(id) ? { id, path: `/api/v1/statuses/${id}` } : undefined;
 }
 
-// A read-back names the id it was asked for and nothing else: the id of the answer is never taken as the post's, and a
-// status the instance answers with another id is no answer. A 404 is the instance saying the status is not there; its
-// status travels on as `httpStatus` and core decides what absence proves (the body text is never read). Private and
-// direct statuses are only visible with `read:statuses`.
+// A status answered with another id is no answer. A 404 travels on as `httpStatus` and core decides what absence proves
+// (the body text is never read). Private and direct statuses are only visible with `read:statuses`.
 async function readBack(context: AdapterContext, post: RemotePost): Promise<ProviderResult> {
   const channel = channelAccessOf(post.account);
   const target = targetOf(post);
@@ -446,9 +423,7 @@ async function readBack(context: AdapterContext, post: RemotePost): Promise<Prov
   return { ok: true, effect: "confirmed", externalId: target.id };
 }
 
-// A delete names the one id and sends nothing else (no `delete_media`: media ship with their own part). The instance's 200
-// is the effect; its 404 says the status is not there, which is what the delete wanted: done, with nothing changed by
-// this call. A 5xx or a cut answer may follow a status that was removed, so it is unknown.
+// No `delete_media` is sent. A 5xx or a cut answer may follow a status that was removed, so it is unknown.
 async function remove(context: AdapterContext, post: RemotePost): Promise<ProviderResult> {
   const channel = channelAccessOf(post.account);
   const target = targetOf(post);
@@ -459,9 +434,8 @@ async function remove(context: AdapterContext, post: RemotePost): Promise<Provid
   return answer.status === 404 ? goneOrNot(context, channel, target) : answer.result;
 }
 
-// A 404 on the delete alone proves nothing (a stale or proxied answer): one read of the same id decides. Its 404 means the
-// post is gone, done with nothing changed by this call. Its 200 means the post is still live, and a read that cannot say
-// leaves it unsaid: both are an unknown outcome, which the ledger hands to a person, and neither is ever called done.
+// A 404 on the delete alone proves nothing (a stale or proxied answer): one read of the same id decides. A post still
+// live, or a read that cannot say, is an unknown outcome for a person, never called done.
 async function goneOrNot(
   context: AdapterContext,
   channel: ChannelAccess,
@@ -477,7 +451,6 @@ async function goneOrNot(
     : unknown();
 }
 
-// The post is validated by the create itself: this step only passes.
 const prepare = async (): Promise<ProviderResult> => ({ ok: true, ...NO_EFFECT });
 
 export function createMastodonAdapter(): ProviderAdapter {

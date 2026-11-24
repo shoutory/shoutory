@@ -11,8 +11,6 @@ import { createBucket, s3Env } from "../support/s3.js";
 import { addWorkspaceMember, seedOrganization, seedWorkspace, signedUser } from "../support/tenancy.js";
 import { type Fixture, startFixture } from "./auth/harness.js";
 
-// The range read of an uploaded original: the same answers from the filesystem driver and from S3 (RFC 9110 14).
-
 const BYTES = "0123456789";
 const SHA = createHash("sha256").update(BYTES).digest("hex");
 type Rig = {

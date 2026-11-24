@@ -24,7 +24,6 @@ interface Harness {
   send(path: string, init?: RequestInit, peer?: string): Promise<Response>;
 }
 
-/** Routes whose handlers throw one prepared error each. */
 function addThrowers(app: ReturnType<typeof createApp>): void {
   const thrower = (path: string, error: unknown) =>
     defineRoute(app, {
@@ -147,7 +146,6 @@ describe("the error envelope", () => {
     const text = await response.clone().text();
     expect((await envelope(response)).code).toBe("internal_error");
     expect(text).not.toMatch(/hunter2|\/srv\/app|secret\.ts|\bat\b.*\.ts|stack/);
-    // The operator still gets the cause, scrubbed, in the log.
     expect(lines.join("")).toContain("internal_error");
   });
 

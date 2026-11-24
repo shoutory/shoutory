@@ -12,9 +12,6 @@ import {
 } from "../support/tenancy.js";
 import { type Fixture, PEPPER, startFixture } from "./auth/harness.js";
 
-// The floor of the invitation routes (R242-R245, R253-R259): the token, the throttles and who may accept. Role and
-// definer-status rows for the member routes are in members-routes.test.ts.
-
 type User = { id: string; cookie: string };
 let fx: Fixture;
 let ws: string;
@@ -66,7 +63,6 @@ const rowOf = (email: string) =>
 const revoke = async (email: string) =>
   send(admin, "DELETE", `${base(ws)}/invitations/${(await rowOf(email)).id}`);
 
-/** An invited account: signed up and verified under the invitation's address, and the mailed token. */
 async function invited() {
   const email = newEmail();
   const cookie = await fx.signedIn(email);
@@ -232,7 +228,7 @@ describe("invitation routes refuse a foreign or missing workspace alike", () => 
   });
 });
 
-describe("throttles (R244)", () => {
+describe("throttles", () => {
   const empty = (scope: string, subject: string) =>
     fx.admin((client) =>
       client.query(

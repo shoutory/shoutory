@@ -96,7 +96,6 @@ describe("the session cookie", () => {
       expect(line).not.toMatch(/;\s*Domain=/i);
     }
     expect(new Set(lines.map((line) => line.split("=")[0])).size).toBe(1);
-    // Lax, a seven-day lifetime on the sign-in cookie, and no cookie of a feature we do not use.
     const signIn = lines[0] ?? "";
     expect(signIn).toMatch(/;\s*SameSite=Lax/i);
     expect(signIn).toMatch(/;\s*Max-Age=604800(;|$)/i);

@@ -9,7 +9,6 @@ import { createFixtureAdapter, type FixtureAdapterOptions } from "../../src/fixt
 import { fixtureManifest } from "../../src/fixture-provider/manifest.js";
 import { startFixtureSimulator } from "../../src/fixture-provider/simulator.js";
 
-// The matrix takes the absent status and the revoked code from the manifest, so it plays what the provider declares.
 const revoked = Object.entries(fixtureManifest.refreshErrorMap).find(([, kind]) => kind === "revoked");
 if (!revoked) throw new Error("the fixture manifest declares no revoked refresh code");
 
@@ -45,7 +44,6 @@ function harness(options: Partial<FixtureAdapterOptions> = {}): MatrixHarness {
   };
 }
 
-// A client that sends the request again when the answer is a 5xx.
 function resending(): MatrixHarness {
   const base = harness();
   const resend = async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
@@ -77,7 +75,6 @@ describe("the fixture provider passes the fault matrix", () => {
 });
 
 describe("the fixture adapter's errors and the matrix's refusals", () => {
-  // What the adapter does with an error thrown by the client: only a network-coded failure is an outcome it may report.
   const socketClosed = Object.assign(new TypeError("terminated"), {
     cause: Object.assign(new Error("other side closed"), { code: "UND_ERR_SOCKET" }),
   });
@@ -95,7 +92,6 @@ describe("the fixture adapter's errors and the matrix's refusals", () => {
 });
 
 describe("the fault matrix refuses a wrong client", () => {
-  // Adapters with the defects the matrix exists to catch, and the row that must refuse each.
   const WRONG: [string, () => MatrixHarness, string, RegExp][] = [
     [
       "reports no effect after a 5xx on a commit",

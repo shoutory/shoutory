@@ -10,8 +10,7 @@ import {
 
 const env = readTestEnv();
 
-// A step-up record is read back by session only, newest first, and counts for 10 minutes. Time moves by editing
-// `at` as the superuser: nothing sleeps.
+// Time moves by editing `at` as the superuser: nothing sleeps.
 describe("step_up_record and step_up_read", () => {
   let db: TestDatabase;
   let auth: Pool;

@@ -11,7 +11,6 @@ function render(onLine: boolean) {
 }
 const fire = (name: "online" | "offline") => act(() => void window.dispatchEvent(new Event(name)));
 
-// ux-spec 2.1 O: a persistent banner while the browser is offline, only then.
 describe("OfflineBanner", () => {
   it.each([
     ["online", true, false],

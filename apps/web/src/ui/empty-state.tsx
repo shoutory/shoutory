@@ -6,16 +6,10 @@ interface Props {
   kind: "first-use" | "filtered-out" | "cleared";
   title: ReactNode;
   children?: ReactNode;
-  /** The one primary action of the first-use kind. */
   action?: { label: string; onPress: () => void; testId?: string };
-  /** The Clear filters action of the filtered-out kind. */
   onClearFilters?: () => void;
 }
 
-/**
- * The three empty states (ux-spec 2.1 E), worded differently and never an alert: first-use explains the thing and has
- * one primary action, filtered-out offers Clear filters, cleared is positive and has no action.
- */
 export function EmptyState(props: Props) {
   return (
     <section data-kind={props.kind} className="flex flex-col items-start gap-3 py-8">

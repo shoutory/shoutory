@@ -2,8 +2,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { signedUser } from "../support/tenancy.js";
 import { type Fixture, startFixture } from "./auth/harness.js";
 
-// The public sign-up mode: one boolean, no address, the same for every caller, served from a short cache so the
-// database is asked at most once per 5 s per process (R326).
 const PATH = "/api/v1/instance/signup";
 const CACHE_MS = 5_000;
 

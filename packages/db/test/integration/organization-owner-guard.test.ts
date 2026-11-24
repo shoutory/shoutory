@@ -10,9 +10,8 @@ import {
 
 const env = readTestEnv();
 
-// Security floor: an organization never ends up with no owner. The check is a deferred constraint trigger, so a
-// transaction may swap owners, and the refusal comes at commit. Rows are seeded through the administrator URL:
-// the migration owner sees no row of a FORCE table without a policy.
+// The check is a deferred constraint trigger, so a transaction may swap owners and the refusal comes at commit.
+// Rows are seeded through the administrator URL: the migration owner sees no row of a FORCE table without a policy.
 const U1 = randomUUID();
 const U2 = randomUUID();
 
@@ -28,7 +27,6 @@ beforeAll(async () => {
 });
 afterAll(() => db.drop());
 
-/** A fresh organization with one owner (U1) and one plain member (U2). */
 async function organization(admin: Client): Promise<string> {
   const id = randomUUID();
   await admin.query(`INSERT INTO app.organizations (id, name, slug, type) VALUES ($1, 'org', $2, 'team')`, [
@@ -42,7 +40,6 @@ async function organization(admin: Client): Promise<string> {
   return id;
 }
 
-/** Runs the statements in one transaction and returns the commit's error, if any. */
 async function commit(admin: Client, statements: string[]): Promise<Error | undefined> {
   await admin.query("BEGIN");
   try {

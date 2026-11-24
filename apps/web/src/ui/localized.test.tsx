@@ -40,7 +40,6 @@ describe("DirText", () => {
   });
 });
 
-// R381: Latin digits whatever the language until the profile setting exists; the calendar is always Gregorian.
 describe("localized values", () => {
   it.each([
     ["en", "1,234,567.89"],

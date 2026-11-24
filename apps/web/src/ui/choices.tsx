@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { Label, Radio, RadioGroup } from "react-aria-components";
 
-/** One option of a `Choices` group. */
 export function Choice({ value, children, testId }: { value: string; children: ReactNode; testId?: string }) {
   return (
     <Radio
@@ -14,7 +13,6 @@ export function Choice({ value, children, testId }: { value: string; children: R
   );
 }
 
-/** A labelled group of radio options, one chosen. */
 export function Choices({
   label,
   value,

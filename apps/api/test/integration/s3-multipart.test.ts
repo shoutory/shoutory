@@ -6,9 +6,6 @@ import { createStorageDriver } from "../../src/storage/driver.js";
 import { createS3Multipart, createS3Presigner } from "../../src/storage/s3-driver.js";
 import { createBucket, s3Env } from "../support/s3.js";
 
-// The multipart half of the S3 driver, on the simulator the integration tests use: the server creates, lists, completes
-// and aborts an upload, and each part goes to a presigned URL that signs that part's sha256 and length, as a browser
-// sends it. Nothing is faked: the answers are the simulator's.
 const BUCKET = "s3-multipart-1";
 const MIB = 1024 * 1024;
 const config = () => parseStorageEnv(s3Env(BUCKET)) as Extract<StorageConfig, { driver: "s3" }>;
@@ -28,14 +25,12 @@ const keyOf = () => `ws/${randomUUID()}/${randomUUID()}/1/original`;
 const hex = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 const filled = (length: number, text: string) => Buffer.alloc(length, text);
 
-/** What a browser does with a signed part: one PUT of the body with the headers it was given. */
 async function putPart(key: string, uploadId: string, number: number, body: Buffer, signedFor = body) {
   const signed = await presigner.presignPart(key, uploadId, number, signedFor.length, hex(signedFor));
   const answer = await fetch(signed.url, { method: "PUT", body, headers: signed.headers });
   return { status: answer.status, code: /<Code>([^<]*)<\/Code>/.exec(await answer.text())?.[1] };
 }
 
-/** An upload of 5 MiB + 1 KiB (the smallest two-part upload) with both parts stored. */
 async function twoParts(key: string) {
   const { uploadId } = await multipart.createUpload(key);
   for (const [index, body] of [filled(5 * MIB, "part-one-"), filled(1024, "part-two-")].entries())

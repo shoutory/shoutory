@@ -13,11 +13,6 @@ import { openTx } from "../support/race.js";
 
 const env = readTestEnv();
 
-// What the effect SQL does for a working ledger (the floor rows are in ledger-resolutions): usage and quota are booked
-// once and refunded once, the post and its target follow only the moves the rollup handles, the sweeps give an unknown
-// outcome its deadlines and end exhausted and unverified work, a new entry into needs_human or unverified is stamped for
-// the escalation, the counts add up, a superseded operation is linked both ways, a full quota denies a start and a
-// refund frees it. Rows are planted as the superuser with the triggers off.
 let db: TestDatabase;
 const admin = <T>(run: (client: Client) => Promise<T>) => withAdminClient(env, db.name, run);
 const rows = (sql: string, params: unknown[] = []) =>
@@ -61,7 +56,6 @@ interface Planted {
   post: string;
   variant: string;
 }
-// A scheduled post with one in-progress target and an operation on it in a given state.
 async function plant(o: Plant = {}): Promise<Planted> {
   const [post] = await rows(
     "INSERT INTO app.posts (workspace_id, author_kind, author_id, status) VALUES ($1, 'user', $2, 'scheduled') RETURNING id",
@@ -125,7 +119,6 @@ const reserve = (op: string) =>
     "INSERT INTO app.usage_reservations (workspace_id, organization_id, operation_id, key, amount) VALUES ($1, $2, $3, 'posts_per_month', 1)",
     [WA, OA, op],
   );
-// An attempt of an operation and its quota row; the attempt had `effect` and is finished or not.
 async function attempt(op: string, effect: string, finished: boolean, quota = false): Promise<void> {
   const [made] = await rows(
     `INSERT INTO app.operation_attempts (workspace_id, operation_id, attempt_no, step, fencing_token, started_at,
@@ -193,7 +186,6 @@ const START =
   "SELECT * FROM app.operation_attempt_start($1::uuid, $2::uuid, $3::bigint, 'worker-a', $4, $5::jsonb)";
 const LATE = { lateness_deadline: new Date(Date.now() - 60_000) };
 
-// [case, the operation planted, whether it holds a quota row, what happens, usage and quota after]
 type Move = (op: string) => Promise<Answer>;
 const BOOKS: [string, Plant, boolean, Move, string[], string[]][] = [
   [
@@ -233,7 +225,6 @@ const BOOKS: [string, Plant, boolean, Move, string[], string[]][] = [
 ];
 describe("usage and quota", () => {
   it.each(BOOKS)("%s", async (_name, planted, quota, move, usage, quotas) => {
-    // fails first because: nothing books or releases usage when an operation ends, so the reservation stays reserved
     const op = (await plant(planted)).id;
     await reserve(op);
     if (quota) await attempt(op, "possible", false, true);
@@ -243,7 +234,6 @@ describe("usage and quota", () => {
   });
 
   it("refunds the quota of an attempt shown to have sent nothing and keeps the usage", async () => {
-    // fails first because: a no-effect attempt keeps its quota row, so the window stays full and the retry is denied
     const op = (await plant({ state: "dispatching", effect: "possible" })).id;
     await reserve(op);
     await attempt(op, "none", true, true);
@@ -258,7 +248,6 @@ describe("usage and quota", () => {
   });
 
   it("denies a start when the quota window is full, writes nothing, and reserves again after a refund", async () => {
-    // fails first because: the start does not count the window, or counts a refunded row
     const quotas = JSON.stringify({ posts: { capacity: 1, window_seconds: 3600 } });
     await rows("DELETE FROM app.provider_quota_ledger");
     const held = (await plant({ state: "dispatching", effect: "possible" })).id;
@@ -275,7 +264,6 @@ describe("usage and quota", () => {
   });
 });
 
-// [the move, the operation planted, the target and the post afterwards]
 const ROLLUPS: [string, Plant, Move, string, string][] = [
   ["published", { state: "dispatching", effect: "possible" }, receipt, "settled", "published"],
   [
@@ -312,7 +300,6 @@ describe("the rollup of the post and its target", () => {
   it.each(ROLLUPS)(
     "a move to %s writes the target and the post",
     async (_name, planted, move, variant, post) => {
-      // fails first because: no rollup writes the target and the post when an operation ends or waits on a person
       const made = await plant(planted);
       expect((await move(made.id)).error).toBeUndefined();
       expect(await targetOf(made)).toMatchObject({ variant, post });
@@ -320,7 +307,6 @@ describe("the rollup of the post and its target", () => {
   );
 
   it("counts the triple and dates the target when a post is published", async () => {
-    // fails first because: the count triple and the published time are not written in the move's transaction
     const made = await plant({ state: "dispatching", effect: "possible" });
     await receipt(made.id);
     expect(await targetOf(made)).toEqual({
@@ -333,7 +319,6 @@ describe("the rollup of the post and its target", () => {
   });
 
   it("does not touch the post on a claim or a start", async () => {
-    // fails first because: a trigger on every move writes the post for each claim and dispatch
     const made = await plant({ state: "pending" });
     const before = await rows(
       "SELECT p.updated_at AS p, v.updated_at AS v FROM app.posts p JOIN app.post_variants v ON v.post_id = p.id WHERE p.id = $1",
@@ -358,7 +343,6 @@ describe("the rollup of the post and its target", () => {
 
 describe("the deadlines of an unknown outcome", () => {
   it("sets the first read-back and the unverified horizon from the provider's entry, with defaults for an unlisted one", async () => {
-    // fails first because: the sweep sets next_check_at to now and never sets unverified_until
     const lapsed = { lease_expires_at: new Date(Date.now() - 5_000) };
     const listed = (await plant({ state: "dispatching", effect: "possible", extra: lapsed })).id;
     const unlisted = (
@@ -378,7 +362,6 @@ describe("the deadlines of an unknown outcome", () => {
   });
 
   it("ends an unverified horizon that came as unverified and stamps the escalation, and leaves an unlisted provider alone", async () => {
-    // fails first because: nothing owns row 39, or the entry into unverified carries no escalation time
     const due = { unverified_until: new Date(Date.now() - 5_000) };
     const listed = (await plant({ state: "unknown_external_state", effect: "possible", extra: due })).id;
     const unlisted = (
@@ -395,7 +378,6 @@ describe("the deadlines of an unknown outcome", () => {
 });
 
 describe("the limits of the progress a worker records", () => {
-  // [the cursor, the references]
   const BAD: [string, object][] = [
     ["prepare:1", { blob: "x".repeat(70_000) }],
     ["upload-everything", { upload: "u-1" }],
@@ -404,7 +386,6 @@ describe("the limits of the progress a worker records", () => {
   it.each(BAD)(
     "%s with oversized, malformed or non-object input is refused with 22023",
     async (cursor, refs) => {
-      // fails first because: the table check answers 23514, or an array is stored as the references
       const made = (await plant({ state: "claimed" })).id;
       const answer = await exec(
         LEDGER,
@@ -418,8 +399,7 @@ describe("the limits of the progress a worker records", () => {
 });
 
 describe("the retention of the quota ledger", () => {
-  it("is seven days, as the data model states", async () => {
-    // fails first because: the class keeps rows for 13 months, the window of the usage reservations
+  it("is seven days", async () => {
     const [found] = await rows(
       "SELECT retain::text AS retain, event_column FROM app.retention_classes WHERE class = 'app.provider_quota_ledger'",
     );
@@ -429,7 +409,6 @@ describe("the retention of the quota ledger", () => {
 
 describe("the horizon of a worker's own unknown outcome", () => {
   it("is set when a worker moves a sent post to unknown_external_state, and refused elsewhere", async () => {
-    // fails first because: the transition has no horizon key, so a worker's own unknown never gets a horizon
     const made = (await plant({ state: "dispatching", effect: "possible" })).id;
     const call = (to: string, from: string, id: string, changes: object) =>
       exec(WORKER, "SELECT * FROM app.operation_transition($1::uuid, $2::uuid, 1, $3, $4, 'W', $5::jsonb)", [
@@ -456,7 +435,6 @@ describe("the horizon of a worker's own unknown outcome", () => {
 
 describe("the escalation of a needs_human operation", () => {
   it("is stamped on entry into needs_human", async () => {
-    // fails first because: the first notice of a needs_human operation has no time
     const made = (await plant({ state: "unknown_external_state", effect: "possible" })).id;
     await exec(
       LEDGER,
@@ -468,7 +446,6 @@ describe("the escalation of a needs_human operation", () => {
 
 describe("the progress of a worker and the counts", () => {
   it("records the cursor and references while the lease and token hold, and moves nothing", async () => {
-    // fails first because: there is no fenced writer of the prepare cursor
     const made = (await plant({ state: "claimed" })).id;
     const call = (token: number) =>
       exec(
@@ -486,7 +463,6 @@ describe("the progress of a worker and the counts", () => {
   });
 
   it("counts every state of the ledger, with a zero for an empty one", async () => {
-    // fails first because: there is no counts function for the admin screen
     const count = async () =>
       new Map(
         (await exec(OWNER, "SELECT * FROM app.ledger_state_counts()")).rows?.map((r) => [
@@ -507,7 +483,6 @@ describe("a superseded operation", () => {
   it.each(["possible", "none"])(
     "is linked both ways, hands its usage to the new operation and leaves the target in progress (effect %s)",
     async (effect) => {
-      // fails first because: the link is one-way, the target stays held, or an effect-none supersede keeps its usage
       const old = await plant({ state: "needs_human", effect });
       await reserve(old.id);
       const done = await exec(

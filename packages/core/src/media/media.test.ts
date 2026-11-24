@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mediaFits, type RejectReason } from "./media.js";
 
-// The one rule set for what a provider takes, read from its manifest: the same function at attach, at ready and at
-// prepare, so a medium cannot pass one gate and fail another.
 const SOURCE = { source: "https://docs.example.test/limits", checked: "2026-11-21" };
 const rules = (capabilities: string[], limits: Record<string, number> = {}) => ({
   capabilities,

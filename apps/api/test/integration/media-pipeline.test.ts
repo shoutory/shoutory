@@ -18,9 +18,6 @@ vi.mock("node:child_process", async (importOriginal) => {
   return { ...original, spawn: vi.fn(original.spawn) };
 });
 
-// The image pipeline as the worker runs it: an uploaded asset is sniffed by its bytes, and what the sender claimed
-// is never trusted. The pipeline runs as a job on the worker pool and moves the asset through the definers.
-
 let fx: Fixture;
 let ws: string;
 let owner: string;
@@ -40,7 +37,6 @@ afterAll(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-/** An uploaded original as complete leaves it: the bytes stored, the asset `uploaded` with the mime the sender claimed. */
 async function uploaded(bytes: Buffer, claimedMime: string, declared?: Buffer): Promise<string> {
   const id = randomUUID();
   // The digest of an upload is the hash of its bytes unless a row says what its sender declared.
@@ -393,10 +389,8 @@ describe("the run of an uploaded video", () => {
   });
 });
 
-// A large upload reaches `uploaded` with the digest its sender declared (storage proved each part, not the whole), and
-// even a single PUT's digest is only as good as the row that holds it: the pipeline hashes every original it copies and
-// rejects an asset whose bytes are not the sha256 it carries, whatever way the upload came in and whether or not its
-// upload session still exists.
+// A large upload reaches `uploaded` with the digest its sender declared (storage proved each part, not the whole), so
+// the pipeline hashes every original it copies, whatever way the upload came in.
 async function uploadedWith(bytes: Buffer, digest: Buffer, session: boolean): Promise<string> {
   const id = await uploaded(bytes, "image/jpeg", digest);
   if (session)

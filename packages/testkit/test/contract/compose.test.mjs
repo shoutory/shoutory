@@ -9,7 +9,6 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const compose = readFileSync(join(root, "docker/compose.yml"), "utf8");
 const { services } = parse(compose);
 const IMAGE = "${SHOUTORY_IMAGE:-ghcr.io/shoutory/shoutory:stable}";
-// Everything a service sets that is a credential, a key or a connection string comes from the environment.
 const SENSITIVE = /PASSWORD|SECRET|PEPPER|KEK|_URL/;
 
 test("compose runs PostgreSQL by digest, the one-shot migrate and the app only: no Redis, no MinIO", () => {
@@ -68,7 +67,7 @@ test("compose takes every credential from the environment and refuses an unset o
   const entries = Object.values(services).flatMap((service) => Object.entries(service.environment ?? {}));
   const sensitive = entries.filter(([key]) => SENSITIVE.test(key));
   assert.ok(sensitive.length >= 6, "the superuser and the role passwords must be listed");
-  // The optional S3 settings are passed through unset (no value): the app refuses an empty one (R504).
+  // The optional S3 settings are passed through unset (no value): the app refuses an empty one.
   const required = sensitive.filter(([key]) => !key.startsWith("SHOUTORY_S3_"));
   for (const [key, value] of required) assert.match(String(value), /^\$\{[A-Z0-9_]+:\?[^}]+\}$/, key);
 });
@@ -84,7 +83,7 @@ test("the app service receives no owner or readonly database URL and no database
 test("every README operator variable is in a compose service environment", () => {
   const readme = readFileSync(join(root, "README.md"), "utf8");
   const table = readme.slice(readme.indexOf("## Configuration"));
-  // The image sets these; the published port fixes the listen port and address, so compose does not pass them (R504).
+  // The image sets these; the published port fixes the listen port and address, so compose does not pass them.
   const exempt = new Set([
     "SHOUTORY_RELEASE_CHANNEL",
     "SHOUTORY_WEB_ROOT",

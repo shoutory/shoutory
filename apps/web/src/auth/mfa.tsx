@@ -11,10 +11,8 @@ import { TextField } from "../ui/text-field";
 import { authCopy } from "./auth-copy";
 import { AuthFrame, SubmitButton, useAction } from "./auth-frame";
 
-// The server's answer to a code carries the person's name, address and verified flag, and no id.
 const verified = z.object({ user: z.object({ email: z.string() }) });
 
-/** A-04 challenge (`/mfa`): the code of the authenticator app, or a recovery code; then back to `return-to`. */
 export function MfaPage() {
   const { t } = useLingui();
   const navigate = useNavigate();

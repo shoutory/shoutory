@@ -25,13 +25,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// Connecting a channel (H-02) and reconnecting one (H-05): "Add channel" opens a dialog of platforms, a tile starts the
-// OAuth flow with one POST and sends the browser to the address the server answers, only when that address is https.
-// Elements are selected by test id: `hub-add`, `hub-add-empty`, `card-reconnect`, `card-reconnect-error`
-// (`data-reason`), the dialog's `wizard-state` (`data-state`: loading, failed, empty, tiles), `wizard-retry`,
-// `wizard-cancel`, `provider-tile`, `tile-start` (`data-provider-id`), `tile-beta` and `start-error` (`data-reason`:
-// forbidden, not_found, rate_limited, unavailable, server).
-
 const PATH = `/w/${CONNECT_WS}/channels`;
 const OTHER = "0190a000-0000-7000-8000-0000000000c2";
 const idOf = (n: number) => `0190a000-0000-7000-8000-00000000e${String(n).padStart(3, "0")}`;
@@ -122,7 +115,7 @@ describe("starting a connection", () => {
   it("a second press while one is pending sends nothing, the tile says it is busy, and the page showing again resets it", async () => {
     const assign = spyAssign();
     const pending = deferred();
-    // The first start waits; a start after the page showed again gets an answer of its own (a body is read once).
+    // A response body is read once, so a start after the page showed again needs its own answer.
     let calls = 0;
     const { host, stub } = await visit({
       ...listWith(["connect"]),
@@ -130,7 +123,6 @@ describe("starting a connection", () => {
       connectStart: () => (calls++ === 0 ? pending.answer() : json({ data: { authorize_url: START_URL } })),
     });
     await openDialog(host);
-    // Pressing another tile while the first is pending sends nothing and does not move the busy mark to that tile.
     const [first, second] = all(document.body, "tile-start") as [HTMLElement, HTMLElement];
     click(first);
     click(second);
@@ -145,7 +137,6 @@ describe("starting a connection", () => {
     pending.release(json({ data: { authorize_url: START_URL } }));
     await settle();
     expect(assign).toHaveBeenCalledTimes(1);
-    // The browser came back (the back button restores the page): the press is possible again.
     await act(async () => {
       window.dispatchEvent(new Event("pageshow"));
     });
@@ -157,7 +148,6 @@ describe("starting a connection", () => {
 });
 
 describe("what a start answers", () => {
-  // Security floor: the browser is sent only to an https address the server answered, and nowhere else.
   it.each<[string, unknown]>([
     ["javascript:", "javascript:alert(1)"],
     ["data:", "data:text/html,x"],
@@ -349,7 +339,6 @@ describe("closing the dialog, and leaving it behind", () => {
 });
 
 describe("a change of workspace", () => {
-  // Tenant class (AGENTS 6.13): an answer for the old workspace must not move the browser.
   it("a start answered after the workspace changed never navigates", async () => {
     const assign = spyAssign();
     const late = deferred();

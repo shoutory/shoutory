@@ -31,23 +31,18 @@ export interface WorkerOptions {
   readonly pool: AppPool;
   readonly logger: Logger;
   readonly role: "worker" | "all";
-  /** What the media pipeline reads and writes: the same storage as the api, the optional upload scan and ffprobe. */
   readonly media: Pick<PipelineDeps, "storage" | "scan" | "ffprobe"> & {
-    /** The data folder of the filesystem driver, set only for that driver: the nightly sweep of upload parts runs over it. */
+    // Set only for the filesystem driver: the nightly sweep of upload parts runs over it.
     readonly partsRoot?: string;
   };
-  /** What the mail sender needs besides the pool and the logger. */
   readonly mail: Pick<
     MailSenderOptions,
     "keys" | "pepper" | "smtpUrl" | "from" | "marketingFrom" | "publicOrigin"
   >;
-  /** The providers whose targets the ledger tick admits; the default is the built-in ones (none yet). */
   readonly registry?: Registry;
-  /** The adapter of each registered provider, by id; a provider with none is admitted but never dispatched (its rows fail). */
+  // A provider with no adapter is admitted but never dispatched (its rows fail).
   readonly adapters?: AdapterMap;
-  /** The `fetch` an adapter of a provider is given; the default refuses every call. */
   readonly fetchFor?: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
-  /** Beat, relay, mail and ledger tick intervals; the defaults are the production values (30 s, 1 s, 1 s, 30 s). */
   readonly heartbeatMs?: number;
   readonly relayIntervalMs?: number;
   readonly mailIntervalMs?: number;
@@ -61,12 +56,12 @@ const HEARTBEAT_MS = 30_000;
 const RELAY_INTERVAL_MS = 1_000;
 const POLL_SECONDS = 30;
 const STOP_TIMEOUT_MS = 10_000;
-// A purge call removes at most this many rows; the job calls again while one comes back full (R309), and stops after
-// MAX_PURGE_CALLS so one run cannot hold a connection for ever (AGENTS 6.6): the next night continues.
+// A purge call removes at most this many rows; the job calls again while one comes back full, and stops after
+// MAX_PURGE_CALLS so one run cannot hold a connection for ever: the next night continues.
 const PURGE_BATCH = 5_000;
 const MAX_PURGE_CALLS = 1_000;
 
-// One instance-wide key for every statement that takes ACCESS EXCLUSIVE on a partitioned parent (R308, R320).
+// One instance-wide key for every statement that takes ACCESS EXCLUSIVE on a partitioned parent.
 const PARTITION_LOCK_KEY = "partitions";
 
 type SystemTx = Parameters<Parameters<typeof withSystem>[2]>[0];
@@ -75,7 +70,6 @@ const underPartitionLock = <T>(pool: AppPool, run: (tx: SystemTx) => Promise<T>)
     withAdvisoryLock(tx, "maintenance", () => run(tx), PARTITION_LOCK_KEY),
   );
 
-/** The scheduled upkeep: keeps the partitions three leaves ahead, one run at a time across workers (R308). */
 export function ensurePartitions(pool: AppPool): Promise<number> {
   return underPartitionLock(
     pool,
@@ -84,10 +78,7 @@ export function ensurePartitions(pool: AppPool): Promise<number> {
   );
 }
 
-/**
- * Purges one retention class, calling again while a call removes a full batch; answers the rows removed. A partition
- * class takes the same lock as `ensurePartitions`, so a purge never races it on one parent (R320).
- */
+// A partition class takes the same lock as `ensurePartitions`, so a purge never races it on one parent.
 export async function purgeExpired(pool: AppPool, retentionClass: string, logger: Logger): Promise<number> {
   let total = 0;
   const partitioned = (PARTITION_CLASSES as readonly string[]).includes(retentionClass);
@@ -117,7 +108,6 @@ export async function purgeExpired(pool: AppPool, retentionClass: string, logger
   return total;
 }
 
-/** Sweeps the filesystem driver's abandoned part files and temporary leftovers, and logs what it did. */
 export async function sweepUploadParts(
   root: string,
   logger: Logger,
@@ -140,10 +130,8 @@ function logged(logger: Logger, queue: string, run: () => Promise<unknown>): Pro
   );
 }
 
-/**
- * The sweep exists for the filesystem driver alone. Another driver removes a stale schedule: one left from a time the
- * instance ran on the filesystem would never be worked and the queue lag would grow.
- */
+// Another driver removes a stale schedule: one left from a time the instance ran on the filesystem would never be
+// worked and the queue lag would grow.
 async function scheduleSweep(boss: PgBoss, logger: Logger, partsRoot: string | undefined): Promise<void> {
   if (partsRoot === undefined) return boss.unschedule("sweep_upload_parts");
   await boss.work("sweep_upload_parts", { pollingIntervalSeconds: POLL_SECONDS }, (jobs) =>
@@ -194,10 +182,8 @@ async function register(
   await scheduleSweep(boss, logger, media.partsRoot);
 }
 
-/**
- * Starts the queue client with its schedules, the 30 s heartbeat, the outbox relay and the mail sender. The first
- * beat is made before this returns, so a worker that cannot reach the database fails its start instead of looking alive.
- */
+// The first beat is made before this returns, so a worker that cannot reach the database fails its start instead of
+// looking alive.
 export async function startWorker({
   connectionString,
   pool,
@@ -221,8 +207,7 @@ export async function startWorker({
   const handlers = { "media.uploaded": mediaUploadedHandler({ pool, logger, ...media }) };
   const relay = createOutboxRelay({ pool, handlers, logger, intervalMs: relayIntervalMs });
   const sender = createMailSender({ ...mail, pool, logger, intervalMs: mailIntervalMs });
-  // What a send and a read-back need besides the pool: the key ring of the mail sender is the instance's, and it also opens
-  // the credentials of the channels a send is for.
+  // The mail sender's key ring is the instance's, and it also opens the credentials of the channels a send is for.
   const sends = { pool, boss, registry, logger, adapters, fetchFor, keys: mail.keys };
   const ledger = createLedgerTick({
     ...sends,

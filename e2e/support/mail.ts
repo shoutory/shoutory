@@ -17,10 +17,7 @@ async function linkIn(base: string, id: string, path: string): Promise<string | 
   return (Text.match(LINK) ?? []).find((link) => new URL(link).pathname.includes(path));
 }
 
-/**
- * Waits for a message to `to` that carries a link whose path contains `path`, and returns that link. A link in `skip`
- * is one the caller already used, so a second invitation to the same address finds its own.
- */
+// A link in `skip` is one the caller already used, so a second invitation to the same address finds its own.
 export async function waitForLink({
   to,
   path,

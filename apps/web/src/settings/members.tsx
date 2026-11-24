@@ -22,13 +22,11 @@ const membersSchema = z.array(
 );
 type Member = z.infer<typeof membersSchema>[number];
 
-/** Who is looking at the table: the workspace, their own rank and id, and how to read the list again quietly. */
 interface Actor {
   readonly workspace: Workspace;
   readonly rank: number;
   readonly me: string | undefined;
   readonly refresh: () => void;
-  /** Reads the members and the invitations again: a refused rank may have changed both. */
   readonly refreshAll: () => void;
   readonly focusHeading: () => void;
 }
@@ -39,14 +37,12 @@ const whenForbidden = (actor: Actor) => (error: ApiError) => {
 
 const changed = z.object({ user_id: z.string(), role: z.string() });
 
-// A role change: a refused password check asks for the password once and runs the change again (a cancelled check
-// changes nothing), and a failure is shown beside the control.
 function RoleCell({ member, actor }: { member: Member; actor: Actor }) {
   const { t, i18n } = useLingui();
   const stepUp = useStepUp();
   const chosen = useRef(member.role);
   const change = useChange(async () => {
-    // The role is read once: a replay after the password check sends the role that was chosen.
+    // Read once, so a replay after the password check sends the role that was chosen.
     const role = chosen.current;
     const path = `/api/v1/workspaces/${actor.workspace.id}/members/${member.user_id}`;
     await stepUp(() => request(changed, path, { method: "PATCH", body: { role_key: role } }));
@@ -82,8 +78,6 @@ function RoleCell({ member, actor }: { member: Member; actor: Actor }) {
 
 const nothing = z.null();
 
-// Removing another member is a sensitive call too: the question names the member, a refused password check asks
-// once, and a cancelled one leaves the member where they are.
 function RemoveCell({ member, actor }: { member: Member; actor: Actor }) {
   const stepUp = useStepUp();
   const [open, setOpen] = useState(false);
@@ -128,7 +122,6 @@ function RemoveCell({ member, actor }: { member: Member; actor: Actor }) {
   );
 }
 
-// Leaving ends the person's own access: the lists are read again and the start page opens the next workspace.
 function LeaveWorkspace({ workspace }: { workspace: Workspace }) {
   const navigate = useNavigate();
   const revalidator = useRevalidator();
@@ -167,7 +160,6 @@ function MemberRow({ member, actor }: { member: Member; actor: Actor }) {
   const { i18n } = useLingui();
   const role = ROLES[member.role as keyof typeof ROLES];
   const self = member.user_id === actor.me;
-  // Only a member strictly below the caller can be changed, and an active one for a role.
   const below = !self && rankOf(member.role) < actor.rank && actor.rank >= ADMIN_RANK;
   return (
     <tr>
@@ -238,11 +230,9 @@ function MemberTable({ members, actor }: { members: Member[]; actor: Actor }) {
   );
 }
 
-// The members come from a list only a role with settings.manage may read; the people with access through the
-// organization are not in it.
 function ManageMembers({ workspace, focusHeading }: { workspace: Workspace; focusHeading: () => void }) {
   const session = useRouteLoaderData<Session>(SESSION_ROUTE_ID);
-  // The largest page: the server's default of 20 would hide the rest from every action (more than 100 is not read).
+  // The largest page: the server's default of 20 would hide the rest.
   const { state, reload, refresh } = useLoad(
     membersSchema,
     `/api/v1/workspaces/${workspace.id}/members?limit=100`,
@@ -276,7 +266,6 @@ function ManageMembers({ workspace, focusHeading }: { workspace: Workspace; focu
 }
 
 function Members({ workspace }: { workspace: Workspace }) {
-  // The role comes from the list as text; a role the matrix does not know manages nothing.
   const permissions: Readonly<Record<string, readonly string[] | undefined>> = ROLE_PERMISSIONS;
   const canManage = permissions[workspace.role]?.includes("settings.manage") ?? false;
   const heading = useHeadingFocus();
@@ -301,7 +290,6 @@ function Members({ workspace }: { workspace: Workspace }) {
   );
 }
 
-/** T-02 (`/w/:ws/settings/members`): the people of one workspace and its pending invitations. */
 export function MembersPage() {
   const { ws } = useParams();
   const data = useShellData();
@@ -313,7 +301,6 @@ export function MembersPage() {
     );
   const workspace = data.workspaces.find((candidate) => candidate.id === ws);
   const org = data.organizations.find((candidate) => candidate.id === workspace?.organization_id);
-  // A person on their own has no members: the page does not exist for a personal organization.
   if (!workspace || !org || org.type === "personal") return <NotFoundPage />;
   return <Members workspace={workspace} />;
 }

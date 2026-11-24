@@ -15,7 +15,6 @@ const valid: Record<string, string> = {
   SHOUTORY_SMTP_URL: "smtp://mailer-test:smtp-test-secret-1@mail.invalid:587",
   SHOUTORY_PUBLIC_ORIGIN: "https://app.example.test",
   SHOUTORY_MAIL_FROM: "noreply@mail.example.test",
-  // The role `all` (the default) connects as app, auth and worker; the owner and readonly URLs are not read.
   ...Object.fromEntries(
     ROLES.map((r) => [
       `SHOUTORY_DATABASE_URL_${r}`,
@@ -26,7 +25,6 @@ const valid: Record<string, string> = {
 const without = (key: string): Env => Object.fromEntries(Object.entries(valid).filter(([k]) => k !== key));
 const withValue = (key: string, value: string): Env => ({ ...valid, [key]: value });
 
-/** The refusal of an environment: the variable it names and everything an error prints. */
 function refusal(env: Env): { variable: string; shown: string } | undefined {
   try {
     parseEnv(env);
@@ -40,7 +38,6 @@ function refusal(env: Env): { variable: string; shown: string } | undefined {
 }
 const refusedVariable = (env: Env) => refusal(env)?.variable;
 
-// Values the repository ships as examples (README, compose when present): a secret equal to one is refused.
 function shippedExamples(): [string, string][] {
   const files = ["../../../../README.md", "../../../../docker/compose.yml"];
   const found: [string, string][] = [];
@@ -219,7 +216,6 @@ describe("start-up: HTTP settings", () => {
   });
 });
 
-// The release channel is build metadata the image sets per tag, not a feature switch: stable unless it says otherwise.
 describe("start-up: release channel", () => {
   it.each([
     ["unset", undefined, "stable"],
@@ -236,7 +232,7 @@ describe("start-up: release channel", () => {
   });
 });
 
-describe("start-up: mail senders (R322)", () => {
+describe("start-up: mail senders", () => {
   const mail = valid;
   const noFrom = (role: string): Env => ({ ...without("SHOUTORY_MAIL_FROM"), SHOUTORY_ROLE: role });
 
@@ -271,7 +267,7 @@ describe("start-up: mail senders (R322)", () => {
   });
 });
 
-describe("start-up: storage settings (R331, R340)", () => {
+describe("start-up: storage settings", () => {
   it("defaults to the filesystem driver on /data and reads a set directory", () => {
     expect(parseEnv(valid).storage).toEqual({ driver: "fs", dataDir: "/data" });
     expect(parseStorageEnv({ SHOUTORY_DATA_DIR: "/srv/shoutory" })).toEqual({
@@ -353,7 +349,7 @@ describe("start-up: the upload scan hook", () => {
   });
 });
 
-describe("start-up: web root setting (V-76)", () => {
+describe("start-up: web root setting", () => {
   it("is optional: unset serves no web, a set absolute folder is read", () => {
     expect(parseEnv(valid).webRoot).toBeUndefined();
     expect(parseEnv(withValue("SHOUTORY_WEB_ROOT", "/srv/shoutory/web")).webRoot).toBe("/srv/shoutory/web");
@@ -389,7 +385,7 @@ const ENDPOINT_MARKERS = [
   "ff9b",
 ];
 
-describe("start-up: S3 storage endpoint (R332)", () => {
+describe("start-up: S3 storage endpoint", () => {
   // Each endpoint carries a marker that an error text must never repeat.
   it.each([
     ["userinfo", "https://user-marker:pass-marker@s3.example.test"],
@@ -438,7 +434,7 @@ describe("start-up: S3 public endpoint", () => {
   });
 });
 
-describe("start-up: S3 storage settings (R331)", () => {
+describe("start-up: S3 storage settings", () => {
   it.each([
     "SHOUTORY_S3_ENDPOINT",
     "SHOUTORY_S3_REGION",
@@ -481,7 +477,7 @@ describe("start-up refusal of the library's own environment switches", () => {
   });
 });
 
-describe("database URLs per process role (R488)", () => {
+describe("database URLs per process role", () => {
   const onlyUrls = (role: string, names: string[]): Env => {
     const urls = Object.fromEntries(
       names.map((r) => [`SHOUTORY_DATABASE_URL_${r}`, valid[`SHOUTORY_DATABASE_URL_${r}`]]),

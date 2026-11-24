@@ -1,11 +1,8 @@
-// Measurement script only (NFR-PERF-07, -09, -11; run alone after a build, AGENTS 6.19): the idle memory of the app
-// (role `all`), the latency of the sign-in password step and of the first page of the workspace list with 500
-// workspaces, at three container sizes. It starts the e2e stack, so it needs Docker and refuses to start when any
-// other container is running. Run it from the repository root:
+// Run alone after a build, from the repository root (needs Docker; refuses to start when another container runs):
 //
 //   node perf/m0/api-latency.mjs [idle seconds, default 300]
 //
-// A workspace organization holds at most 100 workspaces and the per-address sign-in bucket holds 60 tokens and refills
+// An organization holds at most 100 workspaces and the per-address sign-in bucket holds 60 tokens and refills
 // one every 15 s, so there are 5 organizations and each size waits for the bucket before its 50 sign-ins.
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -65,7 +62,6 @@ const call = async (method, path, body) => {
   return { ms, jar, json: text ? JSON.parse(text) : undefined };
 };
 
-/** MiB of the container's memory use, from `docker stats` (a unit of KiB, MiB or GiB). */
 function memoryMiB(id) {
   const [number, unit] = /([\d.]+)(KiB|MiB|GiB)/
     .exec(docker("stats", "--no-stream", "--format", "{{.MemUsage}}", id))

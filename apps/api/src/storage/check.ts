@@ -8,15 +8,14 @@ import {
 
 type CheckFailure = "write_failed" | "read_failed" | "delete_failed" | "timeout";
 
-/** The one answer of the storage check, for the CLI and the admin route. A failure is a class, never error text. */
+// A failure is a class, never error text.
 export interface StorageCheckResult {
   driver: StorageDriver["name"];
   writable: boolean;
   readable: boolean;
-  /** Null where the driver cannot tell. */
   free_bytes: number | null;
   failure: CheckFailure | null;
-  /** Advice about the store, as closed codes (never text of the store); empty when none, and when the probe failed. */
+  // Closed codes, never text of the store.
   warnings: StorageWarning[];
 }
 
@@ -29,7 +28,7 @@ const PROBE_BYTES = 16;
 
 class Lapse extends Error {}
 
-/** `work`'s answer, or a `Lapse` once the signal fires; the work itself cannot be cancelled and may finish later. */
+// The work itself cannot be cancelled and may finish later.
 function within<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     if (signal.aborted) {
@@ -42,10 +41,7 @@ function within<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
   });
 }
 
-/**
- * Runs one probe step. Whatever the driver throws becomes the step's class: the error text of a driver names paths and
- * hosts, so none of it is kept (R333).
- */
+// The error text of a driver names paths and hosts, so none of it is kept.
 async function step(
   failure: Exclude<CheckFailure, "timeout">,
   signal: AbortSignal,
@@ -59,10 +55,8 @@ async function step(
   }
 }
 
-/**
- * What the driver reports about itself; nothing once the time limit has passed. After a failed probe a storage failure
- * of the report is expected (the same bucket that would not take the probe), so it adds nothing to the failure class.
- */
+// After a failed probe a storage failure of the report is expected (the same bucket that would not take the probe), so
+// it adds nothing to the failure class.
 async function inspected(
   driver: StorageDriver,
   signal: AbortSignal,
@@ -76,10 +70,8 @@ async function inspected(
   }
 }
 
-/**
- * Writes a small object under `.shoutory-check/<uuid>`, reads it back and deletes it, all under one time limit. After
- * a lapse the object may be left behind: the driver's own call cannot be cancelled and nothing more is attempted.
- */
+// After a lapse the probe object may be left behind: the driver's own call cannot be cancelled and nothing more is
+// attempted.
 export async function checkStorage(
   driver: StorageDriver,
   options: CheckOptions = {},

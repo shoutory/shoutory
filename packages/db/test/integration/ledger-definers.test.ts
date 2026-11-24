@@ -13,12 +13,6 @@ import { holdThenRace, openTx } from "../support/race.js";
 
 const env = readTestEnv();
 
-// Security floor of migration 0020, the ledger definers: a write by a worker that lost its lease changes nothing, cancel
-// and evidence raise the fencing token, evidence never waits for a lease, a move into published carries its evidence, no
-// caller outside its role reaches a writer, every writer names its actor and writes its outbox row, and nothing but a
-// ledger definer writes the ledger tables. Rows are planted as the superuser with the triggers off, so a row stands in a
-// state without having moved there. The function names, argument lists, answer columns (`outcome`, `fencing_token`,
-// `moved`), the change keys and the error codes are the contract the migration must meet; nothing sleeps.
 let db: TestDatabase;
 const admin = <T>(run: (client: Client) => Promise<T>) => withAdminClient(env, db.name, run);
 const rows = (sql: string, params: unknown[] = []) =>
@@ -36,7 +30,6 @@ const EDITOR = asUser(U.editor);
 type Pool = "app" | "worker";
 const poolOf = (ctx: TenantCtx): Pool => (ctx.principalKind === "job" ? "worker" : "app");
 
-// One channel per connection state: a move to blocked_reconnect looks at the channel of the operation.
 const channels: Record<string, string> = {};
 beforeAll(async () => {
   db = await cloneTemplate(env, inject("shoutoryTemplate"));
@@ -54,7 +47,6 @@ beforeAll(async () => {
 });
 afterAll(() => db.drop());
 
-// A post by `author` with one variant: the target an operation publishes to.
 async function newVariant(author: string = U.editor): Promise<string> {
   const [post] = await rows(
     "INSERT INTO app.posts (workspace_id, author_kind, author_id) VALUES ($1, 'user', $2) RETURNING id",
@@ -77,7 +69,6 @@ interface Plant {
   extra?: Record<string, unknown>;
 }
 const LEASED = new Set(["claimed", "dispatching", "reconciling"]);
-// A row in a given state, as if earlier moves had led there; last_actor is S and the token 1 unless said.
 async function plant(o: Plant = {}): Promise<string> {
   const state = o.state ?? "claimed";
   const blocked = state === "blocked_reconnect";
@@ -140,7 +131,6 @@ interface Answer {
   error?: { code?: string; message?: string } | undefined;
 }
 const head = (answer: Answer) => answer.rows?.[0];
-// One call as the caller in its own transaction: committed when it answers, rolled back when it is refused.
 async function exec(ctx: TenantCtx, sql: string, params: unknown[], pool?: Pool): Promise<Answer> {
   const client = await openTx(db.pool(pool ?? poolOf(ctx)), ctx);
   try {
@@ -204,7 +194,7 @@ const cancel = (ctx: TenantCtx, id: string, ws = WA) =>
 const evidence = (ctx: TenantCtx, id: string, e: Ev = RECEIPT) => exec(ctx, EVIDENCE, evidenceArgs(id, e));
 
 const INSERT = "SELECT app.operation_insert($1::uuid, $2::jsonb, $3) AS id";
-// The insert has no runtime caller: tests run it as the definer role, the way admission and resolve will.
+// The insert has no runtime caller, so it runs as the definer role.
 const insertAs = (fields: Record<string, unknown>, actor: string): Promise<Answer> =>
   admin(async (client) => {
     await client.query("BEGIN");
@@ -237,7 +227,6 @@ describe("a fenced write", () => {
   it("a write with a stale fencing token or a wrong state changes nothing and returns lost_lease", async () => {
     const id = await plant({ token: 3, lease: true });
     const before = await opOf(id);
-    // The wrong state is a listed move from a state the row is not in (the row is claimed).
     for (const [token, step] of [
       [2, STEP],
       [4, STEP],
@@ -248,14 +237,12 @@ describe("a fenced write", () => {
     }
     expect(await opOf(id)).toEqual(before);
     expect(await outboxOf(id)).toEqual([]);
-    // The right token and state move it, so the refusals above are not an answer to everything.
     expect(head(await move(WORKER, id, 3, STEP))).toMatchObject({ outcome: "moved" });
     expect(await opOf(id)).toMatchObject({ state: "processing", token: 3 });
   });
 });
 
 describe("two sessions meet on one operation", () => {
-  // [name, planted, the call that commits first, the call that waits behind it, the state afterwards]
   const MEETINGS: [
     string,
     Plant,
@@ -324,7 +311,6 @@ describe("cancel and evidence raise the fencing token", () => {
 describe("evidence is not fenced", () => {
   it("record_evidence succeeds after the lease moved to another worker", async () => {
     const id = await plant({ state: "processing", token: 1, lease: true });
-    // Another worker took the lease: its owner and token differ from the first worker's.
     await rows("UPDATE app.operations SET lease_owner = 'worker-b', fencing_token = 2 WHERE id = $1", [id]);
     expect(head(await evidence(job([WA]), id, E("verified", "poll_status")))).toMatchObject({ moved: true });
     expect(await opOf(id)).toMatchObject({
@@ -339,7 +325,6 @@ describe("evidence is not fenced", () => {
 });
 
 const SUP = "superseded_after_unknown_outcome";
-// [case, state, effect, evidence, what happens]
 const EVIDENCE_CASES: [string, string, string, Ev, "moves" | "row" | "refused"][] = [
   ["receipt after a possible effect", "dispatching", "possible", RECEIPT, "moves"],
   ["poll_status in processing", "processing", "none", E("verified", "poll_status"), "moves"],
@@ -393,7 +378,7 @@ describe("what evidence moves", () => {
   it.each([
     ["no source", { external_id: "ext-1" }],
     ["an extra key", { source: "fixture", note: "x" }],
-  ])("record_evidence refuses references with %s and writes no row (R593 (4))", async (_name, refs) => {
+  ])("record_evidence refuses references with %s and writes no row", async (_name, refs) => {
     const id = await plant({ state: "dispatching", effect: "possible" });
     const answer = await evidence(WORKER, id, { ...RECEIPT, refs });
     expect(answer.error?.code).toBe("22023");
@@ -404,9 +389,9 @@ describe("what evidence moves", () => {
 describe("a move into published carries its evidence", () => {
   const LEVELS = ["human", "receipt", "poll_status", "webhook", "read_back"];
   const ROWS: [string, string, string, string, string][] = [
-    ["row 17", "dispatching", "W", "receipt", "possible"],
-    ["row 23", "provider_accepted", "P", "poll_status", "confirmed"],
-    ["row 35", "reconciling", "R", "read_back", "possible"],
+    ["from dispatching", "dispatching", "W", "receipt", "possible"],
+    ["from provider_accepted", "provider_accepted", "P", "poll_status", "confirmed"],
+    ["from reconciling", "reconciling", "R", "read_back", "possible"],
   ];
   it.each(ROWS)(
     "operation_transition into published needs the evidence of its row: %s",
@@ -415,11 +400,9 @@ describe("a move into published carries its evidence", () => {
       const before = await opOf(id);
       const via = (changes: Record<string, unknown>) =>
         move(WORKER, id, 2, [from, "published", actor], changes);
-      // No evidence, and every level but the one of the row, is refused with nothing written.
       const given = [
         {},
         ...LEVELS.filter((l) => l !== level).map((l) => ({ evidence: E("verified", l) })),
-        // The level of the row, but a kind or an outcome that proves no post (R593 (2)).
         { evidence: E("absent", level) },
         { evidence: E("verified", level, "scheduled_at_provider") },
       ];
@@ -448,9 +431,7 @@ interface Refusal {
   pool?: Pool;
   ws?: string;
   move?: Step;
-  /** Whether the planted row holds a lease; absent follows the state. */
   lease?: boolean;
-  /** The code the refusal answers. */
   code: string;
 }
 const REFUSALS: Refusal[] = [
@@ -459,23 +440,27 @@ const REFUSALS: Refusal[] = [
     move: [...STEP.slice(0, 2), actor] as Step,
     code: "22023",
   })),
-  { name: "row 4, the claim", state: "pending", move: ["pending", "claimed", "W"], code: "42501" },
   {
-    name: "row 33",
+    name: "pending to claimed, the claim",
+    state: "pending",
+    move: ["pending", "claimed", "W"],
+    code: "42501",
+  },
+  {
+    name: "unknown_external_state to reconciling",
     state: "unknown_external_state",
     effect: "possible",
     move: ["unknown_external_state", "reconciling", "R"],
     code: "42501",
   },
   {
-    name: "row 34",
+    name: "unknown_external_state to needs_human",
     state: "unknown_external_state",
     effect: "possible",
     move: ["unknown_external_state", "needs_human", "R"],
     code: "42501",
   },
   { name: "a move not in the table", state: "pending", move: ["pending", "dispatching", "W"], code: "SH409" },
-  // A call that names the state the operation is already in changes nothing and announces nothing (R593 (1)).
   {
     name: "published to published",
     state: "published",
@@ -489,17 +474,22 @@ const REFUSALS: Refusal[] = [
     move: ["blocked_reconnect", "blocked_reconnect", "W"],
     code: "SH409",
   },
-  // A move into dispatching marks the effect with its attempt row, so it runs only through operation_attempt_start.
-  { name: "row 9 with its lease", move: ["claimed", "dispatching", "W"], code: "42501" },
-  { name: "row 9 without a lease", move: ["claimed", "dispatching", "W"], lease: false, code: "42501" },
+  // A move into dispatching is refused here: it runs only through operation_attempt_start.
+  { name: "claimed to dispatching with its lease", move: ["claimed", "dispatching", "W"], code: "42501" },
   {
-    name: "row 14 with its lease",
+    name: "claimed to dispatching without a lease",
+    move: ["claimed", "dispatching", "W"],
+    lease: false,
+    code: "42501",
+  },
+  {
+    name: "processing to dispatching with its lease",
     state: "processing",
     move: ["processing", "dispatching", "P"],
     code: "42501",
   },
   {
-    name: "row 14 without a lease",
+    name: "processing to dispatching without a lease",
     state: "processing",
     move: ["processing", "dispatching", "P"],
     lease: false,
@@ -627,9 +617,8 @@ describe("operation_insert", () => {
   });
 });
 
-describe("the restore reason of a blocked operation (row 13)", () => {
+describe("the restore reason of a blocked operation", () => {
   const FUTURE = new Date(Date.now() + 3_600_000).toISOString();
-  // [source, actor, planted, the reason it restores to, the parked column that must stay]
   const SOURCES: [string, string, Plant, string, string | undefined][] = [
     ["claimed", "W", { lease: true }, "pending", undefined],
     [
@@ -676,7 +665,6 @@ describe("the restore reason of a blocked operation (row 13)", () => {
 });
 
 describe("operation_cancel", () => {
-  // [who or what, caller, planted, the code it answers (absent: it cancels)]
   const CASES: [string, TenantCtx, Plant, string | undefined][] = [
     ["an Admin", ADMIN, {}, undefined],
     ["an Owner", OWNER, {}, undefined],
@@ -812,7 +800,7 @@ describe("every ledger definer writes its outbox row", () => {
   });
 
   // A call that is answered, moved or lost, hands the purpose back: a caller that goes on in its transaction is not left
-  // under the purpose of a ledger writer (R593 (6)).
+  // under the purpose of a ledger writer.
   it.each([
     ["a moved call", 1],
     ["a lost call", 2],

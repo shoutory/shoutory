@@ -84,7 +84,6 @@ function Details({ system }: { system: System }) {
   );
 }
 
-/** Z-07: the version, the channel and the migration status, with the update notice left quiet. */
 export function ReleasesPage() {
   const { state, reload } = useLoad(systemSchema, "/api/v1/admin/system");
   return (

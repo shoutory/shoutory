@@ -8,7 +8,6 @@ const zones: Record<string, { en: string; ar: string }> = cities.zones;
 const MINUTES_PER_HOUR = 60;
 const ZONE_IDS = Object.keys(zones);
 
-/** Whether `zone` is one the list names (and so one the server accepts). */
 export const isKnownZone = (zone: string | null | undefined): zone is string =>
   typeof zone === "string" && Object.hasOwn(zones, zone);
 
@@ -26,7 +25,6 @@ function offsetMinutes(zone: string, at: Date): number {
   return found[1] === "-" ? -minutes : minutes;
 }
 
-/** "UTC+2", "UTC-3:30" or "UTC": the zone's offset at `at`, in Latin digits whatever the language. */
 function offsetLabel(zone: string, at: Date): string {
   const total = offsetMinutes(zone, at);
   if (total === 0) return "UTC";
@@ -35,7 +33,6 @@ function offsetLabel(zone: string, at: Date): string {
   return `UTC${total < 0 ? "-" : "+"}${hours}${minutes ? `:${String(minutes).padStart(2, "0")}` : ""}`;
 }
 
-// A zone whose offset differs between January and July of the year of `at` changes its clock.
 function changesClock(zone: string, at: Date): boolean {
   const year = at.getUTCFullYear();
   return (
@@ -46,10 +43,6 @@ function changesClock(zone: string, at: Date): boolean {
 
 const cityOf = (zone: string, locale: Locale) => zones[zone]?.[locale] ?? zone;
 
-/**
- * A searchable zone list: each row is the localized city with its offset and, where the clock changes, a note; the
- * IANA id never shows (the id is only the value). The offsets are read at the clock of the moment the picker appears.
- */
 export function ZonePicker({
   label,
   value,
@@ -59,7 +52,6 @@ export function ZonePicker({
   label: string;
   value: string;
   onChange: (zone: string) => void;
-  /** The zone is shown and cannot be changed (a role that may only read the settings). */
   isReadOnly?: boolean;
 }) {
   const { i18n, t } = useLingui();

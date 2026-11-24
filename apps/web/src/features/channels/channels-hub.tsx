@@ -23,9 +23,6 @@ import { LocalizedDateTime } from "../../ui/localized";
 import { Reconnect } from "./connect-start";
 import { ConnectWizard } from "./connect-wizard";
 
-// H-01: the paged list of a workspace's channels. The list is this page's own state (it pages by cursor and replaces
-// one row at a time); only `next_cursor` of the answer's `meta` is read.
-
 const channelSchema = z.object({
   id: z.uuid(),
   provider_id: z.string(),
@@ -36,13 +33,12 @@ const channelSchema = z.object({
   health: z.string().nullable(),
   health_checked_at: z.string().nullable(),
   reconnect_deadline: z.string().nullable(),
-  // Only `check` is read: the other actions belong to screens that do not exist yet.
   actions: z.array(z.string()),
 });
 type Channel = z.infer<typeof channelSchema>;
 const pageSchema = z.object({
   data: z.array(channelSchema),
-  // `actions` of the page: only `connect` is read, and only from the server, never derived (BG-5).
+  // Connecting is offered only when the server lists `connect`; the client never derives it.
   meta: z.object({ next_cursor: z.uuid().nullable(), actions: z.array(z.string()) }),
 });
 type Page = z.infer<typeof pageSchema>;
@@ -54,12 +50,10 @@ interface Ready {
   more: "idle" | "busy" | "failed";
   /** The card that takes focus: the first one a last page appended, because Show more is gone. */
   focusId: string | null;
-  /** The server offers the person to connect a channel here (`meta.actions` holds `connect`). */
   canConnect: boolean;
 }
 type ListState = { status: "loading" } | { status: "failed"; error: ApiError } | Ready;
 
-// One page of the list: the first, or the one after `cursor`. An answer that is not a page is a failed read.
 const readPage = (base: string, cursor?: string) =>
   request(pageSchema, cursor === undefined ? base : `${base}?cursor=${cursor}`, { envelope: false });
 
@@ -72,7 +66,6 @@ const firstPage = (page: Page): Ready => ({
   canConnect: page.meta.actions.includes("connect"),
 });
 
-// The next page adds only channels not listed yet, whatever the server repeats.
 function appended(now: Ready, page: Page): Ready {
   const known = new Set(now.rows.map((one) => one.id));
   const fresh = page.data.filter((one) => !known.has(one.id));
@@ -86,14 +79,12 @@ function appended(now: Ready, page: Page): Ready {
   };
 }
 
-// The session ended while the page was open: sign in, then come back to this address.
 export function useSignIn() {
   const navigate = useNavigate();
   const { pathname, search } = useLocation();
   return () => void navigate(`/sign-in?return-to=${encodeURIComponent(pathname + search)}`);
 }
 
-// Changes the rows of a loaded list; a list that is not loaded is left alone.
 const onRows = (set: Dispatch<SetStateAction<ListState>>, change: (rows: Channel[]) => Channel[]) =>
   set((now) => (now.status === "ready" ? { ...now, rows: change(now.rows) } : now));
 
@@ -182,7 +173,7 @@ function Failed({ error, retry }: { error: ApiError; retry: () => void }) {
 
 const providersSchema = z.array(z.object({ id: z.string(), display_name: z.string() }));
 
-// The providers read names each card's provider; its failure never fails the hub, the card then shows the id.
+// A failed read never fails the hub: the card shows the provider id instead.
 function useProviderNames(ws: string): ReadonlyMap<string, string> {
   const [names, setNames] = useState<ReadonlyMap<string, string>>(new Map());
   useEffect(() => {
@@ -200,7 +191,7 @@ function useProviderNames(ws: string): ReadonlyMap<string, string> {
   return names;
 }
 
-// One word per state and per health (UX 6.3 C); a value the page does not know has the unknown word, never Connected.
+// A value the page does not know gets the unknown word, never Connected.
 function useWords() {
   const { t } = useLingui();
   return {
@@ -225,7 +216,6 @@ function useWords() {
 }
 type Words = ReturnType<typeof useWords>;
 
-// The first code point of each of the first two words; nothing to show reads "?".
 function initialsOf(name: string): string {
   const words = name
     .split(/\s+/)
@@ -235,7 +225,7 @@ function initialsOf(name: string): string {
   return words.map((word) => ([...word][0] ?? "").toUpperCase()).join("");
 }
 
-// Health is read only on a connected channel; "ok" needs a check time behind it, an unfavourable word claims nothing.
+// "ok" needs a check time behind it, so a healthy word is never shown without one.
 function healthOf(row: Channel): "ok" | "degraded" | "failing" | "unknown" | null {
   if (row.connection_state !== "connected") return null;
   if (row.health === "degraded" || row.health === "failing") return row.health;
@@ -253,9 +243,7 @@ interface CardContext {
   words: Words;
   zone: string;
   ws: string;
-  /** A check or a fresh read answered this row: it replaces the card. */
   onReplace: (row: Channel) => void;
-  /** The channel is gone: the card is dropped. */
   onDrop: (id: string) => void;
 }
 
@@ -297,8 +285,8 @@ function failureOf(error: ApiError): CheckFailure | "not_found" {
   return reason === "not_connected" || reason === "provider_unavailable" ? reason : "failed";
 }
 
-// Check now only reads. A second press while one is pending is ignored (Button `busy` only marks the button); the line
-// of a failure stays when the card is replaced, so this part is mounted whether or not the button is offered.
+// A second press while one is pending is ignored (Button `busy` only marks the button). The failure line outlives a
+// card replacement, so this hook is mounted whether or not the button is offered.
 function useCheck(row: Channel, context: CardContext, focusCard: () => void) {
   const [failure, setFailure] = useState<CheckFailure | null>(null);
   const [busy, setBusy] = useState(false);
@@ -310,18 +298,17 @@ function useCheck(row: Channel, context: CardContext, focusCard: () => void) {
     pressed.current = false;
     setBusy(false);
   };
-  // A fresh row replaces the card; when it no longer offers Check now, focus moves to the card, not to the page.
+  // When the fresh row no longer offers Check now, focus moves to the card, not to the page.
   const replace = (fresh: Channel) => {
     context.onReplace(fresh);
     if (!fresh.actions.includes("check")) focusCard();
   };
-  // A rejection that is not an ApiError is a bug: the press is let go before it is rethrown.
+  // Release the press before rethrowing, or the button stays stuck.
   const refused = (error: unknown): ApiError => {
     if (error instanceof ApiError) return error;
     release();
     throw error;
   };
-  // The fresh read after "no longer connected": a 404 drops the card, any other failure is the other failure line.
   const fail = (error: unknown, afterRefresh: boolean) => {
     const answer = refused(error);
     release();
@@ -352,7 +339,6 @@ function useCheck(row: Channel, context: CardContext, focusCard: () => void) {
 interface CheckProps {
   row: Channel;
   context: CardContext;
-  /** The id of the card's display name, which describes the button. */
   nameId: string;
   focusCard: () => void;
 }
@@ -528,7 +514,7 @@ function Loaded({ state, context, loadMore, onAdd }: LoadedProps) {
   );
 }
 
-// The "Add channel" dialog: closing it gives focus back to the button, also where a press did not focus it first.
+// Closing the dialog returns focus to the button, also where the press did not focus it first.
 function useAddDialog() {
   const [adding, setAdding] = useState(false);
   const addRef = useRef<HTMLButtonElement>(null);
@@ -540,8 +526,7 @@ function useAddDialog() {
   return { adding, setAdding, addRef };
 }
 
-// Keyed by the workspace (see the page), so a change of workspace starts from nothing: no row, page, notice or answer
-// of the old one can reach the new one.
+// Keyed by the workspace (see the page), so nothing of the old workspace can reach the new one.
 function ChannelsHub({ ws }: { ws: string }) {
   const { state, loadMore, retry, replaceRow, dropRow } = useChannelList(ws);
   const [removed, setRemoved] = useState(false);
@@ -593,7 +578,6 @@ function ChannelsHub({ ws }: { ws: string }) {
   );
 }
 
-/** `/w/:ws/channels`: a workspace that is not one of mine is the not-found page and reads nothing. */
 export function ChannelsHubPage() {
   const { ws = "" } = useParams();
   const shell = useShellData();

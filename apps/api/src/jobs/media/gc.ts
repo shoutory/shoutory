@@ -5,11 +5,9 @@ import { withSystem } from "@shoutory/db/context/system";
 import type { AppPool } from "@shoutory/db/pool";
 import type { Logger } from "../../logging/logger.js";
 
-// The nightly collection of media objects. The database decides what may go: the candidate list names assets, and the
-// one move to deleted, `media_gc_take`, reads the rule again under the row lock and answers the keys of the original and
-// of its derivatives. The job deletes only those keys, outside any transaction, and then records that the object is gone.
-// A delete that fails leaves the asset deleted without that record, so the 30-day arm offers it again, and a missing key
-// is a no-op for both drivers, so the retry removes what is left.
+// The database decides what may go: `media_gc_take` reads the rule again under the row lock, and the job deletes only the
+// keys it answers, outside any transaction. A failed delete leaves the asset deleted without the removal record, so the
+// 30-day arm offers it again; a missing key is a no-op for both drivers, so the retry removes what is left.
 
 const BATCH = 200;
 const MAX_BATCHES = 50;
@@ -21,13 +19,9 @@ export interface GcDeps {
   readonly logger: Logger;
 }
 export interface GcResult {
-  /** Assets the database let the job take. */
   taken: number;
-  /** Of those, the assets whose every object is gone. */
   removed: number;
-  /** Of those, the assets with an object that could not be deleted. */
   failed: number;
-  /** True when the run stopped at its deadline or its batch limit. */
   cut: boolean;
 }
 interface Candidate {
@@ -39,7 +33,6 @@ interface Candidate {
 const asJobOf = <T>(pool: AppPool, workspaceId: string, work: (tx: TenantTx) => Promise<T>) =>
   withTenant(pool, { principalKind: "job", principalId: randomUUID(), workspaceIds: [workspaceId] }, work);
 
-/** The keys the database lets this job remove for one candidate: none when the rule no longer holds. */
 async function take(pool: AppPool, candidate: Candidate): Promise<string[]> {
   const found = await asJobOf(pool, candidate.workspace_id, (tx) =>
     tx.query<{ object_key: string }>("SELECT object_key FROM app.media_gc_take($1, $2, $3)", [
@@ -51,10 +44,7 @@ async function take(pool: AppPool, candidate: Candidate): Promise<string[]> {
   return found.rows.map((row) => row.object_key);
 }
 
-/**
- * Deletes every key, the original first; a storage failure of one key is logged with the asset and its class, never the
- * key, and the others are still tried. Answers how many keys could not be deleted. Any other error is a defect.
- */
+// A storage failure of one key is logged with the asset and its class, never the key, and the others are still tried.
 async function removeKeys(
   storage: StorageDriver,
   keys: readonly string[],
@@ -98,11 +88,8 @@ const candidatesOf = (pool: AppPool, limit: number, after: string | null) =>
       ).rows,
   );
 
-/**
- * One run: lists up to 200 candidates of every workspace in id order, collects each, and lists again after the last id it
- * listed, so a candidate whose delete keeps failing is tried once and never holds the run back. It stops when a list is
- * empty, at its deadline, or after 50 lists; what it leaves is offered again the next night.
- */
+// Each list starts after the last id of the one before, so a candidate whose delete keeps failing is tried once and
+// never holds the run back; what a cut run leaves is offered again the next night.
 export async function collectMedia(
   deps: GcDeps,
   { limit = BATCH, deadlineMs = DEFAULT_DEADLINE_MS }: { limit?: number; deadlineMs?: number } = {},

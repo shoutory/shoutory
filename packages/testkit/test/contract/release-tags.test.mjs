@@ -1,8 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
-// A release tag (or a nightly date) gives the image tags, the debug image tags and the channel; a stable tag alone
-// moves `stable`, and the major tag is skipped while the major is 0.
 const load = async () => (await import("../../scripts/release-tags.mjs")).imageTags;
 
 const CASES = [
@@ -38,7 +36,6 @@ for (const [title, input, expected] of CASES) {
   });
 }
 
-// A prerelease other than beta.N has no channel the image knows, so it is refused rather than published.
 for (const input of [
   "next",
   "v1.2",
@@ -56,7 +53,6 @@ for (const input of [
   });
 }
 
-// The cases above hold one beta and one nightly; these are others, which must never move a stable or a moving tag.
 test("release tags: no beta or nightly gives stable or a version that a stable release moves", async () => {
   const tags = await load();
   for (const input of ["v2.0.0-beta.10", "v0.9.0-beta.0", "2027-01-01"]) {

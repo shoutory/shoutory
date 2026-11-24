@@ -13,13 +13,8 @@ import { holdThenRace, openTx } from "../support/race.js";
 
 const env = readTestEnv();
 
-// Security floor of migration 0015 (R545, R546): an OAuth sign-in state is written by one definer (`oauth_flow_put`),
-// consumed once by another (`oauth_flow_take`), and refused, audited and spent when it does not match its user,
-// provider, instance host or workspace; a Telegram connect word is consumed once by its own workspace and provider
-// (`connect_challenge_take`); the step-up method CHECK knows `backup_code`. Grants and EXECUTE are also rows of
-// runtime-grants and rls-catalog; the direct-grant rows here are the behaviour. Rows are planted as the superuser, time
-// moves by planting dates, nothing sleeps. The argument lists and outcome names are the contract the migration must
-// meet: a take answers one row whose `outcome` is `ok` or the refusal kind, with the flow columns on an `ok`.
+// Rows are planted as the superuser and time moves by planting dates, nothing sleeps. A take answers one row whose
+// `outcome` is `ok` or the refusal kind, with the flow columns on an `ok`.
 let db: TestDatabase;
 const admin = <T>(run: (client: Client) => Promise<T>) => withAdminClient(env, db.name, run);
 const rows = (sql: string, params: unknown[] = []) =>
@@ -59,7 +54,7 @@ interface PlantedFlow {
   expires?: string;
   consumed?: boolean;
 }
-// A flow as the superuser, in any state; the sealed values are returned to compare a take with them.
+// The sealed values are returned to compare a take with them.
 async function plantFlow(o: PlantedFlow) {
   const seal = sealed();
   await rows(
@@ -99,8 +94,8 @@ beforeAll(async () => {
 });
 afterAll(() => db.drop());
 
-// One outcome kind per refusal; every refusal but an unknown state spends the state (R546 Q5); each writes one audit
-// row, in the flow's workspace chain when the flow was found and in the instance chain (no workspace) when not.
+// Every refusal but an unknown state spends the state; each writes one audit row, in the flow's workspace chain when
+// the flow was found and in the instance chain (no workspace) when not.
 interface Refusal {
   name: string;
   kind: string;

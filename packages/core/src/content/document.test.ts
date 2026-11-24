@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { type Draft, draftSchema, settingsIssues } from "./document.js";
 
-// The document the post definers accept: every bound of the post tables (the database function that applies a draft, and the CHECKs), at the
-// limit and one past it, and the refusals SQL would not make (it drops unknown keys and lets a float through).
 const CH = "00000000-0000-4000-8000-0000000000a1";
 const MEDIA = "00000000-0000-4000-8000-0000000000b1";
 const POST_TYPES = [
@@ -28,7 +26,6 @@ const variant = (change: object = {}) => ({
   ...change,
 });
 const draft = (...variants: object[]) => ({ variants });
-// For the rows that call a function with a draft that is valid by construction.
 const asDraft = (...variants: object[]): Draft => draft(...variants) as Draft;
 const part = (text = "x") => ({ kind: "thread_reply", text });
 const medium = (change: object = {}) => ({ media_id: MEDIA, alt_text: null, crop: null, ...change });
@@ -53,7 +50,6 @@ const deepArray = (depth: number): unknown => {
   for (let level = 0; level < depth; level += 1) value = [value];
   return value;
 };
-// A value of exactly `bytes` UTF-8 bytes of its jsonb text, the padding spread over `slots` strings.
 const sized = (bytes: number, make: (pads: string[]) => unknown, slots = 1) => {
   const base = Buffer.byteLength(pgText(make(Array(slots).fill(""))));
   const each = Math.floor((bytes - base) / slots);

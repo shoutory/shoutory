@@ -14,15 +14,10 @@ import { createLogger } from "../../src/logging/logger.js";
 import { connectChannel, ledgerKeys } from "./ledger-credentials.js";
 import { seedWorkspace } from "./ledger-seed.js";
 
-// The environment of the dispatch tests (floor and feature rows): one cloned database for the file, a workspace, the queue
-// client, and for each row its own fixture simulator and a provider id of its own. Every row runs on the fixture provider
-// and its simulator; a crash is made through the adapter's own inputs (a `fetch` that waits until the call is aborted), an
-// UPDATE that ends the lease, the lease sweep and the next turn.
 const env = readTestEnv();
 const boss = () => createBoss(state.db.url("worker"), () => undefined);
 const state = {} as { db: TestDatabase; ws: string; queue: ReturnType<typeof boss> };
 
-/** Registers the database, the workspace and the queue client of the file; call once at the top of a test file. */
 export function useDispatchEnv(): void {
   beforeAll(async () => {
     state.db = await cloneTemplate(env, inject("shoutoryTemplate"));
@@ -36,14 +31,12 @@ export function useDispatchEnv(): void {
   });
 }
 
-/** The queue client of the file, for a test that builds its own tick. */
 export const queueOf = () => state.queue;
 
 export const logger = createLogger({ secrets: [], stream: { write: () => undefined } });
 export const workerPool = () => state.db.pool("worker");
 export const admin = <T>(run: Parameters<typeof withAdminClient<T>>[2]) =>
   withAdminClient(env, state.db.name, run);
-/** A provider that allows a read-back but never a resend. */
 export const READ_BACK_ONLY = {
   idempotency: { ...fixtureManifest.idempotency, resendAfterUnknown: "read_back_only" },
 };
@@ -53,8 +46,7 @@ export const ledger = (sql: string, params: unknown[] = []) =>
   withSystem(workerPool(), "ledger", (tx) => tx.query(sql, params));
 export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// A call that waits until it is aborted (the lease is lost, or the call times out) or released; released, it goes on to the
-// simulator. Only the first call that matches is held.
+// Holds the first matching call until it is aborted (lease lost or timeout) or released, then sends it to the simulator.
 export function holdFirst(match: (url: string, method: string) => boolean) {
   let armed = true;
   let release: () => void = () => undefined;
@@ -96,9 +88,7 @@ interface Options {
   lease?: number;
   manifest?: Record<string, unknown>;
   hold?: Hold;
-  /** Runs when the simulator receives a request, before the route's handler. */
   before?: (route: string) => void | Promise<void>;
-  /** The clock the turn and the tick read (the sunset of an API version); the default is the real one. */
   clock?: () => Date;
 }
 export async function makeEnv(o: Options = {}) {
@@ -131,12 +121,10 @@ export async function makeEnv(o: Options = {}) {
     registry,
     adapters,
     fetchFor,
-    // The key ring the worker opens the channel credentials with (the ones `plant` stores).
     keys: ledgerKeys,
     ...(o.clock === undefined ? {} : { clock: o.clock }),
   };
   return {
-    // One tick as another manifest of the same provider (a newer API version named) and at another time.
     tickWith: (extra: Record<string, unknown>, at?: Date) =>
       createLedgerTick({
         ...common,
@@ -186,9 +174,7 @@ const SNAPSHOT = (channel: string) => ({
 export interface Plant {
   state?: string;
   effect?: string;
-  /** On the reconcile queue of the provider instead of its publish queue. */
   reconcile?: true;
-  /** The unverified horizon ended this many seconds ago. */
   horizonEndedAgo?: number;
   /** No frozen version: nothing to send. */
   unfrozen?: true;
@@ -196,18 +182,13 @@ export interface Plant {
   unreadable?: true;
   /** Held by a worker that is gone: the lease ended a second ago. */
   leased?: true;
-  /** The sends the operation has used, and the reason it is paused for. */
   attempts?: number;
   reason?: string;
-  /** Not due for this many seconds. */
   waitSeconds?: number;
-  /** The channel stores this instance host and this access token (a provider whose accounts live on user-chosen servers). */
   host?: string;
   token?: string;
-  /** The channel has no stored credential at all. */
   noCredential?: true;
 }
-// The columns a plant sets beyond the common ones.
 const plantExtras = (o: Plant): Record<string, unknown> => ({
   ...(o.attempts === undefined ? {} : { attempt_count: o.attempts }),
   ...(o.reason === undefined ? {} : { reason_code: o.reason }),
@@ -229,8 +210,6 @@ const plantVersion = async (o: Plant, post: string, channel: string): Promise<st
       )
     )[0]?.id,
   );
-// The channel of a planted operation: connected through the credential service, so it holds a credential the worker opens;
-// only a row that asks for `noCredential` has a channel with none.
 async function plantChannel(providerId: string, o: Plant): Promise<{ id: string }> {
   const account = `dispatch-${randomUUID().slice(0, 8)}`;
   if (o.noCredential) {
@@ -250,7 +229,6 @@ async function plantChannel(providerId: string, o: Plant): Promise<{ id: string 
   });
   return { id };
 }
-// A post with a frozen version, its target and an operation on the fixture provider in a given state.
 export async function plant(
   e: Pick<Env, "providerId" | "queueName" | "reconcileQueue" | "lease">,
   o: Plant = {},
@@ -317,7 +295,6 @@ export const typesOf = async (id: string) =>
   (await rows("SELECT type FROM app.outbox WHERE payload ->> 'operation_id' = $1", [id])).map(
     (row) => row.type,
   );
-// The lease of a worker that is gone ends, and the lease sweep takes the row back.
 export async function takeBack(id: string, providers: object = {}): Promise<void> {
   await rows(
     "UPDATE app.operations SET lease_expires_at = clock_timestamp() - interval '1 second' WHERE id = $1",
@@ -326,7 +303,6 @@ export async function takeBack(id: string, providers: object = {}): Promise<void
   await ledger("SELECT app.sweep_expired_leases($1::jsonb)", [JSON.stringify(providers)]);
 }
 
-// Rounds of the tick and of the turn until the operation is published: what the workers do after any crash.
 export async function recover(e: Env, id: string): Promise<void> {
   for (let round = 0; round < 8; round++) {
     const at = String((await opOf(id)).state);

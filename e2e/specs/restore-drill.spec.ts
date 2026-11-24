@@ -10,9 +10,6 @@ import {
   waitForFreshCode,
 } from "../support/restore";
 
-// The drill of the backup guide, run on the stack the first journey made: take the dump, lose the database volume,
-// restore, and prove the instance is the same one. It ends with the data changed under the stack, so it never runs
-// with the other specs: only the `restore` project runs it, and only when SHOUTORY_E2E_RESTORE is true.
 // A step starts or rebuilds containers and waits for their health (up to the stack's own 300 s), so the test time is
 // that wait and a margin, not the 30 s of a page check.
 test.describe.configure({ mode: "serial", timeout: 420_000 });
@@ -30,7 +27,6 @@ test("after a restore the app role without tenant context sees no row and holds 
   dumpAndLoseTheVolume();
   restoreTheDump();
 
-  // Read as the superuser while the app is down: the same rows came back, and row security came back with them.
   const after = databaseFacts();
   expect(after.workspaces, "workspaces after the restore").toBe(before.workspaces);
   expect(after.members, "members after the restore").toBe(before.members);
@@ -63,7 +59,6 @@ test("restore drill: the founder signs in with password and code after dump, vol
     await page.goto(`/w/${workspace.id}/settings/members`);
     await expect(page.locator("tr", { hasText: member.name })).toBeVisible();
 
-    // The first administrator exists again, so sign-up is closed as it was.
     await page.context().clearCookies();
     await page.goto("/sign-up");
     await expect(page.getByText(/invitation-only/)).toBeVisible();

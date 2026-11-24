@@ -19,7 +19,6 @@ const adminCalls = (stub: ReturnType<typeof stubApi>) =>
   stub.mock.calls.filter(([url]) => url.includes("/api/v1/admin/"));
 
 describe("the Admin entry and frame", () => {
-  // A failed read is no answer: the rail simply has no entry, and the page shows no error of its own.
   it.each([
     ["a non-admin", NOT_ADMIN],
     ["a failed admin read", FAILED],
@@ -41,8 +40,6 @@ describe("the Admin entry and frame", () => {
     expect(adminCalls(stub)).toHaveLength(0);
   });
 
-  // No answer is not "no": a failed admin read or a failed shell list shows the error panel with Retry, which reads
-  // the shell again, and still makes no admin call.
   it.each([
     ["a failed admin read", FAILED],
     ["a failed workspace list", { workspaces: () => refusal("service_unavailable", 503) }],

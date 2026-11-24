@@ -11,8 +11,6 @@ const EGRESS_DIR = "packages/provider-sdk/src/egress/";
 const SKIPPED = new Set(["node_modules", "dist", ".git", ".artifacts", ".turbo"]);
 const GLOBS = ["{apps/*,packages/*,packages/providers/*}/src/**/*.{ts,tsx,mts,js,cjs,mjs}"];
 const EXTENSIONS = ["ts", "tsx", "mts", "js", "cjs", "mjs"];
-// The closed list of files that may reach the network without the egress client: path, reason and the id the URL
-// field registry cites.
 const EXCEPTIONS = JSON.parse(readFileSync(join(here, "egress-operator-exceptions.json"), "utf8"));
 
 // The banned words are joined here so this file never matches its own scan.
@@ -27,7 +25,6 @@ const NET_MODULES = "(?:node:)?(?:https?|http2|net|tls|dgram|dns(?:/promises)?)"
 const ALLOWED_BINDINGS = new Set(["createServer", "isIP", "isIPv4", "isIPv6", "BlockList", "SocketAddress"]);
 const DYNAMIC_NET = new RegExp(`\\b(?:import|require)\\s*\\(\\s*["']${NET_MODULES}["']\\s*\\)`);
 const SIDE_EFFECT_NET = new RegExp(`\\bimport\\s*["']${NET_MODULES}["']`);
-// The clause between `import` or `export` and `from`, never crossing another such keyword.
 const STATIC_NET = new RegExp(
   `\\b(?:import|export)\\b((?:(?!\\b(?:import|export)\\b)[^;"'\`])*?)\\bfrom\\s*["']${NET_MODULES}["']`,
   "g",
@@ -102,11 +99,8 @@ function scannedFiles(base) {
 const BEFORE_REGEX =
   /(?:^|[(,=:[!&|?{};+\-*%<>~^]|\b(?:return|typeof|case|void|delete|in|of|else|do|throw|new|yield|await))\s*$/;
 
-/**
- * Reads the source once, left to right, so a comment marker inside a string, a template or a regular expression cannot
- * hide code. Returns the code with comments removed and literals kept (`code`) and with literals blanked too (`bare`).
- * A template's `${}` expressions are code in both.
- */
+// Reads the source once, left to right, so a comment marker inside a string, a template or a regular expression cannot
+// hide code. `code` keeps literals; `bare` blanks them too.
 class Scanner {
   code = "";
   bare = "";
@@ -121,7 +115,6 @@ class Scanner {
     this.at += raw.length;
   }
 
-  /** Moves past `length` source characters without emitting them (a comment). */
   drop(length) {
     this.at += length;
   }
@@ -181,7 +174,6 @@ class Scanner {
     this.at += length;
   }
 
-  /** One token of code; returns true when it is the `}` that closes a template expression. */
   step(depth, inExpression) {
     const c = this.text[this.at];
     const pair = this.text.slice(this.at, this.at + 2);
@@ -210,7 +202,6 @@ function scan(text) {
   return { code: scanner.code, bare: scanner.bare };
 }
 
-/** The code and the blanked code, without `import type` and `export type` statements: they never open a connection. */
 function codeOf(text) {
   const { code, bare } = scan(text);
   const types = /\b(?:import|export)\s+type\s[^;]*?from\s*["'][^"']+["']/g;
@@ -257,7 +248,7 @@ test("the exceptions list is closed: every row names a file that exists, holds a
 const FLAGGED = [
   ["a fetch call", `const r = await ${FETCH}("https://example.test");\n`],
   ["globalThis fetch", `await globalThis.${FETCH}(url);\n`],
-  ["the global fetch passed as a value (the R528 form)", `const deps = { ${FETCH} };\n`],
+  ["the global fetch passed as a value", `const deps = { ${FETCH} };\n`],
   ["the global fetch passed as an argument", `createThing(${FETCH}, config);\n`],
   ["an undici import", `import { request } from "undici";\n`],
   ["an undici require", `const u = require("undici");\n`],
@@ -277,7 +268,6 @@ const FLAGGED = [
     `import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";\n`,
   ],
   ["an OTLP exporter dynamic import", `const m = await import("@opentelemetry/exporter-trace-otlp-http");\n`],
-  // R531 (1): the node network modules are an allowlist, so a binding no rule names is still a finding.
   ["a default import of https", `import https from "node:https";\n`],
   ["a namespace import of net", `import * as net from "node:net";\n`],
   ["a bare module name", `import { connect } from "net";\n`],
@@ -291,7 +281,6 @@ const FLAGGED = [
   ["a dynamic import of https", `const https = await import("node:https");\n`],
   ["a require of tls", `const tls = require("node:tls");\n`],
   ["a destructured require of net", `const { createConnection } = require("net");\n`],
-  // The global fetch by every route, and the literals that hid code from the old comment strip.
   ["global.fetch", `await global.${FETCH}(url);\n`],
   ["self.fetch", `await self.${FETCH}(url);\n`],
   ["window.fetch", `await window.${FETCH}(url);\n`],

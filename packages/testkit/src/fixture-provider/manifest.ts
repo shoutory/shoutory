@@ -1,7 +1,3 @@
-/**
- * The manifest of the `fixture` provider: the stand-in network the core publishing slices run against before any real
- * provider exists. It declares every capability the fault matrix has rows for. It is registered only in tests.
- */
 export const fixtureManifest = {
   id: "fixture",
   displayName: "Fixture Network",

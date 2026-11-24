@@ -23,15 +23,11 @@ const flagsSchema = z.array(
 type Flag = z.infer<typeof flagsSchema>[number];
 const overridden = z.object({ key: z.string(), on: z.boolean().nullable() });
 
-// The three states of an instance override, and the value each sends: on, off, or cleared back to the default.
 const BODY = { on: true, off: false, default: null } as const;
 type Choice = keyof typeof BODY;
 const choiceOf = (flag: Flag): Choice =>
   flag.instance_override === null ? "default" : flag.instance_override ? "on" : "off";
 
-// The override of one flag: choosing runs a sensitive write (a refused password check asks once and runs again, a
-// cancelled one changes nothing). A flag past its removal date is refused by the server, so its list is unavailable
-// and sends nothing.
 function OverrideCell({ flag, expired, refresh }: { flag: Flag; expired: boolean; refresh: () => void }) {
   const { t } = useLingui();
   const stepUp = useStepUp();
@@ -164,7 +160,6 @@ function FlagTable({ flags, refresh }: { flags: Flag[]; refresh: () => void }) {
   );
 }
 
-/** Z-03: every feature flag with its owner, removal date and state, and the instance override of each. */
 export function FlagsPage() {
   const { state, reload, refresh } = useLoad(flagsSchema, "/api/v1/admin/flags");
   return (

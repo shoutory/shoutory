@@ -1,7 +1,7 @@
 import type { ErrorCode } from "@shoutory/core/errors";
 import { Refusal } from "../errors/refusal.js";
 
-// The definers a user route calls: their RAISE messages (migrations 0009 and 0010) start with `<name> ` or `<name>:`.
+// Their RAISE messages start with `<name> ` or `<name>:`.
 const DEFINERS = [
   "resolve_workspace_access",
   "my_workspaces",
@@ -24,7 +24,6 @@ const DEFINERS = [
   // The post definers, and the principal check they share with the media definers (`media: refused`).
   "post",
   "media",
-  // The two media definers a user route calls name themselves in their own refusals (the cap, a state that is not allowed).
   "media_register",
   "media_mark_uploaded",
   "media_set_multipart",
@@ -68,8 +67,8 @@ const SENTENCES: Readonly<Record<string, string>> = {
   "the channel is not connected, reconnect it first": "channel_not_connected",
 };
 
-// `invitation_accept` puts "expires <timestamptz>; invited by <name>" in DETAIL (R241). Only the timestamp is read, by
-// this strict pattern; the name is never read (R263), and a DETAIL that does not match gives the reason alone.
+// `invitation_accept` puts "expires <timestamptz>; invited by <name>" in DETAIL. Only the timestamp is read, by
+// this strict pattern; the name is never read, and a DETAIL that does not match gives the reason alone.
 const EXPIRY =
   /^expires (\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})(?:\.\d{1,6})?([+-]\d{2})(?::(\d{2}))?; invited by /s;
 
@@ -93,7 +92,6 @@ function detailsOf(state: string, message: string, detail: unknown): Record<stri
 // post (a medium that is no longer ready); the same state under another definer's name is a defect.
 const SH_DEFINERS =
   /^(invitation|member|channel)_|^resolve_operation:|^(workspace|organization)_create:|^media_(mark_uploaded|set_multipart):|^post: media_unavailable$/;
-// SH429 is the creation limit alone.
 const LIMIT_DEFINERS = /^(workspace|organization)_create:/;
 
 // A creation definer's SH429 puts "retry after N seconds" in DETAIL; anything else gives the default Retry-After.
@@ -103,7 +101,6 @@ const retryAfterOf = (state: string, detail: unknown): number | undefined => {
   return found ? Number(found[1]) : undefined;
 };
 
-/** The refusal a definer's own error answers with, or nothing when the error is not one of its refusals. */
 export function definerRefusal(error: unknown): Refusal | undefined {
   const { code: state, message, detail } = error as { code?: unknown; message?: unknown; detail?: unknown };
   const code = typeof state === "string" && isDefinerMessage(message) ? DEFINER_STATES[state] : undefined;

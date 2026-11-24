@@ -19,13 +19,11 @@ import {
   workspaceParams,
 } from "./shared.js";
 
-// The import of one image or video by URL. The URL is the member's, so the only way to reach it is the egress client under
-// the operator policy (the address check, the pinned connection, the redirects, the cap and the time limit). The bytes are
-// fetched before anything is written, so a URL that is refused, too large or no media leaves no row and no object. The type
-// is the one the bytes have, never the one the host claims, and an encoded body is refused because the bytes would not be
-// the ones that were checked. The asset that results is an ordinary upload: uploaded, then the pipeline.
+// The URL is the member's, so it is reached only through the egress client under the operator policy. The bytes are
+// fetched before anything is written, so a refused, too large or non-media URL leaves no row and no object. The type
+// is the one the bytes have, never the one the host claims, and an encoded body is refused because the bytes would not
+// be the ones that were checked.
 
-/** The fetch of the import: the egress client bound to the operator policy and a user URL. */
 export type ImportFetch = (request: EgressRequest) => Promise<EgressResponse>;
 
 const importBody = z.strictObject({
@@ -66,7 +64,6 @@ export function reasonOf(error: EgressError): Reason {
   }
 }
 
-/** The name the member gave, else the last segment of the path (never the query or the fragment), else `import`. */
 export function fileNameOf(url: string, given?: string): string {
   if (given !== undefined) return given;
   if (!URL.canParse(url)) return "import";
@@ -118,7 +115,6 @@ async function download(
   return response.body;
 }
 
-/** The type of the bytes; anything that is not an image or a video is refused, whatever the host called it. */
 async function typeOf(bytes: Uint8Array): Promise<string> {
   const found = await fileTypeFromBuffer(bytes.subarray(0, SAMPLE_BYTES));
   if (!found || !(isImageType(found.mime) || isVideoType(found.mime))) throw refused("unsupported_type");
@@ -155,7 +151,6 @@ const MAX_IN_FLIGHT = 2;
 const RETRY_AFTER_SECONDS = 5;
 let inFlight = 0;
 
-/** Takes one of the slots, or refuses with a wait; the returned function hands the slot back (once). */
 function takeSlot(): () => void {
   if (inFlight >= MAX_IN_FLIGHT)
     throw new Refusal("too_many_requests", "too many imports are running", {
@@ -170,7 +165,6 @@ function takeSlot(): () => void {
   };
 }
 
-/** Imports one file: fetch, check the type, register, store, mark uploaded; a duplicate answers the live asset. */
 export function registerImport(app: App, storage: StorageDriver, getFile: ImportFetch, logger: Logger): void {
   defineRoute(app, {
     method: "post",

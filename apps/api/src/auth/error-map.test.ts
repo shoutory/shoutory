@@ -2,8 +2,6 @@ import { APIError } from "better-auth";
 import { describe, expect, it } from "vitest";
 import { refusalFromAnswer, refusalFromLinkError } from "./error-map.js";
 
-// A mailed link the library rejects (unknown, used or expired) is `link_unusable` on both paths: the answer
-// of a forwarded reset (a status and a code) and the thrown error of the in-process verify. A refused input is not.
 describe("the mailed-link answers", () => {
   it.each([
     ["an unknown or used token", "INVALID_TOKEN"],
@@ -27,9 +25,8 @@ describe("the mailed-link answers", () => {
   });
 });
 
-// The one table from a library answer to our envelope's code. A wrong second-factor code is a wrong
-// credential (the screen says "that code is not right"); only the challenge cookie's own error reads as a login that
-// has ended (the screen says "sign-in expired, start again").
+// A wrong second-factor code is a wrong credential; only the challenge cookie's own error reads as a login that has
+// ended.
 describe("the auth answer table", () => {
   it.each([
     ["a wrong password", 401, "INVALID_EMAIL_OR_PASSWORD", "invalid_credentials"],

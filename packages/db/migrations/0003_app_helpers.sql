@@ -1,13 +1,8 @@
--- Tenant setting helpers and the one function that applies a row security template to a table.
---
--- A new function grants EXECUTE to PUBLIC unless told otherwise. Remove that default for everything the
--- migration owner creates from here on, before the first function exists; each function below also states
--- its own REVOKE and GRANT so the intended callers are readable in one place.
+-- A new function grants EXECUTE to PUBLIC unless told otherwise. Remove that default before the first function exists.
 ALTER DEFAULT PRIVILEGES FOR ROLE shoutory_owner REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
 
--- The helpers read the transaction-local settings that withTenant sets. A missing, empty or malformed value
--- answers NULL (an empty array for the workspace list), never an error and never a wider value. They run with
--- the privileges of the caller and pin the search path to the system catalog.
+-- A missing, empty or malformed setting answers NULL (an empty array for the workspace list), never an error and
+-- never a wider value.
 CREATE FUNCTION app.ws_ids() RETURNS uuid[]
 LANGUAGE sql STABLE SECURITY INVOKER
 SET search_path = pg_catalog, pg_temp
@@ -76,18 +71,15 @@ AS $$
   SELECT NULLIF(current_setting('app.job_purpose', true), '')
 $$;
 
--- Policies call the helpers with the privileges of the querying role, so exactly the roles that run policies
--- (and the role that will own the definer functions) may execute them.
+-- Policies run the helpers as the querying role, so only the roles that run policies and the definer role may execute them.
 REVOKE ALL ON FUNCTION app.ws_ids(), app.write_ws(), app.org(), app.principal_id(), app.portal_grant_id(),
   app.principal_kind(), app.service_kind(), app.job_purpose() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app.ws_ids(), app.write_ws(), app.org(), app.principal_id(), app.portal_grant_id(),
   app.principal_kind(), app.service_kind(), app.job_purpose()
   TO shoutory_app, shoutory_worker, shoutory_definer;
 
--- The one function that applies a template to a table; a migration tool, so only the owner may run it. The
--- table name comes from the regclass (already quoted and schema-qualified) and the key column is quoted as an
--- identifier. Only the workspace template exists so far; each other template is added by the first migration
--- whose table needs it.
+-- A migration tool, so only the owner may run it. The table name comes from the regclass (already quoted) and the
+-- key column is quoted as an identifier, so neither can inject SQL.
 --
 -- W: a session reads the workspaces in its read set and writes only its one write workspace, which must also be
 -- in the read set. A portal principal is refused everything by a restrictive policy.

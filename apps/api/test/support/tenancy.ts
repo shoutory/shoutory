@@ -1,8 +1,5 @@
 import type { Fixture } from "../integration/auth/harness.js";
 
-// Seeds tenancy rows through the admin client, which the runtime roles cannot do. Every organization keeps an owner
-// (a deferred guard checks it at commit), so a new organization takes its owner's user id.
-
 let counter = 0;
 export const unique = (prefix: string): string => `${prefix}-${++counter}`;
 
@@ -106,7 +103,6 @@ export async function addOrganizationMember(
   );
 }
 
-/** Plants one channel row in any state; connect definers do not exist yet, so the superuser writes it. */
 export async function seedChannel(
   fx: Fixture,
   workspaceId: string,
@@ -134,7 +130,6 @@ export async function workspaceRow(fx: Fixture, id: string): Promise<Record<stri
   return found.rows[0];
 }
 
-/** Signs up a user and returns its id and session cookie. */
 export async function signedUser(fx: Fixture, label: string): Promise<{ id: string; cookie: string }> {
   const email = `${unique(label)}@example.test`;
   const cookie = await fx.signedIn(email);

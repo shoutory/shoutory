@@ -3,15 +3,14 @@ import { access, constants, stat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import type { RejectReason } from "@shoutory/core/media";
 
-// Reads one uploaded video with ffprobe, in a child process of its own. The child starts with an empty environment,
-// reads one temporary file (the image's build can open nothing else: it has the `file` protocol and no network one, and
-// the argv whitelists it again), is killed at its time limit or at its output limit, and prints one JSON document that
-// `parseProbe` checks field by field: nothing of it is trusted beyond the few facts the pipeline stores.
+// The child starts with an empty environment and can open only local files (the image's build has no network protocol,
+// and the argv whitelists `file` again). Its output is checked field by field: nothing is trusted beyond the few facts
+// the pipeline stores.
 
 const TIME_LIMIT_MS = 15_000;
 const MAX_OUTPUT_BYTES = 256 * 1024;
-// A child that dies of one of these has crashed on the file; any other signal that was not ours (the memory killer's, a
-// stop of the host) says nothing of the file, so the run throws and the asset is retried.
+// Any other signal that was not ours (the memory killer's, a stop of the host) says nothing of the file, so the run
+// throws and the asset is retried.
 const CRASH_SIGNALS: ReadonlySet<string> = new Set(["SIGSEGV", "SIGABRT", "SIGBUS", "SIGFPE", "SIGILL"]);
 // The `duration_ms` column is a 32-bit integer.
 const MAX_DURATION_MS = 2_147_483_647;
@@ -23,23 +22,19 @@ export type ProbeResult =
       readonly width: number;
       readonly height: number;
       readonly durationMs: number;
-      /** The container family the demuxer named: it must be the one the sniffed type belongs to. */
       readonly family: Family;
     }
   | { readonly ok: false; readonly reason: RejectReason };
 
-/** The demuxers the image's ffprobe is built with: `mov` reads mp4 and QuickTime, `matroska` reads webm. */
+// The demuxers the image's ffprobe is built with: `mov` reads mp4 and QuickTime, `matroska` reads webm.
 type Family = "mov" | "matroska";
 
 interface Options {
-  /** The absolute path of the ffprobe binary. */
   readonly ffprobePath: string;
-  /** The absolute path of the one file to read. */
   readonly inputPath: string;
-  /** The demuxer to read it with, from the type its bytes name: ffprobe is not left to guess it from the content. */
+  // From the type the bytes name: ffprobe is not left to guess it from the content.
   readonly demuxer: Family;
   readonly timeoutMs?: number;
-  /** Kills the child when the caller gives up (the relay's handler limit); the run then throws, like any crash. */
   readonly signal?: AbortSignal;
 }
 
@@ -49,7 +44,6 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 const isCover = (stream: Record<string, unknown>) =>
   isObject(stream.disposition) && stream.disposition.attached_pic === 1;
 
-/** The length of the file in milliseconds, from the container's figure or else the stream's; undefined when it is none. */
 function lengthMs(format: Record<string, unknown>, stream: Record<string, unknown>): number | undefined {
   const raw = format.duration ?? stream.duration;
   const seconds = typeof raw === "string" ? Number(raw) : raw;
@@ -58,7 +52,6 @@ function lengthMs(format: Record<string, unknown>, stream: Record<string, unknow
   return ms > 0 ? ms : undefined;
 }
 
-/** What ffprobe printed, checked: the first video stream that is not a cover picture gives the codec and size. */
 export function parseProbe(json: unknown): ProbeResult {
   if (!isObject(json) || !Array.isArray(json.streams) || !isObject(json.format)) return refusal("corrupt");
   const stream = json.streams.find(
@@ -83,10 +76,8 @@ export function parseProbe(json: unknown): ProbeResult {
   return { ok: true, codec, width: width as number, height: height as number, durationMs, family };
 }
 
-/**
- * The argv is fixed: only the demuxer and the path of the file change, and the protocol whitelist is repeated here
- * whatever the build has. `-f` before the input forces the demuxer (ffprobe documentation, "-f format").
- */
+// The argv is fixed: only the demuxer and the path change. `-f` before the input forces the demuxer (ffprobe
+// documentation, "-f format"), and the protocol allowlist is passed whatever the build allows.
 const argvFor = (inputPath: string, demuxer: Family) => [
   "-protocol_whitelist",
   "file",
@@ -101,7 +92,7 @@ const argvFor = (inputPath: string, demuxer: Family) => [
   inputPath,
 ];
 
-/** The output of the child as a document, or a throw: output that is no JSON is a crash of ours, not a verdict. */
+// Output that is no JSON is a crash of ours, not a verdict on the file.
 function parseOutput(output: Buffer): unknown {
   try {
     return JSON.parse(output.toString("utf8"));
@@ -111,7 +102,6 @@ function parseOutput(output: Buffer): unknown {
   }
 }
 
-/** How a child ended: its exit, what it printed (at most MAX_OUTPUT_BYTES) and whether a limit of ours killed it. */
 interface Ended {
   readonly code: number | null;
   readonly signal: string | null;
@@ -120,10 +110,6 @@ interface Ended {
   readonly tooMuch: boolean;
 }
 
-/**
- * Runs the binary with an empty environment and no shell, reads at most MAX_OUTPUT_BYTES of its output and kills it at
- * the time limit or the output limit. It answers how the child ended, and throws when the child could not start.
- */
 function runBounded(
   binary: string,
   argv: readonly string[],
@@ -174,11 +160,8 @@ function runBounded(
   });
 }
 
-/**
- * Probes one file. A file ffprobe cannot read (it exits non-zero), one that prints too much or runs too long is a
- * verdict on the file. A child that cannot start, is killed by a signal that was not ours or prints no JSON throws, and
- * the asset stays as it was for a retry.
- */
+// A file ffprobe cannot read, or that prints too much or runs too long, is a verdict on the file. A child that cannot
+// start, is killed by a signal that was not ours or prints no JSON throws, and the asset stays as it was for a retry.
 export async function runProbe(options: Options): Promise<ProbeResult> {
   if (!isAbsolute(options.inputPath)) throw new Error("the input of ffprobe is named by an absolute path");
   const ended = await runBounded(
@@ -212,11 +195,7 @@ async function checkExecutableFile(path: string): Promise<void> {
   }
 }
 
-/**
- * The worker's start check: the configured path names a file the worker may execute (an absolute path is the env's rule),
- * and running it with `-version`, under the probe's bounds, ends 0 with a first line that starts `ffprobe version`. A
- * wrong program at the path would otherwise reject every video as corrupt.
- */
+// A wrong program at the path would otherwise reject every video as corrupt.
 export async function checkFfprobePath(path: string): Promise<void> {
   await checkExecutableFile(path);
   const ended = await runBounded(path, ["-version"], TIME_LIMIT_MS);

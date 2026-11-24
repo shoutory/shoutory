@@ -31,25 +31,20 @@ const PUBLIC: Record<ErrorCode, { status: ContentfulStatusCode; message: string 
 };
 const RETRY_AFTER_SECONDS = "5";
 
-/** A setting a draft names that the channel does not accept: where it is and why, never its value. */
 interface SettingIssue {
   readonly variant: number;
   readonly key: string;
   readonly reason: "undeclared" | "type";
 }
-/** Fixed strings, the list of setting issues a refused draft carries and whether that list was cut. */
 export type RefusalDetails = Readonly<Record<string, string | boolean | readonly SettingIssue[]>>;
 
 interface RefusalOptions extends ErrorOptions {
   /** Fixed values and the caller's own setting names only: they are sent to the client. */
   readonly details?: RefusalDetails;
-  /** The `ETag` the answer carries (a 412 names the version the resource is at now), already quoted. */
   readonly etag?: string;
-  /** Seconds the client waits before retrying; sent as `Retry-After` on a 429 (the bucket's answer). */
   readonly retryAfterSeconds?: number;
 }
 
-/** A typed refusal: the one way a handler or middleware answers with an error. */
 export class Refusal extends Error {
   readonly details: RefusalDetails | undefined;
   readonly retryAfterSeconds: number | undefined;
@@ -81,10 +76,6 @@ const UNAVAILABLE_MESSAGES = [/timeout exceeded when trying to connect/i, /conne
 // A query builder wraps the driver error (Drizzle keeps it in `cause`), so the chain is read, to a bound.
 const MAX_CAUSE_DEPTH = 5;
 
-/**
- * A database outage: a connection that is refused, reset or timed out, SQLSTATE class 08 and 57P01 to 57P03, found
- * on the error or on a cause up to five levels down.
- */
 export function isUnavailable(error: unknown, depth = 0): boolean {
   if (!(error instanceof Error)) return false;
   const code = (error as { code?: unknown }).code;
@@ -116,7 +107,6 @@ const STORAGE_REFUSALS: Readonly<Record<StorageErrorKind, ErrorCode>> = {
   outside_root: "internal_error",
 };
 
-/** Maps anything thrown on a request path to a refusal; an unknown error becomes a 500 with no detail. */
 export function toRefusal(error: unknown): Refusal {
   if (error instanceof Refusal) return error;
   if (error instanceof StorageError)
@@ -130,7 +120,6 @@ export function toRefusal(error: unknown): Refusal {
   return new Refusal("internal_error", "unhandled error", { cause: error });
 }
 
-/** The error envelope of the public API; every 503 carries `Retry-After` (NFR-REL-13). */
 export function errorResponse(c: Context<AppEnv>, refusal: Refusal): Response {
   const { status, message } = PUBLIC[refusal.code];
   if (status === 503) c.header("Retry-After", RETRY_AFTER_SECONDS);

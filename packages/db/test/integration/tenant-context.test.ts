@@ -6,8 +6,6 @@ import { cloneTemplate, readTestEnv, type TestDatabase, withDatabase } from "../
 
 const env = readTestEnv();
 
-// Security floor: the context lives and dies with one transaction, so a pooled connection never carries a
-// previous request's tenant into the next one, whatever way the request ended.
 const A = randomUUID();
 const B = randomUUID();
 const PURPOSE = `o'brien "x"; --`;
@@ -20,7 +18,7 @@ const FULL = {
 
 type Ctx = Parameters<typeof withTenant>[1];
 
-// One clone and one single-connection pool per describe: a second request must reuse the first one's connection.
+// A single-connection pool: a second request must reuse the first one's connection.
 function useSingleConnectionPool(): () => Pool {
   let db: TestDatabase;
   let pool: Pool;

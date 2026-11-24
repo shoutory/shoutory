@@ -30,7 +30,6 @@ const records = (rows: Array<[string, string]>) =>
     },
   });
 
-// The three checks: what they are called, which call they make, and whether it needs the password.
 const CHECKS: Array<[string, string, keyof Api, string, boolean]> = [
   ["storage", "Check storage", "storageCheck", "/admin/storage/check", true],
   ["mail domain", "Check mail domain", "mailCheck", "/admin/mail/check", false],
@@ -78,7 +77,6 @@ describe("the mail and storage screen", () => {
     },
   );
 
-  // A check that writes asks for the password (its call is refused until then); the read-only domain check does not.
   it.each(CHECKS)("the %s check and the password dialog", async (_n, label, key, _path, step) => {
     const { host } = await openAdmin(PATH, step ? { [key]: () => refusal("step_up_required", 403) } : {});
     await press(host, label);

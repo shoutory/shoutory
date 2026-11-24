@@ -20,8 +20,6 @@ function render(error: ApiError, onRetry?: () => void) {
 const button = (host: Element, text: string) =>
   [...host.querySelectorAll("button")].find((candidate) => candidate.textContent === text);
 
-// ux-spec 6.2: what happened, what it means for the data, what to do, details with the request id (never the server's
-// own words); Retry only when trying again can help.
 describe("ErrorPanel", () => {
   it("names what happened and what it means, as an alert, and keeps the request id behind Details", () => {
     const host = render(new ApiError("internal_error", 500, "req-42"), vi.fn());

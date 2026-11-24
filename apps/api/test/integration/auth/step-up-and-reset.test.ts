@@ -63,7 +63,6 @@ describe("step-up", () => {
   });
 });
 
-// The `login_account` bucket of a subject: an address for sign-in, a user id for a signed-in user's checks.
 const key = (subject: string) => pepperDigest(new SealedSecret(PEPPER), "login_account", subject);
 const idOf = (email: string) =>
   fx.admin(
@@ -105,7 +104,6 @@ describe("a session holder's password checks spend the user's login bucket", () 
     await post("request-password-reset", { email });
     const token = tokenOf((await fx.mails(email))[0]);
     expect((await post("reset-password", { token, newPassword: NEW_PASSWORD })).status).toBe(200);
-    // Only the reset address is refilled.
     expect(Math.round((await tokens(neighbour)) ?? 0)).toBe(7);
     expect(Math.round((await tokens(email)) ?? 0)).toBe(100);
   });
@@ -137,7 +135,6 @@ describe("a session holder's password checks spend the user's login bucket", () 
 describe("sessions end when the credentials change", () => {
   const alive = async (session: Jar) =>
     (await fx.request("/api/auth/get-session", { headers: session.header })).status === 200;
-  // Each row: the user holds the current session and a second one; the change must end the second.
   const signedInTwice = async (email: string) => {
     const jar = new Jar(await fx.signedIn(email));
     return { jar, second: new Jar().add(await post("sign-in/email", { email, password: PASSWORD })) };
@@ -239,7 +236,6 @@ const due = (email: string) =>
         )
       ).rows[0]?.password_recheck_at ?? null,
   );
-// The mark of the second-factor row is planted: the outage-at-sign-up chain is the plain row's.
 const markedSecondFactor = async (email: string) => {
   await fx.enrolled(email);
   await fx.admin((client) =>

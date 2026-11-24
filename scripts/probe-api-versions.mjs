@@ -1,14 +1,11 @@
 #!/usr/bin/env node
-// Weekly probe of the pinned provider API versions (CI tooling, never app code). It reads only the `apiVersions` URLs
-// of the provider manifests, sends no credentials, and bounds each request by time and by bytes read. A URL that does
-// not answer, or answers with an error status, is reported; the scheduled workflow fails on any report.
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-// Reads at most `maxBytes` of the body, then cancels it; the probe only needs to know that the page answers.
+// The probe only needs to know that the page answers, so the body is cancelled after `maxBytes`.
 async function drain(response, maxBytes) {
   if (!response.body) return;
   const reader = response.body.getReader();

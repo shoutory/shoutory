@@ -13,11 +13,6 @@ import { openTx } from "../support/race.js";
 
 const env = readTestEnv();
 
-// Security floor of the media garbage collection definers: the candidate list reads every workspace for a job that holds
-// none and only its own for a job that holds some; `media_gc_take` is the one move of an asset to deleted, for a job of
-// the workspace only, and it rechecks the arm's own rule under the row lock, so an asset that was attached, put in the
-// library or made an avatar after the list was read is never taken. The arguments, the answer column `taken` and the
-// arm names are the contract the migration must meet. Rows are planted as the superuser; nothing sleeps.
 let db: TestDatabase;
 const admin = <T>(run: (client: Client) => Promise<T>) => withAdminClient(env, db.name, run);
 const rows = (sql: string, params: unknown[] = []) =>
@@ -44,7 +39,6 @@ const job = (workspaces: string[]): TenantCtx => ({
   principalId: randomUUID(),
   workspaceIds: workspaces,
 });
-// What `withSystem` gives a worker: a job with a purpose and no workspace.
 const SYSTEM_JOB: TenantCtx = { principalKind: "job", principalId: randomUUID(), jobPurpose: "maintenance" };
 const SERVICE: TenantCtx = {
   principalKind: "service",
@@ -87,7 +81,6 @@ async function plantAsset(o: Planted = {}): Promise<string> {
   }
   return id;
 }
-// The keys a take may hand to the job: the original first, then each derivative in the order of its profile.
 const PROFILES = ["small", "thumb"];
 const keysOf = (ws: string, id: string) => [
   `ws/${ws}/${id}/1/original`,
@@ -112,8 +105,7 @@ async function variantIn(): Promise<string> {
 const ATTACH =
   "INSERT INTO app.post_media (workspace_id, variant_id, position, media_id) VALUES ($1, $2, 0, $3)";
 const attach = async (asset: string) => rows(ATTACH, [WA, await variantIn(), asset]);
-// A post that names an asset in any state, as the superuser with the triggers off, so the state is not what the attach
-// guard would have allowed (a deleted asset a post still names).
+// Triggers off, so the attach guard does not refuse a deleted asset a post still names.
 async function attachUnchecked(asset: string): Promise<void> {
   const variant = await variantIn();
   await admin(async (client) => {
@@ -124,7 +116,6 @@ async function attachUnchecked(asset: string): Promise<void> {
   });
 }
 
-// Runs one call under any principal and commits it.
 async function commit(ctx: TenantCtx, sql: string, params: unknown[]): Promise<Record<string, unknown>[]> {
   const client = await openTx(db.pool("worker"), ctx);
   try {
@@ -136,7 +127,6 @@ async function commit(ctx: TenantCtx, sql: string, params: unknown[]): Promise<R
     client.release();
   }
 }
-// The take answers the object keys the job may remove (the original, then the derivatives), and none when it did not take.
 const TAKE = "SELECT object_key FROM app.media_gc_take($1, $2, $3)";
 const take = async (ctx: TenantCtx, ws: string, asset: string, arm: string) =>
   (await commit(ctx, TAKE, [ws, asset, arm])).map((row) => row.object_key as string);
@@ -208,7 +198,6 @@ describe("what the candidate list offers beyond the 0019 rules", () => {
   );
 });
 
-// [row, what is planted, the arm asked for, the answer, the state afterwards]. The arm's own rule is rechecked at the take.
 const TAKES: [string, Planted, string, boolean, string][] = [
   [
     "a pending upload 25 hours old",
@@ -329,7 +318,6 @@ describe("an asset that became needed after the list was read is not taken (race
   });
 });
 
-// Some other backend is blocked on a lock of this database (the second writer of a race, seen waiting).
 async function untilSomeoneWaits(): Promise<void> {
   for (let tries = 0; tries < 400; tries++) {
     const waiting = await rows(

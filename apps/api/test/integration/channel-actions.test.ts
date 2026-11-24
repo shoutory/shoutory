@@ -14,10 +14,6 @@ import {
 } from "../support/tenancy.js";
 import { type Fixture, PEPPER, startFixture } from "./auth/harness.js";
 
-// The actions of the channel answers: the server says what the caller may do with each channel and with the list, so a
-// screen never derives an action. `connect` (the list) and `reconnect` (a row) need channels.manage and a provider with a
-// connect side; `check` needs channels.manage, a connected channel and a provider the check can reach.
-
 type User = { id: string; cookie: string };
 type Registered = { fx: Fixture; ws: string; other: string; users: Record<string, User> };
 const CONNECTING = "fixture_oauth";
@@ -28,7 +24,6 @@ let sim: Awaited<ReturnType<typeof startFixtureOAuthSimulator>>;
 let main: Registered;
 let plainOnly: Registered;
 
-// A registry, an organization with one member per role, and a second workspace of another organization.
 async function register(providers: Record<string, boolean>, label: string): Promise<Registered> {
   const connecting = createFixtureAdapter({ baseUrl: sim.url, clientId: FAKE_CLIENT, issuer: sim.url });
   const plain = createFixtureAdapter({ baseUrl: sim.url });

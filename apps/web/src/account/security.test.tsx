@@ -56,7 +56,6 @@ async function changePassword(api: Parameters<typeof stubApi>[0] = {}, next = NE
   return { ...opened, stub };
 }
 
-// NFR-SEC-28..30: the current password goes once with the new one (a stale identity check is X-04's); nothing is kept.
 describe("changing the password (security floor)", () => {
   it("changes it with only the two passwords, in one call, and keeps both out of URLs and storage", async () => {
     stubApi();
@@ -96,7 +95,6 @@ describe("changing the password (security floor)", () => {
 describe("the password change answers", () => {
   it("success says the other devices were signed out and that this one stays signed in", async () => {
     const { host, stub } = await changePassword();
-    // The change ends the other sessions, so the device list is read again.
     expect(stub.mock.calls.filter(([path]) => path === "/api/auth/sessions")).toHaveLength(2);
     const statuses = [...host.querySelectorAll('[role="status"]')].map((node) => node.textContent).join(" ");
     expect(statuses).toMatch(/other devices were signed out/i);
@@ -114,7 +112,7 @@ describe("the password change answers", () => {
     ],
     [
       "a wrong current password",
-      // The server's answer: apps/api change-password adds the reason to the library's INVALID_PASSWORD.
+      // The server adds the reason to the library's INVALID_PASSWORD code.
       { changePassword: () => refusal("validation_failed", 400, { reason: "current_password_wrong" }) },
       /not right/i,
     ],
@@ -213,7 +211,6 @@ describe("the two-step verification block", () => {
   });
 });
 
-// F-TEAM-006, NFR-SEC-17: new codes are asked for with the password, shown once and kept nowhere.
 describe("new recovery codes (security floor)", () => {
   async function regenerate() {
     const stub = stubApi({

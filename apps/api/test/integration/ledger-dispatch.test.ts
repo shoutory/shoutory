@@ -22,10 +22,6 @@ import {
   useDispatchEnv,
 } from "../support/ledger-dispatch-env.js";
 
-// Security floor of the dispatch: the worker marks that a post may have been sent before it calls the provider, in a
-// transaction of its own; it records the result and the move together; it never resends after an unknown outcome unless
-// the manifest and the key window allow it, and then only through a normal publish turn; and a worker that lost its lease
-// writes nothing more. The environment of the rows is `support/ledger-dispatch-env.ts`.
 useDispatchEnv();
 
 // [crash, the call that is held (it never reaches the provider), what runs first, the plant, the state the sweep leaves]
@@ -54,7 +50,6 @@ describe("a crash at every step of a dispatch", () => {
   it.each(CRASHES)(
     "%s ends in a defined state with at most one create at the provider",
     async (name, match, first, planted, left) => {
-      // fails first because: the turn ends before the call, so nothing is dispatched, recovered or counted
       const hold = holdFirst(match ?? (() => false));
       let current = "";
       let ended = false;
@@ -131,7 +126,6 @@ describe("a resend after an unknown outcome", () => {
   it.each(GONE)(
     "is never sent when %s in between",
     async (_name, change, after) => {
-      // fails first because: the reconcile turn calls the provider itself, without the live re-read of a publish turn
       const e = await makeEnv();
       try {
         const id = await plant(e, { state: "unknown_external_state", effect: "possible", reconcile: true });
@@ -154,7 +148,6 @@ describe("a resend after an unknown outcome", () => {
 
 describe("an absence read before a resend", () => {
   it("does not count for the cycle after it: the old id is not read again", async () => {
-    // fails first because: the read-back target and the absence reads are taken from the whole history of the row
     const e = await makeEnv({
       manifest: {
         readBackGapSeconds: 1,
@@ -169,15 +162,13 @@ describe("an absence read before a resend", () => {
       await sleep(1_200);
       await e.tick();
       expect(await opOf(id)).toMatchObject({ state: "retry_wait", effect: "none" });
-      // The resend times out: unknown again, with no id of its own.
       await e.tick();
       e.sim.arm("commit", { kind: "hang" });
       await e.turn();
       expect(await opOf(id)).toMatchObject({ state: "unknown_external_state", effect: "possible" });
       await rows("UPDATE app.operations SET next_check_at = now() WHERE id = $1", [id]);
       await e.tick();
-      // No read of the old id counted for this cycle, so nothing is proven; the resend holds no id of its own, so it goes to
-      // a person instead of waiting for a read-back nothing can make.
+      // The resend holds no id of its own, so it goes to a person instead of waiting for a read-back nothing can make.
       expect(await opOf(id)).toMatchObject({
         state: "needs_human",
         effect: "possible",
@@ -198,7 +189,6 @@ describe("an absence read before a resend", () => {
 
 describe("the effect marker", () => {
   it("is committed and visible from a second session when the simulator receives the commit", async () => {
-    // fails first because: the marker is written late or with the result, so the provider gets a call the ledger does not know
     let seen: Record<string, unknown> | undefined;
     let id = "";
     const e = await makeEnv({
@@ -242,18 +232,12 @@ const UNKNOWN: [string, Record<string, unknown>, string, boolean][] = [
     "needs_human",
     true,
   ],
-  [
-    "a provider that cannot read back (class E)",
-    { ...READ_BACK_ONLY, readBackMode: "E" },
-    "needs_human",
-    true,
-  ],
+  ["a provider that cannot read back", { ...READ_BACK_ONLY, readBackMode: "E" }, "needs_human", true],
 ];
 describe("a timeout after the send", () => {
   it.each(UNKNOWN)(
     "ends unknown with its horizon and is never resent: %s",
     async (_name, manifest, after, notice) => {
-      // fails first because: the call is not made, or a timeout is written as a failure and the post is sent again
       const e = await makeEnv({ manifest });
       try {
         e.sim.arm("commit", { kind: "hang" });
@@ -271,7 +255,7 @@ describe("a timeout after the send", () => {
         await rows("UPDATE app.operations SET next_check_at = now() WHERE id = $1", [id]);
         await e.tick();
         expect(e.commits.count).toBe(1);
-        // A provider that cannot read back has no reason to give (no id is missing, no credential): the plan's reason, none.
+        // A provider that cannot read back has no reason code to give.
         expect(await opOf(id)).toMatchObject({
           state: after,
           escalated: notice,
@@ -291,7 +275,6 @@ describe("a timeout after the send", () => {
 
 describe("the heartbeat of a dispatch", () => {
   it("keeps running from the claim through the call that was already sent", async () => {
-    // fails first because: the beat stops when the turn is ready, so a long commit call outlives its lease
     const hold = holdFirst(isCommit);
     const e = await makeEnv({ hold, lease: 24 });
     try {
@@ -333,7 +316,6 @@ describe("a lease lost during the call", () => {
   it.each(LOST)(
     "ends the turn lost with no later write: %s",
     async (_name, lose) => {
-      // fails first because: the worker records a result, or moves the row, after its lease went to another
       const hold = holdFirst(isCommit);
       const e = await makeEnv({ hold, lease: 24 });
       try {

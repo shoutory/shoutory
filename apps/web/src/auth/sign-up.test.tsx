@@ -27,8 +27,6 @@ async function signUp(api: Parameters<typeof stubApi>[0] = {}, password = PASSWO
 const signUpCalls = (stub: Awaited<ReturnType<typeof signUp>>["stub"]) =>
   stub.mock.calls.filter(([path]) => path.includes("/api/auth/sign-up/email"));
 
-// NFR-SEC-28..30: the form never submits natively, the fields say what they are, and the password goes nowhere
-// but the one POST. The answer is alike for a new, an existing and a closed address.
 describe("the sign-up form (security floor)", () => {
   it("a submit is prevented, so the browser never sends a GET with the password in the URL", async () => {
     stubApi();

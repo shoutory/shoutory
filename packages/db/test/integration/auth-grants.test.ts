@@ -9,9 +9,7 @@ import {
 
 const env = readTestEnv();
 
-// Security floor: the identity tables belong to the auth role alone. They sit on the row-security allowlist, so the
-// grants are the whole defence. One matrix constant per role: a later column grant adds a row here, it does not
-// loosen the rest.
+// The identity tables sit on the row-security allowlist, so the grants are the whole defence.
 const TABLES = ["user", "session", "account", "verification", "two_factor"] as const;
 const PRIVILEGES = [
   "SELECT",
@@ -75,12 +73,10 @@ async function ownershipViolations(pool: Pool): Promise<string[]> {
   return found;
 }
 
-/** Everything the catalog says that the grant design forbids. An empty list is a pass. */
 async function violations(pool: Pool): Promise<string[]> {
   return [...(await privilegeViolations(pool)), ...(await ownershipViolations(pool))];
 }
 
-/** One clone per describe. */
 function useClone(): () => TestDatabase {
   let db: TestDatabase;
   beforeAll(async () => {
@@ -142,7 +138,6 @@ describe("auth tables: shape under shoutory_auth", () => {
   });
 });
 
-// The check must fail for a grant planted on purpose: one row per way the matrix can be broken.
 describe("the auth grant check catches a planted grant", () => {
   const clone = useClone();
 

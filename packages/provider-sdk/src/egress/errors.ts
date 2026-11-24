@@ -14,15 +14,11 @@ export type EgressErrorClass =
   | "size_exceeded"
   | "network";
 
-/**
- * The only error the egress client throws (review M8). It carries the class, the host and a status, and never the
- * original error: undici errors can hold the full URL with query tokens and the request headers.
- */
+// It never carries the original error: undici errors can hold the full URL with query tokens and the request headers.
 export class EgressError extends Error {
   readonly class: EgressErrorClass;
   readonly host: string;
   readonly status: number | undefined;
-  /** Whether the request may have taken effect: none before sending, possible after. */
   readonly effect: Effect;
 
   constructor(init: { class: EgressErrorClass; host: string; status?: number; effect?: Effect }) {
@@ -76,7 +72,6 @@ function codeOf(error: unknown): string | undefined {
   return undefined;
 }
 
-/** Turns any network failure into an `EgressError` that holds no part of the original. */
 export function wrapNetworkError(error: unknown, host: string): EgressError {
   for (let current = error, depth = 0; current instanceof Error && depth < 4; depth += 1) {
     if (current instanceof EgressError) return current;

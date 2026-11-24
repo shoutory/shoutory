@@ -4,7 +4,6 @@ import { isUnavailable, Refusal } from "../errors/refusal.js";
 
 const UNDEFINED_TABLE = "42P01";
 
-/** The shipped migrations against the applied ones: how many of the shipped files are applied, and which are not. */
 export interface MigrationStatus {
   readonly applied: number;
   readonly shipped: number;
@@ -13,7 +12,7 @@ export interface MigrationStatus {
 
 let shipped: Promise<string[]> | undefined;
 
-/** The names of the migration files this build ships, read once; a failed read is not remembered. */
+// Read once; a failed read is not remembered.
 async function shippedNames(): Promise<string[]> {
   shipped ??= loadMigrations().then((all) => all.map(({ name }) => name));
   return shipped.catch((error: unknown) => {
@@ -39,7 +38,6 @@ async function appliedNames(pool: AppPool): Promise<Set<string>> {
   }
 }
 
-/** The one comparison of applied and shipped migrations, for the readiness probe and the admin system answer. */
 export async function migrationStatus(pool: AppPool): Promise<MigrationStatus> {
   const names = await shippedNames();
   const applied = await appliedNames(pool);

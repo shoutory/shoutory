@@ -15,7 +15,6 @@ const ROUTES: Record<MatrixOperation, string> = {
   edit: `PATCH ${POST}/:id`,
 };
 
-// The fixture network documents one error code per refusal; a 400 carries the code the test names.
 const ERROR_CODES: Readonly<Record<number, string>> = {
   401: "grant_revoked",
   403: "target_refused",
@@ -83,8 +82,7 @@ export function fixtureRoutes(posts: Map<string, StoredPost>): Readonly<Record<s
   return {
     [ROUTES.commit]: create,
     "POST /v1/validate": () => ({ status: 200, body: {} }),
-    // Like a real network, the account read wants the access token. `/v1/me` names the account a token belongs to (the
-    // connect reads it once); `/v1/account` is the health read, so a fault armed on one never lands on the other.
+    // Two routes so a fault armed on the connect read never lands on the health read.
     "GET /v1/account": account,
     "GET /v1/me": account,
     [ROUTES.readBack]: (request) => {
@@ -110,7 +108,6 @@ export function fixtureRoutes(posts: Map<string, StoredPost>): Readonly<Record<s
   } satisfies Record<string, Handler>;
 }
 
-/** Starts the fixture network on a loopback port. It answers the fixture adapter and arms matrix faults. */
 export async function startFixtureSimulator(options: SimulatorOptions = {}) {
   const posts = new Map<string, StoredPost>();
   const simulator = await startSimulator(fixtureRoutes(posts), options);

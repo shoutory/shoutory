@@ -13,12 +13,6 @@ import { openTx } from "../support/race.js";
 
 const env = readTestEnv();
 
-// Security floor of the effect SQL: the marker of an effect is committed before the call and a stale holder writes
-// nothing, the guard resets an effect only on proof, a definer that ends an operation locks the post and the variant
-// first, a person resolves only from the states the table allows, on a channel that can send, and every new table and
-// definer refuses the callers that are not its own. The function names, argument lists, answer columns (`outcome`,
-// `new_operation_id`), the result and change keys and the error codes are the contract the migration must meet. Rows
-// are planted as the superuser with the triggers off; a refused call is rolled back and reported, never thrown.
 let db: TestDatabase;
 const admin = <T>(run: (client: Client) => Promise<T>) => withAdminClient(env, db.name, run);
 const rows = (sql: string, params: unknown[] = []) =>
@@ -72,7 +66,6 @@ interface Planted {
   post: string;
   variant: string;
 }
-// A post with one variant and an operation on it in a given state, as earlier moves would have left it.
 async function plant(o: Plant = {}): Promise<Planted> {
   const ws = o.ws ?? WA;
   const [post] = await rows(
@@ -138,7 +131,6 @@ interface Answer {
   rows?: Record<string, unknown>[];
   error?: { code?: string; message?: string } | undefined;
 }
-// One call as the caller in its own transaction: committed when it answers, rolled back when it is refused.
 async function exec(ctx: TenantCtx, sql: string, params: unknown[], before: string[] = []): Promise<Answer> {
   const client = await openTx(db.pool(poolOf(ctx)), ctx);
   try {
@@ -167,7 +159,6 @@ const resolve = (id: string, kind: string, args: Record<string, unknown> = {}, c
 
 describe("the effect marker and the fence of an attempt", () => {
   it("the effect marker is committed and visible from a second session when attempt_start returns", async () => {
-    // fails first because: there is no attempt definer, so the marker and the attempt row are written late or apart
     const planted = await plant({ state: "claimed" });
     const answer = await start(planted.id);
     expect(answer.rows?.[0]).toMatchObject({ outcome: "started" });
@@ -193,13 +184,11 @@ describe("the effect marker and the fence of an attempt", () => {
     });
   });
 
-  // [case, the operation's token and owner against the call's]
   const STALE: [string, number, string][] = [
     ["a token that moved on", 99, "worker-a"],
     ["another lease owner", 1, "worker-b"],
   ];
   it.each(STALE)("a stale holder cannot start an attempt: %s", async (_name, token, owner) => {
-    // fails first because: the start is not fenced by the token and the owner, so a worker that lost its lease marks an effect
     const planted = await plant({ state: "claimed" });
     expect((await start(planted.id, token, owner)).rows?.[0]).toMatchObject({ outcome: "lost_lease" });
     expect(await opOf(planted.id)).toMatchObject({
@@ -211,7 +200,6 @@ describe("the effect marker and the fence of an attempt", () => {
   });
 });
 
-// [step, the state the operation is in, its effect]: a start of a step that sends nothing writes the attempt row only
 const QUIET: [string, string, string][] = [
   ["prepare", "claimed", "none"],
   ["prepare", "processing", "none"],
@@ -222,7 +210,6 @@ describe("the start of a step that sends nothing", () => {
   it.each(QUIET)(
     "a %s start in %s writes the attempt row with no move and the effect kept",
     async (step, state, effect) => {
-      // fails first because: every start marks an effect or moves the operation, or only a commit start is accepted
       const planted = await plant({ state, effect });
       expect((await start(planted.id, 1, "worker-a", LEDGER, WA, step)).rows?.[0]).toMatchObject({
         outcome: "started",
@@ -249,7 +236,6 @@ describe("the start of a step that sends nothing", () => {
   ])(
     "a committing start from %s moves to dispatching by %s, keeping the token and the lease",
     async (from, actor) => {
-      // fails first because: the move into dispatching is still open to operation_transition, which writes no attempt row
       const planted = await plant({ state: from });
       expect((await start(planted.id)).rows?.[0]).toMatchObject({ outcome: "started" });
       expect(await opOf(planted.id)).toMatchObject({
@@ -265,7 +251,6 @@ describe("the start of a step that sends nothing", () => {
   );
 
   it("numbers every start but counts only the commit start", async () => {
-    // fails first because: a prepare start raises attempt_count, so the attempts the manifest allows are used up by uploads
     const planted = await plant({ state: "claimed" });
     await start(planted.id, 1, "worker-a", LEDGER, WA, "prepare");
     await start(planted.id);
@@ -283,7 +268,6 @@ describe("the start of a step that sends nothing", () => {
 
 describe("the finish of an attempt", () => {
   it("a stale token cannot finish an attempt and the right token finishes it once", async () => {
-    // fails first because: the finish is not fenced, so a worker that lost its lease rewrites the result of an attempt
     const planted = await plant({ state: "claimed" });
     await start(planted.id);
     const [attempt] = await rows("SELECT id FROM app.operation_attempts WHERE operation_id = $1", [
@@ -310,7 +294,6 @@ describe("the finish of an attempt", () => {
 });
 
 type Proof = "attempt" | "absent" | "human";
-// [row, from, to, actor, the proof the move needs, the reason the target state holds]
 const RESETS: [number, string, string, string, Proof, string | null][] = [
   [42, "needs_human", "retry_wait", "U", "absent", null],
   [42, "needs_human", "retry_wait", "U", "human", null],
@@ -331,13 +314,12 @@ const EVIDENCE_ROW = (op: string, kind: string, level: string, ago: string, ws =
      VALUES ($1, $2, $3, $4, 'fixture', now() - $5::interval)`,
     [ws, op, kind, level, ago],
   );
-// Every proof there is, on an operation other than the one that moves: it must never count for the one that does.
+// Every proof there is, on another operation: it must never count for the one that moves.
 async function decoy(op: string, ws = WA): Promise<void> {
   await ATTEMPT(op, "none", true, ws);
   await EVIDENCE_ROW(op, "absent", "read_back", "1 minute", ws);
   await EVIDENCE_ROW(op, "human_confirmed", "human", "0 seconds", ws);
 }
-// What a move needs, in the order a proof is built: nothing, a near miss, the proof itself.
 async function nearMiss(op: string, proof: Proof): Promise<void> {
   await ATTEMPT(op, "possible", true);
   if (proof !== "attempt") await EVIDENCE_ROW(op, "absent", "read_back", "30 minutes");
@@ -376,7 +358,6 @@ describe("the guard that lets an effect go back to none", () => {
   it.each(RESETS)(
     "row %i (%s to %s) is refused with no proof and with a near miss, and passes with its proof (%s)",
     async (_row, from, to, actor, proof, reason) => {
-      // fails first because: the guard lets an effect reset by the row number alone, whatever the attempt and the evidence say
       const planted = await resetPlant(from);
       expect((await direct(planted.id, to, actor, reason)).error?.code).toBe("SH409");
       await nearMiss(planted.id, proof);
@@ -391,7 +372,6 @@ describe("the guard that lets an effect go back to none", () => {
   );
 });
 
-// [row, from, to, actor, proof, the reason the target state holds]: the moves that take an effect back to none
 const BACKSTOP: [number, string, string, string, Proof, string | null][] = [
   [19, "dispatching", "retry_wait", "W", "attempt", null],
   [20, "dispatching", "failed", "W", "attempt", null],
@@ -405,7 +385,6 @@ describe("a move into a state that holds no effect", () => {
   it.each(BACKSTOP)(
     "row %i (%s to %s) is refused when the statement keeps the effect, even with the proof in place",
     async (_row, from, to, actor, proof, reason) => {
-      // fails first because: a move into retry_wait, failed, paused or cancelled that keeps its effect passes the guard
       const planted = await resetPlant(from);
       await nearMiss(planted.id, proof);
       await prove(planted.id, proof);
@@ -415,7 +394,6 @@ describe("a move into a state that holds no effect", () => {
   );
 });
 
-// [row, from, to, actor, proof, changes of the call]
 const VIA: [number, string, string, string, Proof, Record<string, unknown>][] = [
   [19, "dispatching", "retry_wait", "W", "attempt", {}],
   [20, "dispatching", "failed", "W", "attempt", {}],
@@ -427,7 +405,6 @@ describe("the moves that reset an effect, by operation_transition", () => {
   it.each(VIA)(
     "operation_transition runs row %i only with its proof: no proof, a near miss and another operation's proof are refused, then it moves",
     async (_row, from, to, actor, proof, changes) => {
-      // fails first because: the guard lets an effect reset by the row number alone, whatever the attempt and the evidence say
       const planted = await resetPlant(from);
       const args = [WA, planted.id, 1, from, to, actor, JSON.stringify(changes)];
       expect((await exec(WORKER, TRANSITION, args)).error?.code).toBe("SH409");
@@ -442,8 +419,7 @@ describe("the moves that reset an effect, by operation_transition", () => {
     },
   );
 
-  it("a caller that sets app.idempotent_resend itself still cannot pass row 36 without proof", async () => {
-    // fails first because: the flag is read from a setting the caller can set, or row 36 is refused whatever the flag says
+  it("a caller that sets app.idempotent_resend itself still cannot pass the guard without proof", async () => {
     const planted = await resetPlant("reconciling");
     const args = (changes: object) => [
       WA,
@@ -467,7 +443,6 @@ describe("the moves that reset an effect, by operation_transition", () => {
 
 describe("the post and variant locks of a definer that ends an operation", () => {
   it("two sessions ending operations of one post never deadlock and the rollup lands once", async () => {
-    // fails first because: no trigger rolls the post up, and an ending definer that locks the operation first can deadlock with it
     const planted = await plant({ state: "dispatching", effect: "possible" });
     await admin(async (holder) => {
       await holder.query("BEGIN");
@@ -519,7 +494,6 @@ describe("the post and variant locks of a definer that ends an operation", () =>
   });
 });
 
-// [kind, state of the operation, kind of the operation, the state afterwards (null: refused), step-up stamped, effect planted]
 type Row = [string, string, string, string | null, boolean, string];
 const RESOLUTIONS: Row[] = [
   ["attest_published", "needs_human", "publish", "published", true, "possible"],
@@ -549,7 +523,6 @@ describe("resolve_operation", () => {
   it.each(RESOLUTIONS)(
     "%s on %s (%s operation) ends in %s",
     async (kind, from, opKind, after, stepUp, effect) => {
-      // fails first because: there is no resolution definer, or one that moves from a state the table does not allow
       const planted = await plant({ state: from, kind: opKind, effect });
       const answer = await resolve(planted.id, kind, ACK);
       const [resolution] = await rows(
@@ -570,7 +543,6 @@ describe("resolve_operation", () => {
     },
   );
 
-  // [kind, state, channel state, whether it is refused]: a resolution that would send needs a connected channel
   const CHANNELS: [string, string, string, boolean][] = [
     ["attest_not_executed", "needs_human", "needs_reconnect", true],
     ["attest_not_executed", "needs_human", "disabled", true],
@@ -581,7 +553,6 @@ describe("resolve_operation", () => {
     ["drop", "needs_human", "needs_reconnect", false],
   ];
   it.each(CHANNELS)("%s on %s with a %s channel: refused is %s", async (kind, state, channel, refused) => {
-    // fails first because: a resolution that sends is not refused on a channel that cannot send, or one that sends nothing is
     const effect = ["drop", "publish_late"].includes(kind) ? "none" : "possible";
     const planted = await plant({ state, channel, effect });
     const answer = await resolve(planted.id, kind, ACK);
@@ -596,7 +567,6 @@ describe("resolve_operation", () => {
 });
 
 describe("a drop or a reschedule of a post that may have been sent", () => {
-  // [kind, the evidence the id names, whether it is refused]
   const ABSENCE: [string, "fresh" | "stale" | "other" | "none", boolean][] = [
     ["drop", "fresh", false],
     ["reschedule", "fresh", false],
@@ -605,7 +575,6 @@ describe("a drop or a reschedule of a post that may have been sent", () => {
     ["reschedule", "none", true],
   ];
   it.each(ABSENCE)("%s with %s absence evidence: refused is %s", async (kind, which, refused) => {
-    // fails first because: a post with a possible effect is dropped or rescheduled, or any evidence id is trusted
     const planted = await plant({ state: "needs_human", effect: "possible" });
     await ATTEMPT(planted.id, "possible", true);
     const other = await plant({ state: "needs_human", effect: "possible" });
@@ -631,7 +600,6 @@ describe("a drop or a reschedule of a post that may have been sent", () => {
 });
 
 describe("the permalink of an attestation", () => {
-  // [permalink, whether it is refused]
   const LINKS: [string, boolean][] = [
     ["https://example.test/post/1", false],
     ["http://example.test/post/1", false],
@@ -640,7 +608,6 @@ describe("the permalink of an attestation", () => {
     [`https://example.test/${"a".repeat(2040)}`, true],
   ];
   it.each(LINKS)("%s is refused: %s", async (permalink, refused) => {
-    // fails first because: any text is kept as the link a person is later sent to
     const planted = await plant({ state: "needs_human", effect: "possible" });
     const answer = await resolve(planted.id, "attest_published", { permalink });
     if (refused) {
@@ -654,7 +621,6 @@ describe("the permalink of an attestation", () => {
 
 describe("a delete beside a publish in flight", () => {
   it("is refused while a publish of the same target is in flight", async () => {
-    // fails first because: nothing keeps a delete from being admitted beside a publish that may already have sent
     const planted = await plant({ state: "dispatching", effect: "possible" });
     const fields = {
       variant_id: planted.variant,
@@ -689,7 +655,6 @@ describe("a delete beside a publish in flight", () => {
 });
 
 describe("who may call the effect SQL", () => {
-  // [case, the caller, the call (built from the planted operation), the SQLSTATE of the refusal or "unchanged"]
   type Call = (planted: Planted, foreign: Planted) => [string, unknown[]];
   const quota = "SELECT count(*) FROM app.provider_quota_ledger";
   const CASES: [string, TenantCtx, Call, string][] = [
@@ -721,7 +686,6 @@ describe("who may call the effect SQL", () => {
     ["the app role reading the quota ledger", OWNER, () => [quota, []], "42501"],
   ];
   it.each(CASES)("refuses %s", async (_name, ctx, call, expected) => {
-    // fails first because: a new definer or table answers a caller that is not its own, or does not exist to refuse it
     const planted = await plant({ state: "needs_human", effect: "possible" });
     const foreign = await plant({ ws: WB, state: "claimed" });
     const [sql, params] = call(planted, foreign);

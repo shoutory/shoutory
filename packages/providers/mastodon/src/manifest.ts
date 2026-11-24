@@ -1,16 +1,10 @@
 import { manifestSchema } from "@shoutory/provider-sdk/manifest";
 
-// Every number below names the page it was read from and the day it was read (docs.joinmastodon.org, 2026-11-24). A
-// number an instance states itself (`GET /api/v2/instance`) replaces the default here when a channel connects and
+// A number an instance states itself (`GET /api/v2/instance`) replaces the default here when a channel connects and
 // whenever its health is read, so these are only what the documentation says an unmodified instance allows.
 const INSTANCE_DOCS = "https://docs.joinmastodon.org/methods/instance/";
 const CHECKED = "2026-11-24";
 
-/**
- * The manifest of the Mastodon network. Its accounts live on user-chosen servers, so its host is the channel's own stored
- * instance (`egressHostSource`), never a list. It declares what the adapter ships: text posts and their delete; media,
- * edit and threads are declared as each ships.
- */
 export const mastodonManifest = manifestSchema.parse({
   id: "mastodon",
   displayName: "Mastodon",
@@ -22,13 +16,13 @@ export const mastodonManifest = manifestSchema.parse({
   capabilities: ["text", "delete"],
   readBackMode: "A",
   // The native Idempotency-Key (docs.joinmastodon.org/methods/statuses/, "stored for up to 1 hour"). VERIFY: the window is
-  // measured on a live instance before a resend is ever allowed (V-58), so a resend after an unknown outcome waits for a
+  // measured on a live instance before a resend is ever allowed, so a resend after an unknown outcome waits for a
   // read-back.
   idempotency: { mechanism: "header", keyWindowSeconds: 3600, resendAfterUnknown: "read_back_only" },
   // A delete whose outcome is unknown is never sent again on its own: a 404 is confirmed by a read, and a status that is
   // still there after one is an unknown outcome for a person to decide.
   retrySafety: { prepare: "safe", commit: "read_back_first", readBack: "safe", delete: "never" },
-  // 300 calls per 5 minutes per account and 30 media uploads per 30 minutes (PF-M09; docs.joinmastodon.org/api/rate-limits/,
+  // 300 calls per 5 minutes per account and 30 media uploads per 30 minutes (docs.joinmastodon.org/api/rate-limits/,
   // read 2026-11-24).
   rateLimits: [
     { name: "api", scope: "account", key: "account", max: 300, windowSeconds: 300 },

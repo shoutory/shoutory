@@ -5,9 +5,6 @@ import { ApiError, request } from "../../http/client";
 import { Button } from "../../ui/button";
 import { useSignIn } from "./channels-hub";
 
-// Starting the OAuth flow: one POST that answers where to send the browser. The browser goes there only when the
-// server's answer is an https address, never from a query, a prop or storage; anything else is the error line.
-
 export type StartFailure = "forbidden" | "not_found" | "rate_limited" | "unavailable" | "server";
 const answerSchema = z.object({ authorize_url: z.string() });
 
@@ -39,7 +36,6 @@ const START_WORDS: Record<StartFailure, ReactNode> = {
   ),
 };
 
-/** The line of a failed start; `testId` names it for the part of the page that shows it. */
 export function StartError({ failure, testId }: { failure: StartFailure; testId: string }) {
   return (
     <p data-testid={testId} data-reason={failure} role="alert" className="text-sm">
@@ -48,7 +44,7 @@ export function StartError({ failure, testId }: { failure: StartFailure; testId:
   );
 }
 
-// The address as the browser will take it, or null when it is not an https address.
+// The browser is sent only to an https address from the server's answer, never one from a query, prop or storage.
 function httpsAddress(value: string): string | null {
   try {
     const url = new URL(value);
@@ -66,7 +62,6 @@ function failureOf(error: ApiError): StartFailure {
   return error.state === "maintenance" ? "unavailable" : "server";
 }
 
-/** The Reconnect button of a card: it starts the connection of that channel through its own provider. */
 export function Reconnect(props: { ws: string; providerId: string; channelId: string; nameId: string }) {
   const { start, busy, failure } = useStart(props.ws);
   return (
@@ -84,11 +79,6 @@ export function Reconnect(props: { ws: string; providerId: string; channelId: st
   );
 }
 
-/**
- * The start of a connection in workspace `ws`. A second press while one is pending is ignored, and the page showing
- * again (the back button restores it) lets the person press again. An answer that arrives after the part of the page
- * that started it is gone (a closed dialog, another workspace) moves nothing.
- */
 export function useStart(ws: string) {
   const [failure, setFailure] = useState<StartFailure | null>(null);
   const [busy, setBusy] = useState(false);
@@ -96,8 +86,7 @@ export function useStart(ws: string) {
   const live = useRef(true);
   const expired = useSignIn();
 
-  // One definition for the handlers and the page-show listener; it only touches a ref and a state setter, so it is stable
-  // and the listener is subscribed once.
+  // Stable, so the pageshow listener (the back button restores the page) is subscribed once.
   const release = useCallback(() => {
     pressed.current = false;
     setBusy(false);
@@ -131,7 +120,6 @@ export function useStart(ws: string) {
     if (error.state === "session_expired") expired();
     else setFailure(failureOf(error));
   };
-  /** Starts the connection; false when one is already pending and nothing was sent. */
   const start = (providerId: string, channelId?: string): boolean => {
     if (pressed.current) return false;
     pressed.current = true;

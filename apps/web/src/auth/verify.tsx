@@ -13,7 +13,6 @@ import { useMailedToken } from "./link-token";
 const verified = z.object({ verified: z.boolean() });
 const sent = z.object({ status: z.boolean() });
 
-// A dead link asks for the address and sends a new link; the answer is alike for every address.
 function ResendForm() {
   const { t } = useLingui();
   const [email, setEmail] = useState("");
@@ -60,7 +59,6 @@ function ResendForm() {
   );
 }
 
-/** The email-verify page (`/auth/verify#token`): it opens and changes nothing; the press confirms the address. */
 export function VerifyPage() {
   const token = useMailedToken();
   const [done, setDone] = useState(false);

@@ -10,12 +10,6 @@ import { createFsDriver } from "../../src/storage/fs-driver.js";
 import { seedChannel, seedOrganization, seedWorkspace, signedUser } from "../support/tenancy.js";
 import { type Fixture, startFixture } from "./auth/harness.js";
 
-// Security floor of the garbage collection of media: the job removes the objects of abandoned and unreferenced media
-// and never the object a post, an operation that can still send it, the library or a workspace avatar still needs. The
-// definers decide what is collectable; this job only deletes what a definer let it take, outside any transaction, and
-// leaves an asset whose delete failed for the next arm. Rows plant assets as the superuser with their objects stored, and
-// ages move by planting dates; nothing sleeps.
-
 let fx: Fixture;
 let dir: string;
 let real: ReturnType<typeof createFsDriver>;
@@ -29,8 +23,6 @@ const logger = createLogger({ secrets: [], stream: { write: (line) => void lines
 const failing = new Set<string>();
 const deleted: string[] = [];
 
-// The driver of the job: the real filesystem driver, which can be made to fail the delete of chosen keys and which
-// records every key it was asked to delete.
 const storage: StorageDriver = {
   name: "fs",
   put: (...args) => real.put(...args),
@@ -60,7 +52,6 @@ afterAll(async () => {
 });
 
 interface Planted {
-  /** The id of the asset; the candidate list is ordered by it. */
   id?: string;
   ws?: string;
   state?: string;
@@ -74,7 +65,6 @@ interface Asset {
   key: string;
   derivativeKey: string;
 }
-// An asset with its original and one derivative stored, as the superuser, in any state and of any age.
 async function plantAsset(o: Planted = {}): Promise<Asset> {
   const [id, ws, state] = [o.id ?? randomUUID(), o.ws ?? wsA, o.state ?? "ready"];
   const [key, derivativeKey] = [`ws/${ws}/${id}/1/original`, `ws/${ws}/${id}/1/thumb`];
@@ -113,7 +103,6 @@ const rowOf = async (id: string) =>
     )
   )[0] as { state: string; removed: boolean };
 
-// A post variant of the workspace, the target of an operation or the holder of a post_media row.
 async function variantIn(ws: string): Promise<string> {
   const channel = ws === wsA ? channelA : channelB;
   return fx.admin(async (client) => {
@@ -185,8 +174,6 @@ async function reference(asset: Asset): Promise<void> {
 const run = (options?: { limit?: number }) =>
   collectMedia({ pool: fx.db.pool("worker"), storage, logger }, options);
 
-// What holds an asset, and what is true of the asset after a run: an asset something still needs keeps its state and its
-// objects; one nothing needs is deleted, its object and its derivative are gone and the removal is recorded.
 type Holder = (asset: Asset) => Promise<unknown>;
 const PINNED: [string, Planted, Holder][] = [
   // One row per kind of pin, end to end through the take; every state of an operation is a row of the db package, once,

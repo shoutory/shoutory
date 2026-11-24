@@ -3,7 +3,6 @@ import { useDigits } from "../account/prefs";
 import { type FormatPrefs, formatDate, formatNumber, type Locale } from "../i18n/i18n";
 import { DirText } from "./dir-text";
 
-// Latin digits by default whatever the language; the profile setting switches to Arabic-Indic.
 function useFormatPrefs(): FormatPrefs {
   const { i18n } = useLingui();
   return { locale: i18n.locale as Locale, digits: useDigits() };
@@ -13,7 +12,6 @@ export function LocalizedNumber({ value }: { value: number }) {
   return <DirText dir="ltr">{formatNumber(value, useFormatPrefs())}</DirText>;
 }
 
-// A displayed date always names its time zone (AGENTS 3.10), so the zone is required and printed.
 const DATE_TIME: Intl.DateTimeFormatOptions = {
   year: "numeric",
   month: "long",

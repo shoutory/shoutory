@@ -1,7 +1,5 @@
-// The one place an uploaded image is decoded. It runs as a child process of the worker (see sharp-run.ts), reads one
-// file and writes two, and prints one line of JSON: the facts of the image or the reason it is refused. It imports only
-// sharp and node:*, and uses only syntax Node can run by stripping the types, so the same file runs from source and,
-// compiled, from dist.
+// It imports only sharp and node:*, and uses only syntax Node can run by stripping the types, so the same file runs
+// from source and, compiled, from dist.
 import { join } from "node:path";
 import sharp from "sharp";
 
@@ -32,8 +30,7 @@ async function run(inputPath: string, outputDir: string) {
   const open = (animated: boolean) => sharp(inputPath, { limitInputPixels: MAX_PIXELS, animated });
   const format = (await open(true).metadata()).format ?? "";
   if (!Object.hasOwn(EXTENSIONS, format)) return { ok: false, reason: "unsupported_type" };
-  // `rotate()` applies the orientation and, like every output here, writes no metadata (EXIF, GPS, XMP, IPTC, ICC).
-  // `stripped` keeps every frame of a GIF or WebP; `thumb` is the first frame.
+  // sharp writes no metadata (EXIF, GPS, XMP, IPTC, ICC) unless asked, so the outputs carry none.
   const strippedPath = join(outputDir, `stripped.${EXTENSIONS[format]}`);
   const stripped = await open(format === "gif" || format === "webp")
     .rotate()

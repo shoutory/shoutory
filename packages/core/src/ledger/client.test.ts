@@ -13,7 +13,6 @@ describe("callTimeoutMs", () => {
   it.each(ROWS)(
     "a %i ms call timeout with a %i s lease started %i ms ago gives %s (min of the timeout and what is left minus 10 s)",
     (timeout, lease, elapsed, expected) => {
-      // fails first because: the timeout ignores the lease that is left, or a call starts inside the last 10 seconds
       expect(callTimeoutMs({ manifestTimeoutMs: timeout, leaseSeconds: lease, elapsedMs: elapsed })).toBe(
         expected,
       );
@@ -32,14 +31,12 @@ describe("rereadOutcome", () => {
     ["revoked_by_provider", true, { to: "blocked_reconnect" }],
   ];
   it.each(ROWS)("a %s channel with a live target %s gives %j", (channelState, targetLive, expected) => {
-    // fails first because: a channel that lost its grant waits 300 s and is claimed again, instead of parking (OL row 13)
     expect(rereadOutcome({ channelState, targetLive })).toEqual(expected);
   });
 });
 
 describe("sweepArguments", () => {
   it("lists every provider for the lease sweep and only the live ones for the due-move sweep", () => {
-    // fails first because: the due list names a retired provider, so its rows at the last attempt fail while it is retired
     const base = { readBackMode: "A", maxAttempts: 5, unverifiedHorizonDays: 30 };
     const { leases, due } = sweepArguments([
       { id: "live", live: true, ...base },
@@ -61,7 +58,6 @@ describe("denialMove", () => {
   it.each(ROWS)(
     "a denial of %i s (maximum %i s, %i s of lateness left) moves %j",
     (after, max, left, move) => {
-      // fails first because: a zero retry is due at once and spins, or the manifest maximum is not applied
       expect(
         denialMove({ retryAfterSeconds: after, retryAfterMaxSeconds: max, latenessLeftSeconds: left }),
       ).toEqual(move);
@@ -75,7 +71,6 @@ describe("bucketKey", () => {
     bucketKey({ limitName: "posts", scope: "account", keyName: "account", channel: ch, ...over } as never);
 
   it("is a 64-hex digest, shared by one account and different for another account, instance, provider or limit name", () => {
-    // fails first because: two accounts, providers or limits share one bucket, or the key is not a digest the table accepts
     expect(key()).toMatch(/^[0-9a-f]{64}$/);
     expect(key()).toBe(key());
     const other = [
@@ -93,7 +88,6 @@ describe("bucketKey", () => {
     ["a null account column", {}, { ...channel, provider_account_id: null }],
     ["a null instance column", { keyName: "instance" }, { ...channel, instance_host: null }],
   ])("refuses %s", (_name, over, ch) => {
-    // fails first because: a missing column becomes the string "null" and every such channel shares one bucket
     expect(() => key(over, ch)).toThrow();
   });
 });

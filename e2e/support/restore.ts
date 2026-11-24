@@ -20,7 +20,7 @@ interface Ran {
   readonly stderr: string;
 }
 
-/** A guide command run against this stack: the guide's own `./shoutory.dump` is the run's state folder here. */
+// The guide's own `./shoutory.dump` is the run's state folder here.
 function guide(command: string, allowFailure = false): Ran {
   const args = command
     .replace(/^docker compose /, "")
@@ -33,7 +33,6 @@ function guide(command: string, allowFailure = false): Ran {
 const project = () => process.env.SHOUTORY_E2E_PROJECT ?? "";
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
-/** One statement list as the database superuser, answered as bare text lines. */
 function psql(sql: string): string {
   const args = ["exec", "-T", "postgres", "psql", "-U", "postgres", "-d", "shoutory", "-qAt", "-c", sql];
   return composeInStack(args).stdout.trim();
@@ -56,12 +55,9 @@ SELECT count(*) FROM app.workspaces;`;
 export interface DatabaseFacts {
   readonly workspaces: number;
   readonly members: number;
-  /** Tables of the app and auth schemas with row security forced. */
   readonly forced: number;
-  /** Tables with row security enabled but not forced. */
   readonly enabledNotForced: number;
   readonly bypassRls: boolean;
-  /** Workspace rows the app role sees without a tenant. */
   readonly visibleRows: number;
 }
 
@@ -78,10 +74,7 @@ export function databaseFacts(): DatabaseFacts {
   };
 }
 
-/**
- * Stops the mail catcher and asks for a password reset of the founder, so one mail link is sealed in the outbox and
- * never sent: the only row `secrets check` can read. Waits until the row is there.
- */
+// A mail link sealed in the outbox and never sent is the only row `secrets check` can read.
 export async function plantUnsentLink(email: string): Promise<void> {
   composeInStack(["stop", "mail"]);
   const answer = await fetch(`${APP_ORIGIN}/api/auth/request-password-reset`, {
@@ -97,7 +90,6 @@ export async function plantUnsentLink(email: string): Promise<void> {
   }
 }
 
-/** Takes the dump as the superuser, copies it out of the container, stops the app and removes the database and its volume. */
 export function dumpAndLoseTheVolume(): void {
   guide(COMMANDS.dump);
   guide(COMMANDS.copyOut);
@@ -107,18 +99,14 @@ export function dumpAndLoseTheVolume(): void {
   if (removed.status !== 0) throw new Error(`the database volume was not removed: ${removed.stderr.trim()}`);
 }
 
-/** Starts an empty database (the init script makes the roles again), copies the dump in and restores it. */
 export function restoreTheDump(): void {
   composeInStack(["up", "--detach", "--wait", "--wait-timeout", "300", "postgres"]);
   guide(COMMANDS.copyIn);
   guide(COMMANDS.restore);
 }
 
-/**
- * Runs `secrets check` on the restored database with the app down. `saved` is the guide's own command. A ring without
- * the saved id starts the same image with another active key and no `k1`, which compose cannot do to its own service;
- * it therefore runs the image by hand and depends on the worker's URL variable and the key variable names of the app.
- */
+// A key ring without the saved id starts the same image with another active key and no `k1`, which compose cannot do
+// to its own service, so the image runs by hand and depends on the worker's URL variable and the app's key variable names.
 export function secretsCheck(ring: "saved" | "without-the-saved-id"): Ran {
   if (ring === "saved") return guide(COMMANDS.secretsCheck, true);
   const network = ["--network", `${project()}_default`];
@@ -138,13 +126,11 @@ export function secretsCheck(ring: "saved" | "without-the-saved-id"): Ran {
   return { status: run.status ?? 1, stdout: run.stdout, stderr: run.stderr };
 }
 
-/**
- * The server accepts each code once (the `used` map in totp.ts only knows the codes of its own process), and the first
- * journey's second code is the next step's, so the last step the server saw can be one ahead of that journey's clock.
- * A code is fresh once two whole steps have passed since the journey saved its session (or, for a member of its own,
- * since the member's last code, the file `savedFile` names). The wait is a protocol fact, so
- * it extends the running test's timeout by the time it sleeps (it must be called inside a test).
- */
+// The server accepts each code once (the `used` map in totp.ts only knows the codes of its own process), and the first
+// journey's second code is the next step's, so the last step the server saw can be one ahead of that journey's clock.
+// A code is fresh once two whole steps have passed since the journey saved its session (or, for a member of its own,
+// since the member's last code, the file `savedFile` names). The wait is a protocol fact, so it extends the running
+// test's timeout by the time it sleeps.
 export async function waitForFreshCode(savedFile: string = FOUNDER_STATE): Promise<void> {
   const savedAt = statSync(savedFile).mtimeMs;
   const fresh = (Math.floor(savedAt / STEP_MS) + 2) * STEP_MS;
@@ -154,7 +140,6 @@ export async function waitForFreshCode(savedFile: string = FOUNDER_STATE): Promi
   await sleep(waitMs);
 }
 
-/** Starts the whole stack again on the restored database and waits until the app is ready. */
 export function startApp(): void {
   composeInStack(["up", "--detach", "--wait", "--wait-timeout", "300"]);
 }

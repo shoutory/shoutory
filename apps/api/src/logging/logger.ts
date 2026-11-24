@@ -7,7 +7,6 @@ interface LogStream {
 }
 
 export interface LoggerOptions {
-  /** Values (KEK, pepper, session secret, passwords, URLs) replaced in every string in five spellings. */
   readonly secrets: readonly string[];
   readonly stream: LogStream;
 }
@@ -38,7 +37,6 @@ function wrap(logger: pino.Logger, bindings: BindingsFormatter): Logger {
   };
 }
 
-/** Pino JSON lines to `stream`; the scrubber sees the message, every argument and the child bindings. */
 export function createLogger(options: LoggerOptions): Logger {
   const scrub: Scrubber = createScrubber(options.secrets);
   const withhold = () => options.stream.write(`${WITHHELD}\n`);
@@ -75,7 +73,7 @@ export function createLogger(options: LoggerOptions): Logger {
   return wrap(logger, bindings);
 }
 
-/** The request line: the path after credential redaction, never the query string (any parameter may carry a token). */
+// Never the query string: any parameter may carry a token.
 export function logRequest(logger: Logger, request: RequestLine): void {
   const [path] = redactUrl(request.url).split("?");
   logger.info({ method: request.method, path, status: request.status }, "request");

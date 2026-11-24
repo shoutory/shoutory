@@ -12,7 +12,6 @@ const OPTIONS = [
 describe("the kit Select", () => {
   it("is named by its label and shows the chosen option", () => {
     const host = mount(<Select label="Role" value="viewer" onChange={() => undefined} options={OPTIONS} />);
-    // The trigger is found through its aria-labelledby, so this is its accessible name.
     const trigger = selectTrigger(host, "Role");
     expect(trigger.textContent).toContain("Viewer");
   });

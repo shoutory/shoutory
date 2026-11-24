@@ -4,8 +4,6 @@ import { closeApp, openApp, refusal, stubApi } from "../test/support/app";
 
 afterEach(closeApp);
 
-// ux-spec 4.10 SC 2.4.2 and 2.4.3: a route change sets the translated title and focuses the new page's h1; the first
-// load moves nothing; only a change of path counts (R397 6).
 describe("a route change", () => {
   it.each<["en" | "ar", string, string, string]>([
     ["en", "/sign-in", "/session-expired", "Your session has ended"],
@@ -36,7 +34,6 @@ describe("a route change", () => {
     expect(document.activeElement).toBe(document.body);
   });
 
-  // A replace navigation is a redirect on the first load, not a page the user went to: no focus moves (R399 2).
   it.each([
     ["the start redirect", {}, "/", "/w/w1"],
     ["a guard redirect", { session: () => refusal("unauthenticated", 401) }, "/w/w1", "/sign-in"],

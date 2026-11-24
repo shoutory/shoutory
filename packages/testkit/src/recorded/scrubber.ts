@@ -1,4 +1,3 @@
-/** One request and its answer as captured from a provider, before and after the secrets are taken out. */
 export interface RecordedExchange {
   readonly request: {
     readonly method: string;
@@ -13,7 +12,7 @@ export interface RecordedExchange {
   };
 }
 
-// The one closed list of where a secret sits. A provider that puts one somewhere else is added here, with a test row.
+// A provider that puts a secret somewhere else is added to these lists, with a test row.
 const SECRET_HEADERS = ["authorization", "proxy-authorization", "cookie", "set-cookie", "dpop"];
 const SECRET_JSON_KEYS = [
   "code_verifier",
@@ -21,7 +20,6 @@ const SECRET_JSON_KEYS = [
 ];
 // A query string, fragment or form body also carries the one-time OAuth values, which a JSON answer uses for plain codes.
 const SECRET_FORM_FIELDS = [...SECRET_JSON_KEYS, "code", "state"];
-// Besides the lists, any header, field or JSON key named like a credential is a secret (case-insensitive).
 const SECRET_NAME = /token|secret|key|signature|password|assertion/i;
 const isSecretName = (list: readonly string[], name: string) =>
   list.includes(lower(name)) || SECRET_NAME.test(name);
@@ -109,8 +107,7 @@ function alignment(bytes: Buffer, offset: number): string {
   return whole.toString("base64").slice(Math.ceil((8 * offset) / 6), Math.floor((8 * whole.length) / 6));
 }
 
-// Every form a secret may be echoed in (AGENTS 4.2): raw, percent-encoded in both cases, form-encoded, hex, base64 padded,
-// unpadded and URL-safe, JSON-escaped, and base64 inside a longer string at each of its three alignments.
+// A secret must not survive in any form an answer may echo it in, base64 inside a longer string included.
 function forms(secret: string): string[] {
   const bytes = Buffer.from(secret);
   const percent = encodeURIComponent(secret);
@@ -135,10 +132,7 @@ function sweeper(secrets: readonly string[]): (text: string) => string {
   return (text) => needles.reduce((rest, needle) => rest.split(needle).join(REDACTED), text);
 }
 
-/**
- * Takes every secret out of an exchange. Secrets are found by place (the closed lists above) and then swept out of every
- * string of the exchange in every form, so an answer that echoes one is clean too. Everything else is kept.
- */
+// Secrets are found by place, then swept out of every string of the exchange, so an answer that echoes one is clean too.
 export function scrubExchange(exchange: RecordedExchange): RecordedExchange {
   const { request, response } = exchange;
   const sweep = sweeper([

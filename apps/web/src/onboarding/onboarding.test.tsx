@@ -46,8 +46,6 @@ const bodyOf = (call: readonly [string, (RequestInit | undefined)?] | undefined)
 const ORGS_PATH = "/api/v1/organizations";
 const WORKSPACES_PATH = "/api/v1/workspaces";
 
-// F-TEAM-001: a person with nothing yet names an organization and a first workspace in one flow, and an unfinished
-// flow resumes where it stopped.
 describe("what the start page opens", () => {
   it("a person with no organization and no workspace gets the whole flow", async () => {
     stubApi(lists([]));
@@ -113,7 +111,6 @@ describe("the organization step", () => {
     expect(field(host, "workspace")?.value).toBe("Acme Client");
   });
 
-  // The message sits on the empty field, which takes focus; a field is cleared of its message when it changes.
   it.each([
     ["an empty name", "", null, "organization"],
     ["a name of spaces only", "   ", null, "organization"],
@@ -161,7 +158,6 @@ describe("creating the organization and its first workspace", () => {
     expect(bodyOf(posts(stub, ORGS_PATH)[0])).toMatchObject({ type: "personal" });
   });
 
-  // A retry after the workspace call failed must not make a second organization.
   it("a failed first-workspace call keeps the organization: the retry sends only the workspace", async () => {
     let calls = 0;
     const { stub, host } = await submit({
@@ -191,7 +187,6 @@ describe("the organization and workspace calls that fail or repeat", () => {
     return { ...opened, stub };
   }
 
-  // A reload after the workspace call failed must find the organization again, whatever the address says.
   it("a reopen at ?new after a failed workspace call resumes the organization: no second one", async () => {
     let made = false;
     const stub = stubApi({

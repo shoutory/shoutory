@@ -1,5 +1,4 @@
-// R377: the one screen with no message ids. It shows when no message catalog could be loaded, so it cannot use one;
-// its text is fixed English and it needs no provider. Every other screen takes its copy from the catalogs.
+// Fixed English with no message ids: it shows when no catalog could be loaded.
 export function CatalogFallback() {
   return (
     <main id="main">

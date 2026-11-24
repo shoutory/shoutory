@@ -34,11 +34,8 @@ import {
   workspaceParams,
 } from "./shared.js";
 
-// Media uploads: register an upload (a presigned URL the browser sends the bytes to), complete it, and read the original
-// back by range. The bytes never pass through the API on the way in. The digest of an upload is the one storage holds
-// for the object (the URL signs the declared sha256, so storage refuses other bytes); the client's claim is never read
-// back as the digest. A file above the single-PUT size goes in parts (multipart.ts). A member with library.edit uploads
-// and library.view reads.
+// The digest of an upload is the one storage holds for the object (the URL signs the declared sha256, so storage
+// refuses other bytes); the client's claim is never read back as the digest.
 
 const registerBody = z.strictObject({
   file_name: z
@@ -56,7 +53,6 @@ const registerBody = z.strictObject({
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
 });
 
-/** Where the browser sends the bytes: an S3 upload URL, or on the filesystem driver the PUT route of this API. */
 async function uploadTarget(
   presigner: S3Presigner | undefined,
   workspaceId: string,
@@ -76,7 +72,6 @@ const tooLarge = () =>
     details: { reason: "too_large" },
   });
 
-/** What the S3 side of the app can do: sign single uploads, and (when it has them) run multipart uploads. */
 interface S3Side {
   presigner: S3Presigner | undefined;
   multipart: S3Multipart | undefined;
@@ -95,7 +90,6 @@ function registerUpload(app: App, { presigner, multipart, logger, parts }: S3Sid
     body: registerBody,
     status: 201,
     handler: async ({ scoped, body }) => {
-      // Above the single-PUT size a file goes in parts, and only where storage can take them.
       const large = body.byte_size > MAX_UPLOAD_BYTES;
       if (body.byte_size > MAX_MULTIPART_BYTES || (large && !parts)) throw tooLarge();
       const made = await scoped(true, async (tx, scope) => ({
@@ -147,12 +141,10 @@ function registerComplete(app: App, storage: StorageDriver, s3: Pick<S3Side, "mu
         upload: await uploadOf(tx, scope.workspaceId, params.media_id),
       }));
       if (asset.state !== "pending_upload") return settled(storage, workspaceId, asset, scoped);
-      // A large upload is completed from storage's own part list; every storage call is outside a transaction.
       if (upload?.multipart_upload_id)
         return s3.multipart
           ? finishMultipart({ storage, ...s3 }, workspaceId, asset, upload, scoped)
           : finishFsParts({ storage, logger: s3.logger }, workspaceId, asset, upload, scoped);
-      // The head is outside every transaction: the size and the digest are what storage holds for the object.
       return finish(storage, workspaceId, asset, scoped);
     },
   });
@@ -240,7 +232,6 @@ export function sandboxDownloads(app: App): void {
 // An upload may be started this long after it was registered, as long as an S3 upload URL lives.
 const UPLOAD_WINDOW_MS = 15 * 60 * 1000;
 
-/** Passes the bytes through while hashing and counting them; the digest is read once the put has finished. */
 function hashing(source: ReadableStream<Uint8Array>) {
   const hash = createHash("sha256");
   let size = 0;
@@ -273,7 +264,6 @@ async function settleWrite(
   throw conflict("different_bytes");
 }
 
-/** Writes the original once: a body longer than it declares is 413, and a put that found the object or lost its answer is settled. */
 async function storeOriginal(
   storage: StorageDriver,
   key: string,
@@ -292,7 +282,6 @@ async function storeOriginal(
   }
 }
 
-/** The PUT of an upload's bytes to the API (the filesystem driver has no upload URL): streamed, never buffered. */
 function registerPut(app: App, storage: StorageDriver, now: () => Date): void {
   defineRoute(app, {
     method: "put",
@@ -320,18 +309,12 @@ function registerPut(app: App, storage: StorageDriver, now: () => Date): void {
   });
 }
 
-/**
- * The media routes, for either driver: register, complete and the read. Register answers an S3 upload URL when there is
- * a presigner; without one (the filesystem driver) it answers the PUT route of this API, which takes the bytes. With
- * the multipart half of the S3 driver too, a file above 64 MiB registers in parts and has a route to sign them.
- */
 export function registerMedia(
   app: App,
   storage: StorageDriver,
   s3: {
     presigner?: S3Presigner | undefined;
     multipart?: S3Multipart | undefined;
-    /** The egress fetch of the import by URL; the import route exists only when it is given. */
     mediaImportFetch?: ImportFetch | undefined;
     logger: Logger;
   },

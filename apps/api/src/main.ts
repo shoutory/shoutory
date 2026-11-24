@@ -38,7 +38,6 @@ export interface RunningServer {
   readonly port: number;
   close(): Promise<void>;
 }
-/** A process that refused to start (or ran a command) has an exit code and listens on nothing; a worker has no port. */
 export type Started =
   | { readonly exitCode: number }
   | { readonly server: RunningServer }
@@ -52,7 +51,6 @@ function listen(
   host: string | undefined,
 ) {
   return new Promise<RunningServer>((done, fail) => {
-    // No host means the Node default (all interfaces).
     const server = serve({ fetch: handler, port, ...(host ? { hostname: host } : {}) }, (info) => {
       server.off("error", fail);
       done({
@@ -64,25 +62,18 @@ function listen(
   });
 }
 
-/** The one operator network policy, built from instance configuration, bound to the breach-check host. */
 function boundEgress(config: Config) {
   const operator = createOperatorPolicy({ allowCidrs: config.egressAllowCidrs });
   const request = { kind: "provider", egressHosts: [RANGE_HOST] } as const;
   return (req: EgressRequest) => egressFetch(req, { request, operator });
 }
 
-/** The fetch of the import of media by URL: the same operator policy, for any URL a member names. */
 function importFetch(config: Config) {
   const operator = createOperatorPolicy({ allowCidrs: config.egressAllowCidrs });
   const request = { kind: "user_url" } as const;
   return (req: EgressRequest) => egressFetch(req, { request, operator });
 }
 
-/**
- * The `fetch` of a provider adapter: the same operator policy, narrowed to the hosts its manifest names or, for a
- * provider whose accounts live on user-chosen servers, to the one instance host the channel stored. With no host for
- * such a provider every call is refused.
- */
 function providerFetch(config: Config) {
   const operator = createOperatorPolicy({ allowCidrs: config.egressAllowCidrs });
   return (manifest: Manifest, instanceHost?: string): typeof fetch => {
@@ -96,7 +87,6 @@ function providerFetch(config: Config) {
   };
 }
 
-/** The built-in providers by id, each with its validated manifest and its adapter; one without an adapter refuses the start. */
 function builtInProviders(): Record<string, HealthProvider> {
   const adapters = createBuiltInAdapters();
   return Object.fromEntries(
@@ -108,11 +98,6 @@ function builtInProviders(): Record<string, HealthProvider> {
   );
 }
 
-/**
- * What the app is given from the configuration beside its pools and stores. The channel routes run on the built-in
- * providers, and every provider call is bound to its manifest's hosts or to its channel's instance host (`fetchFor`), so
- * no unbound fetch exists.
- */
 function appSettingsOf(config: Config) {
   return {
     webRoot: config.webRoot,
@@ -127,10 +112,6 @@ function appSettingsOf(config: Config) {
   };
 }
 
-/**
- * The storage driver and, for S3 only (the filesystem driver has no upload URL), the signer of upload URLs and the server
- * side of multipart uploads. The driver's `close` also releases the multipart connections.
- */
 function storageOptions(storage: Config["storage"]): {
   storage: StorageDriver;
   presigner?: S3Presigner;
@@ -202,14 +183,12 @@ async function startServer(config: Config, logger: Logger): Promise<RunningServe
   }
 }
 
-/** A configured ffprobe must be a file the worker may run, else the start is refused; none says once that video is off. */
 async function checkVideoProbing(config: Config, logger: Logger): Promise<void> {
   if (config.ffprobePath === undefined)
     logger.info({ variable: "SHOUTORY_FFPROBE_PATH" }, "video probing is off: the variable is not set");
   else await checkFfprobePath(config.ffprobePath);
 }
 
-/** The worker role over its own pool: the queue client, schedules, heartbeat and outbox relay (R316). */
 async function startWorkerRole(
   config: Config,
   logger: Logger,
@@ -223,7 +202,6 @@ async function startWorkerRole(
     storage = createStorageDriver(config.storage);
     await assertMigrationsApplied(pool);
     await checkVideoProbing(config, logger);
-    // The worker and all roles need the sender; the configuration refuses a start without it.
     if (config.mailFrom === undefined) throw new Error("SHOUTORY_MAIL_FROM is required");
     const mail = {
       keys: config.keys,
@@ -265,7 +243,6 @@ async function startWorkerRole(
   }
 }
 
-/** HTTP for `api` and `all`, the worker for `worker` and `all`; each part that started is closed if a later one fails. */
 async function startRole(config: Config, logger: Logger): Promise<Started> {
   if (config.role === "worker") return { worker: await startWorkerRole(config, logger, "worker") };
   const server = await startServer(config, logger);
@@ -288,7 +265,6 @@ async function startRole(config: Config, logger: Logger): Promise<Started> {
   }
 }
 
-/** Start order: telemetry (the preload, before this module), UTC, configuration, logger, migration check, listen. */
 async function start(env: NodeJS.ProcessEnv, io: CliIo): Promise<Started> {
   if (telemetryFailure) throw telemetryFailure;
   assertUtc(env);
@@ -318,10 +294,6 @@ async function start(env: NodeJS.ProcessEnv, io: CliIo): Promise<Started> {
   return "server" in started ? { server: { port: started.server.port, close } } : { worker: { close } };
 }
 
-/**
- * The one process entry. With a command in argv it runs the command and returns its exit code; otherwise it starts
- * the server for the configured role.
- */
 export async function main(argv: readonly string[], env: NodeJS.ProcessEnv, io: CliIo): Promise<Started> {
   if (argv.length > 0) return { exitCode: await run(argv, env, io) };
   try {

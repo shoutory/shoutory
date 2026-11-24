@@ -46,7 +46,6 @@ const authorizationFields = (challenge: string, overrides: Record<string, string
   ...overrides,
 });
 
-// While a test sets `recording`, every call through `send` is kept as the exchange a recorder would have captured.
 let recording: RecordedExchange[] | undefined;
 async function send(url: string, init: RequestInit = {}): Promise<Response> {
   const response = await fetch(url, { redirect: "manual", ...init });
@@ -74,7 +73,6 @@ const token = (fields: Record<string, string>, headers: Record<string, string> =
   return send(`${fake.url}/token`, { ...request, headers: { ...request.headers, ...headers } });
 };
 
-// The pushed-request path of the flow: push, authorize, and the code the redirect carries.
 async function codeFor(challenge: string): Promise<string> {
   const pushed = (await (await push(authorizationFields(challenge))).json()) as { request_uri: string };
   const redirect = await authorizeWith({ client_id: CLIENT, request_uri: pushed.request_uri });
@@ -120,7 +118,6 @@ describe("the oauth fake", () => {
 });
 
 describe("the oauth fake's refusals", () => {
-  // A refused exchange or push answers one error code and issues nothing.
   it.each([
     [
       "a verifier that does not match",
@@ -219,13 +216,11 @@ function proofWith(nonce: string | undefined, parts: ProofParts = {}): string {
   return `${input}.${parts.signature ?? signature}`;
 }
 
-// The server's nonce, learned the way a client learns it: from the refusal of a proof that has none.
 async function serverNonce(): Promise<string> {
   const refused = await exchange("code-0", "unused", { dpop: proofWith(undefined) });
   return refused.headers.get("dpop-nonce") ?? "";
 }
 
-// A suite that needs the fake to demand DPoP proofs.
 function withDpop() {
   beforeAll(() => {
     requireDpop = true;
@@ -295,7 +290,6 @@ describe("the oauth fake refuses a defective DPoP proof", () => {
 
 type Tokens = { access_token: string; refresh_token?: string };
 
-// A full connect on the running fake, and a refresh with the token it returned.
 async function connect(): Promise<Tokens> {
   const secret = verifier();
   const answer = await exchange(await codeFor(challengeOf(secret)), secret);
@@ -304,7 +298,6 @@ async function connect(): Promise<Tokens> {
 const refreshWith = (refreshToken: string, headers: Record<string, string> = {}) =>
   token({ grant_type: "refresh_token", refresh_token: refreshToken, client_id: CLIENT }, headers);
 
-// The suites below run against `fixture-oauth` instead of the bare fake.
 let oauth: Awaited<ReturnType<typeof startFixtureOAuthSimulator>>;
 function withFixtureOAuth() {
   beforeEach(async () => {
@@ -351,7 +344,6 @@ describe("fixture-oauth refresh", () => {
 describe("fixture-oauth token route failures", () => {
   withFixtureOAuth();
 
-  // What a failure at the token route does to the refresh token the caller holds.
   const FAULTS: [string, () => Promise<void>][] = [
     [
       "a 503 before the grant ran leaves the refresh token usable",
@@ -390,7 +382,6 @@ describe("fixture-oauth token route failures", () => {
   });
 });
 
-// Security floor: what a recorder would keep of a full connect and refresh, and what the fake's refusals say.
 const privateJwk = keys.privateKey.export({ format: "jwk" });
 const FORMS: [string, (secret: string) => string][] = [
   ["raw", (s) => s],
@@ -401,7 +392,6 @@ const FORMS: [string, (secret: string) => string][] = [
   ["JSON-escaped", (s) => JSON.stringify(s).slice(1, -1)],
 ];
 
-// Connect, refresh and a key upload, recorded; the secrets the flow made are returned by name.
 async function recordedFlow(): Promise<{ exchanges: RecordedExchange[]; secrets: Record<string, string> }> {
   recording = [];
   const nonce = await serverNonce();

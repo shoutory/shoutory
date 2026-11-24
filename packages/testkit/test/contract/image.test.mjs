@@ -11,7 +11,6 @@ const dockerfile = existsSync(join(root, "docker/Dockerfile")) ? read("docker/Do
 const lines = dockerfile.split("\n");
 const nvmrc = read(".nvmrc").trim();
 
-// Every image the Dockerfile uses is named by version and digest, with the date its digest was read on the line above.
 test("each image the Dockerfile uses is pinned by digest and says when it was read", () => {
   const pins = [
     [
@@ -44,8 +43,6 @@ test("the runtime stage is distroless and non-root, runs in UTC and takes the ch
   assert.doesNotMatch(runtime, /^RUN /m, "a distroless runtime has no shell to run anything");
 });
 
-// The debug image carries a shell for support; it is a target of its own, and the default build (the last stage) is
-// still the nonroot one.
 test("the debug stage pins its shell base by digest and date and the last stage is still the distroless nonroot one", () => {
   const debug = lines.findIndex((line) =>
     /^FROM gcr\.io\/distroless\/nodejs26-debian13:debug-nonroot@sha256:[0-9a-f]{64} AS debug$/.test(line),
@@ -63,8 +60,6 @@ test("the debug stage pins its shell base by digest and date and the last stage 
   assert.match(shell, /^USER nonroot$/m);
 });
 
-// The support image must reproduce the shipped one, so both distroless bases run the same Node; the comment above
-// each pin names the Node version of its digest.
 test("the debug and the default runtime bases name the same Node version", () => {
   const versionAbove = (pattern) => {
     const at = lines.findIndex((line) => pattern.test(line));
@@ -81,7 +76,6 @@ test("the debug and the default runtime bases name the same Node version", () =>
   assert.equal(debug, base, "the debug image runs another Node than the shipped one");
 });
 
-// The image's ffprobe is built from source, never from a distro package: the one stage is pinned like the others and its source is checksummed.
 test("the ffprobe stage uses the build stage's base and a checksummed FFmpeg tarball with an LGPL-only, local-files-only configure line", () => {
   const at = lines.findIndex((line) => /^FROM node:\S+ AS ffprobe$/.test(line));
   assert.ok(at > 0, "no ffprobe stage");
@@ -140,7 +134,6 @@ test("the nonroot and debug runtime stages copy ffprobe from the one ffprobe sta
   }
 });
 
-// Only the ffprobe stage installs build packages, and they never leave it: the runtime is distroless.
 test("the Dockerfile uses no package runner, corepack or downloader, and apt-get only in the ffprobe stage with retries", () => {
   assert.ok(dockerfile.length > 0, "there is no docker/Dockerfile");
   for (const word of ["npx", "dlx", "corepack", "curl", "wget"]) {

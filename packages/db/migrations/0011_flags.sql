@@ -1,7 +1,5 @@
--- Feature flags and their overrides. Both tables are reached only through definers: no runtime role holds a privilege
--- on them. A flag carries an owner and a removal date; an override is stored per scope (instance, organization or
--- workspace) and is read only inside the caller's own scope. An override can only be written while its flag is live;
--- a flag that reaches general availability is deleted together with its overrides (the cascade).
+-- Both tables are reached only through definers: no runtime role holds a privilege on them. An override is read
+-- only inside the caller's own scope and can only be written while its flag is live; deleting a flag cascades.
 CREATE TABLE app.feature_flags (
   key text PRIMARY KEY CHECK (key ~ '^[a-z][a-z0-9_-]*$' AND char_length(key) <= 64),
   description text NOT NULL CHECK (char_length(description) BETWEEN 1 AND 500),
@@ -38,10 +36,8 @@ CREATE POLICY flag_override_set_select ON app.instance_admins FOR SELECT TO shou
 CREATE POLICY instance_admin_check_select ON app.instance_admins FOR SELECT TO shoutory_definer
   USING ((SELECT app.job_purpose()) = 'instance_admin_check');
 
--- Every flag with the overrides the caller may see: the instance override, the one of the caller's organization and
--- those of the caller's workspaces. A flag past its removal date is still listed, so the admin screen can show it.
--- It is callable without a signed-in user on purpose (the flag loader runs before sign-in) and never returns an
--- override outside the caller's own scope.
+-- Callable without a signed-in user on purpose (the flag loader runs before sign-in); it never returns an override
+-- outside the caller's own scope. A flag past its removal date is still listed, so the admin screen can show it.
 CREATE FUNCTION app.flags_read()
 RETURNS TABLE (
   flag_key text, description text, owner text, remove_by date, default_on boolean,
@@ -69,7 +65,6 @@ REVOKE ALL ON FUNCTION app.flags_read() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app.flags_read() TO shoutory_app, shoutory_worker;
 ALTER FUNCTION app.flags_read() OWNER TO shoutory_definer;
 
--- Whether the signed-in user is an instance admin. A refusal is false, never an error and never a guess.
 CREATE FUNCTION app.instance_admin_check()
 RETURNS boolean
 LANGUAGE plpgsql SECURITY DEFINER
@@ -92,8 +87,7 @@ REVOKE ALL ON FUNCTION app.instance_admin_check() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app.instance_admin_check() TO shoutory_app;
 ALTER FUNCTION app.instance_admin_check() OWNER TO shoutory_definer;
 
--- Sets (or, with a NULL value, removes) the instance override of one live flag. The caller is the signed-in user of
--- the session context and must be an instance admin; an unknown flag and one past its removal date are refused.
+-- A NULL value removes the override. The caller comes from the session context and must be an instance admin.
 CREATE FUNCTION app.feature_flag_override_set(flag_key text, enabled boolean, request_id text, ip_hmac bytea)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER
@@ -132,8 +126,6 @@ REVOKE ALL ON FUNCTION app.feature_flag_override_set(text, boolean, text, bytea)
 GRANT EXECUTE ON FUNCTION app.feature_flag_override_set(text, boolean, text, bytea) TO shoutory_app;
 ALTER FUNCTION app.feature_flag_override_set(text, boolean, text, bytea) OWNER TO shoutory_definer;
 
--- The settings writer of 0007 gains the request id and the address digest and writes one instance-chain audit row.
--- No code called the old form, so it is replaced, not kept beside the new one.
 DROP FUNCTION app.instance_setting_set(text, jsonb);
 
 CREATE FUNCTION app.instance_setting_set(key text, value jsonb, request_id text, ip_hmac bytea)

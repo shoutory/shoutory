@@ -4,8 +4,6 @@ import { run } from "../../src/cli/main.js";
 
 const env = readTestEnv();
 
-// `shoutory audit verify [day]` asks the database to recompute the hash chain of one UTC day (the chain itself is
-// tested in packages/db) and turns the answer into an exit code an operator's script can use.
 let db: TestDatabase;
 beforeAll(async () => {
   db = await cloneTemplate(env, inject("shoutoryTemplate"));

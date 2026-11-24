@@ -10,12 +10,10 @@ import { mastodonManifest } from "../../src/manifest.js";
 import { type MastodonSimulator, startMastodonSimulator } from "../../src/simulator.js";
 import { accountOf, recorder } from "../support/instance.js";
 
-// The shared fault matrix, run against the Mastodon adapter and its simulator. The matrix builds a commit as
-// `{idempotencyKey, text}` and knows nothing of an account, so the harness hands the adapter the channel's token and host
-// the way the worker does. The manifest declares what the matrix has rows for: text and delete, no edit, thread or first
-// comment. The page documents no machine code for a 422 (`{"error":"Validation failed: ..."}`), so no bad-request code is
-// played and a 422 is classed by its status in the adapter rows; the text a 401 carries is the documented one, echoed in
-// the simulator's error body (docs.joinmastodon.org/methods/statuses, accessed 2026-11-24).
+// The matrix knows nothing of an account, so the harness hands the adapter the channel's token and host the way the
+// worker does. The page documents no machine code for a 422 (`{"error":"Validation failed: ..."}`), so no bad-request
+// code is played and a 422 is classed by its status; the text a 401 carries is the documented one
+// (docs.joinmastodon.org/methods/statuses, accessed 2026-11-24).
 const rows = faultMatrixRows({
   badRequestCodes: [],
   capabilities: [],
@@ -49,8 +47,7 @@ function harness(): MatrixHarness {
     effects: () => sim.effects(),
     settle: () => sim.settle(),
     stored: sim.stored,
-    // The matrix guards that a call never sends again after an unknown outcome. A read that confirms a 404 on a delete changes
-    // nothing and is no resend, so only the requests that can change something are counted.
+    // A read that confirms a 404 on a delete is no resend, so only requests that can change something are counted.
     requestCount: () => sim.requests.filter((request) => request.method !== "GET").length,
   };
 }

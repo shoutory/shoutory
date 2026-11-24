@@ -8,11 +8,6 @@ import { createFsDriver } from "../../src/storage/fs-driver.js";
 import { addWorkspaceMember, seedOrganization, seedWorkspace, signedUser } from "../support/tenancy.js";
 import { type Fixture, startFixture, WEB } from "./auth/harness.js";
 
-// Security floor of the filesystem upload: a member PUTs the bytes of a pending upload to the API, which streams them to
-// the driver. The route reads a raw body, so the JSON check is skipped and everything else (the CSRF check, the session,
-// library.edit) stays; the declared length is the bound, a finished original is never rewritten, and a put whose outcome
-// is unknown is settled by what storage holds, never by the client's word.
-
 type User = { id: string; cookie: string };
 const MAX = 64 * 1024 * 1024;
 const SEATS = ["owner", "editor", "viewer", "approver"] as const;
@@ -23,8 +18,7 @@ let dir: string;
 let real: StorageDriver;
 const users: Record<string, User> = {};
 const user = (name: string): User => users[name] as User;
-// The real driver, except that a `put` can fail with a storage error of a chosen kind, with the bytes stored first when
-// the server lost only its answer.
+// A `put` can fail with a chosen storage error, with the bytes stored first when the server lost only its answer.
 const fail: { kind: StorageErrorKind | null; stored: boolean } = { kind: null, stored: false };
 
 beforeAll(async () => {
@@ -57,7 +51,6 @@ const stream = (text: string) => new Blob([text]).stream();
 const readText = async (body: ReadableStream<Uint8Array> | null) =>
   body === null ? null : new TextDecoder().decode(await new Response(body).arrayBuffer());
 
-/** A pending upload (or a finished one) as register leaves it, written as the superuser: the PUT is under test, not register. */
 async function plant(workspace = ws, state = "pending_upload", minutesOld = 0): Promise<string> {
   const id = randomUUID();
   await fx.admin((client) =>
@@ -77,12 +70,10 @@ interface Sent {
   who?: User | null;
   workspace?: string;
   body?: string;
-  /** A body that is a stream the test can watch, with the length it declares. */
   stream?: ReadableStream<Uint8Array>;
   headers?: Record<string, string | null>;
   csrf?: boolean;
 }
-/** A PUT as a browser sends it: the cookie, the web-client headers, an octet-stream body and its length. */
 function put(id: string, sent: Sent = {}) {
   const who = sent.who === undefined ? user("editor") : sent.who;
   const body = sent.body ?? "12345";
@@ -241,7 +232,6 @@ describe("a put that fails or finds the object", () => {
   });
 });
 
-// The whole flow on the filesystem driver: register, PUT, complete (the S3 flow has its own file).
 const asUser = (who: User, path: string, body?: unknown) =>
   fx.request(path, {
     method: "POST",
@@ -268,7 +258,6 @@ describe("register, PUT and complete on the filesystem driver", () => {
       url: string;
       headers: Record<string, string>;
     };
-    // Register answers this API's PUT route, and the headers a browser sends there.
     expect(url).toBe(`/api/v1/workspaces/${ws}/media/${id}/original`);
     expect(headers).toEqual({ "content-type": "application/octet-stream" });
     expect((await put(id, { body: "actual-bytes" })).status).toBe(200);

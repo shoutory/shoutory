@@ -123,7 +123,7 @@ describe("the mail sender", () => {
   });
 });
 
-describe("STARTTLS for smtp: URLs (R493)", () => {
+describe("STARTTLS for smtp: URLs", () => {
   it.each(["smtp://", "SMTP://", "Smtp://"])(
     "a %s URL to a server without STARTTLS is not delivered",
     async (scheme) => {
@@ -154,7 +154,7 @@ const until = async (done: () => boolean) => {
   for (let tries = 0; tries < 100 && !done(); tries++) await sleep(20);
 };
 
-describe("the batch loop (R325)", () => {
+describe("the batch loop", () => {
   it.each([
     [
       "a hanging server ends as a failed attempt by the send timeout",
@@ -203,7 +203,7 @@ describe("the batch loop (R325)", () => {
   });
 });
 
-describe("the canary link of a failed send (AGENTS 4.2)", () => {
+describe("the canary link of a failed send", () => {
   let failedId = "";
   let everything = Buffer.alloc(0);
   beforeEach(async () => {
@@ -237,7 +237,7 @@ describe("the canary link of a failed send (AGENTS 4.2)", () => {
   });
 });
 
-describe("mail classes (rule 100)", () => {
+describe("mail classes", () => {
   const marketing = {
     templates: { ...TEMPLATES, verify_email: { ...TEMPLATES.verify_email, class: "marketing" as const } },
   };

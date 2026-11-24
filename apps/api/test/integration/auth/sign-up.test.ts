@@ -18,7 +18,6 @@ describe("sign-up", () => {
     const first = await signUp("hijack-1@example.test", "victim-password-1");
     const second = await signUp("hijack-1@example.test", "attacker-password-1");
     const fresh = await signUp("hijack-2@example.test", "other-password-1");
-    // The answers carry the same fields and no token; only the echoed email differs.
     const shape = async (answer: Response) => {
       const body = (await answer.json()) as { user: Record<string, unknown> };
       return {
@@ -33,7 +32,6 @@ describe("sign-up", () => {
     expect(await count(`SELECT count(*) AS n FROM auth."user" WHERE email = 'hijack-1@example.test'`)).toBe(
       1,
     );
-    // Neither password opens a session; the account is unverified.
     for (const password of ["victim-password-1", "attacker-password-1"]) {
       const answer = await signIn("hijack-1@example.test", password);
       expect(cookieOf(answer)).toBe("");
@@ -41,7 +39,6 @@ describe("sign-up", () => {
     }
     const mails = await fx.mails("hijack-1@example.test");
     expect(mails.map((mail) => mail.template).sort()).toEqual(["existing_account_notice", "verify_email"]);
-    // The notice points at the sign-in page; the verification link is the SPA page with the token in the fragment.
     const byTemplate = Object.fromEntries(mails.map((mail) => [mail.template, mail.link]));
     expect(byTemplate.existing_account_notice).toBe("https://app.example.test/auth/sign-in");
     expect(byTemplate.verify_email).toMatch(/^https:\/\/app\.example\.test\/auth\/verify#token=[^&?]+$/);
@@ -123,7 +120,6 @@ describe("the instance owner's claim", () => {
       await fx2.request("/api/auth/sign-up/email", {
         body: { name: "T", email: "stranded-1@example.test", password: PASSWORD },
       });
-      // The state a failed claim leaves: verified, and no admin row.
       await fx2.admin((client) => client.query(`UPDATE auth."user" SET email_verified = true`));
       const answer = await fx2.request("/api/auth/sign-in/email", {
         body: { email: "stranded-1@example.test", password: PASSWORD },

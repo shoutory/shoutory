@@ -1,7 +1,6 @@
 import { type App, defineRoute } from "../define-route.js";
 
-// Whether the signed-in user is an instance admin, for the shell to show the Admin entry. Any signed-in user may ask:
-// the answer is false for everyone else (the definer never errors), so it names no admin and no route.
+// Any signed-in user may ask: the answer is false for everyone else (the definer never errors), so it names no admin.
 export function registerAdminMe(app: App): void {
   defineRoute(app, {
     method: "get",

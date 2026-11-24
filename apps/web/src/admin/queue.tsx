@@ -122,7 +122,6 @@ function Measures({ queue }: { queue: Queue }) {
   );
 }
 
-/** Z-05: the workers, the lag of the outbox and the job queue, and what cannot be measured yet. */
 export function QueuePage() {
   const { state, reload } = useLoad(queueSchema, "/api/v1/admin/queue");
   return (

@@ -37,7 +37,6 @@ test("the probe fails when the version URL answers with an error status", async 
   assert.equal(result.ok, false);
 });
 
-// The two bounds: a request that never answers fails at the timeout, an endless body is cut at the size bound.
 const BOUNDS = [
   [
     "the probe fails when the request outlives its timeout",

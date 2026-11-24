@@ -16,7 +16,6 @@ afterEach(closeApp);
 
 const HELP = 'a[href="https://docs.shoutory.com"]';
 
-// ux-spec X-01, X-08 and 4.10 (SC 2.4.1, 3.2.6): one frame for every signed-in route.
 describe("the shell frame", () => {
   it("has landmarks, one Help link in the top bar and exactly one main to skip to", async () => {
     stubApi();
@@ -53,7 +52,6 @@ function unreadableStorage() {
   });
 }
 
-// R392 and R397: `/` opens the last-used workspace, else the first; a stale or unreadable id never blocks.
 describe("opening a workspace", () => {
   it.each([
     ["nothing stored", null, "/w/w1"],
@@ -88,7 +86,6 @@ describe("opening a workspace", () => {
   });
 });
 
-// ux-spec 2.1 X: a failed list is an inline panel in the top bar; the rail and the top bar stay.
 describe("a failed list", () => {
   it.each([
     ["the workspaces", { workspaces: () => refusal("internal_error", 500) }],
@@ -118,7 +115,6 @@ describe("a failed list", () => {
   });
 });
 
-// ux-spec 2.1 L (R397 10): nothing for 300 ms, then a skeleton, then "Still loading" with Retry after 10 s.
 describe("while the lists load", () => {
   it.each([
     ["299 ms", 299, ""],

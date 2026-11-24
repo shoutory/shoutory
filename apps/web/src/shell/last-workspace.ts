@@ -1,5 +1,3 @@
-// The workspace opened last, remembered per browser so `/` returns to it. A blocked or full storage is a normal
-// answer here: nothing is remembered and `/` opens the first workspace.
 const KEY = "shoutory.workspace";
 
 // Storage throws an Error (a DOMException) when it is blocked; anything that is not an Error is not ours to hide.

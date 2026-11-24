@@ -18,7 +18,6 @@ const MAX_EMAIL = 254;
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const sent = z.object({ id: z.string(), email: z.string(), role_key: z.string() });
 
-// How long an invitation lasts, in seconds: from one hour to 14 days, which the server accepts; 48 hours is its own.
 const EXPIRIES = [
   { seconds: 3600, label: msg({ id: "invite.exp_1h", message: "1 hour" }) },
   { seconds: 86_400, label: msg({ id: "invite.exp_24h", message: "24 hours" }) },
@@ -28,7 +27,6 @@ const EXPIRIES = [
 ];
 const DEFAULT_EXPIRY = "172800";
 
-// A duplicate and the limit of 100 pending invitations have their own words; the rest are the generic ones.
 function inviteCopy(error: ApiError) {
   if (error.details?.reason === "pending_duplicate")
     return {
@@ -131,7 +129,6 @@ function InviteForm({ workspace, onSent }: { workspace: Workspace; onSent: () =>
   );
 }
 
-/** The Invite button and its dialog; the dialog closes only after the server's answer, then the list is read again. */
 export function InviteButton({ workspace, onSent }: { workspace: Workspace; onSent: () => void }) {
   const [open, setOpen] = useState(false);
   return (

@@ -9,10 +9,6 @@ import {
 } from "@shoutory/core/net";
 import { EgressError } from "./errors.js";
 
-/**
- * The request part of the policy: a provider's manifest hosts, the one instance host a channel stored (a provider whose
- * accounts live on user-chosen servers), or a user-supplied URL.
- */
 export type RequestPolicy =
   | { readonly kind: "provider"; readonly egressHosts: readonly string[] }
   | { readonly kind: "instance"; readonly host: string }
@@ -24,10 +20,8 @@ interface ResolvedAddress {
 }
 type Lookup = (hostname: string) => Promise<readonly ResolvedAddress[]>;
 
-/**
- * The operator network policy, built once at start-up from instance configuration and never from a
- * workspace row or a request: the fixed refuse list minus the operator allowlist, metadata and link-local always refused.
- */
+// Built once at start-up from instance configuration and never from a workspace row or a request, so no workspace can
+// widen it. Metadata and link-local addresses are always refused.
 export interface OperatorPolicy {
   readonly ports: readonly number[];
   readonly schemes: readonly string[];
@@ -38,13 +32,9 @@ export interface OperatorPolicy {
 
 export interface OperatorPolicyOptions {
   readonly allowCidrs: readonly string[];
-  /** Allowed ports; 443 only by default. */
   readonly ports?: readonly number[];
-  /** Allowed URL schemes; `https:` only by default. */
   readonly schemes?: readonly string[];
-  /** The resolver; the system resolver by default. */
   readonly lookup?: Lookup;
-  /** The TXT resolver; a `Resolver` with a 3 s timeout and 2 tries by default. */
   readonly resolveTxt?: ResolveTxt;
 }
 
@@ -79,7 +69,6 @@ export function createOperatorPolicy(options: OperatorPolicyOptions): OperatorPo
 
 const DEFAULT_PORTS: Readonly<Record<string, number>> = { "https:": 443, "http:": 80 };
 
-/** Checks everything about a URL that needs no DNS answer; returns the parsed URL or throws an `EgressError`. */
 export function checkUrl(input: string, request: RequestPolicy, operator: OperatorPolicy): URL {
   if (!URL.canParse(input)) throw new EgressError({ class: "invalid_url", host: "" });
   const url = new URL(input);

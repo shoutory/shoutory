@@ -4,12 +4,9 @@ import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-// A new screen must not skip the browser checks: every path of the app's routes is a screen of the e2e catalogue (which
-// the accessibility, reflow and visual specs walk), or a route with no screen of its own that says why.
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const CATALOGUE = "e2e/support/screens.ts";
 
-/** A route path as the catalogue writes it: with a leading slash, except the catch-all. */
 const full = (path) => (path === "*" || path.startsWith("/") ? path : `/${path}`);
 
 test("every route path of the app is a screen of the e2e catalogue or an exempt route with a reason", async () => {

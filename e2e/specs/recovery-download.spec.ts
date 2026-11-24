@@ -50,7 +50,6 @@ test("the recovery codes download holds the codes, and its Blob URL is revoked a
   await page.clock.fastForward(1_000);
   expect((await blobs(page)).revoked).toEqual([first]);
 
-  // A second download is revoked at once when the person leaves the codes.
   await download(page);
   await page.getByTestId("recovery-saved").click();
   const seen = await blobs(page);

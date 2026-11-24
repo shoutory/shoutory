@@ -1,18 +1,12 @@
 import type { FlagState } from "@shoutory/core/flags";
 import type { TenantTx } from "@shoutory/db/context";
 
-// The one place the flag tables are read: the definer `flags_read` answers every flag with the overrides the
-// caller's scope may see, and this loader turns those rows into the snapshot `flags.isOn` resolves over. It maps the
-// instance overrides only: no caller has an organization or workspace scope to resolve yet.
-
 interface LoadedFlag {
   readonly key: string;
   readonly description: string;
   readonly owner: string;
-  /** The removal date, `YYYY-MM-DD`. */
   readonly removeBy: string;
   readonly defaultOn: boolean;
-  /** The instance override, or null when none is set. */
   readonly instanceOverride: boolean | null;
 }
 
@@ -35,7 +29,6 @@ const READ = `
   FROM app.flags_read()
   WHERE scope IS NULL OR scope = 'instance'`;
 
-/** Every flag with its instance override, as a list and as a snapshot for `flags.isOn`. */
 export async function loadFlags(tx: TenantTx): Promise<LoadedFlags> {
   const rows = (await tx.query<Row>(READ)).rows;
   const flags = rows.map((row) => ({

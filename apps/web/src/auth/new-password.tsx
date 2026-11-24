@@ -4,10 +4,7 @@ import { useState } from "react";
 import type { ApiError } from "../http/client";
 import { TextField } from "../ui/text-field";
 
-/**
- * A new-password field that checks the length only (NFR-SEC-28): the server decides everything else. `check`
- * says whether the value may be sent; a value that is too short shows its message beside the field.
- */
+// Checks the length only: the server decides everything else.
 export function useNewPassword() {
   const [value, setValue] = useState("");
   const [short, setShort] = useState(false);

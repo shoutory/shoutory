@@ -11,7 +11,6 @@ import { createApp } from "../../src/app.js";
 import { createLogger } from "../../src/logging/logger.js";
 import { testAuth } from "../support/auth.js";
 
-// The real web build, not a fixture: the policy must allow the script the build really emits (V-76, R360).
 const webPackage = join(import.meta.dirname, "../../../web/package.json");
 const fromWeb = createRequire(webPackage);
 const out = mkdtempSync(join(tmpdir(), "web-csp-build-"));
@@ -26,8 +25,8 @@ beforeAll(() => {
 
 afterAll(() => rmSync(out, { recursive: true, force: true }));
 
-// The expected hash comes from a real HTML parser (happy-dom, a dependency of apps/web, loaded like Vite), not from
-// the pattern the code under test uses: the text of each script element without `src`, as the parser delivers it.
+// The expected hash comes from a real HTML parser (happy-dom, loaded like Vite), not from the pattern the code under
+// test uses.
 const { Window } = fromWeb("happy-dom") as {
   Window: new (options: {
     settings: { disableJavaScriptEvaluation: boolean };
@@ -79,9 +78,8 @@ async function directiveServedFrom(webRoot: string, directive: string): Promise<
   return csp.split(";").find((part) => part.trim().startsWith(directive)) ?? "";
 }
 
-// React Aria inserts two `<style>` elements with fixed text when a control is pressed or an overlay opens. The policy
-// allows them by hash, so the expected hash comes from the installed package's own files: an upgrade that changes a
-// text fails here before it ships, instead of being refused in the browser.
+// React Aria inserts two `<style>` elements with fixed text; the policy allows them by hash. Reading the text from the
+// installed package makes an upgrade that changes it fail here instead of being refused in the browser.
 function injectedStyleTexts(): string[] {
   // `react-aria` is a dependency of `react-aria-components`, so it sits beside it in the package store.
   const racDir = realpathSync(join(dirname(webPackage), "node_modules/react-aria-components"));

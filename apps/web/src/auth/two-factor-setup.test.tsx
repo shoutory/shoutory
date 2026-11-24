@@ -55,7 +55,6 @@ async function toCodes(api: Parameters<typeof stubApi>[0] = {}) {
 const found = (host: HTMLElement, secrets = SECRETS) =>
   secrets.filter((secret) => host.innerHTML.includes(secret));
 
-// F-TEAM-006, NFR-SEC-17: the secret, its address and the recovery codes are shown to the person and kept nowhere.
 describe("the two-factor setup (security floor)", () => {
   it("the password field and the code field say what they are", async () => {
     stubApi({ enable: ENABLED });
@@ -194,7 +193,6 @@ describe("the two-factor setup steps", () => {
 });
 
 describe("the two-factor setup failures", () => {
-  // A failure that is not a refusal of the value keeps what was typed, so the next press needs no retyping.
   const NO_SECRET = "otpauth://totp/Shoutory:x?issuer=Shoutory";
   it.each([
     [

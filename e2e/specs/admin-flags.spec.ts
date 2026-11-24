@@ -18,7 +18,6 @@ test("the flags screen lists planted flags with owner, removal date and state, m
   await expect(row(page, flags.defaultOn.key)).toHaveAttribute("data-state", "on");
   await expect(row(page, flags.live.key)).not.toHaveAttribute("data-expired", "true");
 
-  // Expiry is shown in words and the control is unavailable, never by colour alone.
   const expired = row(page, flags.expired.key);
   await expect(expired).toHaveAttribute("data-expired", "true");
   await expect(expired.getByTestId("flag-expired")).toBeVisible();

@@ -11,11 +11,6 @@ import { ErrorPanel } from "../ui/error-panel";
 
 type Words = { what: ReactNode; meaning: ReactNode };
 
-/**
- * One change to a workspace's people (a role, a removal, an invitation): it ignores a second press while it runs, an
- * ended session goes to sign-in and back, and a refused rank reads the shell lists again, so the page shows the role
- * the person has now (`onFailure` reads the page's own lists).
- */
 export function useChange(run: () => Promise<void>, onFailure?: (error: ApiError) => void) {
   const navigate = useNavigate();
   const revalidator = useRevalidator();
@@ -28,7 +23,6 @@ export function useChange(run: () => Promise<void>, onFailure?: (error: ApiError
   });
 }
 
-/** A heading that takes focus when `move` is called: after a change ends the question, focus is not lost with it. */
 export function useHeadingFocus() {
   const ref = useRef<HTMLHeadingElement>(null);
   const [moved, setMoved] = useState(0);
@@ -38,7 +32,6 @@ export function useHeadingFocus() {
   return { ref, move: () => setMoved((now) => now + 1) };
 }
 
-/** One loaded list: the loading status, the error panel with Retry, or the list itself. */
 export function Listed<T>({
   state,
   reload,
@@ -47,7 +40,7 @@ export function Listed<T>({
 }: {
   state: Loaded<T>;
   reload: () => void;
-  /** A min-height class that holds the room the list takes once it has loaded, so what is below does not move. */
+  /** A min-height class that keeps the room the loaded list will take, so what is below does not move. */
   reserve?: string;
   children: (data: T) => ReactNode;
 }) {
@@ -64,11 +57,6 @@ export function Listed<T>({
   return <>{children(state.data)}</>;
 }
 
-/**
- * A question before a change that ends something (a removal, a leave, a revoke): the dialog says what ends, nothing is
- * sent until the person confirms, and a refusal is shown inside it. A password that was not confirmed ends the
- * question and `onDeclined` tells the page; `onDone` runs once the dialog has closed after an answer.
- */
 export function ConfirmChange({
   title,
   label,
@@ -105,7 +93,6 @@ export function ConfirmChange({
       onDeclined?.(error);
     },
   );
-  // Closed, the question forgets its last refusal: the next time it opens it is a clean one.
   const { reset } = action;
   useEffect(() => {
     if (!isOpen) reset();
@@ -138,7 +125,6 @@ export function ConfirmChange({
   );
 }
 
-// Refusals the page does not offer but a stale page or a second tab can reach: each says what it means.
 const BY_REASON: Record<string, Words> = {
   last_owner: {
     what: <Trans id="members.last_owner.what">A workspace needs one Owner</Trans>,
@@ -158,7 +144,6 @@ const BY_REASON: Record<string, Words> = {
   },
 };
 
-/** The words of a refused change: a password that was not confirmed, a refused rank and each reason have their own. */
 export function changeCopy(error: ApiError): Words {
   const own = BY_REASON[error.details?.reason ?? ""];
   if (own) return own;

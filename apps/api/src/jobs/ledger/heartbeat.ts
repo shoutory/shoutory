@@ -12,15 +12,12 @@ export interface HeartbeatOptions {
   readonly token: string | number;
   readonly owner: string;
   readonly leaseSeconds: number;
-  /** A monotonic clock in milliseconds; the default is `performance.now`. */
   readonly now?: () => number;
-  /** When the claim began on that clock, so the lease end is never counted later than the database counts it. */
+  // Taken before the claim, so the lease end is never counted later than the database counts it.
   readonly claimStartedMs?: number;
 }
 export interface Heartbeat {
-  /** Aborts when the lease is lost (the database says so) or ends with no beat that took. */
   readonly signal: AbortSignal;
-  /** Ends the beating and waits for a beat in flight, at most one beat timeout; no write follows. */
   stop(): Promise<void>;
 }
 
@@ -29,7 +26,6 @@ const extendLease = ({ pool, workspaceId, id, token, owner, leaseSeconds }: Hear
     heartbeat(sqlOf(tx), { id, token: String(token), owner, extendSeconds: leaseSeconds }),
   );
 
-// A beat is given a third of the lease; one that is still waiting then counts as failed.
 async function within<T>(work: Promise<T>, ms: number): Promise<T> {
   let give: NodeJS.Timeout | undefined;
   const slow = new Promise<never>((_, reject) => {
@@ -42,17 +38,13 @@ async function within<T>(work: Promise<T>, ms: number): Promise<T> {
   }
 }
 
-/**
- * Keeps the lease of one claimed operation alive: every third of the lease it extends it by the whole lease, fenced by the
- * token and the owner. The database answering `lost` aborts the signal at once. A beat that fails or takes longer than a
- * third of the lease is retried every third; a timer set to the lease end (on the monotonic clock, reset after each good
- * beat) aborts the signal when no beat took in time, so a worker that cannot prove it still holds the lease stops before
- * the lease ends, whether the database errs or hangs.
- */
+// The deadline timer aborts the signal when no beat took in time, so a worker that cannot prove it still holds the
+// lease stops before the lease ends, whether the database errs or hangs.
 export function startHeartbeat(options: HeartbeatOptions): Heartbeat {
   const { logger, leaseSeconds, now = () => performance.now() } = options;
   const controller = new AbortController();
   const leaseMs = leaseSeconds * 1000;
+  // A beat gets a third of the lease; a beat still waiting after that counts as failed.
   const every = leaseMs / 3;
   let leaseEnd = (options.claimStartedMs ?? now()) + leaseMs;
   let timer: NodeJS.Timeout | undefined;
@@ -101,14 +93,11 @@ export interface HoldOptions {
   readonly operation: Operation;
   readonly manifest: Manifest;
   readonly leaseSeconds: number;
-  /** The lease owner. */
   readonly owner: string;
   readonly now: () => number;
-  /** Taken on the monotonic clock before the claim, so the abort deadline never lies after the lease end. */
   readonly started: number;
 }
 
-/** Starts the heartbeat of a claim and gathers what the turn holds; `stop` ends the beat and waits for one in flight. */
 export function hold(options: HoldOptions): { held: Held; stop: () => Promise<void> } {
   const { claim, operation, manifest, leaseSeconds, started } = options;
   const beating = startHeartbeat({

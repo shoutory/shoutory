@@ -8,10 +8,6 @@ const ZOOMED = { width: 640, height: 360 };
 const CONTROLS =
   'a[href], button, input, select, textarea, [role="combobox"], [tabindex]:not([tabindex="-1"])';
 
-/**
- * Containers whose content is wider than they are, and which either scroll it or cut it off, and are not in `named`
- * (by test id): each is a defect. Text hidden on purpose (assistive technology only, or aria-hidden) does not count.
- */
 const unnamedOverflow = (page: Page, named: readonly string[]) =>
   page.evaluate((allowed) => {
     const clips = (element: Element) =>
@@ -28,7 +24,6 @@ const unnamedOverflow = (page: Page, named: readonly string[]) =>
       .map((element) => `${element.tagName.toLowerCase()}.${String(element.className).slice(0, 60)}`);
   }, named);
 
-/** The controls a person cannot reach after scrolling to them: outside the viewport sideways, or covered. */
 async function unreachableControls(page: Page): Promise<string[]> {
   const controls = page.locator(CONTROLS);
   const unreachable: string[] = [];

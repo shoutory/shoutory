@@ -87,7 +87,6 @@ describe("adding a client", () => {
     expect([body.organization_id, body.name]).toEqual(["o1", "New Client"]);
     expect(calls(stub, false)).toHaveLength(2);
     expect(host.querySelector('[role="dialog"]')).toBeNull();
-    // The dialog is gone: focus is on the heading and a status line says the client was added.
     expect(document.activeElement).toBe(host.querySelector("h1"));
     const status = [...host.querySelectorAll('main [role="status"]')].map((node) => node.textContent);
     expect(status.join(" ")).toMatch(/client added/i);

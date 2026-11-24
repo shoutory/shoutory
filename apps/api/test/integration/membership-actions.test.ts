@@ -9,9 +9,6 @@ import {
 } from "../support/tenancy.js";
 import { type Fixture, ORIGIN, startFixture } from "./auth/harness.js";
 
-// The happy path of each member and invitation action, and the audit row it writes (R246): one table, one row per
-// action code. Who may do what, and every refusal, is the floor in members-routes and invitations-routes.
-
 type User = { id: string; cookie: string };
 let fx: Fixture;
 let ws: string;

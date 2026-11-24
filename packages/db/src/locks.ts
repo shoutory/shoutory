@@ -1,11 +1,9 @@
 import type { Pool, PoolClient } from "pg";
 
-// The one place that calls an advisory lock function; a contract test refuses a call anywhere else. A lock is
-// keyed by a fixed class id plus a hash of the key, and a code path takes classes in the order listed here.
+// A code path takes classes in the order listed here.
 const CLASS_IDS = { migrate: 1, channel: 2, maintenance: 3 } as const;
 export type LockClass = keyof typeof CLASS_IDS;
 
-/** What a transaction-scoped lock needs of its transaction: it only sends statements (a pooled client or a tenant tx). */
 export interface QueryOnly {
   query(text: string, values?: unknown[]): Promise<{ rowCount: number | null }>;
 }
@@ -19,10 +17,7 @@ export function withAdvisoryLock<T>(
   lockClass: "migrate",
   run: (client: PoolClient) => Promise<T>,
 ): Promise<T>;
-/**
- * Every other class is transaction-scoped: `tx` must already be inside a transaction, which releases the lock. The
- * `maintenance` class serializes the scheduled upkeep of the worker role across workers.
- */
+// Transaction-scoped: `tx` must already be inside a transaction, which releases the lock.
 export function withAdvisoryLock<T>(
   tx: QueryOnly,
   lockClass: "channel" | "maintenance",

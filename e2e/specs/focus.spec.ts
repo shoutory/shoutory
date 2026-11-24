@@ -3,8 +3,8 @@ import { loadFounder, loadMember, memberStatePath, signInWithCode } from "../sup
 import { inPage, newRecoveryCodes } from "../support/quality";
 import { waitForFreshCode } from "../support/restore";
 
-// Where a screen says focus goes, checked in a real browser: the library may drop an attribute a unit test cannot see.
-// Focus moves after the page has changed, so each check waits for it instead of reading it once.
+// A real browser, because the library may drop an attribute a unit test cannot see. Focus moves after the page has
+// changed, so each check waits for it instead of reading it once.
 test("the palette, a dialog and a route change put focus where the screen says", async ({ page }) => {
   const { workspace } = await loadFounder();
   await page.goto(`/w/${workspace.id}`);
@@ -17,21 +17,19 @@ test("the palette, a dialog and a route change put focus where the screen says",
 
   await page.goto(`/w/${workspace.id}/settings/members`);
   await page.getByTestId("invite-open").click();
-  // Focus is on the dialog or on something in it.
   await expect(page.locator('[role="dialog"]:focus-within')).toHaveCount(1);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toBeHidden();
   await expect(page.getByTestId("invite-open")).toBeFocused();
 
-  // A change of screen puts focus on the new screen's heading.
   await page.locator(`a[href$="/settings/general"]`).first().click();
   await expect(page.locator("h1")).toBeFocused();
 });
 
-// A member of its own, not the founder: the server takes a code once per person (one per ninety seconds) and ten checks per
-// person every fifteen minutes (`totp_code` and `two_factor` in the throttle table), and every other spec that uses the
-// founder spends those. This member's codes are used only here and at enrolment, and the sign-in with a code makes the
-// session's identity check fresh, so no second code is spent.
+// A member of its own, not the founder: the server takes a code once per person (one per ninety seconds) and ten checks
+// per person every fifteen minutes, and every other spec that uses the founder spends those. This member's codes are
+// used only here and at enrolment, and the sign-in with a code makes the session's identity check fresh, so no second
+// code is spent.
 test("new recovery codes take focus when they appear, and the security heading takes it back when saved", async ({
   browser,
 }) => {

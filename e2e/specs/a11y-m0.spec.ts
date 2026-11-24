@@ -7,7 +7,6 @@ import { DIALOGS, ERROR_PAGES, LOCALES, message, openErrorPage, SCREENS, THEMES 
 const TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 const DIRECTIONS = { en: "ltr", ar: "rtl" } as const;
 
-/** Every violation on the page, one line each: the rule and the elements it names. */
 async function violations(page: Page): Promise<string[]> {
   const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
   return results.violations.map(
@@ -15,7 +14,6 @@ async function violations(page: Page): Promise<string[]> {
   );
 }
 
-/** The scan only counts if the page is in the cell it claims to be in: language, direction and theme. */
 async function expectCell(page: Page, locale: Locale, theme: Theme): Promise<void> {
   const html = page.locator("html");
   await expect(html).toHaveAttribute("lang", locale);

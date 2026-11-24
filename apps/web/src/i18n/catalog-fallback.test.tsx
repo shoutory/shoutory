@@ -7,7 +7,6 @@ import { CatalogFallback } from "./catalog-fallback";
 
 afterEach(() => document.body.replaceChildren());
 
-// R377: when no message catalog loads, the page still says what happened, in fixed English, with no i18n provider.
 describe("the catalog-load fallback", () => {
   it("renders English text and a way to retry without any provider", () => {
     const host = document.body.appendChild(document.createElement("div"));

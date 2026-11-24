@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 const src = join(import.meta.dirname, "../../src");
 
 // A control that cannot be used says why and stays focusable: `aria-disabled="true"`, never the native `disabled`
-// attribute or React Aria's `isDisabled` prop (NFR-A11Y-05). Tailwind's `disabled:` variant is a class, not an attribute.
+// attribute or React Aria's `isDisabled` prop. Tailwind's `disabled:` variant is a class, not an attribute.
 const NATIVE_DISABLED = [
   /<[A-Za-z][\w.]*\s[^>]*(?<![\w-])(?:disabled|isDisabled)(?![\w:-])/, // an attribute on a tag
   /(?<![\w-])(?:disabled|isDisabled)(?:\s*=|\s*\/?>|\s*$)/, // an attribute on a line of its own

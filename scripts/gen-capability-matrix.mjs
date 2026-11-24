@@ -1,7 +1,4 @@
 #!/usr/bin/env node
-// Generates docs/providers/capability-matrix.md from the provider manifests. `--check` writes nothing and fails when the
-// file is missing or differs from what the manifests produce. `--manifests <json>` and `--out <file>` replace the
-// built registry and the default path (the contract test uses both). CI tooling, never app code.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";

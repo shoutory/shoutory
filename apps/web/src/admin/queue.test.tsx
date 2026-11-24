@@ -25,7 +25,6 @@ describe("the queue health screen", () => {
     expect(host.textContent).toContain("3");
   });
 
-  // Stuck rows and the reconciler backlog have no source yet: "not available", never a zero.
   it.each(["Stuck operations", "Reconciler backlog"])(
     "shows %s as not available, never a zero",
     async (name) => {
@@ -41,7 +40,6 @@ describe("the queue health screen", () => {
     expect(host.textContent).toMatch(/job queue is not installed/i);
   });
 
-  // No heartbeat at all is the failure the screen exists to show: it says so instead of an empty table.
   it("says no worker has reported instead of showing an empty table", async () => {
     const { host } = await openAdmin(PATH, { adminQueue: () => json({ data: { ...QUEUE, workers: [] } }) });
     expect(host.textContent).toMatch(/no worker has reported/i);

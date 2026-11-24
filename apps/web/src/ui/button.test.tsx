@@ -25,7 +25,6 @@ const key = (button: HTMLElement, type: "keydown" | "keyup", name: string) =>
     button.dispatchEvent(new KeyboardEvent(type, { key: name, bubbles: true }));
   });
 
-// NFR-A11Y-05 and R380: an unavailable button stays focusable and says why; the press never reaches the handler.
 describe("the Button while aria-disabled is set", () => {
   it("stays focusable, is not natively disabled and links its reason", () => {
     const button = render(
@@ -70,7 +69,6 @@ describe("the Button while aria-disabled is set", () => {
 });
 
 describe("the Button's handlers", () => {
-  // R387: no handler of the caller reaches the element while it is unavailable, whatever event it listens to.
   it.each(["onPressStart", "onPressEnd", "onPressUp", "onPressChange", "onClick", "onKeyDown", "onKeyUp"])(
     "%s of the caller never runs",
     (name) => {
@@ -99,7 +97,6 @@ describe("the Button's handlers", () => {
 });
 
 describe("the Button's classes", () => {
-  // A caller's class is added to the base classes (the size, focus ring and unavailable look), never replaces them.
   it.each([
     ["a class string", "extra-class"],
     ["a class function", () => "extra-class"],

@@ -11,7 +11,6 @@ import { AuthFrame, SubmitButton, useAction } from "./auth-frame";
 
 const sent = z.object({ status: z.boolean() });
 
-/** A-03 request (`/forgot`): the confirmation is the same text for every address, known or not. */
 export function ForgotPage() {
   const { t } = useLingui();
   const [email, setEmail] = useState("");

@@ -23,8 +23,6 @@ import { holdThenRace, openTx } from "../support/race.js";
 
 const env = readTestEnv();
 
-// The invitation definers of migration 0010. Rows that fail run in a rolled-back transaction; rows that must commit
-// say so. Every refusal asserts its SQLSTATE and the `<definer>:` message prefix (R241).
 let db: TestDatabase;
 const rows = (sql: string, params?: unknown[]) =>
   withAdminClient(env, db.name, async (a) => (await a.query(sql, params)).rows);
@@ -36,13 +34,11 @@ const ACCEPT = "SELECT app.invitation_accept($1::bytea, NULL, NULL) AS workspace
 const TAKE = "-m06a@example.test";
 const VIEWER_ROLE = "(SELECT id FROM app.roles WHERE workspace_id IS NULL AND key = 'viewer')";
 
-/** Calls invitation_create in WA as the caller, rolled back; `after` reads the effect first. */
 const create = (caller: string, email: string, role: string, token: string, after?: [string, unknown[]]) =>
   attempt(app(), inWorkspace(caller), CREATE, [WA, email, role, "1 day", digestOf(token)], after);
 
 const commitAs = (user: string, sql: string, params: unknown[]) => commit(app(), user, sql, params);
 
-/** Plants one invitation as the superuser and returns its id. */
 async function plant(row: Planted): Promise<string> {
   await withAdminClient(env, db.name, (admin) => plantInvitation(admin, row));
   const found = await rows("SELECT id FROM app.invitations WHERE token_hash = $1", [digestOf(row.token)]);
@@ -62,7 +58,6 @@ beforeAll(async () => {
 afterAll(() => db.drop());
 
 describe("an invitation above the inviter's role is refused", () => {
-  // [caller label, role asked, caller, SQLSTATE of the refusal or null when the invitation is made]
   it.each([
     ["owner", "admin", U.owner, null],
     ["owner", "owner", U.owner, "SH403"],
@@ -110,7 +105,7 @@ describe("an invitation above the inviter's role is refused", () => {
   });
 });
 
-describe("invitation_create and invitation_revoke bounds (R245, R253)", () => {
+describe("invitation_create and invitation_revoke bounds", () => {
   const at = (expires: string | null, email: string) =>
     attempt(
       app(),
@@ -157,7 +152,7 @@ describe("invitation_create and invitation_revoke bounds (R245, R253)", () => {
   );
 });
 
-describe("a caller below admin cannot invite, revoke, change or remove another member (R253)", () => {
+describe("a caller below admin cannot invite, revoke, change or remove another member", () => {
   const OTHER = "SELECT app.member_role_set($1::uuid, $2::uuid, 'viewer', NULL, NULL)";
   const OTHER_REMOVE = "SELECT app.member_remove($1::uuid, $2::uuid, NULL, NULL)";
   const CALLERS = [
@@ -185,7 +180,7 @@ describe("a caller below admin cannot invite, revoke, change or remove another m
   );
 });
 
-describe("accept (R242): the answers are fixed by who asks and in what state the row is", () => {
+describe("accept: the answers are fixed by who asks and in what state the row is", () => {
   const COUNT = "SELECT count(*)::int AS n FROM app.workspace_members";
 
   it.each(ACCEPT_CASES)("$title", async ({ title, planted, caller, mutate, state, message }) => {
@@ -302,12 +297,11 @@ describe("the token digest is stored and the app role reads and writes only what
   });
 });
 
-describe("a caller outside the workspace gets the same 42501 and message for a real and a missing target (E-1)", () => {
+describe("a caller outside the workspace gets the same 42501 and message for a real and a missing target", () => {
   type Args = (ws: string, victim: string) => unknown[];
   const pair: Args = (ws, victim) => [ws, victim];
   const SET_ROLE = "SELECT app.member_role_set($1::uuid, $2::uuid, 'viewer', NULL, NULL)";
   const REMOVE = "SELECT app.member_remove($1::uuid, $2::uuid, NULL, NULL)";
-  // [definer, SQL, the arguments for a workspace and a target]
   const DEFINERS: [string, string, Args][] = [
     ["invitation_create", CREATE, (ws) => [ws, `probe${TAKE}`, "viewer", "1 day", Buffer.alloc(32, 9)]],
     ["invitation_revoke", REVOKE, pair],
