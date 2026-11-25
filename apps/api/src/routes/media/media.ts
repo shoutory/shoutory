@@ -78,9 +78,11 @@ interface S3Side {
   logger: Logger;
   /** Whether the storage takes a file above 64 MiB in parts: S3 with its multipart half, or the filesystem. */
   parts: boolean;
+  /** The most bytes one workspace may store; null is no cap. */
+  cap: number | null;
 }
 
-function registerUpload(app: App, { presigner, multipart, logger, parts }: S3Side): void {
+function registerUpload(app: App, { presigner, multipart, logger, parts, cap }: S3Side): void {
   defineRoute(app, {
     method: "post",
     path: BASE,
@@ -98,8 +100,8 @@ function registerUpload(app: App, { presigner, multipart, logger, parts }: S3Sid
         id: (
           await callDefiner<{ id: string }>(
             tx,
-            "SELECT app.media_register($1, $2, $3, 'upload', NULL, NULL, $4) AS id",
-            [scope.workspaceId, body.file_name, body.mime, large ? PART_SIZE : null],
+            "SELECT app.media_register($1, $2, $3, 'upload', NULL, NULL, $4, $5, $6) AS id",
+            [scope.workspaceId, body.file_name, body.mime, large ? PART_SIZE : null, body.byte_size, cap],
           )
         ).id,
       }));
@@ -292,9 +294,10 @@ function registerPut(app: App, storage: StorageDriver, now: () => Date): void {
     params: mediaParams,
     rawBody: { maxBytes: MAX_UPLOAD_BYTES },
     handler: async ({ c, scoped, params }) => {
-      const { workspaceId, asset } = await scoped(false, async (tx, scope) => ({
+      const { workspaceId, asset, upload } = await scoped(false, async (tx, scope) => ({
         workspaceId: scope.workspaceId,
         asset: await assetOf(tx, scope.workspaceId, params.media_id),
+        upload: await uploadOf(tx, scope.workspaceId, params.media_id),
       }));
       if (!OCTET_STREAM.test(c.req.header("content-type") ?? ""))
         throw new Refusal("validation_failed", "the body must be application/octet-stream");
@@ -304,6 +307,8 @@ function registerPut(app: App, storage: StorageDriver, now: () => Date): void {
       if (body === null) throw new Refusal("validation_failed", "the body is empty");
       // Bounded at the declared length, so a body that lies about it is cut (the limit trusts the header).
       const declared = Number(c.req.header("content-length"));
+      const registered = upload?.declared_size;
+      if (typeof registered === "number" && declared > registered) throw tooLarge();
       await storeOriginal(storage, originalKey(workspaceId, asset.id), body, declared);
       return { id: asset.id };
     },
@@ -317,17 +322,19 @@ export function registerMedia(
     presigner?: S3Presigner | undefined;
     multipart?: S3Multipart | undefined;
     mediaImportFetch?: ImportFetch | undefined;
+    mediaWorkspaceMaxBytes?: number | undefined;
     logger: Logger;
   },
   now: () => Date = () => new Date(),
 ): void {
   const { presigner, multipart, logger } = s3;
+  const cap = s3.mediaWorkspaceMaxBytes ?? null;
   const fs = storage.name === "fs" && !presigner;
-  registerUpload(app, { presigner, multipart, logger, parts: fs || (!!presigner && !!multipart) });
+  registerUpload(app, { presigner, multipart, logger, parts: fs || (!!presigner && !!multipart), cap });
   registerComplete(app, storage, { multipart, logger });
   if ((presigner && multipart) || fs) registerParts(app, presigner);
   if (!presigner) registerPut(app, storage, now);
   if (fs) registerFsParts(app, storage);
-  if (s3.mediaImportFetch) registerImport(app, storage, s3.mediaImportFetch, logger);
+  if (s3.mediaImportFetch) registerImport(app, storage, { getFile: s3.mediaImportFetch, logger, cap });
   registerRead(app, storage);
 }

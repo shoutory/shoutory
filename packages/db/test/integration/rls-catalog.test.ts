@@ -352,7 +352,7 @@ const DEFINERS: Definer[] = [
   { name: "media_guard", args: "", callers: [], helper: true },
   {
     name: "media_register",
-    args: "workspace_id uuid, file_name text, mime text, source text, source_ref text, multipart_upload_id text, part_size integer",
+    args: "workspace_id uuid, file_name text, mime text, source text, source_ref text, multipart_upload_id text, part_size integer, declared_size bigint, workspace_max_bytes bigint",
     callers: ["shoutory_app"],
   },
   {

@@ -283,6 +283,16 @@ const scratchSchema = z.object({
     .default("/data/scratch"),
 });
 
+// The most bytes one workspace may store, so one workspace cannot fill the operator's disk; unset is no cap.
+const workspaceCapSchema = z.object({
+  SHOUTORY_MEDIA_WORKSPACE_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(Number.MAX_SAFE_INTEGER)
+    .optional(),
+});
+
 export interface Config {
   role: ServerRole;
   publicOrigin: string | undefined;
@@ -303,6 +313,7 @@ export interface Config {
   mediaScan: MediaScanConfig;
   ffprobePath: string | undefined;
   scratchDir: string;
+  mediaWorkspaceMaxBytes: number | undefined;
   databaseUrls: Readonly<Partial<Record<Role, SealedSecret>>>;
 }
 
@@ -392,6 +403,7 @@ export function parseEnv(env: Env): Config {
     mediaScan: parseMediaScanEnv(env),
     ffprobePath: parseFfprobeEnv(env),
     scratchDir: parseWith(scratchSchema, env).SHOUTORY_SCRATCH_DIR,
+    mediaWorkspaceMaxBytes: parseWith(workspaceCapSchema, env).SHOUTORY_MEDIA_WORKSPACE_MAX_BYTES,
     databaseUrls: Object.fromEntries(
       URL_ROLES[http.data.SHOUTORY_ROLE].map((r) => [r, secret(roleVariable("SHOUTORY_DATABASE_URL_", r))]),
     ),

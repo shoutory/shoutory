@@ -17,6 +17,8 @@ const MAPPED: [string, string, string | undefined, string, Record<string, string
   ["42501", "media: refused", undefined, "not_found", undefined],
   ["SH409", "media_set_multipart: the asset is not a pending upload", undefined, "conflict", undefined],
   ["SH422", "post: media_unavailable", undefined, "unprocessable_content", { reason: "media_unavailable" }],
+  ["SH422", "media_register: storage_full", undefined, "unprocessable_content", { reason: "storage_full" }],
+  ["SH422", "media_mark_uploaded: too_large", undefined, "unprocessable_content", { reason: "too_large" }],
   ...["post_in_flight", "use_edit", "variant_has_history", "post_archived"].map(
     (reason) =>
       ["SH409", `post: ${reason}`, undefined, "conflict", { reason }] as [

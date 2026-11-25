@@ -252,6 +252,8 @@ export interface FixtureOptions {
   readonly multipart?: AppOptions["multipart"];
   /** The egress fetch of the import of media by URL; absent, the app has no import route. */
   readonly mediaImportFetch?: AppOptions["mediaImportFetch"];
+  /** The most bytes one workspace may store; absent, no cap. */
+  readonly mediaWorkspaceMaxBytes?: number;
   /** The plan limits of the app; absent, the app answers the core self-host value. */
   readonly entitlements?: Entitlements;
   /** The providers and egress client of the channel check; absent, the app has no check route. */
@@ -346,6 +348,9 @@ function buildOn({ logger, hibp, authPool, appPool, options }: Parts, libraryPoo
   const imports = options.mediaImportFetch ? { mediaImportFetch: options.mediaImportFetch } : {};
   const limits = options.entitlements ? { entitlements: options.entitlements } : {};
   const channels = options.channels ? { channels: options.channels } : {};
+  const cap = options.mediaWorkspaceMaxBytes
+    ? { mediaWorkspaceMaxBytes: options.mediaWorkspaceMaxBytes }
+    : {};
   const app = createApp({
     publicOrigin: ORIGIN,
     trustedProxies: [],
@@ -360,6 +365,7 @@ function buildOn({ logger, hibp, authPool, appPool, options }: Parts, libraryPoo
     ...imports,
     ...limits,
     ...channels,
+    ...cap,
   });
   return { app, auth };
 }

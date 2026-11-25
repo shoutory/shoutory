@@ -130,14 +130,14 @@ const streamOf = (bytes: Uint8Array) =>
 
 async function register(
   scoped: Scope,
-  fields: { name: string; mime: string; origin: string | null },
+  fields: { name: string; mime: string; origin: string | null; size: number; cap: number | null },
 ): Promise<string> {
   return (
     await scoped(true, (tx, scope) =>
       callDefiner<{ id: string }>(
         tx,
-        "SELECT app.media_register($1, $2, $3, 'url_import', $4, NULL, NULL) AS id",
-        [scope.workspaceId, fields.name, fields.mime, fields.origin],
+        "SELECT app.media_register($1, $2, $3, 'url_import', $4, NULL, NULL, $5, $6) AS id",
+        [scope.workspaceId, fields.name, fields.mime, fields.origin, fields.size, fields.cap],
       ),
     )
   ).id;
@@ -164,7 +164,11 @@ function takeSlot(): () => void {
   };
 }
 
-export function registerImport(app: App, storage: StorageDriver, getFile: ImportFetch, logger: Logger): void {
+export function registerImport(
+  app: App,
+  storage: StorageDriver,
+  { getFile, logger, cap }: { getFile: ImportFetch; logger: Logger; cap: number | null },
+): void {
   defineRoute(app, {
     method: "post",
     path: `${BASE}/import`,
@@ -178,7 +182,7 @@ export function registerImport(app: App, storage: StorageDriver, getFile: Import
       const workspaceId = await scoped(false, async (_tx, scope) => scope.workspaceId);
       const release = takeSlot();
       try {
-        const on = { storage, getFile, logger, scoped, workspaceId, signal: c.req.raw.signal };
+        const on = { storage, getFile, logger, cap, scoped, workspaceId, signal: c.req.raw.signal };
         return await importOne(on, body);
       } finally {
         release();
@@ -191,19 +195,20 @@ interface Import {
   storage: StorageDriver;
   getFile: ImportFetch;
   logger: Logger;
+  cap: number | null;
   scoped: Scope;
   workspaceId: string;
   signal: AbortSignal;
 }
 
 async function importOne(
-  { storage, getFile, logger, scoped, workspaceId, signal }: Import,
+  { storage, getFile, logger, cap, scoped, workspaceId, signal }: Import,
   body: z.infer<typeof importBody>,
 ): Promise<{ id: string }> {
   const bytes = await download(getFile, body.url, logger, signal);
   const mime = await typeOf(bytes);
   const name = fileNameOf(body.url, body.file_name);
-  const id = await register(scoped, { name, mime, origin: originOf(body.url) });
+  const id = await register(scoped, { name, mime, origin: originOf(body.url), size: bytes.length, cap });
   await storage.put(originalKey(workspaceId, id), streamOf(bytes), bytes.length, { ifAbsent: true });
   const asset = { id, state: "pending_upload", created_at: new Date(), mime, byte_size: null, sha256: null };
   const sha256 = createHash("sha256").update(bytes).digest("hex");

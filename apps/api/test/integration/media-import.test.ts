@@ -10,11 +10,18 @@ import { processAsset } from "../../src/jobs/media/pipeline.js";
 import { createFsDriver } from "../../src/storage/fs-driver.js";
 import { leaks } from "../support/canary.js";
 import { png } from "../support/images.js";
-import { addWorkspaceMember, seedOrganization, seedWorkspace, signedUser } from "../support/tenancy.js";
+import {
+  addWorkspaceMember,
+  seedFilledWorkspace,
+  seedOrganization,
+  seedWorkspace,
+  signedUser,
+} from "../support/tenancy.js";
 import { type Fixture, startFixture } from "./auth/harness.js";
 
 type User = { id: string; cookie: string };
 const MIB = 1024 * 1024;
+const CAP = 1024 * MIB;
 const CANARY = "import-canary-token-1";
 const SEATS = ["owner", "admin", "editor", "approver", "viewer"] as const;
 let fx: Fixture;
@@ -66,7 +73,7 @@ beforeAll(async () => {
   operator = policy();
   dir = await mkdtemp(join(tmpdir(), "shoutory-import-"));
   storage = createFsDriver(dir);
-  fx = await startFixture({ storage, mediaImportFetch: fetchOf });
+  fx = await startFixture({ storage, mediaImportFetch: fetchOf, mediaWorkspaceMaxBytes: CAP });
   const founder = await signedUser(fx, "import-org");
   ws = await seedWorkspace(fx, await seedOrganization(fx, founder.id));
   for (const name of [...SEATS, "outsider", "foreign"]) users[name] = await signedUser(fx, `import-${name}`);
@@ -102,7 +109,10 @@ const refusal = async (answer: Response) => {
 const assets = () =>
   fx.admin(
     async (client) =>
-      (await client.query("SELECT * FROM app.media_assets")).rows as Record<string, unknown>[],
+      (await client.query("SELECT * FROM app.media_assets WHERE source = 'url_import'")).rows as Record<
+        string,
+        unknown
+      >[],
   );
 const stored = async () => (await readdir(dir, { recursive: true })).sort();
 const serve = (path: string, body: Buffer | string, headers: Record<string, string> = {}) =>
@@ -155,6 +165,20 @@ describe("a URL the guard refuses is refused before any request is made (floor)"
       "address_not_allowed",
     ]);
     await expectNothing(before);
+  });
+});
+
+describe("an import into a workspace at its byte cap (floor)", () => {
+  it("answers 422 storage_full and stores nothing", async () => {
+    const full = await seedFilledWorkspace(fx, user("editor").id, CAP);
+    serve("/a.png", await png());
+    const before = await snapshot();
+    expect(await refusal(await importUrl(user("editor"), at("/a.png"), full))).toEqual([
+      422,
+      "unprocessable_content",
+      "storage_full",
+    ]);
+    await expectNothing(before, 1);
   });
 });
 

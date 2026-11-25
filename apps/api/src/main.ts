@@ -103,6 +103,7 @@ function appSettingsOf(config: Config) {
     webRoot: config.webRoot,
     mail: { from: config.mailFrom, dkimSelector: config.mailDkimSelector },
     releaseChannel: config.releaseChannel,
+    mediaWorkspaceMaxBytes: config.mediaWorkspaceMaxBytes,
     channels: {
       providers: builtInProviders(),
       fetch: refuseEgress(),

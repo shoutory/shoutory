@@ -123,6 +123,23 @@ export async function seedChannel(
   return found.rows[0].id;
 }
 
+/** A workspace where `editorId` is an Editor and one ready original of `bytes` is already stored. */
+export async function seedFilledWorkspace(fx: Fixture, editorId: string, bytes: number): Promise<string> {
+  const ws = await seedWorkspace(fx, await seedOrganization(fx, editorId));
+  await addWorkspaceMember(fx, ws, editorId, "editor");
+  await fx.admin((client) =>
+    client.query(
+      `INSERT INTO app.media_assets (id, workspace_id, object_key, file_name, mime, source, created_by, state, sha256,
+         byte_size)
+       SELECT id, $1::uuid, 'ws/' || $1::text || '/' || id || '/1/original', 'kept.mp4', 'video/mp4', 'upload', $2, 'ready',
+         sha256(id::text::bytea), $3
+       FROM (SELECT uuidv7() AS id) AS made`,
+      [ws, editorId, bytes],
+    ),
+  );
+  return ws;
+}
+
 export async function workspaceRow(fx: Fixture, id: string): Promise<Record<string, unknown>> {
   const found = await fx.admin((client) =>
     client.query("SELECT name, slug, colour, default_tz FROM app.workspaces WHERE id = $1", [id]),

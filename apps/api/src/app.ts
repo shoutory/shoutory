@@ -60,6 +60,8 @@ export interface AppOptions {
   readonly multipart?: S3Multipart;
   /** The egress fetch of the import of media by URL (a user URL under the operator policy); absent, there is no import route. */
   readonly mediaImportFetch?: ImportFetch;
+  /** The most bytes one workspace may store; absent, no cap. */
+  readonly mediaWorkspaceMaxBytes?: number | undefined;
   readonly webRoot?: string | undefined;
   readonly releaseChannel?: string;
   readonly mail?: MailSettings;

@@ -5,11 +5,18 @@ import { join } from "node:path";
 import { type StorageDriver, StorageError, type StorageErrorKind } from "@shoutory/core/storage";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createFsDriver } from "../../src/storage/fs-driver.js";
-import { addWorkspaceMember, seedOrganization, seedWorkspace, signedUser } from "../support/tenancy.js";
+import {
+  addWorkspaceMember,
+  seedFilledWorkspace,
+  seedOrganization,
+  seedWorkspace,
+  signedUser,
+} from "../support/tenancy.js";
 import { type Fixture, startFixture, WEB } from "./auth/harness.js";
 
 type User = { id: string; cookie: string };
 const MAX = 64 * 1024 * 1024;
+const CAP = 1024 ** 3;
 const SEATS = ["owner", "editor", "viewer", "approver"] as const;
 let fx: Fixture;
 let ws: string;
@@ -32,7 +39,7 @@ beforeAll(async () => {
       throw new StorageError(fail.kind);
     },
   };
-  fx = await startFixture({ storage });
+  fx = await startFixture({ storage, mediaWorkspaceMaxBytes: CAP });
   const founder = await signedUser(fx, "fsup-org");
   ws = await seedWorkspace(fx, await seedOrganization(fx, founder.id));
   for (const name of [...SEATS, "outsider", "foreign"]) users[name] = await signedUser(fx, `fsup-${name}`);
@@ -248,6 +255,10 @@ const registerFs = (text: string, workspace = ws, who = user("editor")) =>
 const completeFs = (id: string, workspace = ws, who = user("editor")) =>
   asUser(who, `/api/v1/workspaces/${workspace}/media/${id}/complete`);
 const dataOf = async (answer: Response) => ((await answer.json()) as { data: Record<string, unknown> }).data;
+const reasonOf = async (answer: Response) => {
+  const { error } = (await answer.json()) as { error: { code: string; details?: { reason?: string } } };
+  return [error.code, error.details?.reason];
+};
 
 describe("register, PUT and complete on the filesystem driver", () => {
   it("records the size and sha256 of the stored bytes, never the declared ones, and complete is safe to repeat", async () => {
@@ -282,5 +293,42 @@ describe("register, PUT and complete on the filesystem driver", () => {
     await real.put(keyOf(ws, empty), stream(""), 1024);
     expect((await completeFs(empty)).status).toBe(409);
     expect(await stateOf(empty)).toBe("pending_upload");
+  });
+});
+
+describe("the bytes an upload may take (floor)", () => {
+  it("a PUT longer than the registered size answers 422 too_large and stores nothing (floor)", async () => {
+    const { id } = (await dataOf(await registerFs("abc"))) as { id: string };
+    const answer = await put(id, { body: "abcd" });
+    expect(answer.status).toBe(422);
+    expect(await reasonOf(answer)).toEqual(["unprocessable_content", "too_large"]);
+    expect(await real.head(keyOf(ws, id))).toBeNull();
+    expect(await stateOf(id)).toBe("pending_upload");
+  });
+
+  it.each(["abc", "ab"])("a PUT of %j after registering 3 bytes is stored", async (sent) => {
+    const { id } = (await dataOf(await registerFs("abc"))) as { id: string };
+    expect((await put(id, { body: sent })).status).toBe(200);
+  });
+
+  it("a register past the workspace byte cap answers 422 storage_full before any upload starts (floor)", async () => {
+    const full = await seedFilledWorkspace(fx, user("editor").id, CAP);
+    const large = { file_name: "clip.mp4", mime: "video/mp4", byte_size: MAX + 1, sha256: hexOf("clip") };
+    for (const answer of [
+      await registerFs("x", full),
+      await asUser(user("editor"), `/api/v1/workspaces/${full}/media`, large),
+    ]) {
+      expect(answer.status).toBe(422);
+      expect(await reasonOf(answer)).toEqual(["unprocessable_content", "storage_full"]);
+    }
+    const rows = await fx.admin(
+      async (client) =>
+        (
+          await client.query("SELECT count(*)::int AS n FROM app.media_assets WHERE workspace_id = $1", [
+            full,
+          ])
+        ).rows[0].n,
+    );
+    expect(rows).toBe(1);
   });
 });

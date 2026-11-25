@@ -131,7 +131,7 @@ const scalar = (name: string, params: unknown[]): [string, unknown[]] => [
   params,
 ];
 const register = (ws = WD) =>
-  scalar("media_register", [ws, "register.png", "image/png", "upload", null, null, null]);
+  scalar("media_register", [ws, "register.png", "image/png", "upload", null, null, null, 1024, null]);
 const run = (ctx: TenantCtx, [sql, params]: [string, unknown[]]) =>
   attempt(db.pool(poolOf(ctx)), ctx, sql, params);
 async function commit(

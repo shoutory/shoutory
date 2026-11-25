@@ -328,6 +328,17 @@ describe("start-up: the media scratch folder", () => {
   });
 });
 
+describe("start-up: the workspace byte cap", () => {
+  const CAP = "SHOUTORY_MEDIA_WORKSPACE_MAX_BYTES";
+  it("is no cap unless set and takes a whole number of bytes", () => {
+    expect(parseEnv(valid).mediaWorkspaceMaxBytes).toBeUndefined();
+    expect(parseEnv(withValue(CAP, "10737418240")).mediaWorkspaceMaxBytes).toBe(10737418240);
+  });
+  it.each(["0", "-1", "1.5", "ten", "9007199254740992"])("refuses %s", (value) => {
+    expect(refusedVariable(withValue(CAP, value))).toBe(CAP);
+  });
+});
+
 describe("start-up: the upload scan hook", () => {
   const scan = (extra: Record<string, string>) => ({ ...valid, ...extra });
 
