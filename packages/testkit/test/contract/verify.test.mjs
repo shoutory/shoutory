@@ -1,5 +1,6 @@
 import { strict as assert } from "node:assert";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
@@ -8,6 +9,7 @@ import {
   affectedSteps,
   loadPlaceholders,
   pathsFromNul,
+  RERUN_TRIGGERS,
   runSteps,
   STEPS,
 } from "../../../../scripts/verify.mjs";
@@ -115,6 +117,41 @@ test("each changed path selects exactly its steps", () => {
     const names = selected(changed, options);
     for (const name of included) assert.ok(names.includes(name), `${label}: ${name} must run`);
     for (const name of excluded) assert.ok(!names.includes(name), `${label}: ${name} must not run`);
+  }
+});
+
+const integrationOf = (changed, options) =>
+  affectedSteps(STEPS, { changed, base: "base-sha-1", ref: FEATURE, ...options }).find(
+    (step) => step.name === "integration",
+  ).command;
+
+test("a branch runs only the integration files that import a changed file; main, --all and the check command run all", () => {
+  for (const [label, changed, options, narrowed] of [
+    ["an api source on a branch", ["apps/api/src/a.ts"], {}, true],
+    ["an api source on main", ["apps/api/src/a.ts"], { ref: "refs/heads/main" }, false],
+    ["an api source with --all", ["apps/api/src/a.ts"], { all: true }, false],
+    ["the check command on a branch", ["scripts/verify.mjs"], {}, false],
+    ["no known merge base", ["apps/api/src/a.ts"], { base: undefined }, false],
+  ]) {
+    const command = integrationOf(changed, options).join(" ");
+    assert.equal(command.includes("--changed base-sha-1 --passWithNoTests"), narrowed, label);
+  }
+});
+
+// Vitest's own matcher, applied as it applies the triggers: to the absolute path git reports.
+const requireFromVitest = createRequire(createRequire(join(root, "package.json")).resolve("vitest"));
+const triggers = requireFromVitest("picomatch")(RERUN_TRIGGERS, { dot: true });
+
+test("a file the integration tests read without importing reruns them all on a branch", () => {
+  for (const [path, reruns] of [
+    ["packages/db/migrations/0046_x.sql", true],
+    ["docker/postgres/init.sql", true],
+    ["apps/api/test/fixtures/photo.png", true],
+    ["apps/api/package.json", true],
+    ["pnpm-lock.yaml", true],
+    ["apps/api/src/a.ts", false],
+  ]) {
+    assert.equal(triggers(join(root, path).replaceAll("\\", "/")), reruns, path);
   }
 });
 

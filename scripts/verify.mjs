@@ -135,6 +135,7 @@ export const STEPS = [
       "SHOUTORY_TEST_S3_URL",
       ...["OWNER", "APP", "WORKER", "AUTH", "READONLY"].map((role) => `SHOUTORY_DATABASE_URL_${role}`),
     ],
+    narrow: true,
     ...vitest("integration", "integration", "integration-horizon"),
   },
   {
@@ -348,7 +349,26 @@ export function runSteps(
 // A change to the check command or the workflow can affect any step, so it selects them all.
 const CHECK_FILES = ["scripts/verify.mjs", ".github/workflows/ci.yml"];
 
-export function affectedSteps(steps, { changed, all = false, ref = process.env.GITHUB_REF } = {}) {
+// A narrowed step runs only the test files that import a changed file, directly or through other modules
+// (https://vitest.dev/guide/recipes/affected-tests, read 2026-11-25). A change to a file the tests read without
+// importing it reruns the whole suite (https://vitest.dev/config/forcereruntriggers, read 2026-11-25). Vitest matches
+// these against absolute paths, so each pattern starts with `**/`; the first three are its defaults.
+export const RERUN_TRIGGERS = [
+  "**/package.json",
+  "**/vitest.config.*",
+  "**/vite.config.*",
+  "**/packages/db/migrations/*.sql",
+  "**/docker/postgres/init.sql",
+  "**/test/fixtures/**",
+  "**/pnpm-lock.yaml",
+  "**/tsconfig*.json",
+];
+const narrowed = (step, base) => ({
+  ...step,
+  command: [...step.command, "--changed", base, "--passWithNoTests"],
+});
+
+export function affectedSteps(steps, { changed, base, all = false, ref = process.env.GITHUB_REF } = {}) {
   const full =
     all ||
     changed === undefined ||
@@ -356,20 +376,23 @@ export function affectedSteps(steps, { changed, all = false, ref = process.env.G
     ref?.startsWith("refs/tags/") ||
     changed.some((path) => CHECK_FILES.includes(path));
   if (full) return steps;
-  return steps.filter(
-    (step) => !step.watch || changed.some((path) => step.watch.some((glob) => matchesGlob(path, glob))),
-  );
+  return steps
+    .filter(
+      (step) => !step.watch || changed.some((path) => step.watch.some((glob) => matchesGlob(path, glob))),
+    )
+    .map((step) => (step.narrow && base ? narrowed(step, base) : step));
 }
 
 function changedPaths() {
   const git = (...args) => spawnSync("git", args, { cwd: root, encoding: "utf8" });
-  const base = git("merge-base", "origin/main", "HEAD");
-  if (base.status !== 0) return undefined;
+  const merge = git("merge-base", "origin/main", "HEAD");
+  if (merge.status !== 0) return {};
+  const base = merge.stdout.trim();
   // `--no-renames` lists a move as the old path and the new one, so leaving a watched folder still counts.
-  const diff = git("diff", "--name-only", "--no-renames", "-z", base.stdout.trim());
+  const diff = git("diff", "--name-only", "--no-renames", "-z", base);
   const added = git("ls-files", "--others", "--exclude-standard", "-z");
-  if (diff.status !== 0 || added.status !== 0) return undefined;
-  return pathsFromNul(diff.stdout, added.stdout);
+  if (diff.status !== 0 || added.status !== 0) return {};
+  return { changed: pathsFromNul(diff.stdout, added.stdout), base };
 }
 
 // NUL-separated, so a name with a space, a quote or a newline stays one path.
@@ -386,11 +409,14 @@ function selectSteps(argv) {
     return chosen;
   }
   const all = argv.includes("--all");
-  const changed = all ? undefined : changedPaths();
-  const chosen = affectedSteps(STEPS, { changed, all });
+  const { changed, base } = all ? {} : changedPaths();
+  const chosen = affectedSteps(STEPS, { changed, base, all });
   if (!all && changed === undefined && chosen === STEPS)
     console.log("== origin/main is not known here: running every step");
-  const skipped = STEPS.filter((step) => !chosen.includes(step)).map((step) => step.name);
+  const names = new Set(chosen.map((step) => step.name));
+  const skipped = STEPS.filter((step) => !names.has(step.name)).map((step) => step.name);
+  for (const step of chosen.filter((each) => !STEPS.includes(each)))
+    console.log(`== ${step.name}: only the test files that import a changed file (since ${base})`);
   if (skipped.length > 0) console.log(`== skipped, no watched path changed: ${skipped.join(", ")}`);
   return chosen;
 }

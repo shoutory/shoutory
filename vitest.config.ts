@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { defineConfig, type Plugin } from "vitest/config";
+import { RERUN_TRIGGERS } from "./scripts/verify.mjs";
 
 // The Lingui plugin is a dependency of apps/web only, so it is resolved from there.
 const webDir = join(import.meta.dirname, "apps/web");
@@ -57,6 +58,7 @@ const integration = {
 
 export default defineConfig({
   test: {
+    forceRerunTriggers: RERUN_TRIGGERS,
     projects: [
       { ssr, test: { name: "unit", include: unit, exclude: nodeExclude } },
       {
