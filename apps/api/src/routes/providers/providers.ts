@@ -23,6 +23,8 @@ export function registerProviders(app: App, providers: Readonly<Record<string, H
           lifecycle: manifest.lifecycle,
           auth_kind: manifest.auth.method,
           connectable: adapter.connect !== undefined,
+          // A provider whose accounts live on servers people choose needs the host typed before the connect.
+          needs_instance_host: manifest.egressHostSource === "channel",
         })),
   });
 }

@@ -109,13 +109,34 @@ describe("authorize asks for the scopes that publishing, read-back and delete ne
   });
 });
 
-describe("inspect: verify_credentials decides health", () => {
-  const inspectWith = async (verify: "ok" | "revoked" | "stub" | "not_json") => {
-    sim.reset({ verify });
+describe("identity: the account a connect stores", () => {
+  const identityWith = async (limits: { maxCharacters?: number | null } = {}) => {
+    sim.reset({ limits });
+    const connect = createMastodonAdapter().connect;
+    if (!connect) throw new Error("the adapter has no connect side");
     const accessToken = new SealedSecret(sim.issueToken());
-    return createMastodonAdapter().inspect(recorder().context, { accessToken, instanceHost: HOST });
+    return connect.identity(recorder().context, { accessToken, instanceHost: HOST });
   };
 
+  it("names a local account with its instance, so two instances' accounts of one name differ", async () => {
+    expect((await identityWith()).identity?.handle).toBe(`sim@${HOST}`);
+  });
+
+  it("an instance that leaves out a limit still connects, that field left to the manifest and named", async () => {
+    const answer = await identityWith({ maxCharacters: null });
+    expect(answer).toMatchObject({ ok: true, limitsFromManifest: ["textLength"] });
+    expect(answer.limits?.textLength).toBeUndefined();
+    expect(answer.limits?.mediaMaxCount?.value).toBe(4);
+  });
+});
+
+const inspectWith = async (verify: "ok" | "revoked" | "forbidden" | "stub" | "not_json") => {
+  sim.reset({ verify });
+  const accessToken = new SealedSecret(sim.issueToken());
+  return createMastodonAdapter().inspect(recorder().context, { accessToken, instanceHost: HOST });
+};
+
+describe("inspect: verify_credentials decides health", () => {
   it("an account answer is a healthy channel and carries the instance's limits", async () => {
     expect(await inspectWith("ok")).toMatchObject({
       ok: true,
@@ -124,25 +145,42 @@ describe("inspect: verify_credentials decides health", () => {
       limits: { textLength: { value: 500 } },
     });
   });
+});
 
-  // Each value is one past the adapter's bound (1,000,000 characters, 100 attachments, 16 GiB).
+describe("inspect: an instance's limits, field by field", () => {
+  // A value one past the adapter's bound (1,000,000 characters, 100 attachments, 16 GiB) or a missing field is no limit:
+  // that field alone is left to the manifest and named, the others stay and the channel is still healthy.
   it.each([
-    ["maxCharacters", 1_000_001],
-    ["maxMedia", 101],
-    ["imageSizeLimit", 17_179_869_185],
+    ["maxCharacters", 1_000_001, "textLength"],
+    ["maxMedia", 101, "mediaMaxCount"],
+    ["imageSizeLimit", 17_179_869_185, "imageMaxBytes"],
+    ["reservedPerUrl", null, "urlWeight"],
+    ["maxCharacters", null, "textLength"],
   ] as const)(
-    "an instance that states %s of %i gives no limits and is still healthy",
-    async (name, value) => {
+    "an instance that states %s as %s leaves only %s to the manifest and is still healthy",
+    async (name, value, field) => {
       sim.reset({ limits: { [name]: value } });
       const accessToken = new SealedSecret(sim.issueToken());
       const answer = await createMastodonAdapter().inspect(recorder().context, {
         accessToken,
         instanceHost: HOST,
       });
-      expect(answer).toMatchObject({ ok: true, health: "ok" });
-      expect(answer.limits).toBeUndefined();
+      expect(answer).toMatchObject({ ok: true, health: "ok", limitsFromManifest: [field] });
+      expect(Object.keys(answer.limits ?? {}).sort()).toEqual(
+        ["imageMaxBytes", "mediaMaxCount", "textLength", "urlWeight"].filter((key) => key !== field),
+      );
     },
   );
+});
+
+describe("inspect: a refused or unusable answer", () => {
+  it("a 403 is a permanent refusal, which health reads as failing, never a reconnect", async () => {
+    expect(await inspectWith("forbidden")).toMatchObject({
+      ok: false,
+      errorClass: "permanent",
+      httpStatus: 403,
+    });
+  });
 
   it("a 401 is a revoked token", async () => {
     expect(await inspectWith("revoked")).toMatchObject({

@@ -28,6 +28,7 @@ export const RETENTION_CLASSES = [
   "app.session_step_ups",
   "app.invitations",
   "app.oauth_flows",
+  "app.provider_instance_apps",
   "app.connect_challenges",
   "app.media_uploads",
   "app.idempotency_keys",

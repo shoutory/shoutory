@@ -10,11 +10,8 @@ import { type App, type AppEnv, defineRoute } from "../define-route.js";
 
 const uuid = z.uuid().transform((id) => id.toLowerCase());
 const providerId = z.string().regex(/^[a-z][a-z0-9_]{0,31}$/);
-const instanceHost = z
-  .string()
-  .min(1)
-  .max(253)
-  .regex(/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/);
+// A person types the host in any common form; the service reduces it to the one stored form or refuses it by name.
+const typedHost = z.string().max(2048);
 
 const RESULT_PATH = "/connect/result";
 
@@ -32,7 +29,13 @@ const callbackQuery = z.object({
   iss: field(512),
   error: field(128),
   error_description: field(1024),
-  instance_host: instanceHost.optional().catch(undefined),
+  // The server built this redirect from the stored form, so anything else names no flow.
+  instance_host: z
+    .string()
+    .max(253)
+    .regex(/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/)
+    .optional()
+    .catch(undefined),
 });
 
 function registerStart(app: App, auth: AuthService, connect: ConnectService): void {
@@ -43,7 +46,7 @@ function registerStart(app: App, auth: AuthService, connect: ConnectService): vo
     // Split: the registration of an app on an instance is an outbound call, which never runs inside a transaction.
     access: { workspace: "workspace_id", permission: "channels.manage", split: true },
     params: z.strictObject({ workspace_id: uuid, provider_id: providerId }),
-    body: z.strictObject({ instance_host: instanceHost.optional(), channel_id: uuid.optional() }),
+    body: z.strictObject({ instance_host: typedHost.optional(), channel_id: uuid.optional() }),
     handler: async ({ c, scoped, params, body }) => {
       await auth.throttle.spend("connect_start", c.get("session").userId);
       const authorizeUrl = await connect.start(scoped, {

@@ -212,3 +212,7 @@ export const manifestSchema = manifestShape.superRefine((manifest, context) => {
 });
 
 export type Manifest = z.infer<typeof manifestSchema>;
+
+/** The scopes an app is registered and a person is asked for: the manifest's, sorted and space-joined. */
+export const scopeSetOf = (manifest: Pick<Manifest, "scopes">): string =>
+  [...manifest.scopes].sort().join(" ");

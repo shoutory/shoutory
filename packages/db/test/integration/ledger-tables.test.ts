@@ -693,6 +693,7 @@ const POLICIES = [
   "operation_usage_update on usage_reservations",
   "purge_expired_delete on operation_attempts",
   "purge_expired_delete on usage_reservations",
+  "purge_expired_select on channels",
   "purge_expired_select on operation_attempts",
   "purge_expired_select on operations",
   "purge_expired_select on outbox",

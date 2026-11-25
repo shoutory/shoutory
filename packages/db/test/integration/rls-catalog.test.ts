@@ -330,12 +330,12 @@ const DEFINERS: Definer[] = [
   },
   {
     name: "instance_app_put",
-    args: `p_id uuid, p_ws uuid, p_provider text, p_host text, p_client_id text, ${SEALED_FIELDS}, p_replaces text`,
+    args: `p_id uuid, p_ws uuid, p_provider text, p_host text, p_scopes text, p_client_id text, ${SEALED_FIELDS}, p_replaces text`,
     callers: ["shoutory_app"],
   },
   {
     name: "instance_app_get",
-    args: "p_ws uuid, p_provider text, p_host text",
+    args: "p_ws uuid, p_provider text, p_host text, p_scopes text",
     callers: ["shoutory_app"],
   },
   {

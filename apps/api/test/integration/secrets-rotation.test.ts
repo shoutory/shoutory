@@ -26,6 +26,7 @@ const OTHER_WS = randomUUID();
 const USER = randomUUID();
 const HOST = "rotation.example.test";
 const PROVIDER = "fixture_oauth";
+const SCOPES = "read write";
 
 let db: TestDatabase;
 const salts = new Map<string, Buffer>();
@@ -122,11 +123,11 @@ async function plantInstanceApp(): Promise<string> {
   const id = randomUUID();
   const sealed = seal(CLIENT_SECRET, aadOf(NIL_SCOPE, id, "provider_instance_app", 1), OLD);
   await sql(
-    `INSERT INTO app.provider_instance_apps (id, provider_id, instance_host, client_id, secret_format_version,
+    `INSERT INTO app.provider_instance_apps (id, provider_id, instance_host, scopes, client_id, secret_format_version,
        secret_key_id, secret_iv, secret_ciphertext, secret_auth_tag, secret_wrap_iv, secret_wrap_tag,
        secret_wrapped_dek, secret_generation)
-     VALUES ($1, $2, $3, 'client-rotation-1', $4, $5, $6, $7, $8, $9, $10, $11, 1)`,
-    [id, PROVIDER, HOST, ...sealedColumns(sealed)],
+     VALUES ($1, $2, $3, $4, 'client-rotation-1', $5, $6, $7, $8, $9, $10, $11, $12, 1)`,
+    [id, PROVIDER, HOST, SCOPES, ...sealedColumns(sealed)],
   );
   return id;
 }
@@ -191,7 +192,7 @@ describe("a key rotation", () => {
       TOKEN,
     );
     const app = await withTenant(db.pool("app"), { principalKind: "user", principalId: USER }, (tx) =>
-      readApp(tx, NEW, { workspaceId: WS, providerId: PROVIDER, instanceHost: HOST }),
+      readApp(tx, NEW, { workspaceId: WS, providerId: PROVIDER, instanceHost: HOST, scopes: SCOPES }),
     );
     expect(app?.clientSecret.expose()).toBe(CLIENT_SECRET);
     const [stored] = await sql("SELECT secret_generation FROM app.provider_instance_apps WHERE id = $1", [

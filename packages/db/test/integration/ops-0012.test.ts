@@ -81,6 +81,7 @@ const RETAINED = [
   ["app.usage_reservations", "app.usage_reservations"],
   ["app.provider_quota_ledger", "app.provider_quota_ledger"],
   ["app.oauth_flows", "app.oauth_flows"],
+  ["app.provider_instance_apps", "app.provider_instance_apps"],
   ["app.connect_challenges", "app.connect_challenges"],
   ["app.rate_buckets", "app.rate_buckets"],
   ["app.worker_heartbeats", "app.worker_heartbeats"],

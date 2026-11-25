@@ -6,12 +6,13 @@ import {
   pkcePair,
   providerErrorText,
 } from "@shoutory/core/connect/flow";
+import { normalizeInstanceHost } from "@shoutory/core/connect/host";
 import { type Aad, FORMAT_VERSION, open, SealedSecret, seal } from "@shoutory/core/crypto";
 import type { KeyProvider } from "@shoutory/core/keys";
 import { type TenantCtx, type TenantTx, withTenant } from "@shoutory/db/context";
 import type { AppPool } from "@shoutory/db/pool";
 import type { AppCredentials, ConnectAdapter } from "@shoutory/provider-sdk/adapter";
-import type { Manifest } from "@shoutory/provider-sdk/manifest";
+import { type Manifest, scopeSetOf } from "@shoutory/provider-sdk/manifest";
 import type {
   AccountIdentity,
   ProviderResult,
@@ -133,12 +134,59 @@ interface AppStep {
 // The reasons an instance can be refused with, each fixed: an answer names no host, address or class (no port scanner).
 const INSTANCE_REASONS: ReadonlySet<string> = new Set(["instance_unsupported", "address_not_allowed"]);
 
+const instanceRefused = (reason: string) =>
+  new Refusal("unprocessable_content", `instance refused: ${reason}`, { details: { reason } });
+
+// Each failure keeps its class, so the person is told whether to fix the host, wait, or try again later.
 function refusalOf(result: ProviderResult | undefined): Refusal {
   const reason = result?.providerCode;
-  if (reason !== undefined && INSTANCE_REASONS.has(reason)) {
-    return new Refusal("unprocessable_content", `instance refused: ${reason}`, { details: { reason } });
+  if (reason !== undefined && INSTANCE_REASONS.has(reason)) return instanceRefused(reason);
+  if (result?.errorClass === "rate_limited") {
+    const wait = result.retryAfterMs;
+    return new Refusal("too_many_requests", "the instance limited the registration of the app", {
+      details: { reason: "instance_rate_limited" },
+      ...(wait === undefined ? {} : { retryAfterSeconds: Math.max(1, Math.ceil(wait / 1000)) }),
+    });
   }
-  return new Refusal("service_unavailable", "the instance did not answer the registration of the app");
+  if (result?.errorClass === "permanent" || result?.errorClass === "auth_revoked") {
+    return instanceRefused("instance_refused");
+  }
+  return new Refusal("service_unavailable", "the instance did not answer the registration of the app", {
+    details: { reason: "instance_unreachable" },
+  });
+}
+
+const appKeyOf = (at: Omit<AppKey, "scopes">, manifest: Manifest): AppKey => ({
+  ...at,
+  scopes: scopeSetOf(manifest),
+});
+
+const hostRefusal = (reason: "host_invalid" | "host_mismatch") =>
+  new Refusal("unprocessable_content", `instance host refused: ${reason}`, { details: { reason } });
+
+function hostOf(typed: string | undefined): string | undefined {
+  if (typed === undefined) return undefined;
+  const host = normalizeInstanceHost(typed);
+  if (host === undefined) throw hostRefusal("host_invalid");
+  return host;
+}
+
+const CHANNEL_HOST =
+  "SELECT instance_host FROM app.channels WHERE id = $1 AND workspace_id = $2 AND provider_id = $3";
+
+// A reconnect of an instance channel runs on the host the channel was connected on: the person need not type it again,
+// and a different typed host would rebind the channel to another instance's account.
+async function reconnectHostOf(scoped: Scoped, input: StartInput, connect: ConnectAdapter) {
+  const typed = hostOf(input.instanceHost);
+  const { channelId } = input;
+  if (!connect.registerApp || channelId === undefined) return typed;
+  const found = await scoped(false, (tx) =>
+    tx.query(CHANNEL_HOST, [channelId, input.workspaceId, input.providerId]),
+  );
+  const stored = found.rows[0]?.instance_host;
+  if (typeof stored !== "string") throw new Refusal("not_found", "no such channel");
+  if (typed !== undefined && typed !== stored) throw hostRefusal("host_mismatch");
+  return stored;
 }
 
 const errorClassOf = (error: unknown): string => (error instanceof Error ? error.name : "unknown");
@@ -190,18 +238,16 @@ export class ConnectService {
     if (!connect.registerApp) return undefined;
     if (input.instanceHost === undefined)
       throw new Refusal("validation_failed", "the provider needs an instance host");
-    const key = {
-      workspaceId: input.workspaceId,
-      providerId: input.providerId,
-      instanceHost: input.instanceHost,
-    };
+    const { workspaceId, providerId, instanceHost } = input;
+    const key = appKeyOf({ workspaceId, providerId, instanceHost }, provider.manifest);
     return this.#appOf((write, run) => scoped(write, (tx) => run(tx)), { key, provider, connect });
   }
 
-  async start(scoped: Scoped, input: StartInput): Promise<string> {
-    const provider = this.#providerOf(input.providerId);
+  async start(scoped: Scoped, typed: StartInput): Promise<string> {
+    const provider = this.#providerOf(typed.providerId);
     const connect = provider?.adapter.connect;
     if (!provider || !connect) throw new Refusal("not_found", "no connect for the provider");
+    const input = { ...typed, instanceHost: await reconnectHostOf(scoped, typed, connect) };
     const app = await this.#startApp(scoped, input, provider, connect);
     const { state, digest } = newState();
     const { verifier, challenge } = pkcePair();
@@ -325,11 +371,14 @@ export class ConnectService {
   ) {
     if (!step.connect.registerApp) return undefined;
     if (flow.instance_host === null) throw new Error("the flow of an instance provider has no instance host");
-    const key = {
+    const provider = this.#providerOf(step.providerId);
+    if (!provider) throw new Error("the flow names a provider that is not registered");
+    const at = {
       workspaceId: flow.workspace_id,
       providerId: step.providerId,
       instanceHost: flow.instance_host,
     };
+    const key = appKeyOf(at, provider.manifest);
     const app = await withTenant(this.#deps.pool, principal, (tx) => readApp(tx, this.#deps.keys, key));
     if (!app) throw new Error("the instance has no stored app");
     return app;
@@ -373,6 +422,13 @@ export class ConnectService {
     const accessToken = exchanged.credential.accessToken;
     const who = await connect.identity(context, { accessToken, ...hostPart });
     if (!who.ok || !who.identity) return { step: "identity", errorClass: who.errorClass ?? "none" };
+    if (who.limitsFromManifest?.length) {
+      const fields = who.limitsFromManifest;
+      this.#deps.logger.info(
+        { event: "instance_limits_from_manifest", providerId: input.providerId, fields },
+        "the instance left limits to the manifest",
+      );
+    }
     return { credential: exchanged.credential, identity: who.identity, limits: who.limits };
   }
 
@@ -392,11 +448,12 @@ export class ConnectService {
     ) {
       return this.#failed(input.providerId, failure.step, failure.errorClass);
     }
-    const key = {
+    const at = {
       workspaceId: flow.workspace_id,
       providerId: input.providerId,
       instanceHost: flow.instance_host,
     };
+    const key = appKeyOf(at, step.provider.manifest);
     try {
       await this.#appOf(
         (_write, run) => withTenant(this.#deps.pool, principal, run),

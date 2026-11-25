@@ -20,6 +20,7 @@ const rows = (sql: string, params: unknown[] = []) =>
   admin(async (client) => (await client.query(sql, params)).rows);
 
 const PROVIDER = "fixture_oauth";
+const SCOPES = "read write";
 const sealed = () => [
   1,
   "k1",
@@ -48,12 +49,13 @@ interface Put {
   id?: string;
   ws?: string;
   host: string;
+  scopes?: string;
   clientId?: string;
   seal?: ReturnType<typeof sealed>;
   replaces?: string | null;
 }
 const PUT =
-  "SELECT app.instance_app_put($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) AS stored";
+  "SELECT app.instance_app_put($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) AS stored";
 const putCall = (o: Put): [string, unknown[]] => [
   PUT,
   [
@@ -61,14 +63,15 @@ const putCall = (o: Put): [string, unknown[]] => [
     o.ws ?? WA,
     PROVIDER,
     o.host,
+    o.scopes ?? SCOPES,
     o.clientId ?? `client-${randomUUID()}`,
     ...(o.seal ?? sealed()),
     o.replaces ?? null,
   ],
 ];
-const GET = "SELECT * FROM app.instance_app_get($1, $2, $3)";
-const getAs = (ctx: TenantCtx, host: string, ws: string = WA) =>
-  attempt(db.pool("app"), ctx, GET, [ws, PROVIDER, host]);
+const GET = "SELECT * FROM app.instance_app_get($1, $2, $3, $4)";
+const getAs = (ctx: TenantCtx, host: string, ws: string = WA, scopes = SCOPES) =>
+  attempt(db.pool("app"), ctx, GET, [ws, PROVIDER, host, scopes]);
 const storedOf = (host: string) =>
   rows(
     "SELECT id, client_id, secret_ciphertext, secret_generation FROM app.provider_instance_apps WHERE provider_id = $1 AND instance_host = $2",
@@ -209,7 +212,9 @@ describe("instance_app_put: a replace is compare-and-set on the client id (floor
     expect(late?.stored).toBe(false);
     expect(await storedOf(host)).toMatchObject([{ client_id: "client-newer" }]);
   });
+});
 
+describe("the app table's policies (floor)", () => {
   it("the policies on the app table and of its purposes are exactly these", async () => {
     const found = await rows(
       `SELECT p.polname || ' on ' || c.relname AS policy FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid
@@ -228,6 +233,8 @@ describe("instance_app_put: a replace is compare-and-set on the client id (floor
         "instance_apps_reseal_batch_select on provider_instance_apps",
         "instance_apps_reseal_write_select on provider_instance_apps",
         "instance_apps_reseal_write_update on provider_instance_apps",
+        "purge_expired_select on provider_instance_apps",
+        "purge_expired_delete on provider_instance_apps",
         ...tenancy.flatMap((table) => [
           `instance_app_get_select on ${table}`,
           `instance_app_put_select on ${table}`,
@@ -262,5 +269,76 @@ describe("instance_app_put audits what it changes (floor)", () => {
       { action: "instance.app_replaced", workspace_id: WA, metadata },
     ]);
     expect(await auditOf(lost)).toEqual([]);
+  });
+});
+
+// An app is registered for one scope set: a connect that asks for more must not reuse an app that cannot grant them,
+// and a row stored before the scope set was kept (NULL) is never read.
+describe("an app is stored and read per scope set (floor)", () => {
+  it("a second scope set on one host is stored beside the first and each set reads only its own", async () => {
+    const host = hostOf();
+    const narrow = putCall({ host, scopes: "read", clientId: "client-narrow" });
+    const [first] = await commitAs(db.pool("app"), U.admin, ...narrow);
+    const [second] = await commitAs(db.pool("app"), U.admin, ...putCall({ host, clientId: "client-wide" }));
+    expect([first?.stored, second?.stored]).toEqual([true, true]);
+    expect((await getAs(asUser(U.admin), host, WA, "read")).rows).toMatchObject([
+      { client_id: "client-narrow" },
+    ]);
+    expect((await getAs(asUser(U.admin), host)).rows).toMatchObject([{ client_id: "client-wide" }]);
+  });
+
+  it("a row with no scope set is never read, and a new app is stored beside it", async () => {
+    const host = hostOf();
+    await commitAs(db.pool("app"), U.admin, ...putCall({ host, clientId: "client-unscoped" }));
+    await rows("UPDATE app.provider_instance_apps SET scopes = NULL WHERE instance_host = $1", [host]);
+    expect((await getAs(asUser(U.admin), host)).rows).toEqual([]);
+    const [fresh] = await commitAs(db.pool("app"), U.admin, ...putCall({ host, clientId: "client-scoped" }));
+    expect(fresh?.stored).toBe(true);
+    expect((await getAs(asUser(U.admin), host)).rows).toMatchObject([{ client_id: "client-scoped" }]);
+  });
+});
+
+// The registration on the instance cannot be deleted from here; only the local row goes, once nothing can use it.
+describe("purge_expired removes an app that no flow and no channel names, a day after it was stored", () => {
+  const plant = async (age: string) => {
+    const host = hostOf();
+    await commitAs(db.pool("app"), U.admin, ...putCall({ host }));
+    const aged =
+      "UPDATE app.provider_instance_apps SET created_at = now() - $2::interval WHERE instance_host = $1";
+    await rows(aged, [host, age]);
+    return host;
+  };
+
+  it("removes the old unused app and an old one with no scope set, and keeps a fresh one, one a flow and one a channel names", async () => {
+    const [unused, fresh, flowed, channelled, unscoped] = [
+      await plant("2 days"),
+      await plant("2 hours"),
+      await plant("2 days"),
+      await plant("2 days"),
+      await plant("2 days"),
+    ];
+    await rows("UPDATE app.provider_instance_apps SET scopes = NULL WHERE instance_host = $1", [unscoped]);
+    await rows(
+      `INSERT INTO app.oauth_flows (workspace_id, user_id, provider_id, instance_host, state_hash, format_version,
+         key_id, iv, ciphertext, auth_tag, wrap_iv, wrap_tag, wrapped_dek, expires_at)
+       VALUES ($1, $2, $3, $4, $5, 1, 'k1', '\\x00', '\\x00', '\\x00', '\\x00', '\\x00', '\\x00',
+         now() + interval '10 minutes')`,
+      [WA, U.admin, PROVIDER, flowed, randomBytes(32)],
+    );
+    await rows(
+      `INSERT INTO app.channels (workspace_id, provider_id, account_kind, provider_account_id, display_name,
+         instance_host)
+       VALUES ($1, $2, 'profile', $3, 'purge-channel-1', $4), ($1, $2, 'profile', $5, 'purge-channel-2', $6)`,
+      [WA, PROVIDER, `${channelled}/1`, channelled, `${unscoped}/1`, unscoped],
+    );
+    const purged = await db
+      .pool("worker")
+      .query("SELECT removed FROM app.purge_expired('app.provider_instance_apps')");
+    expect(Number(purged.rows[0]?.removed)).toBe(2);
+    const left = await rows(
+      "SELECT instance_host FROM app.provider_instance_apps WHERE instance_host = ANY ($1)",
+      [[unused, fresh, flowed, channelled, unscoped]],
+    );
+    expect(left.map((row) => row.instance_host as string).sort()).toEqual([fresh, flowed, channelled].sort());
   });
 });

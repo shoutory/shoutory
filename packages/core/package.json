@@ -33,6 +33,10 @@
       "source": "./src/connect/flow.ts",
       "default": "./dist/connect/flow.js"
     },
+    "./connect/host": {
+      "source": "./src/connect/host.ts",
+      "default": "./dist/connect/host.js"
+    },
     "./content": {
       "source": "./src/content/document.ts",
       "default": "./dist/content/document.js"

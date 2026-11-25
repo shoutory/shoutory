@@ -42,6 +42,8 @@ export interface ProviderResult {
   readonly app?: RegisteredApp;
   /** Present on a successful identity or channel read of a provider whose instances state their own limits. */
   readonly limits?: Readonly<Record<string, ReadLimit>>;
+  /** The limits the instance left out or stated beyond bound, so the manifest's documented value stands for them. */
+  readonly limitsFromManifest?: readonly string[];
   readonly credential?: RefreshedCredential;
   readonly identity?: AccountIdentity;
   /** Present on a successful channel read: what the provider's answer says of the channel (`ok` when absent). */

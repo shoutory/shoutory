@@ -13,15 +13,17 @@ import type {
   RemotePost,
 } from "@shoutory/provider-sdk/adapter";
 import { isPolicyRefusal } from "@shoutory/provider-sdk/egress/errors";
+import { scopeSetOf } from "@shoutory/provider-sdk/manifest";
 import { errorResult, type ProviderResult, type ReadLimit } from "@shoutory/provider-sdk/result";
 import { z } from "zod";
+import { mastodonManifest } from "./manifest.js";
 
 // Built from https://docs.joinmastodon.org/methods/apps/, /spec/oauth/ (discovery document, PKCE S256 from 4.3.0),
 // /methods/oauth/, /methods/accounts/, /methods/instance/, /methods/statuses/ and /api/rate-limits/ (all read
 // 2026-11-24). Every call goes to the one instance host the channel stored, on paths fixed here: no URL an instance
 // answers with (a discovery document's endpoints included) is ever followed.
 
-const SCOPES = "read:accounts read:statuses write:statuses write:media";
+const SCOPES = scopeSetOf(mastodonManifest);
 const CLIENT_NAME = "Shoutory";
 const NO_EFFECT = { effect: "none" } as const;
 const NOT_SENT = new Set(["UND_ERR_CONNECT_TIMEOUT", "ECONNREFUSED"]);
@@ -43,16 +45,24 @@ const account = z.object({
 const MAX_CHARACTERS = 1_000_000;
 const MAX_ATTACHMENTS = 100;
 const MAX_IMAGE_BYTES = 16 * 1024 ** 3;
-const instanceAnswer = z.object({
-  configuration: z.object({
-    statuses: z.object({
-      max_characters: z.int().positive().max(MAX_CHARACTERS),
-      max_media_attachments: z.int().positive().max(MAX_ATTACHMENTS),
-      characters_reserved_per_url: z.int().positive().max(MAX_CHARACTERS),
-    }),
-    media_attachments: z.object({ image_size_limit: z.int().positive().max(MAX_IMAGE_BYTES) }),
-  }),
-});
+// Each field is read on its own: one the instance leaves out or states beyond bound is left to the manifest.
+const limitField = (max: number) => z.int().positive().max(max).optional().catch(undefined);
+const instanceAnswer = z
+  .object({
+    configuration: z
+      .object({
+        statuses: z
+          .object({
+            max_characters: limitField(MAX_CHARACTERS),
+            max_media_attachments: limitField(MAX_ATTACHMENTS),
+            characters_reserved_per_url: limitField(MAX_CHARACTERS),
+          })
+          .catch({}),
+        media_attachments: z.object({ image_size_limit: limitField(MAX_IMAGE_BYTES) }).catch({}),
+      })
+      .catch({ statuses: {}, media_attachments: {} }),
+  })
+  .catch({ configuration: { statuses: {}, media_attachments: {} } });
 const oauthError = z.object({ error: z.string().max(64) });
 // Only these OAuth error codes (RFC 6749 section 5.2) are handed on; any other text an instance sends, including a value
 // it echoes back from the request, is never carried into a result.
@@ -212,26 +222,23 @@ const form = (fields: Record<string, string>) => ({
 });
 const bearer = (token: SealedSecret) => ({ authorization: `Bearer ${token.expose()}` });
 
-async function instanceLimits(
-  context: AdapterContext,
-  host: string,
-): Promise<Found<Record<string, ReadLimit>>> {
+type InstanceLimits = Pick<ProviderResult, "limits" | "limitsFromManifest">;
+
+async function instanceLimits(context: AdapterContext, host: string): Promise<Found<InstanceLimits>> {
   const answer = await call(context, host, "/api/v2/instance");
   if (!answer.ok) return { found: false, result: answer.result };
-  const parsed = instanceAnswer.safeParse(answer.json);
-  if (!parsed.success) return { found: false, result: unusable() };
-  const { statuses, media_attachments: media } = parsed.data.configuration;
+  const { statuses, media_attachments: media } = instanceAnswer.parse(answer.json).configuration;
+  const stated = Object.entries({
+    textLength: statuses.max_characters,
+    urlWeight: statuses.characters_reserved_per_url,
+    mediaMaxCount: statuses.max_media_attachments,
+    imageMaxBytes: media.image_size_limit,
+  });
   const [source, checked] = [`https://${host}/api/v2/instance`, context.now().toISOString().slice(0, 10)];
-  const limit = (value: number): ReadLimit => ({ value, source, checked });
-  return {
-    found: true,
-    value: {
-      textLength: limit(statuses.max_characters),
-      urlWeight: limit(statuses.characters_reserved_per_url),
-      mediaMaxCount: limit(statuses.max_media_attachments),
-      imageMaxBytes: limit(media.image_size_limit),
-    },
-  };
+  const limits: Record<string, ReadLimit> = {};
+  for (const [name, value] of stated) if (value !== undefined) limits[name] = { value, source, checked };
+  const missing = stated.filter(([, value]) => value === undefined).map(([name]) => name);
+  return { found: true, value: { limits, ...(missing.length > 0 ? { limitsFromManifest: missing } : {}) } };
 }
 
 // PKCE S256 exists from Mastodon 4.3.0; a fork keeps its own version string, so the discovery document is tested.
@@ -329,13 +336,14 @@ async function identity(context: AdapterContext, input: IdentityInput): Promise<
   return {
     ok: true,
     ...NO_EFFECT,
-    limits: limits.value,
+    ...limits.value,
     identity: {
       // An account id is local to its instance: the same id on two instances is two accounts.
       providerAccountId: `${input.instanceHost}/${id}`,
       accountKind: "profile",
       displayName: shown || username,
-      ...(acct === undefined ? {} : { handle: acct }),
+      // A local account's acct is its bare username; the instance makes it a full address.
+      ...(acct === undefined ? {} : { handle: acct.includes("@") ? acct : `${acct}@${input.instanceHost}` }),
       ...(avatar === undefined ? {} : { avatar }),
     },
   };
@@ -346,7 +354,7 @@ async function inspect(context: AdapterContext, input: InspectInput): Promise<Pr
   const who = await verified(context, input.instanceHost, input.accessToken);
   if (!who.found) return who.result;
   const limits = await instanceLimits(context, input.instanceHost);
-  return { ok: true, ...NO_EFFECT, health: "ok", ...(limits.found ? { limits: limits.value } : {}) };
+  return { ok: true, ...NO_EFFECT, health: "ok", ...(limits.found ? limits.value : {}) };
 }
 
 const connect: ConnectAdapter = {

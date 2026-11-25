@@ -22,9 +22,9 @@ const appRowSchema = z.object({
   generation: z.number().int(),
 });
 
-const GET_APP = "SELECT * FROM app.instance_app_get($1, $2, $3)";
+const GET_APP = "SELECT * FROM app.instance_app_get($1, $2, $3, $4)";
 const PUT_APP =
-  "SELECT app.instance_app_put($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) AS stored";
+  "SELECT app.instance_app_put($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) AS stored";
 
 // A stored app starts at generation 1; each reseal under a new key moves it one on.
 const aadOf = (ownerId: string, generation: number): Aad => ({
@@ -39,6 +39,8 @@ export interface AppKey {
   readonly workspaceId: string;
   readonly providerId: string;
   readonly instanceHost: string;
+  /** An app serves only the scopes it was registered with, so a wider scope set needs its own app. */
+  readonly scopes: string;
 }
 
 export async function readApp(
@@ -46,7 +48,7 @@ export async function readApp(
   keys: KeyProvider,
   at: AppKey,
 ): Promise<AppCredentials | undefined> {
-  const found = await tx.query(GET_APP, [at.workspaceId, at.providerId, at.instanceHost]);
+  const found = await tx.query(GET_APP, [at.workspaceId, at.providerId, at.instanceHost, at.scopes]);
   if (!found.rows[0]) return undefined;
   const row = appRowSchema.parse(found.rows[0]);
   const stored = {
@@ -78,6 +80,7 @@ export async function writeApp(
     at.workspaceId,
     at.providerId,
     at.instanceHost,
+    at.scopes,
     app.clientId,
     ...sealedParams(sealed),
     replaces,

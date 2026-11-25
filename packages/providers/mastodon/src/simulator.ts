@@ -32,8 +32,9 @@ interface Limits {
 
 export interface SimulatorSettings {
   readonly discovery?: "ok" | "missing" | "no_s256" | "foreign_endpoints";
-  readonly verify?: "ok" | "revoked" | "stub" | "not_json";
-  readonly limits?: Partial<Limits>;
+  readonly verify?: "ok" | "revoked" | "forbidden" | "stub" | "not_json";
+  /** A null leaves the field out of the instance answer. */
+  readonly limits?: { readonly [K in keyof Limits]?: number | null };
 }
 
 export interface MastodonSimulatorOptions {
@@ -210,6 +211,7 @@ const verifyCredentials =
   (request) => {
     const mode = state.settings.verify ?? "ok";
     if (mode === "revoked") return fail(401, "The access token is invalid");
+    if (mode === "forbidden") return fail(403, "This action is not allowed");
     if (mode === "stub") return { status: 200, body: {} };
     if (mode === "not_json")
       return { status: 200, headers: { "content-type": "text/html" }, body: "<html>stub</html>" };
@@ -230,11 +232,11 @@ const instance =
         version: "4.3.0",
         configuration: {
           statuses: {
-            max_characters: limits.maxCharacters,
-            max_media_attachments: limits.maxMedia,
-            characters_reserved_per_url: limits.reservedPerUrl,
+            max_characters: limits.maxCharacters ?? undefined,
+            max_media_attachments: limits.maxMedia ?? undefined,
+            characters_reserved_per_url: limits.reservedPerUrl ?? undefined,
           },
-          media_attachments: { image_size_limit: limits.imageSizeLimit },
+          media_attachments: { image_size_limit: limits.imageSizeLimit ?? undefined },
         },
       },
     };

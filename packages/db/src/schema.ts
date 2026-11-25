@@ -418,8 +418,10 @@ export const providerInstanceApps = app.table("provider_instance_apps", {
   id: id(),
   providerId: text("provider_id").notNull(),
   instanceHost: text("instance_host").notNull(),
+  scopes: text("scopes"),
   clientId: text("client_id").notNull(),
   ...sealedSecret(),
+  createdAt: stamp("created_at").notNull().defaultNow(),
 });
 
 // One salt per workspace wraps every credential's data key, so deleting it shreds them; definer-only.
