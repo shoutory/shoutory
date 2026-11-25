@@ -26,8 +26,11 @@ export interface OutboxRelayOptions {
   readonly handlers: OutboxHandlers;
   readonly logger: Logger;
   readonly batch?: number;
-  // Kept well inside the 5-minute lease.
+  // Inside the 5-minute lease, unless a heartbeat keeps the claim.
   readonly handlerTimeoutMs?: number;
+  readonly heartbeatMs?: number;
+  readonly types?: readonly string[];
+  readonly excludeTypes?: readonly string[];
   readonly intervalMs?: number;
   readonly stopTimeoutMs?: number;
 }
@@ -46,21 +49,71 @@ const DEFAULT_BATCH = 50;
 const DEFAULT_HANDLER_TIMEOUT_MS = 60_000;
 const DEFAULT_STOP_TIMEOUT_MS = 10_000;
 
-class HandlerTimeout extends Error {
-  override readonly name = "HandlerTimeout";
+class HandlerAborted extends Error {
+  constructor(override readonly name: "HandlerTimeout" | "ClaimLost" | "RelayStopping") {
+    super(`the outbox handler was stopped: ${name}`);
+  }
 }
 
-function runWithin(handler: OutboxHandlers[string], event: OutboxEvent, ms: number): Promise<void> {
-  const controller = new AbortController();
-  let timer: NodeJS.Timeout | undefined;
-  const expired = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => {
-      reject(new HandlerTimeout("the outbox handler ran past its timeout"));
-      controller.abort();
-    }, ms);
+// Any abort ends the wait at once: the row is no longer this handler's to end.
+function runWithin(
+  handler: OutboxHandlers[string],
+  event: OutboxEvent,
+  ms: number,
+  controller: AbortController,
+): Promise<void> {
+  const timer = setTimeout(() => controller.abort(new HandlerAborted("HandlerTimeout")), ms);
+  let onAbort = (): void => undefined;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(controller.signal.reason);
+    controller.signal.addEventListener("abort", onAbort, { once: true });
   });
-  return Promise.race([handler(event, controller.signal), expired]).finally(() => clearTimeout(timer));
+  return Promise.race([handler(event, controller.signal), aborted]).finally(() => {
+    clearTimeout(timer);
+    controller.signal.removeEventListener("abort", onAbort);
+  });
 }
+
+// Beats run one after another; a beat that fails to reach the database is logged and the next one tries again, since
+// only an answer of false means the claim is lost. The returned stop waits for a beat in flight.
+function keepClaim(
+  { pool, logger, heartbeatMs }: OutboxRelayOptions,
+  row: Claimed,
+  controller: AbortController,
+): () => Promise<void> {
+  if (heartbeatMs === undefined) return async () => undefined;
+  let live = true;
+  let timer: NodeJS.Timeout | undefined;
+  let inFlight: Promise<void> = Promise.resolve();
+  const beat = async () => {
+    try {
+      const kept = await withSystem(pool, "outbox_relay", (tx) =>
+        tx.query<{ ok: boolean }>("SELECT app.outbox_heartbeat($1, $2, $3) AS ok", [
+          row.id,
+          row.created_at,
+          row.attempts,
+        ]),
+      );
+      if (live && kept.rows[0]?.ok !== true) controller.abort(new HandlerAborted("ClaimLost"));
+    } catch (error) {
+      logger.error({ type: row.type, id: row.id, error: errorKind(error) }, "outbox heartbeat failed");
+    }
+    if (live && !controller.signal.aborted) schedule();
+  };
+  const schedule = () => {
+    timer = setTimeout(() => {
+      inFlight = beat();
+    }, heartbeatMs);
+  };
+  schedule();
+  return () => {
+    live = false;
+    clearTimeout(timer);
+    return inFlight;
+  };
+}
+
+const errorKind = (error: unknown) => (error instanceof Error ? error.name : "NonError");
 
 async function waitUpTo(promise: Promise<unknown>, ms: number): Promise<void> {
   let timer: NodeJS.Timeout | undefined;
@@ -112,14 +165,17 @@ export function intervalLoop(
 
 // A failure is logged by type and error class only: an error message may carry the payload.
 async function deliver(
-  { pool, handlers, logger, handlerTimeoutMs = DEFAULT_HANDLER_TIMEOUT_MS }: OutboxRelayOptions,
+  options: OutboxRelayOptions,
   row: Claimed,
+  controller: AbortController,
 ): Promise<boolean> {
+  const { pool, handlers, logger, handlerTimeoutMs = DEFAULT_HANDLER_TIMEOUT_MS } = options;
   const handler = handlers[row.type];
   if (!handler) {
     logger.error({ type: row.type, id: row.id }, "outbox event has no handler");
     return false;
   }
+  const stopBeats = keepClaim(options, row, controller);
   try {
     const event = {
       id: row.id,
@@ -128,11 +184,12 @@ async function deliver(
       payload: row.payload,
       attempts: row.attempts,
     };
-    await runWithin(handler, event, handlerTimeoutMs);
+    await runWithin(handler, event, handlerTimeoutMs, controller);
   } catch (error) {
-    const kind = error instanceof Error ? error.name : "NonError";
-    logger.error({ type: row.type, id: row.id, error: kind }, "outbox handler failed");
+    logger.error({ type: row.type, id: row.id, error: errorKind(error) }, "outbox handler failed");
     return false;
+  } finally {
+    await stopBeats();
   }
   const marked = await withSystem(pool, "outbox_relay", (tx) =>
     tx.query<{ ok: boolean }>("SELECT app.outbox_mark($1, $2, $3) AS ok", [
@@ -154,18 +211,41 @@ export function createOutboxRelay(options: OutboxRelayOptions): OutboxRelay {
     pool,
     logger,
     batch = DEFAULT_BATCH,
+    types = null,
+    excludeTypes = null,
     intervalMs = DEFAULT_INTERVAL_MS,
     stopTimeoutMs = DEFAULT_STOP_TIMEOUT_MS,
   } = options;
+  const running = new Set<AbortController>();
+  let stopping = false;
 
   async function tick(): Promise<number> {
     const claimed = await withSystem(pool, "outbox_relay", (tx) =>
-      tx.query<Claimed>("SELECT * FROM app.outbox_claim($1)", [batch]),
+      tx.query<Claimed>("SELECT * FROM app.outbox_claim($1, $2, $3)", [batch, types, excludeTypes]),
     );
     let marked = 0;
-    for (const row of claimed.rows) if (await deliver(options, row)) marked += 1;
+    for (const row of claimed.rows) {
+      if (stopping) break;
+      const controller = new AbortController();
+      running.add(controller);
+      try {
+        if (await deliver(options, row, controller)) marked += 1;
+      } finally {
+        running.delete(controller);
+      }
+    }
     return marked;
   }
 
-  return { tick, ...intervalLoop("outbox relay", tick, logger, intervalMs, stopTimeoutMs) };
+  const loop = intervalLoop("outbox relay", tick, logger, intervalMs, stopTimeoutMs);
+  return {
+    tick,
+    start: loop.start,
+    // A handler in flight is told to stop, so its work and its beats end before the pool closes.
+    async stop() {
+      stopping = true;
+      for (const controller of running) controller.abort(new HandlerAborted("RelayStopping"));
+      await loop.stop();
+    },
+  };
 }

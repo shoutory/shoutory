@@ -256,7 +256,16 @@ const DEFINERS: Definer[] = [
   },
   { name: "email_outbox_claim", args: "lim integer", callers: ["shoutory_worker"] },
   { name: "email_outbox_mark", args: "id uuid, attempt integer, ok boolean", callers: ["shoutory_worker"] },
-  { name: "outbox_claim", args: "lim integer", callers: ["shoutory_worker"] },
+  {
+    name: "outbox_claim",
+    args: "lim integer, only_types text[], skip_types text[]",
+    callers: ["shoutory_worker"],
+  },
+  {
+    name: "outbox_heartbeat",
+    args: "id uuid, created_at text, attempt integer",
+    callers: ["shoutory_worker"],
+  },
   {
     name: "outbox_mark",
     args: "id uuid, created_at text, attempt integer",

@@ -147,6 +147,77 @@ describe("the outbox relay's loop", () => {
   });
 });
 
+// A handler that announces it runs and then waits for its signal, recording why it aborted.
+function waitsForAbort() {
+  let announce = (): void => undefined;
+  const running = new Promise<void>((resolve) => {
+    announce = resolve;
+  });
+  const seen: { reason?: string } = {};
+  const handler: Handler = (_event, signal) => {
+    announce();
+    return new Promise<void>((resolve) => {
+      signal.addEventListener("abort", () => {
+        seen.reason = (signal.reason as Error).name;
+        resolve();
+      });
+    });
+  };
+  return { running, handler, seen };
+}
+const setLease = (id: string, sql: string) =>
+  admin((c) => c.query(`UPDATE app.outbox SET ${sql} WHERE id = $1`, [id]));
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+describe("the outbox relay's heartbeat", () => {
+  it("keeps a long handler's claim past the lease, so another relay claims nothing", async () => {
+    const id = await plant("test.long");
+    const long = waitsForAbort();
+    const loop = relay({ "test.long": long.handler }, 1, {
+      types: ["test.long"],
+      heartbeatMs: 20,
+      intervalMs: 5,
+    });
+    loop.start();
+    await long.running;
+    await setLease(id, "claimed_until = now() + interval '1 second'");
+    await sleep(1200);
+    expect((await row(id)).claimed_until?.getTime()).toBeGreaterThan(Date.now() + 4 * 60_000);
+    expect(await relay({ "test.long": long.handler }, 1, { types: ["test.long"] }).tick()).toBe(0);
+    await loop.stop();
+    expect(long.seen.reason).toBe("RelayStopping");
+    const after = (await row(id)).claimed_until;
+    await sleep(100);
+    expect((await row(id)).claimed_until).toEqual(after);
+  });
+
+  it("aborts the handler when a beat finds the claim lost, and leaves the row unmarked", async () => {
+    const id = await plant("test.lost");
+    const lost = waitsForAbort();
+    const run = relay({ "test.lost": lost.handler }, 1, { types: ["test.lost"], heartbeatMs: 20 }).tick();
+    await lost.running;
+    await setLease(id, "attempts = attempts + 1");
+    expect(await run).toBe(0);
+    expect(lost.seen.reason).toBe("ClaimLost");
+    expect((await row(id)).dispatched_at).toBeNull();
+  });
+});
+
+describe("the outbox relay's types", () => {
+  it.each([
+    ["an include list delivers only its types", { types: ["test.kept"] }, ["test.kept"]],
+    ["an exclude list never delivers its types", { excludeTypes: ["test.left"] }, ["test.kept"]],
+  ])("%s", async (_name, filter, delivered) => {
+    await admin((a) => a.query("DELETE FROM app.outbox"));
+    await plant("test.kept");
+    await plant("test.left");
+    const seen: string[] = [];
+    const record: Handler = async (event) => void seen.push(event.type);
+    await relay({ "test.kept": record, "test.left": record }, 5, filter).tick();
+    expect(seen).toEqual(delivered);
+  });
+});
+
 describe("the outbox relay's claim", () => {
   it("fences a claimer whose lease lapsed: its mark cannot end the row the new claimer holds", async () => {
     const id = await plant("test.slow");

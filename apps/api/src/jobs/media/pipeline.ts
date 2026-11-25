@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { createWriteStream } from "node:fs";
-import { readFile, rm } from "node:fs/promises";
+import { createReadStream, createWriteStream } from "node:fs";
+import { rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -55,8 +55,6 @@ const CORRUPT = { ok: false, reason: "corrupt" } as const;
 type Job = <T>(run: (tx: TenantTx) => Promise<T>) => Promise<T>;
 
 const keyOf = (original: string, profile: Profile) => original.replace(/original$/, profile);
-const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
-const blob = (bytes: Uint8Array) => new Blob([new Uint8Array(bytes)]).stream();
 
 const sql = <R extends object = object>(job: Job, text: string, values: unknown[]) =>
   job((tx) => tx.query<R & Record<string, unknown>>(text, values));
@@ -108,6 +106,24 @@ async function hashStored(storage: StorageDriver, key: string): Promise<{ digest
   return { digest: hash.digest("hex"), size };
 }
 
+// A derivative can be as large as the video it came from, so it is read from disk as the store takes it, and hashed on
+// the way; the signal stops the read.
+function hashedFile(path: string, signal: AbortSignal | undefined) {
+  const hash = createHash("sha256");
+  let size = 0;
+  async function* chunks() {
+    for await (const chunk of createReadStream(path, signal ? { signal } : {})) {
+      hash.update(chunk as Buffer);
+      size += (chunk as Buffer).length;
+      yield chunk as Buffer;
+    }
+  }
+  return {
+    body: Readable.toWeb(Readable.from(chunks())) as ReadableStream<Uint8Array>,
+    written: () => ({ digest: hash.digest("hex"), size }),
+  };
+}
+
 async function putDerivative(
   deps: PipelineDeps,
   job: Job,
@@ -116,6 +132,7 @@ async function putDerivative(
   profile: Profile,
   path: string,
   original: string,
+  signal?: AbortSignal,
 ): Promise<void> {
   const known = (
     await sql<{ state: string }>(
@@ -131,11 +148,12 @@ async function putDerivative(
       id,
       profile,
     ]);
-  const bytes = await readFile(path);
   const key = keyOf(original, profile);
-  let written = { digest: sha(bytes), size: bytes.length };
+  const file = hashedFile(path, signal);
+  let written: { digest: string; size: number };
   try {
-    await deps.storage.put(key, blob(bytes), bytes.length, { ifAbsent: true });
+    await deps.storage.put(key, file.body, (await stat(path)).size, { ifAbsent: true });
+    written = file.written();
   } catch (error) {
     if (!(error instanceof StorageError) || error.kind !== "exists") throw error;
     written = await hashStored(deps.storage, key);
@@ -160,7 +178,12 @@ async function warnScan(deps: PipelineDeps, ws: string, id: string, path: string
   }
 }
 
-async function copyOriginal(deps: PipelineDeps, asset: Asset, path: string): Promise<string> {
+async function copyOriginal(
+  deps: PipelineDeps,
+  asset: Asset,
+  path: string,
+  signal: AbortSignal | undefined,
+): Promise<string> {
   const original = await deps.storage.get(asset.object_key);
   if (original === null) throw new Error("the original of an uploaded asset is missing");
   const source = Readable.fromWeb(original as NodeReadableStream<Uint8Array>);
@@ -171,7 +194,7 @@ async function copyOriginal(deps: PipelineDeps, asset: Asset, path: string): Pro
       done(null, chunk);
     },
   });
-  await pipeline(source, counting, createWriteStream(path));
+  await pipeline(source, counting, createWriteStream(path), signal ? { signal } : {});
   return hash.digest("hex");
 }
 
@@ -186,12 +209,13 @@ async function withOriginal<T>(
   id: string,
   asset: Asset,
   scanned: Scanned,
+  signal: AbortSignal | undefined,
   use: (input: string, dir: string) => Promise<T>,
 ): Promise<T | typeof CORRUPT> {
   const dir = await scratchFor(deps.scratchDir, asset.byte_size);
   try {
     const input = join(dir, "input");
-    const digest = await copyOriginal(deps, asset, input);
+    const digest = await copyOriginal(deps, asset, input, signal);
     if (digest !== asset.sha256) return CORRUPT;
     if (scanned) {
       await warnScan(deps, ws, id, input);
@@ -212,11 +236,11 @@ function derive(
   scanned: Scanned,
   signal?: AbortSignal,
 ) {
-  return withOriginal(deps, ws, id, asset, scanned, async (input, dir) => {
+  return withOriginal(deps, ws, id, asset, scanned, signal, async (input, dir) => {
     const result = await runSharpChild({ inputPath: input, outputDir: dir, ...(signal ? { signal } : {}) });
     if (!result.ok) return result;
     for (const profile of PROFILES)
-      await putDerivative(deps, job, ws, id, profile, result.files[profile], asset.object_key);
+      await putDerivative(deps, job, ws, id, profile, result.files[profile], asset.object_key, signal);
     return result;
   });
 }
@@ -243,7 +267,7 @@ async function judgeVideo(
   const ffprobePath = deps.ffprobe;
   if (ffprobePath === undefined) return { ok: false, reason: "unsupported_type" };
   if (sniffed !== claimedType(asset.mime)) return { ok: false, reason: "type_mismatch" };
-  const probed = await withOriginal(deps, ws, id, asset, scanned, (inputPath) =>
+  const probed = await withOriginal(deps, ws, id, asset, scanned, signal, (inputPath) =>
     runProbe({ ffprobePath, inputPath, demuxer: FAMILY_OF[sniffed], ...(signal ? { signal } : {}) }),
   );
   if (!probed.ok) return probed;

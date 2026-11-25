@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { inspect } from "node:util";
@@ -184,6 +185,56 @@ describe("s3 driver: a streamed get body", () => {
     expect(next).toMatchObject({ kind: "failed" });
     await new Promise((done) => setTimeout(done, 200));
     expect(closedByClient).toBe(true);
+  });
+});
+
+const MIB = 1024 * 1024;
+const sized = (bytes: number) => new Blob([Buffer.alloc(bytes, "large-body-")]).stream();
+const sha256Of = (bytes: Buffer) => createHash("sha256").update(bytes).digest("base64");
+
+// A stub that takes every request as S3 would and records what each carried.
+async function recordingServer() {
+  const seen: { method: string; url: string; headers: Record<string, unknown>; body: Buffer }[] = [];
+  const endpoint = await listen(async (request, response) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) chunks.push(chunk as Buffer);
+    const url = request.url ?? "";
+    seen.push({ method: request.method ?? "", url, headers: request.headers, body: Buffer.concat(chunks) });
+    const xml = { "content-type": "application/xml" };
+    if (/[?&]uploads/.test(url)) {
+      response.writeHead(200, xml);
+      response.end(
+        "<InitiateMultipartUploadResult><UploadId>upload-1</UploadId></InitiateMultipartUploadResult>",
+      );
+    } else if (request.method === "POST") {
+      response.writeHead(200, xml);
+      response.end('<CompleteMultipartUploadResult><ETag>"whole"</ETag></CompleteMultipartUploadResult>');
+    } else {
+      response.writeHead(200, { etag: `"part-${seen.length}"` });
+      response.end();
+    }
+  });
+  return { endpoint, seen };
+}
+
+describe("s3 driver: a large put", () => {
+  it.each([
+    ["of exactly 64 MiB is one request", 64 * MIB, ["PUT"]],
+    [
+      "of 64 MiB + 1 goes in parts of 16 MiB, each with its sha256",
+      64 * MIB + 1,
+      ["POST", "PUT", "PUT", "PUT", "PUT", "PUT", "POST"],
+    ],
+  ])("%s", async (_name, size, methods) => {
+    const { endpoint, seen } = await recordingServer();
+    await createS3Driver(configFor(endpoint)).put(KEY, sized(size), size);
+    expect(seen.map(({ method }) => method)).toEqual(methods);
+    const parts = seen.filter(({ url }) => /partNumber=/.test(url));
+    expect(parts.map(({ body }) => body.length)).toEqual(
+      methods.length > 1 ? [16 * MIB, 16 * MIB, 16 * MIB, 16 * MIB, 1] : [],
+    );
+    for (const { headers, body } of parts) expect(headers["x-amz-checksum-sha256"]).toBe(sha256Of(body));
+    if (parts.length > 0) expect(seen.at(-1)?.headers["x-amz-mp-object-size"]).toBe(String(size));
   });
 });
 

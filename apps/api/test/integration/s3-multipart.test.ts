@@ -1,10 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
+import { ListMultipartUploadsCommand, S3Client } from "@aws-sdk/client-s3";
 import { parseStorageEnv, type StorageConfig } from "@shoutory/core/config";
 import { StorageError } from "@shoutory/core/storage";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createStorageDriver } from "../../src/storage/driver.js";
 import { createS3Multipart, createS3Presigner } from "../../src/storage/s3-driver.js";
-import { createBucket, s3Env } from "../support/s3.js";
+import { createBucket, S3_ACCESS_KEY, S3_SECRET_KEY, s3Env, s3Url } from "../support/s3.js";
 
 const BUCKET = "s3-multipart-1";
 const MIB = 1024 * 1024;
@@ -91,5 +92,82 @@ describe("a finished or aborted upload has no parts to list", () => {
     expect(await multipart.listParts(completed, second.uploadId)).toBeNull();
     // A complete of an upload that is already done is not an error: the caller reads the object to settle it.
     await expect(multipart.complete(completed, second.uploadId, parts, second.size)).resolves.toBeUndefined();
+  });
+});
+
+const LARGE = 64 * MIB + 1;
+
+// One MiB at a time, each chunk named by its place, so a part stored out of order changes the digest.
+function largeBody(size: number, failAfter = Infinity) {
+  const hash = createHash("sha256");
+  let sent = 0;
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (sent >= failAfter) return controller.error(new Error("the source broke"));
+      if (sent >= size) return controller.close();
+      const chunk = filled(Math.min(MIB, size - sent), `chunk-${sent / MIB}-`);
+      hash.update(chunk);
+      sent += chunk.length;
+      controller.enqueue(chunk);
+    },
+  });
+  return { body, digest: () => hash.digest("hex") };
+}
+
+async function stored(key: string) {
+  const body = await driver.get(key);
+  const hash = createHash("sha256");
+  if (body) for await (const chunk of body) hash.update(chunk);
+  return hash.digest("hex");
+}
+
+async function openUploads(key: string) {
+  const client = new S3Client({
+    region: "us-east-1",
+    endpoint: s3Url(),
+    forcePathStyle: true,
+    credentials: { accessKeyId: S3_ACCESS_KEY, secretAccessKey: S3_SECRET_KEY },
+  });
+  try {
+    const answer = await client.send(new ListMultipartUploadsCommand({ Bucket: BUCKET, Prefix: key }));
+    return answer.Uploads ?? [];
+  } finally {
+    client.destroy();
+  }
+}
+
+describe("a put above 64 MiB goes in parts the driver sends itself", () => {
+  it("stores 64 MiB + 1 as one object with the same bytes", async () => {
+    const key = keyOf();
+    const { body, digest } = largeBody(LARGE);
+    await driver.put(key, body, LARGE);
+    expect(await driver.head(key)).toMatchObject({ size: LARGE });
+    expect(await stored(key)).toBe(digest());
+  });
+
+  it.each([
+    ["a source that breaks after 85 MiB, once parts are stored", 100 * MIB, 85 * MIB, "failed"],
+    ["a source longer than its bound", 70 * MIB, Infinity, "too_large"],
+  ])("leaves no object and no open upload after %s", async (_name, maxBytes, failAfter, kind) => {
+    const key = keyOf();
+    const { body } = largeBody(90 * MIB, failAfter);
+    await expect(driver.put(key, body, maxBytes)).rejects.toMatchObject({ kind });
+    expect(await driver.head(key)).toBeNull();
+    expect(await openUploads(key)).toEqual([]);
+  });
+
+  it.each([
+    ["answers exists and keeps the first bytes when it must not replace", true, "exists"],
+    ["replaces the object otherwise", false, null],
+  ])("over an existing object %s", async (_name, ifAbsent, kind) => {
+    const key = keyOf();
+    await driver.put(key, new Blob(["first"]).stream(), 1024);
+    const { body, digest } = largeBody(LARGE);
+    const put = driver.put(key, body, LARGE, { ifAbsent });
+    if (kind) await expect(put).rejects.toMatchObject({ kind });
+    else await put;
+    expect(await driver.head(key)).toMatchObject({ size: kind ? 5 : LARGE });
+    if (!kind) expect(await stored(key)).toBe(digest());
+    expect(await openUploads(key)).toEqual([]);
   });
 });

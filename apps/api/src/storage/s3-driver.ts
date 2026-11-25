@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   AbortMultipartUploadCommand,
   CompleteMultipartUploadCommand,
@@ -31,20 +32,109 @@ const REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_BODY_DEADLINE_MS = 300_000;
 const MAX_BODY_DEADLINE_MS = 3_600_000;
 
-async function readBounded(body: ReadableStream<Uint8Array>, maxBytes: number): Promise<Uint8Array> {
+// A body up to 64 MiB goes in one request; a larger one goes in parts of 16 MiB, so memory holds about 150 MiB at most
+// (the first 80 MiB of parts and the copies made while joining them) whatever the size. At 16 MiB the 10,000 parts S3 allows reach about 156 GiB.
+const SINGLE_PUT_MAX = 64 * 1024 * 1024;
+const PART_BYTES = 16 * 1024 * 1024;
+
+// Parts of PART_BYTES, the last one shorter. A body past maxBytes is refused, and a consumer that stops early cancels it.
+async function* partsOf(body: ReadableStream<Uint8Array>, maxBytes: number): AsyncGenerator<Buffer> {
   const reader = body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) return Buffer.concat(chunks);
-    size += value.length;
-    if (size > maxBytes) {
-      await reader.cancel();
-      throw new StorageError("too_large");
+  let open = true;
+  let held: Uint8Array[] = [];
+  let heldBytes = 0;
+  let total = 0;
+  try {
+    for (;;) {
+      const next = await reader.read().catch((error: unknown) => {
+        open = false;
+        throw error;
+      });
+      if (next.done) break;
+      total += next.value.length;
+      if (total > maxBytes) throw new StorageError("too_large");
+      held.push(next.value);
+      heldBytes += next.value.length;
+      while (heldBytes >= PART_BYTES) {
+        const joined = Buffer.concat(held);
+        held = [joined.subarray(PART_BYTES)];
+        heldBytes -= PART_BYTES;
+        yield joined.subarray(0, PART_BYTES);
+      }
     }
-    chunks.push(value);
+    open = false;
+    if (heldBytes > 0) yield Buffer.concat(held);
+  } finally {
+    if (open) await reader.cancel();
   }
+}
+
+function putWhole({ client, onceClient, Bucket, Key, ifAbsent }: PutTarget, Body: Buffer): Promise<void> {
+  const command = new PutObjectCommand({ Bucket, Key, Body, IfNoneMatch: ifAbsent ? "*" : undefined });
+  return guarded(async () => {
+    await (ifAbsent ? onceClient : client).send(command);
+  });
+}
+
+interface PutTarget {
+  readonly client: S3Client;
+  readonly onceClient: S3Client;
+  readonly Bucket: string;
+  readonly Key: string;
+  readonly ifAbsent: boolean;
+}
+
+// The sequence is the driver's own, not the browser multipart: every part carries its sha256, and the complete is sent
+// once with `If-None-Match: *` when it must not replace.
+async function putInParts(target: PutTarget, first: Buffer[], rest: AsyncGenerator<Buffer>): Promise<void> {
+  const { client, onceClient, Bucket, Key, ifAbsent } = target;
+  const created = await guarded(() =>
+    client.send(new CreateMultipartUploadCommand({ Bucket, Key, ChecksumAlgorithm: "SHA256" })),
+  );
+  const UploadId = created.UploadId;
+  if (!UploadId) throw new StorageError("failed");
+  try {
+    const Parts = await uploadParts(target, UploadId, first, rest);
+    const MpuObjectSize = Parts.reduce((sum, part) => sum + part.size, 0);
+    await (ifAbsent ? onceClient : client).send(
+      new CompleteMultipartUploadCommand({
+        Bucket,
+        Key,
+        UploadId,
+        IfNoneMatch: ifAbsent ? "*" : undefined,
+        MpuObjectSize,
+        MultipartUpload: { Parts: Parts.map(({ size: _size, ...part }) => part) },
+      }),
+    );
+  } catch (error) {
+    // The first failure is the one reported. An abort that fails too leaves parts the bucket's abort rule removes,
+    // the rule the check advises.
+    await client.send(new AbortMultipartUploadCommand({ Bucket, Key, UploadId })).catch(() => undefined);
+    throw mapped(error);
+  }
+}
+
+async function uploadParts(
+  target: PutTarget,
+  UploadId: string,
+  first: Buffer[],
+  rest: AsyncGenerator<Buffer>,
+) {
+  const { client, Bucket, Key } = target;
+  const parts: { PartNumber: number; ETag: string; ChecksumSHA256: string; size: number }[] = [];
+  const send = async (bytes: Buffer) => {
+    const PartNumber = parts.length + 1;
+    if (PartNumber > MAX_PART_NUMBER) throw new StorageError("too_large");
+    const ChecksumSHA256 = createHash("sha256").update(bytes).digest("base64");
+    const answer = await client.send(
+      new UploadPartCommand({ Bucket, Key, UploadId, PartNumber, Body: bytes, ChecksumSHA256 }),
+    );
+    if (!answer.ETag) throw new StorageError("failed");
+    parts.push({ PartNumber, ETag: answer.ETag, ChecksumSHA256, size: bytes.length });
+  };
+  for (const bytes of first.splice(0)) await send(bytes);
+  for await (const bytes of rest) await send(bytes);
+  return parts;
 }
 
 const DENIED_NAMES = new Set(["AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch"]);
@@ -365,6 +455,27 @@ async function lifecycleAdvice(client: S3Client, Bucket: string): Promise<Storag
   }
 }
 
+async function putBounded(
+  target: PutTarget,
+  body: ReadableStream<Uint8Array>,
+  maxBytes: number,
+): Promise<void> {
+  const parts = partsOf(body, maxBytes);
+  const first: Buffer[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const next = await parts.next();
+      if (next.done) return await putWhole(target, Buffer.concat(first));
+      first.push(next.value);
+      size += next.value.length;
+      if (size > SINGLE_PUT_MAX) return await putInParts(target, first, parts);
+    }
+  } finally {
+    await parts.return(undefined);
+  }
+}
+
 // The bucket must exist: the driver never creates one. The credentials are read from their sealed form only when the
 // SDK asks for them.
 export function createS3Driver(config: S3Config, options: { bodyDeadlineMs?: number } = {}): StorageDriver {
@@ -380,15 +491,8 @@ export function createS3Driver(config: S3Config, options: { bodyDeadlineMs?: num
     name: "s3",
     async put(key, body, maxBytes, putOptions) {
       storageKeySegments(key);
-      const bytes = await readBounded(body, maxBytes);
       const ifAbsent = putOptions?.ifAbsent === true;
-      const command = new PutObjectCommand({
-        Bucket,
-        Key: key,
-        Body: bytes,
-        IfNoneMatch: ifAbsent ? "*" : undefined,
-      });
-      await guarded(() => (ifAbsent ? onceClient : client).send(command));
+      await putBounded({ client, onceClient, Bucket, Key: key, ifAbsent }, body, maxBytes);
     },
     async get(key, range) {
       storageKeySegments(key);

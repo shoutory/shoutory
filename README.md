@@ -104,6 +104,11 @@ reads local files only and has no network protocol. The image sets `SHOUTORY_FFP
 QuickTime or webm video is probed (15 seconds at most) and becomes ready without being converted or copied;
 [`docs/dependencies.md`](docs/dependencies.md) records the signature check and the build packages.
 
+The worker handles uploaded media one file at a time, apart from its other work, and gives each file up to 30 minutes
+while it keeps its claim on it. Within that time it copies the original from storage and writes what it derives back, so a
+5 GiB video needs about 17 MiB/s between the worker and storage. With driver `s3` a file above 64 MiB is written in parts
+of 16 MiB, so the worker holds at most about 150 MiB of it in memory whatever its size.
+
 ### Backup and restore
 
 What to keep, how to dump and restore, and how to test your backups: [docs/self-host/backup-restore.md](docs/self-host/backup-restore.md).

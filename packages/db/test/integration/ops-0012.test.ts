@@ -127,10 +127,15 @@ describe("worker liveness and lag", () => {
     expect((await status())[0]).toMatchObject({ stale: true });
   });
 
-  it("the outbox lag is the age of the oldest undispatched event, 0 with none", async () => {
+  // A video's row is held for up to 30 minutes by its own relay, so it never counts toward readiness.
+  it("the outbox lag is the age of the oldest undispatched event other than an upload, 0 with none", async () => {
     const lag = async () =>
       (await pool("app").query("SELECT app.outbox_lag() AS lag")).rows[0]?.lag as number;
     await rows("DELETE FROM app.outbox");
+    await rows(
+      `INSERT INTO app.outbox (id, created_at, type)
+       VALUES (gen_random_uuid(), now() - interval '900 seconds', 'media.uploaded')`,
+    );
     expect(await lag()).toBe(0);
     await rows(
       `INSERT INTO app.outbox (id, created_at, type) VALUES (gen_random_uuid(), now() - interval '100 seconds', 'test.lag'),

@@ -24,7 +24,7 @@ import { collectMedia } from "./media/gc.js";
 import type { PipelineDeps } from "./media/pipeline.js";
 import { sweepScratch } from "./media/scratch.js";
 import { mediaUploadedHandler } from "./media/uploaded.js";
-import { createOutboxRelay } from "./outbox-relay.js";
+import { createOutboxRelay, type IntervalLoop, type OutboxRelayOptions } from "./outbox-relay.js";
 import {
   JOB_QUEUES,
   PARTITION_CLASSES,
@@ -63,6 +63,33 @@ const HEARTBEAT_MS = 30_000;
 const RELAY_INTERVAL_MS = 1_000;
 const POLL_SECONDS = 30;
 const STOP_TIMEOUT_MS = 10_000;
+// An upload can run for half an hour (a large video is copied twice at the storage's pace), so it has a relay of its
+// own that takes one row at a time and beats its claim; the general relay never waits behind it.
+const MEDIA_EVENTS = ["media.uploaded"];
+const MEDIA_HANDLER_TIMEOUT_MS = 30 * 60_000;
+const MEDIA_HEARTBEAT_MS = 60_000;
+
+function createRelays(
+  options: Pick<OutboxRelayOptions, "pool" | "handlers" | "logger" | "intervalMs">,
+): IntervalLoop {
+  const general = createOutboxRelay({ ...options, excludeTypes: MEDIA_EVENTS });
+  const media = createOutboxRelay({
+    ...options,
+    types: MEDIA_EVENTS,
+    batch: 1,
+    handlerTimeoutMs: MEDIA_HANDLER_TIMEOUT_MS,
+    heartbeatMs: MEDIA_HEARTBEAT_MS,
+  });
+  return {
+    start() {
+      general.start();
+      media.start();
+    },
+    async stop() {
+      await Promise.all([general.stop(), media.stop()]);
+    },
+  };
+}
 // A purge call removes at most this many rows; the job calls again while one comes back full, and stops after
 // MAX_PURGE_CALLS so one run cannot hold a connection for ever: the next night continues.
 const PURGE_BATCH = 5_000;
@@ -229,7 +256,7 @@ export async function startWorker({
   const beat = () =>
     withSystem(pool, "heartbeat", (tx) => tx.query("SELECT app.worker_heartbeat($1, $2)", [workerId, role]));
   const handlers = { "media.uploaded": mediaUploadedHandler({ pool, logger, ...media }) };
-  const relay = createOutboxRelay({ pool, handlers, logger, intervalMs: relayIntervalMs });
+  const relays = createRelays({ pool, handlers, logger, intervalMs: relayIntervalMs });
   const sender = createMailSender({ ...mail, pool, logger, intervalMs: mailIntervalMs });
   // The mail sender's key ring is the instance's, and it also opens the credentials of the channels a send is for.
   const credentials = createCredentialService({
@@ -263,7 +290,7 @@ export async function startWorker({
       .catch((stopError: unknown) => logger.error({ err: stopError }, "job queue did not stop"));
     throw error;
   }
-  relay.start();
+  relays.start();
   sender.start();
   ledger.start();
   const timer = setInterval(() => {
@@ -276,7 +303,7 @@ export async function startWorker({
       closing.abort();
       // The tick stops first: it sends wake-ups through the queue client, which stops last.
       await ledger.stop();
-      await Promise.all([relay.stop(), sender.stop()]);
+      await Promise.all([relays.stop(), sender.stop()]);
       await boss.stop({ graceful: true, timeout: STOP_TIMEOUT_MS });
     },
   };

@@ -135,6 +135,46 @@ describe("a crash is not a verdict", () => {
   });
 });
 
+// The relay aborts a run whose claim it lost or whose worker stops: the copy and the upload stop too, not only the
+// decoder, so nothing is written after the row stopped being this run's.
+describe("a run stops when its signal aborts", () => {
+  type Stopper = (controller: AbortController) => Partial<typeof storage>;
+  it.each<[string, Stopper]>([
+    [
+      "while the original is copied",
+      (controller) => ({
+        // The type sniff reads a range first; the copy reads the whole object, which here never ends.
+        get: async (key, range) =>
+          range
+            ? storage.get(key, range)
+            : new ReadableStream<Uint8Array>({
+                start(stream) {
+                  stream.enqueue(new Uint8Array([1]));
+                  controller.abort();
+                },
+              }),
+      }),
+    ],
+    [
+      "while a derivative is stored",
+      (controller) => ({
+        put: async (key, body, maxBytes, options) => {
+          controller.abort();
+          await new Promise((resolve) => setImmediate(resolve));
+          return storage.put(key, body, maxBytes, options);
+        },
+      }),
+    ],
+  ])("%s, and records no derivative", async (_name, stopper) => {
+    const id = await uploaded(await jpeg(), "image/jpeg");
+    const controller = new AbortController();
+    const deps = depsWith({ storage: { ...storage, ...stopper(controller) } });
+    await expect(processAsset(deps, ws, id, controller.signal)).rejects.toThrow();
+    expect((await rowOf(id)).state).toBe("processing");
+    expect((await derivativesOf(id)).filter((derivative) => derivative.state === "ready")).toEqual([]);
+  });
+});
+
 describe("the claimed type may be spelled another way", () => {
   it.each([
     ["in capitals", "IMAGE/PNG", async () => png()],
