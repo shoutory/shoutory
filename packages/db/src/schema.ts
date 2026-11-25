@@ -521,7 +521,6 @@ export const mediaUploads = app.table("media_uploads", {
   mediaId: uuid("media_id").notNull(),
   multipartUploadId: text("multipart_upload_id"),
   partSize: integer("part_size"),
-  partsDone: integer("parts_done").array(),
   // The sha256 and size of the whole file as its sender declared them; set once with the upload id.
   declaredSha256: bytea("declared_sha256"),
   declaredSize: bigint("declared_size", { mode: "number" }),

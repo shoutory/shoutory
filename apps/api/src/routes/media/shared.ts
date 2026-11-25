@@ -82,13 +82,20 @@ export type Scope = <T>(
 export const conflict = (reason: string) =>
   new Refusal("conflict", `upload not completed: ${reason}`, { details: { reason } });
 
+// `duplicate` says the file was already in the workspace: the answer names that medium instead of the one asked.
+export interface Settled {
+  id: string;
+  duplicate: boolean;
+}
+const settledAs = (asked: string, live: string): Settled => ({ id: live, duplicate: live !== asked });
+
 export async function settled(
   storage: StorageDriver,
   workspaceId: string,
   asset: Asset,
   scoped: Scope,
-): Promise<{ id: string }> {
-  if (LIVE.includes(asset.state)) return { id: asset.id };
+): Promise<Settled> {
+  if (LIVE.includes(asset.state)) return settledAs(asset.id, asset.id);
   const head = await storage.head(originalKey(workspaceId, asset.id));
   const live = head?.sha256
     ? (
@@ -102,7 +109,7 @@ export async function settled(
       ).rows[0]
     : undefined;
   if (!live) throw conflict("not_pending");
-  return { id: live.id };
+  return settledAs(asset.id, live.id);
 }
 
 /**
@@ -115,7 +122,7 @@ export async function markUploaded(
   asset: Asset,
   scoped: Scope,
   proved: { sha256: string; size: number },
-): Promise<{ id: string }> {
+): Promise<Settled> {
   try {
     const done = await scoped(true, (tx, scope) =>
       callDefiner<{ outcome: string; live_id: string }>(
@@ -124,7 +131,7 @@ export async function markUploaded(
         [scope.workspaceId, asset.id, proved.sha256, proved.size, asset.mime ?? "application/octet-stream"],
       ),
     );
-    return { id: done.live_id };
+    return settledAs(asset.id, done.live_id);
   } catch (error) {
     if (!(error instanceof Refusal) || error.code !== "conflict") throw error;
     const now = await scoped(false, (tx, scope) => assetOf(tx, scope.workspaceId, asset.id));

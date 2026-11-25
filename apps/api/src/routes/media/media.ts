@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { claimedType, isImageType, MAX_UPLOAD_BYTES } from "@shoutory/core/media";
 import { type StorageDriver, StorageError } from "@shoutory/core/storage";
+import type { TenantTx } from "@shoutory/db/context";
+import type { Context, Next } from "hono";
 import { z } from "zod";
 import { Refusal } from "../../errors/refusal.js";
 import type { Logger } from "../../logging/logger.js";
@@ -8,6 +10,7 @@ import type { S3Multipart, S3Presigner } from "../../storage/s3-driver.js";
 import { type App, defineRoute } from "../define-route.js";
 import { finishFsParts, registerFsParts } from "./fs-parts.js";
 import { type ImportFetch, registerImport } from "./import.js";
+import { registerLibrary } from "./library.js";
 import {
   finishMultipart,
   MAX_MULTIPART_BYTES,
@@ -28,6 +31,7 @@ import {
   OCTET_STREAM,
   originalKey,
   type Scope,
+  type Settled,
   settled,
   uploadOf,
   VIEW_SPLIT,
@@ -82,6 +86,32 @@ interface S3Side {
   cap: number | null;
 }
 
+// A file already ready in the workspace is answered as that medium: nothing is registered and nothing is uploaded.
+// The declared hash only finds it; it is never stored as the digest of a new medium.
+async function readyWithHash(tx: TenantTx, workspaceId: string, sha256: string): Promise<string | undefined> {
+  const found = await tx.query<{ id: string }>(
+    `SELECT id FROM app.media_assets WHERE workspace_id = $1 AND sha256 = decode($2, 'hex') AND state = 'ready'
+     ORDER BY created_at LIMIT 1`,
+    [workspaceId, sha256],
+  );
+  return found.rows[0]?.id;
+}
+
+async function registered(
+  tx: TenantTx,
+  workspaceId: string,
+  body: z.infer<typeof registerBody>,
+  partSize: number | null,
+  cap: number | null,
+): Promise<string> {
+  const made = await callDefiner<{ id: string }>(
+    tx,
+    "SELECT app.media_register($1, $2, $3, 'upload', NULL, NULL, $4, $5, $6) AS id",
+    [workspaceId, body.file_name, body.mime, partSize, body.byte_size, cap],
+  );
+  return made.id;
+}
+
 function registerUpload(app: App, { presigner, multipart, logger, parts, cap }: S3Side): void {
   defineRoute(app, {
     method: "post",
@@ -95,19 +125,16 @@ function registerUpload(app: App, { presigner, multipart, logger, parts, cap }: 
       const large = body.byte_size > MAX_UPLOAD_BYTES;
       if (body.byte_size > MAX_MULTIPART_BYTES || (large && !parts)) throw tooLarge();
       if (large && isImageType(claimedType(body.mime))) throw tooLarge();
-      const made = await scoped(true, async (tx, scope) => ({
-        workspaceId: scope.workspaceId,
-        id: (
-          await callDefiner<{ id: string }>(
-            tx,
-            "SELECT app.media_register($1, $2, $3, 'upload', NULL, NULL, $4, $5, $6) AS id",
-            [scope.workspaceId, body.file_name, body.mime, large ? PART_SIZE : null, body.byte_size, cap],
-          )
-        ).id,
-      }));
-      if (large) return startMultipart({ multipart, logger }, scoped, made, body);
+      const made = await scoped(true, async (tx, scope) => {
+        const ready = await readyWithHash(tx, scope.workspaceId, body.sha256);
+        const id = ready ?? (await registered(tx, scope.workspaceId, body, large ? PART_SIZE : null, cap));
+        return { workspaceId: scope.workspaceId, id, duplicate: ready !== undefined };
+      });
+      if (made.duplicate) return { id: made.id, duplicate: true };
+      if (large)
+        return { ...(await startMultipart({ multipart, logger }, scoped, made, body)), duplicate: false };
       const target = await uploadTarget(presigner, made.workspaceId, made.id, body);
-      return { id: made.id, url: target.url, headers: target.headers };
+      return { id: made.id, duplicate: false, url: target.url, headers: target.headers };
     },
   });
 }
@@ -121,7 +148,7 @@ async function finish(
   workspaceId: string,
   asset: Asset,
   scoped: Scope,
-): Promise<{ id: string }> {
+): Promise<Settled> {
   const head = await storage.head(originalKey(workspaceId, asset.id));
   if (!head) throw conflict("no_object");
   if (head.size <= 0) throw conflict("empty");
@@ -222,14 +249,16 @@ function registerRead(app: App, storage: StorageDriver): void {
 }
 
 /**
- * The original of an upload is a download, never a page of this origin: the sandbox policy replaces the page policy
- * on it. It must be registered before the secure-headers middleware, which sets the page policy after the handler.
+ * The original of an upload and its derivatives are never a page of this origin: the sandbox policy replaces the page
+ * policy on them. It must be registered before the secure-headers middleware, which sets the page policy after the handler.
  */
 export function sandboxDownloads(app: App): void {
-  app.use("/api/v1/workspaces/:workspace_id/media/:media_id/original", async (c, next) => {
+  const sandbox = async (c: Context, next: Next) => {
     await next();
     c.res.headers.set("content-security-policy", "sandbox");
-  });
+  };
+  app.use("/api/v1/workspaces/:workspace_id/media/:media_id/original", sandbox);
+  app.use("/api/v1/workspaces/:workspace_id/media/:media_id/derivatives/:profile", sandbox);
 }
 
 // An upload may be started this long after it was registered, as long as an S3 upload URL lives.
@@ -337,4 +366,5 @@ export function registerMedia(
   if (fs) registerFsParts(app, storage);
   if (s3.mediaImportFetch) registerImport(app, storage, { getFile: s3.mediaImportFetch, logger, cap });
   registerRead(app, storage);
+  registerLibrary(app, storage);
 }

@@ -74,7 +74,6 @@ interface Planted {
   ageHours?: number;
   deletedDaysAgo?: number;
   removed?: boolean;
-  session?: boolean;
 }
 async function plantAsset(o: Planted = {}): Promise<string> {
   const id = randomUUID();
@@ -99,12 +98,6 @@ async function plantAsset(o: Planted = {}): Promise<string> {
       o.removed ?? false,
     ],
   );
-  if (o.session) {
-    await rows(
-      "INSERT INTO app.media_uploads (workspace_id, media_id, expires_at) VALUES ($1, $2, now() + interval '1 day')",
-      [ws, id],
-    );
-  }
   return id;
 }
 const plantPending = (ws: string, count: number) =>
@@ -275,7 +268,6 @@ describe("media_register's upload session", () => {
 interface Definer {
   name: string;
   state?: string;
-  session?: true;
   build: (asset: string) => [string, unknown[]];
   valid: TenantCtx;
   alsoRefused: TenantCtx;
@@ -302,11 +294,11 @@ const DEFINERS: Definer[] = [
     alsoRefused: ADMIN,
   },
   {
-    name: "media_upload_progress",
-    session: true,
-    build: (asset) => call("media_upload_progress", [WA, asset, [1, 2]]),
+    name: "media_delete",
+    state: "ready",
+    build: (asset) => call("media_delete", [WA, asset]),
     valid: EDITOR,
-    alsoRefused: asUser(U.approver),
+    alsoRefused: job([WA]),
   },
   {
     name: "media_set_metadata",
@@ -348,7 +340,7 @@ describe("who may run a media definer", () => {
     { d, who: "its valid caller", ctx: d.valid, accepted: true },
   ]);
   it.each(cases)("$d.name as $who", async ({ d, ctx, accepted }) => {
-    const asset = await plantAsset({ state: d.state ?? "pending_upload", session: d.session === true });
+    const asset = await plantAsset({ state: d.state ?? "pending_upload" });
     const result = await run(ctx, d.build(asset));
     if (accepted) expect(result.error).toBeUndefined();
     else expect(result.error).toMatchObject({ code: "42501" });
@@ -401,7 +393,7 @@ describe("media_advance facts", () => {
   });
   const PROCESSING = ["processing", "ready"] as const;
   it.each([
-    refused("a user's move with facts", EDITOR, "ready", "deleted", FACTS.ok),
+    refused("a user's move with facts", EDITOR, "pending_upload", "deleted", FACTS.ok),
     refused("a text width", job([WA]), ...PROCESSING, FACTS.text),
     refused("a width that overflows", job([WA]), ...PROCESSING, FACTS.overflow),
     refused("facts that are not an object", job([WA]), ...PROCESSING, FACTS.array),
@@ -426,9 +418,7 @@ const LEGAL: [string, string, TenantCtx][] = [
   ["scanning", "rejected", job([WA])],
   ["processing", "ready", job([WA])],
   ["processing", "rejected", job([WA])],
-  ["ready", "deleted", EDITOR],
   ["ready", "deleted", job([WA])],
-  ["rejected", "deleted", EDITOR],
   ["rejected", "deleted", job([WA])],
 ];
 
@@ -471,31 +461,6 @@ describe("media_derivative_put rules", () => {
     const result = await run(job([WA]), scalar("media_derivative_put", [WA, id, ...args]));
     if (code) expect(result.error).toMatchObject({ code });
     else expect(result.error).toBeUndefined();
-  });
-});
-
-describe("media_upload_progress", () => {
-  it.each([
-    { name: "an open session of a pending upload stores the parts", state: "pending_upload", session: true },
-    {
-      name: "a pending upload with no session is refused",
-      state: "pending_upload",
-      session: false,
-      code: "SH409",
-    },
-    {
-      name: "an upload that is no longer pending is refused",
-      state: "uploaded",
-      session: true,
-      code: "SH409",
-    },
-  ])("$name", async ({ state, session, code }) => {
-    const asset = await plantAsset({ state, session });
-    const call_ = call("media_upload_progress", [WA, asset, [1, 2, 3]]);
-    if (code) return void expect((await run(EDITOR, call_)).error).toMatchObject({ code });
-    await commit(EDITOR, call_);
-    const stored = await rows("SELECT parts_done FROM app.media_uploads WHERE media_id = $1", [asset]);
-    expect(stored[0]?.parts_done).toEqual([1, 2, 3]);
   });
 });
 
@@ -556,6 +521,9 @@ describe("an illegal state move", () => {
     ["uploaded", "deleted"],
     ["scanning", "deleted"],
     ["processing", "deleted"],
+    // A user deletes only through media_delete, which first checks that nothing uses the medium.
+    ["ready", "deleted"],
+    ["rejected", "deleted"],
   ])("a user Admin cannot reach %s to %s (42501) and the row is unchanged", async (from, to) => {
     const asset = await plantAsset({ state: from });
     const before = await assetOf(asset);

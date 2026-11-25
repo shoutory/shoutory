@@ -256,7 +256,7 @@ REGISTRY["app.media_uploads"] = {
   seed: [uploadRow(MA, WA), uploadRow(MB, WB)],
   insertForB: () => uploadRow(MB, WB),
   write: {
-    update: "UPDATE app.media_uploads SET parts_done = parts_done",
+    update: "UPDATE app.media_uploads SET part_size = part_size",
     insertOwn: () => uploadRow(MA, WA),
     insertWs: WA,
     changeWs: WA,

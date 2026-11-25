@@ -380,9 +380,9 @@ const DEFINERS: Definer[] = [
     callers: ["shoutory_worker"],
   },
   {
-    name: "media_upload_progress",
-    args: "workspace_id uuid, asset_id uuid, parts_done integer[]",
-    callers: APP_WORKER,
+    name: "media_delete",
+    args: "workspace_id uuid, asset_id uuid",
+    callers: ["shoutory_app"],
   },
   {
     name: "media_set_metadata",

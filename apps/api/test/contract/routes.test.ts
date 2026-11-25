@@ -60,6 +60,8 @@ describe("route registration", () => {
         );
     const read = "GET session library.view";
     const edit = "session library.edit";
+    // The library: list, one medium, a derivative, metadata and delete.
+    const library = [read, read, read, `PATCH ${edit}`, `DELETE ${edit}`];
     expect(mediaOf(buildApp({ storage }))).toEqual([
       `POST ${edit}`,
       `POST ${edit}`,
@@ -67,8 +69,14 @@ describe("route registration", () => {
       `PUT ${edit}`,
       `PUT ${edit}`,
       read,
+      ...library,
     ]);
-    expect(mediaOf(buildApp({ storage, presigner }))).toEqual([`POST ${edit}`, `POST ${edit}`, read]);
+    expect(mediaOf(buildApp({ storage, presigner }))).toEqual([
+      `POST ${edit}`,
+      `POST ${edit}`,
+      read,
+      ...library,
+    ]);
     // The part-signing route exists only where storage can run multipart uploads.
     const multipart = {} as never;
     expect(mediaOf(buildApp({ storage, presigner, multipart }))).toEqual([
@@ -76,6 +84,7 @@ describe("route registration", () => {
       `POST ${edit}`,
       `POST ${edit}`,
       read,
+      ...library,
     ]);
   });
 });

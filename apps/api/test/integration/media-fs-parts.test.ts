@@ -183,7 +183,7 @@ describe("a file above 64 MiB goes to the filesystem in parts", () => {
     expect(partSize).toBe(PART);
     await uploadParts(id, body);
     const done = await complete(id);
-    expect([done.status, await dataOf(done)]).toEqual([200, { id }]);
+    expect([done.status, await dataOf(done)]).toEqual([200, { id, duplicate: false }]);
     expect(await assetOf(id)).toMatchObject({ state: "uploaded", sha256: sha(body), byte_size: LARGE });
     expect(await real.head(originalKey(id))).toMatchObject({ size: LARGE, sha256: sha(body) });
     // The part files and their folder are gone once the original is stored.
@@ -298,7 +298,7 @@ describe("complete assembles the parts only into the declared file (floor)", () 
     await uploadParts(id, body);
     await real.put(originalKey(id), new Blob([new Uint8Array(body)]).stream(), LARGE, { ifAbsent: true });
     const done = await complete(id);
-    expect([done.status, await dataOf(done)]).toEqual([200, { id }]);
+    expect([done.status, await dataOf(done)]).toEqual([200, { id, duplicate: false }]);
     expect(await assetOf(id)).toMatchObject({ state: "uploaded", sha256: sha(body) });
   }, 180_000);
 

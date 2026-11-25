@@ -15,6 +15,7 @@ import {
   mediaParams,
   originalKey,
   type Scope,
+  type Settled,
   type UploadSession,
   uploadOf,
 } from "./shared.js";
@@ -170,7 +171,7 @@ async function markDeclared(
   asset: Asset,
   open: OpenUpload,
   scoped: Scope,
-): Promise<{ id: string }> {
+): Promise<Settled> {
   const head = await storage.head(originalKey(workspaceId, asset.id));
   if (head === null) throw conflict("no_object");
   if (head.size !== open.size) throw conflict("size");
@@ -183,7 +184,7 @@ export async function finishMultipart(
   asset: Asset,
   upload: UploadSession | undefined,
   scoped: Scope,
-): Promise<{ id: string }> {
+): Promise<Settled> {
   const { storage, multipart, logger } = stores;
   if (!multipart) throw new StorageError("unsupported");
   const open = openUpload(asset, upload);

@@ -213,7 +213,7 @@ describe("a file above 64 MiB goes to storage in parts and never through the API
       expect((await putTo(part, slices[at] as Buffer)).status).toBe(200);
     const done = await complete(user("editor"), id);
     expect(done.status).toBe(200);
-    expect(await dataOf(done)).toEqual({ id });
+    expect(await dataOf(done)).toEqual({ id, duplicate: false });
     expect(await assetOf(id)).toMatchObject({ state: "uploaded", sha256: sha(body), byte_size: body.length });
     expect(await real.head(`ws/${ws}/${id}/1/original`)).toMatchObject({ size: body.length });
     // The API handled a few small JSON bodies and wrote no object itself.
@@ -350,7 +350,7 @@ describe("complete takes the part list from storage, never from the client (floo
   it("a list that is exactly 1..n of the declared size is completed with that size and finishes the asset", async () => {
     const id = await exactUpload("skip");
     const answer = await complete(user("editor"), id);
-    expect([answer.status, await dataOf(answer)]).toEqual([200, { id }]);
+    expect([answer.status, await dataOf(answer)]).toEqual([200, { id, duplicate: false }]);
     const stored = await assetOf(id);
     // The parts are the ones storage listed (number and ETag), and the size is the declared one.
     const asListed = listed(...EXACT).map(({ number, etag }) => ({ number, etag }));

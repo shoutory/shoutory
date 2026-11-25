@@ -199,15 +199,18 @@ describe("the same bytes are one asset in a workspace", () => {
   it("the same sha256 uploaded twice in one workspace reuses the first asset; in two workspaces it stays two assets", async () => {
     const first = await started(user("editor"), "dedupe-bytes-1");
     expect((await upload(first, "dedupe-bytes-1")).status).toBe(200);
-    expect(await dataOf(await complete(user("editor"), first.id))).toMatchObject({ id: first.id });
+    expect(await dataOf(await complete(user("editor"), first.id))).toEqual({
+      id: first.id,
+      duplicate: false,
+    });
 
     const again = await started(user("admin"), "dedupe-bytes-1");
     expect((await upload(again, "dedupe-bytes-1")).status).toBe(200);
-    expect(await dataOf(await complete(user("admin"), again.id))).toMatchObject({ id: first.id });
+    expect(await dataOf(await complete(user("admin"), again.id))).toEqual({ id: first.id, duplicate: true });
     expect((await assetOf(again.id)).state).toBe("deleted");
     expect((await assetOf(first.id)).state).toBe("uploaded");
     // A replay of the second complete answers the live id too.
-    expect(await dataOf(await complete(user("admin"), again.id))).toMatchObject({ id: first.id });
+    expect(await dataOf(await complete(user("admin"), again.id))).toEqual({ id: first.id, duplicate: true });
 
     const theirs = await started(user("foreign"), "dedupe-bytes-1", other);
     expect((await upload(theirs, "dedupe-bytes-1")).status).toBe(200);
@@ -303,7 +306,10 @@ describe("complete is idempotent and moves nothing when it is refused", () => {
       hide.delayMs = 0;
     });
     expect(answers.map((answer) => answer.status)).toEqual([200, 200]);
-    expect(await Promise.all(answers.map(dataOf))).toEqual([{ id: info.id }, { id: info.id }]);
+    expect(await Promise.all(answers.map(dataOf))).toEqual([
+      { id: info.id, duplicate: false },
+      { id: info.id, duplicate: false },
+    ]);
   });
 
   it("answers 409 with no object, and the same live id on a second complete after success", async () => {

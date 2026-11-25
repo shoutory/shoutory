@@ -15,6 +15,7 @@ import {
   markUploaded,
   originalKey,
   type Scope,
+  type Settled,
   workspaceParams,
 } from "./shared.js";
 
@@ -204,7 +205,7 @@ interface Import {
 async function importOne(
   { storage, getFile, logger, cap, scoped, workspaceId, signal }: Import,
   body: z.infer<typeof importBody>,
-): Promise<{ id: string }> {
+): Promise<Settled> {
   const bytes = await download(getFile, body.url, logger, signal);
   const mime = await typeOf(bytes);
   const name = fileNameOf(body.url, body.file_name);
@@ -214,5 +215,5 @@ async function importOne(
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const live = await markUploaded(storage, workspaceId, asset, scoped, { sha256, size: bytes.length });
   logger.info({ mediaId: live.id }, "a file was imported");
-  return { id: live.id };
+  return live;
 }

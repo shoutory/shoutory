@@ -28,6 +28,8 @@ const DEFINERS = [
   "media_register",
   "media_mark_uploaded",
   "media_set_multipart",
+  "media_delete",
+  "media_set_metadata",
 ];
 const isDefinerMessage = (message: unknown): message is string =>
   typeof message === "string" &&
@@ -67,6 +69,9 @@ const REASONS: ReadonlySet<string> = new Set([
   "post_archived",
   "storage_full",
   "too_large",
+  "in_use",
+  "not_deletable",
+  "not_ready",
 ]);
 
 // A definer that explains its refusal in a sentence instead of a code; the sentence becomes the code a client reads.
@@ -98,7 +103,7 @@ function detailsOf(state: string, message: string, detail: unknown): Record<stri
 // Only the invitation, member, channel, resolution and creation definers raise the SH states, and the post writes for
 // their named reasons; the same state under another definer's name is a defect.
 const SH_DEFINERS =
-  /^(invitation|member|channel)_|^resolve_operation:|^(workspace|organization)_create:|^media_(register|mark_uploaded|set_multipart):|^post: (media_unavailable|post_in_flight|use_edit|variant_has_history|post_archived)$/;
+  /^(invitation|member|channel)_|^resolve_operation:|^(workspace|organization)_create:|^media_(register|mark_uploaded|set_multipart|delete|set_metadata):|^post: (media_unavailable|post_in_flight|use_edit|variant_has_history|post_archived)$/;
 const LIMIT_DEFINERS = /^(workspace|organization)_create:/;
 
 // A creation definer's SH429 puts "retry after N seconds" in DETAIL; anything else gives the default Retry-After.

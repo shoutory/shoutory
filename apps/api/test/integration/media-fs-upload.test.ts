@@ -274,8 +274,8 @@ describe("register, PUT and complete on the filesystem driver", () => {
     expect((await put(id, { body: "actual-bytes" })).status).toBe(200);
     const done = await completeFs(id);
     expect(done.status).toBe(200);
-    expect(await dataOf(done)).toEqual({ id });
-    expect(await dataOf(await completeFs(id))).toEqual({ id });
+    expect(await dataOf(done)).toEqual({ id, duplicate: false });
+    expect(await dataOf(await completeFs(id))).toEqual({ id, duplicate: false });
     const row = await fx.admin(
       async (client) =>
         (

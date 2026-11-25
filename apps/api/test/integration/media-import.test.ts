@@ -360,7 +360,8 @@ describe("who may import, and into which workspace (floor)", () => {
   });
 });
 
-const dataOf = async (answer: Response) => ((await answer.json()) as { data: { id: string } }).data;
+const dataOf = async (answer: Response) =>
+  ((await answer.json()) as { data: { id: string; duplicate: boolean } }).data;
 const rowOf = async (id: string) =>
   (await assets()).find((row) => row.id === id) as
     | { state: string; mime: string; file_name: string; source: string }
@@ -387,7 +388,7 @@ describe("an import leaves an ordinary asset", () => {
     serve("/twice.png", await png(13, 13));
     const first = await dataOf(await importUrl(user("editor"), at("/twice.png")));
     const second = await dataOf(await importUrl(user("editor"), at("/twice.png")));
-    expect(second.id).toBe(first.id);
+    expect([first.duplicate, second]).toEqual([false, { id: first.id, duplicate: true }]);
     expect((await rowOf(first.id))?.state).toBe("uploaded");
   });
 });

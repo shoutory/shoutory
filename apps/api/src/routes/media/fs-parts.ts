@@ -16,6 +16,7 @@ import {
   OCTET_STREAM,
   originalKey,
   type Scope,
+  type Settled,
   type UploadSession,
   uploadOf,
 } from "./shared.js";
@@ -164,7 +165,7 @@ export async function finishFsParts(
   asset: Asset,
   upload: UploadSession | undefined,
   scoped: Scope,
-): Promise<{ id: string }> {
+): Promise<Settled> {
   const { storage, logger } = stores;
   const open = openUpload(asset, upload);
   const keys = Array.from({ length: partCount(open) }, (_, at) => partKey(workspaceId, asset.id, at + 1));
