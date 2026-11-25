@@ -120,6 +120,8 @@ const SEALED_LINK =
 const APP_WORKER = ["shoutory_app", "shoutory_worker"];
 const SEALED_FIELDS =
   "format_version integer, key_id text, iv bytea, ciphertext bytea, auth_tag bytea, wrap_iv bytea, wrap_tag bytea, wrapped_dek bytea";
+const RESEAL_WRITE =
+  "p_id uuid, p_generation integer, p_ciphertext bytea, p_iv bytea, p_auth_tag bytea, p_wrap_iv bytea, p_wrap_tag bytea, p_wrapped_dek bytea, p_key_id text, p_format_version integer";
 const DEFINERS: Definer[] = [
   { name: "bucket_take", args: "key text, scope text, cost integer", callers: AUTH_APP_WORKER },
   { name: "bucket_state", args: "key text, scope text", callers: AUTH_APP_WORKER },
@@ -156,6 +158,14 @@ const DEFINERS: Definer[] = [
     args: `id uuid, expected_generation integer, ${SEALED_LINK}`,
     callers: ["shoutory_worker"],
   },
+  ...["channel_credentials", "instance_apps"].flatMap((table) => [
+    {
+      name: `${table}_reseal_batch`,
+      args: "lim integer, active_key_id text, after_id uuid",
+      callers: ["shoutory_worker"],
+    },
+    { name: `${table}_reseal_write`, args: RESEAL_WRITE, callers: ["shoutory_worker"] },
+  ]),
   {
     name: "instance_setting_set",
     args: "key text, value jsonb, request_id text, ip_hmac bytea",

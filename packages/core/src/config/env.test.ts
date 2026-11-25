@@ -93,6 +93,18 @@ describe("start-up refusal", () => {
     if (value) expect(refused?.shown).not.toContain(value);
   });
 
+  const pepper = valid.SHOUTORY_HMAC_PEPPER as string;
+  it.each([
+    ["a session secret equal to the pepper", { SHOUTORY_SESSION_SECRET: pepper }, "SHOUTORY_SESSION_SECRET"],
+    ["a KEK equal to the pepper", { SHOUTORY_HMAC_PEPPER: b64(7) }, "SHOUTORY_KEK_K1"],
+    ["a KEK equal to the session secret", { SHOUTORY_SESSION_SECRET: b64(7) }, "SHOUTORY_KEK_K1"],
+    ["two equal KEKs", { SHOUTORY_KEK_OLD: b64(7) }, "SHOUTORY_KEK_OLD"],
+  ])("refuses %s, naming the later variable and never the value", (_name, change, variable) => {
+    const refused = refusal({ ...valid, ...change });
+    expect(refused?.variable).toBe(variable);
+    expect(refused?.shown).not.toContain(Object.values(change)[0]);
+  });
+
   it("refuses an active key id that has no loaded key", () => {
     expect(refusedVariable(withValue("SHOUTORY_ACTIVE_KEY_ID", "k9"))).toBe("SHOUTORY_KEK_K9");
   });

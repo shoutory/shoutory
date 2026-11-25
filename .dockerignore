@@ -14,5 +14,6 @@ playwright-report
 **/.env
 **/.env.*
 !**/.env.example
+docker/keys.env
 **/*.pem
 **/*.key

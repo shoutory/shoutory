@@ -80,6 +80,20 @@ test("the app service receives no owner or readonly database URL and no database
   );
 });
 
+// A key named in `environment` would fix the set of key ids, so a retired key could not reach the app during a rotation.
+test("the app reads its keys from a required, git-ignored keys file, so a retired and an active KEK both reach it", () => {
+  const app = services.shoutory;
+  const files = (app.env_file ?? []).map((entry) => (typeof entry === "string" ? { path: entry } : entry));
+  assert.equal(files.length, 1);
+  assert.equal(files[0].required, true);
+  assert.deepEqual(
+    Object.keys(app.environment).filter((key) => /^SHOUTORY_(KEK_|ACTIVE_KEY_ID)/.test(key)),
+    [],
+  );
+  const ignored = readFileSync(join(root, ".gitignore"), "utf8").split(/\r?\n/);
+  assert.ok(ignored.includes(`docker/${files[0].path}`), "the keys file must be git-ignored");
+});
+
 test("every README operator variable is in a compose service environment", () => {
   const readme = readFileSync(join(root, "README.md"), "utf8");
   const table = readme.slice(readme.indexOf("## Configuration"));
@@ -98,7 +112,8 @@ test("every README operator variable is in a compose service environment", () =>
     const prefix = names[0]?.replace(/[A-Z]+$/, "") ?? "";
     for (const m of cell.matchAll(/`_([A-Z]+)`/g)) names.push(`${prefix}${m[1]}`);
     for (const name of names) {
-      const found = name === "SHOUTORY_KEK_<ID>" ? present.has("SHOUTORY_KEK_K1") : present.has(name);
+      const keyFile = /^SHOUTORY_(KEK_<ID>|ACTIVE_KEY_ID)$/.test(name) && services.shoutory.env_file;
+      const found = keyFile || present.has(name);
       if (!found && !exempt.has(name)) missing.push(name);
     }
   }

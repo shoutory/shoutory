@@ -335,6 +335,21 @@ function assertNoLibrarySwitches(env: Env): void {
     );
 }
 
+// One value in two places means one leak exposes both. The later variable in this order is named, never the value.
+function assertDistinctSecrets(env: Env): void {
+  const keks = Object.keys(env)
+    .filter((name) => name.startsWith("SHOUTORY_KEK_"))
+    .sort();
+  const seen = new Map<string, string>();
+  for (const name of ["SHOUTORY_HMAC_PEPPER", "SHOUTORY_SESSION_SECRET", ...keks]) {
+    const value = env[name];
+    if (!value) continue;
+    const first = seen.get(value);
+    if (first) throw new ConfigError(name, `${name} repeats the value of ${first}; every secret must differ`);
+    seen.set(value, name);
+  }
+}
+
 export function parseEnv(env: Env): Config {
   assertNoLibrarySwitches(env);
   const parsed = schema.safeParse(env);
@@ -344,6 +359,7 @@ export function parseEnv(env: Env): Config {
   const urlNames = URL_ROLES[http.data.SHOUTORY_ROLE].map((r) => roleVariable("SHOUTORY_DATABASE_URL_", r));
   const urls = z.object(Object.fromEntries(urlNames.map((name) => [name, databaseUrl]))).safeParse(env);
   if (!urls.success) throw refusal(urls.error);
+  assertDistinctSecrets(env);
   const value: Record<string, string> = { ...parsed.data, ...urls.data };
   const secret = (name: string) => new SealedSecret(value[name] as string);
   return {

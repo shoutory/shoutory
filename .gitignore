@@ -19,6 +19,7 @@ stryker-setup-*.js
 .env
 .env.*
 !.env.example
+docker/keys.env
 
 # logs
 *.log

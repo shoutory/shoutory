@@ -3,8 +3,8 @@
 #   docker compose build      builds the image from this checkout (or pull SHOUTORY_IMAGE once a release exists)
 #   docker compose up -d      starts the database, applies the migrations, then starts the app
 #
-# Every credential comes from the environment and compose refuses to start when one is unset or empty. Published ports
-# are bound to this machine only; put a reverse proxy with TLS in front of the app.
+# Every credential comes from the environment, the keys from docker/keys.env, and compose refuses to start when one is
+# unset or empty. Published ports are bound to this machine only; put a reverse proxy with TLS in front of the app.
 services:
   postgres:
     image: postgres:18.6-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
@@ -60,6 +60,11 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+    # The key-encryption keys and SHOUTORY_ACTIVE_KEY_ID, one per line; a file passes every key, so an old and a new
+    # key both reach the app while a rotation runs. Compose refuses to start without it.
+    env_file:
+      - path: keys.env
+        required: true
     environment:
       SHOUTORY_ROLE: ${SHOUTORY_ROLE:-all}
       SHOUTORY_PUBLIC_ORIGIN: ${SHOUTORY_PUBLIC_ORIGIN:?set SHOUTORY_PUBLIC_ORIGIN}
@@ -86,8 +91,6 @@ services:
       SHOUTORY_S3_FORCE_PATH_STYLE:
       SHOUTORY_HMAC_PEPPER: ${SHOUTORY_HMAC_PEPPER:?set SHOUTORY_HMAC_PEPPER}
       SHOUTORY_SESSION_SECRET: ${SHOUTORY_SESSION_SECRET:?set SHOUTORY_SESSION_SECRET}
-      SHOUTORY_ACTIVE_KEY_ID: ${SHOUTORY_ACTIVE_KEY_ID:?set SHOUTORY_ACTIVE_KEY_ID}
-      SHOUTORY_KEK_K1: ${SHOUTORY_KEK_K1:?set SHOUTORY_KEK_K1}
       SHOUTORY_DATABASE_URL_APP: ${SHOUTORY_DATABASE_URL_APP:?set SHOUTORY_DATABASE_URL_APP}
       SHOUTORY_DATABASE_URL_WORKER: ${SHOUTORY_DATABASE_URL_WORKER:?set SHOUTORY_DATABASE_URL_WORKER}
       SHOUTORY_DATABASE_URL_AUTH: ${SHOUTORY_DATABASE_URL_AUTH:?set SHOUTORY_DATABASE_URL_AUTH}

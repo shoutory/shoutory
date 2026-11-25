@@ -241,8 +241,23 @@ draft is saved (422 `media_unavailable`, with the refused limit in `details.rule
 are not all ready when it falls due stays scheduled and is taken once they are; if they are still not ready when
 the workspace's late window ends, the target is recorded as missed.
 
-Generate real values with `openssl rand -base64 32`. The values below are examples only and are refused at start-up. To
-rotate, add a new `SHOUTORY_KEK_<ID>`, point `SHOUTORY_ACTIVE_KEY_ID` at it and keep the old key until no row uses it.
+Generate real values with `openssl rand -base64 32`. The values below are examples only and are refused at start-up, as is
+a pepper, session secret or key that repeats another one's value. With compose, `SHOUTORY_ACTIVE_KEY_ID` and every
+`SHOUTORY_KEK_<ID>` go in `docker/keys.env` (one `NAME=value` per line, git-ignored), so any number of keys reaches the app;
+the file needs Docker Compose 2.24 or later, and compose refuses to start without it.
+
+To rotate a key:
+
+1. Add the new `SHOUTORY_KEK_<ID>`, point `SHOUTORY_ACTIVE_KEY_ID` at it, keep the old key, and recreate the app
+   (`docker compose -f docker/compose.yml up -d`; a plain restart does not read the keys file again).
+2. Run `shoutory secrets reseal` as the worker role (with compose:
+   `docker compose -f docker/compose.yml run --rm shoutory secrets reseal`). It seals email links, channel tokens and
+   instance app secrets again under the active key and prints how many it moved. A channel token whose refresh is running,
+   or whose last refresh ended with an unknown outcome, is counted as `busy` and left alone: run the command again after
+   that channel refreshed or was reconnected. A row it cannot open is counted by its key id and the command exits 1.
+3. Run `shoutory secrets check` the same way. It exits 0 only when every sealed row is under the active key; sign-in flows
+   in progress still hold the old key until they expire within minutes.
+4. Keep the old key for 35 days more, until the last backup taken before the reseal has aged out, then remove it.
 
 ```sh
 export SHOUTORY_ACTIVE_KEY_ID=example

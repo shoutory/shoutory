@@ -210,7 +210,7 @@ describe("instance_app_put: a replace is compare-and-set on the client id (floor
     expect(await storedOf(host)).toMatchObject([{ client_id: "client-newer" }]);
   });
 
-  it("the policies on the app table and of its two purposes are exactly these", async () => {
+  it("the policies on the app table and of its purposes are exactly these", async () => {
     const found = await rows(
       `SELECT p.polname || ' on ' || c.relname AS policy FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid
        WHERE c.relnamespace = 'app'::regnamespace
@@ -224,6 +224,10 @@ describe("instance_app_put: a replace is compare-and-set on the client id (floor
         "instance_app_put_select on provider_instance_apps",
         "instance_app_put_insert on provider_instance_apps",
         "instance_app_put_delete on provider_instance_apps",
+        "sealed_key_ids_select on provider_instance_apps",
+        "instance_apps_reseal_batch_select on provider_instance_apps",
+        "instance_apps_reseal_write_select on provider_instance_apps",
+        "instance_apps_reseal_write_update on provider_instance_apps",
         ...tenancy.flatMap((table) => [
           `instance_app_get_select on ${table}`,
           `instance_app_put_select on ${table}`,

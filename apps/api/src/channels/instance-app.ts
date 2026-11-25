@@ -19,18 +19,20 @@ const appRowSchema = z.object({
   wrap_iv: bytes,
   wrap_tag: bytes,
   wrapped_dek: bytes,
+  generation: z.number().int(),
 });
 
 const GET_APP = "SELECT * FROM app.instance_app_get($1, $2, $3)";
 const PUT_APP =
   "SELECT app.instance_app_put($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) AS stored";
 
-const aadOf = (ownerId: string): Aad => ({
+// A stored app starts at generation 1; each reseal under a new key moves it one on.
+const aadOf = (ownerId: string, generation: number): Aad => ({
   formatVersion: FORMAT_VERSION,
   scopeId: NIL_SCOPE,
   ownerId,
   credentialKind: "provider_instance_app",
-  generation: 1,
+  generation,
 });
 
 export interface AppKey {
@@ -57,7 +59,7 @@ export async function readApp(
     wrapTag: row.wrap_tag,
     wrappedDek: row.wrapped_dek,
   };
-  return { clientId: row.client_id, clientSecret: open(stored, aadOf(row.id), keys) };
+  return { clientId: row.client_id, clientSecret: open(stored, aadOf(row.id, row.generation), keys) };
 }
 
 // The first writer of an instance wins and a later one gets false (it rereads the winner); a replace changes nothing
@@ -70,7 +72,7 @@ export async function writeApp(
   replaces: string | null,
 ): Promise<boolean> {
   const id = String((await tx.query("SELECT uuidv7() AS id")).rows[0]?.id);
-  const sealed = seal(app.clientSecret.expose(), aadOf(id), keys);
+  const sealed = seal(app.clientSecret.expose(), aadOf(id, 1), keys);
   const stored = await tx.query(PUT_APP, [
     id,
     at.workspaceId,

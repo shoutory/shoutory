@@ -14,6 +14,11 @@ services:
     build:
       args:
         SHOUTORY_RELEASE_CHANNEL: beta
+    # A run's keys are drawn fresh and stay in the process environment, so no keys file is written to the checkout.
+    env_file: !reset []
+    environment:
+      SHOUTORY_ACTIVE_KEY_ID: ${SHOUTORY_ACTIVE_KEY_ID:?set SHOUTORY_ACTIVE_KEY_ID}
+      SHOUTORY_KEK_K1: ${SHOUTORY_KEK_K1:?set SHOUTORY_KEK_K1}
     # Only the app is pointed at the sidecar: Docker's own resolver still answers the names of this stack, and every
     # other name goes to the sidecar, which records it and refuses it. The address is read after the sidecar starts.
     dns:
