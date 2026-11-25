@@ -88,6 +88,21 @@ const candidatesOf = (pool: AppPool, limit: number, after: string | null) =>
       ).rows,
   );
 
+// An unused medium's 30 days run from the first run that finds it unused, so each run starts and clears those clocks
+// before it lists what is due.
+async function markUnreferenced(pool: AppPool): Promise<void> {
+  for (let batch = 0; batch < MAX_BATCHES; batch++) {
+    const changed = await withSystem(
+      pool,
+      "maintenance",
+      async (tx) =>
+        (await tx.query<{ changed: number }>("SELECT app.media_mark_unreferenced($1) AS changed", [BATCH]))
+          .rows[0]?.changed ?? 0,
+    );
+    if (changed < BATCH) return;
+  }
+}
+
 // Each list starts after the last id of the one before, so a candidate whose delete keeps failing is tried once and
 // never holds the run back; what a cut run leaves is offered again the next night.
 export async function collectMedia(
@@ -96,6 +111,7 @@ export async function collectMedia(
 ): Promise<GcResult> {
   const stopAt = Date.now() + deadlineMs;
   const result: GcResult = { taken: 0, removed: 0, failed: 0, cut: false };
+  await markUnreferenced(deps.pool);
   let after: string | null = null;
   for (let batch = 0; batch < MAX_BATCHES; batch++) {
     const listed = await candidatesOf(deps.pool, limit, after);

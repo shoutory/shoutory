@@ -1,6 +1,6 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Client } from "pg";
-import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, inject, it } from "vitest";
 import type { TenantCtx } from "../../src/context/with-tenant.js";
 import {
   cloneTemplate,
@@ -57,19 +57,34 @@ interface Planted {
   deletedDays?: number;
   library?: boolean;
   removed?: boolean;
+  // Days since a run found a ready asset unused; by default it has been unused since it was created.
+  unreferencedDays?: number | null;
 }
 async function plantAsset(o: Planted = {}): Promise<string> {
   const id = o.id ?? randomUUID();
   const [ws, state] = [o.ws ?? WA, o.state ?? "ready"];
+  const unreferenced = o.unreferencedDays === undefined ? (o.ageDays ?? 31) : o.unreferencedDays;
   await rows(
     `INSERT INTO app.media_assets (id, workspace_id, object_key, file_name, source, created_by, state, sha256,
-       created_at, in_library, deleted_at, object_removed_at)
+       created_at, in_library, deleted_at, object_removed_at, unreferenced_since)
      VALUES ($1::uuid, $2::uuid, 'ws/' || $2::text || '/' || $1::text || '/1/original', 'gc.png', 'upload', $3::uuid, $4::text,
        CASE WHEN $4::text IN ('uploaded', 'scanning', 'processing', 'ready') THEN sha256(convert_to($1::text, 'UTF8')) END,
        now() - make_interval(secs => $5::float8 * 86400), $6,
        CASE WHEN $4::text = 'deleted' THEN now() - make_interval(secs => $7::float8 * 86400) END,
-       CASE WHEN $8 THEN now() END)`,
-    [id, ws, U.editor, state, o.ageDays ?? 31, o.library ?? false, o.deletedDays ?? 31, o.removed ?? false],
+       CASE WHEN $8 THEN now() END,
+       CASE WHEN $4::text = 'ready' AND $9::float8 IS NOT NULL
+         THEN now() - make_interval(secs => $9::float8 * 86400) END)`,
+    [
+      id,
+      ws,
+      U.editor,
+      state,
+      o.ageDays ?? 31,
+      o.library ?? false,
+      o.deletedDays ?? 31,
+      o.removed ?? false,
+      unreferenced,
+    ],
   );
   for (const profile of PROFILES) {
     await rows(
@@ -117,7 +132,7 @@ async function attachUnchecked(asset: string): Promise<void> {
 }
 
 async function commit(ctx: TenantCtx, sql: string, params: unknown[]): Promise<Record<string, unknown>[]> {
-  const client = await openTx(db.pool("worker"), ctx);
+  const client = await openTx(db.pool(ctx.principalKind === "job" ? "worker" : "app"), ctx);
   try {
     const result = (await client.query(sql, params)).rows;
     await client.query("COMMIT");
@@ -271,6 +286,135 @@ describe("media_gc_take moves an asset to deleted only when its arm's rule holds
   });
 });
 
+const MARK = "SELECT app.media_mark_unreferenced($1)";
+const markRun = () => commit(SYSTEM_JOB, MARK, [500]);
+const clockOf = async (id: string) =>
+  (await rows("SELECT unreferenced_since FROM app.media_assets WHERE id = $1", [id]))[0]
+    ?.unreferenced_since as Date | null;
+async function pin(asset: string, state: string, unverifiedDays: number | null): Promise<void> {
+  const variant = await variantIn();
+  await admin(async (client) => {
+    await client.query("BEGIN");
+    await client.query("SET LOCAL session_replication_role = replica");
+    const op = await client.query(
+      `INSERT INTO app.operations (workspace_id, variant_id, channel_id, provider_id, queue, kind, state, last_actor,
+         due_at, lateness_deadline, idempotency_marker, requested_by, unverified_until)
+       VALUES ($1, $2, $3, 'fixture-oauth', 'publish.pin', 'publish', $4, 'S', now(), now() + interval '2 hours', $5, $6,
+         now() + make_interval(secs => $7::float8 * 86400)) RETURNING id`,
+      [WA, variant, channel, state, `gc-pin-${randomUUID()}`, U.editor, unverifiedDays],
+    );
+    await client.query(
+      `INSERT INTO app.operation_media (workspace_id, operation_id, position, media_id, derivative_sha256)
+       VALUES ($1, $2, 0, $3, decode(repeat('ab', 32), 'hex'))`,
+      [WA, op.rows[0].id, asset],
+    );
+    await client.query("COMMIT");
+  });
+}
+
+describe("an unused medium is collected 30 days after its last reference, not after its upload", () => {
+  it("an asset uploaded 31 days ago and unreferenced for 10 days is kept; at 30 days it is collected", async () => {
+    const recent = await plantAsset({ ageDays: 31, unreferencedDays: 10 });
+    const old = await plantAsset({ ageDays: 31, unreferencedDays: 30.01 });
+    const offered = new Map((await candidates(job([WA]))).map((row) => [row.asset_id, row.arm]));
+    expect([offered.has(recent), offered.get(old)]).toEqual([false, "unreferenced"]);
+    expect(await take(job([WA]), WA, recent, "unreferenced")).toEqual([]);
+    expect(await take(job([WA]), WA, old, "unreferenced")).toEqual(keysOf(WA, old));
+  });
+});
+
+const CLOCK: [
+  string,
+  Planted,
+  ((asset: string) => Promise<unknown>) | null,
+  "set" | "cleared" | "unchanged",
+][] = [
+  ["a ready asset nothing uses", { unreferencedDays: null }, null, "set"],
+  ["an attached asset", { unreferencedDays: 5 }, attach, "cleared"],
+  ["an asset in the library", { library: true, unreferencedDays: 5 }, null, "cleared"],
+  [
+    "the workspace avatar",
+    { unreferencedDays: 5 },
+    (asset) => rows("UPDATE app.workspaces SET avatar = $2 WHERE id = $1", [WA, asset]),
+    "cleared",
+  ],
+  [
+    "an asset a live operation pins",
+    { unreferencedDays: 5 },
+    (asset) => pin(asset, "pending", null),
+    "cleared",
+  ],
+  [
+    "an asset pinned by a superseded operation past its window",
+    { unreferencedDays: null },
+    (asset) => pin(asset, "superseded_after_unknown_outcome", -1),
+    "set",
+  ],
+  ["an asset already marked and still unused", { unreferencedDays: 5 }, null, "unchanged"],
+  ["a rejected asset", { state: "rejected", unreferencedDays: null }, null, "unchanged"],
+];
+describe("a run starts the clock of a ready asset nothing needs and clears it on one that is needed", () => {
+  afterEach(() => rows("UPDATE app.workspaces SET avatar = NULL WHERE id = $1", [WA]));
+  it.each(CLOCK)(
+    "a run over %s sets, clears or keeps its clock as the table says",
+    async (_what, planted, become, expected) => {
+      const asset = await plantAsset({ ageDays: 40, ...planted });
+      await become?.(asset);
+      const before = await clockOf(asset);
+      const started = Date.now();
+      await markRun();
+      const after = await clockOf(asset);
+      if (expected === "cleared") expect(after).toBeNull();
+      if (expected === "unchanged") expect(after).toEqual(before);
+      if (expected === "set") expect(after?.getTime()).toBeGreaterThanOrEqual(started - 5_000);
+    },
+  );
+});
+
+describe("a save that attaches a medium and a library flag clear its clock at once", () => {
+  it("an attach and a detach between two runs restart the 30 days", async () => {
+    const asset = await plantAsset({ ageDays: 40, unreferencedDays: 40 });
+    const draft = (media: unknown[]) =>
+      JSON.stringify({ draft: { variants: [{ channel_id: channel, locale: null, text: "gc", media }] } });
+    const hash = (label: string) => createHash("sha256").update(label).digest();
+    const [made] = await commit(asUser(U.editor), "SELECT * FROM app.post_create($1, $2::jsonb, $3)", [
+      WA,
+      draft([{ media_id: asset, alt_text: null, crop: null }]),
+      hash("attached"),
+    ]);
+    expect(await clockOf(asset)).toBeNull();
+    await commit(asUser(U.editor), "SELECT * FROM app.post_save($1, $2, $3, $4::jsonb, $5)", [
+      WA,
+      made?.post_id,
+      made?.version_id,
+      draft([]),
+      hash("detached"),
+    ]);
+    await markRun();
+    expect(await take(job([WA]), WA, asset, "unreferenced")).toEqual([]);
+    expect(await stateOf(asset)).toBe("ready");
+  });
+
+  it("putting an asset in the library through its metadata clears its clock", async () => {
+    const asset = await plantAsset({ ageDays: 40, unreferencedDays: 40 });
+    await commit(asUser(U.editor), "SELECT app.media_set_metadata($1, $2, NULL, NULL, true)", [WA, asset]);
+    expect(await clockOf(asset)).toBeNull();
+  });
+});
+
+describe("who may run media_mark_unreferenced (floor)", () => {
+  it.each([
+    ["an Owner user", asUser(U.owner)],
+    ["a service principal", SERVICE],
+    ["a portal principal", PORTAL],
+  ] as [string, TenantCtx][])("media_mark_unreferenced is refused to %s (floor)", async (_who, ctx) => {
+    const asset = await plantAsset({ ageDays: 40, unreferencedDays: null });
+    const answer = await attempt(db.pool("app"), ctx, MARK, [500]);
+    expect(answer.error).toMatchObject({ code: "42501" });
+    expect(await clockOf(asset)).toBeNull();
+  });
+});
+
 describe("an asset that became needed after the list was read is not taken (race, floor)", () => {
   const BECAME: [string, (asset: string) => Promise<unknown>][] = [
     ["a post attached it", attach],
@@ -419,6 +563,7 @@ describe("what the take and the candidate list may read and write (grants pin)",
       `SELECT p.polname || ' on ' || c.relname AS policy FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid
        WHERE c.relnamespace = 'app'::regnamespace
          AND (p.polname LIKE 'media_gc_take\\_%' OR p.polname LIKE 'post_media_guard\\_%'
+           OR p.polname LIKE 'media_mark_unreferenced\\_%' OR p.polname LIKE 'post_apply_draft\\_%'
            OR (p.polname LIKE 'media_gc_candidates\\_%' AND c.relname = 'workspaces'))`,
     );
     expect(policies.map((row) => row.policy as string).sort()).toEqual(
@@ -433,6 +578,14 @@ describe("what the take and the candidate list may read and write (grants pin)",
         "media_gc_take_select on post_media",
         "media_gc_take_select on workspaces",
         "media_gc_take_update on media_assets",
+        "media_mark_unreferenced_select on media_assets",
+        "media_mark_unreferenced_update on media_assets",
+        "media_mark_unreferenced_select on operation_media",
+        "media_mark_unreferenced_select on operations",
+        "media_mark_unreferenced_select on post_media",
+        "media_mark_unreferenced_select on workspaces",
+        "post_apply_draft_select on media_assets",
+        "post_apply_draft_update on media_assets",
       ].sort(),
     );
   });

@@ -59,6 +59,7 @@ interface Planted {
   ageDays?: number;
   deletedDays?: number;
   library?: boolean;
+  neverMarked?: boolean;
 }
 interface Asset {
   id: string;
@@ -72,12 +73,13 @@ async function plantAsset(o: Planted = {}): Promise<Asset> {
   await fx.admin(async (client) => {
     await client.query(
       `INSERT INTO app.media_assets (id, workspace_id, object_key, file_name, source, created_by, state, sha256,
-         created_at, in_library, deleted_at)
+         created_at, in_library, deleted_at, unreferenced_since)
        VALUES ($1::uuid, $2::uuid, $3, 'gc.png', 'upload', $4::uuid, $5::text,
          CASE WHEN $5::text IN ('uploaded', 'scanning', 'processing', 'ready') THEN sha256(convert_to($1::text, 'UTF8')) END,
          now() - make_interval(secs => $6::float8 * 86400), $7,
-         CASE WHEN $5::text = 'deleted' THEN now() - make_interval(secs => $8::float8 * 86400) END)`,
-      [id, ws, key, owner, state, o.ageDays ?? 31, o.library ?? false, o.deletedDays ?? 31],
+         CASE WHEN $5::text = 'deleted' THEN now() - make_interval(secs => $8::float8 * 86400) END,
+         CASE WHEN $5::text = 'ready' AND $9 THEN now() - make_interval(secs => $6::float8 * 86400) END)`,
+      [id, ws, key, owner, state, o.ageDays ?? 31, o.library ?? false, o.deletedDays ?? 31, !o.neverMarked],
     );
     await client.query(
       `INSERT INTO app.media_derivatives (workspace_id, media_id, profile, object_key, state, sha256, byte_size)
@@ -220,6 +222,18 @@ describe("the garbage collection removes what nothing needs, in each arm", () =>
     expect([await stored(asset.key), await stored(asset.derivativeKey)]).toEqual(
       collected ? [false, false] : [true, true],
     );
+  });
+
+  it("starts the 30 days of an old asset it finds unused for the first time, and keeps it", async () => {
+    const asset = await plantAsset({ ageDays: 40, neverMarked: true });
+    await run();
+    expect(await rowOf(asset.id)).toMatchObject({ state: "ready", removed: false });
+    const [clock] = await fx.admin(
+      async (client) =>
+        (await client.query("SELECT unreferenced_since FROM app.media_assets WHERE id = $1", [asset.id]))
+          .rows,
+    );
+    expect(clock?.unreferenced_since).toBeInstanceOf(Date);
   });
 });
 

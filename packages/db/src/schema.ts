@@ -512,6 +512,7 @@ export const mediaAssets = app.table("media_assets", {
   createdAt: stamp("created_at").notNull().default(sql`clock_timestamp()`),
   deletedAt: stamp("deleted_at"),
   objectRemovedAt: stamp("object_removed_at"),
+  unreferencedSince: stamp("unreferenced_since"),
 });
 
 export const mediaUploads = app.table("media_uploads", {

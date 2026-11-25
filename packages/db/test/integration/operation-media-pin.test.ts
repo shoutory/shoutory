@@ -48,9 +48,10 @@ async function plantMedium(o: PlantedMedium = {}): Promise<Medium> {
   const sha = digestOf(id);
   await rows(
     `INSERT INTO app.media_assets (id, workspace_id, object_key, file_name, mime, source, created_by, state, sha256,
-       created_at, deleted_at)
+       created_at, deleted_at, unreferenced_since)
      VALUES ($1::uuid, $2::uuid, 'ws/' || $2::text || '/' || $1::text || '/1/original', 'pin.png', $3, 'upload',
-       $4::uuid, 'ready', $5, now() - make_interval(secs => $6::float8 * 86400), NULL)`,
+       $4::uuid, 'ready', $5, now() - make_interval(secs => $6::float8 * 86400), NULL,
+       now() - make_interval(secs => $6::float8 * 86400))`,
     [id, ws, mime, U.editor, sha, o.ageDays ?? 0],
   );
   let derivative: { id: string; sha: Buffer } | undefined;

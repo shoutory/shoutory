@@ -472,16 +472,11 @@ describe("restore of a draft that no longer resolves", () => {
   });
 });
 
-// A saved version's snapshot is not a use of its media: once no post names the medium and it is old enough, the
-// collection removes it, and restoring the version is refused like an autosave of that draft.
+// A saved version's snapshot is not a use of its media: once no post has named the medium for 30 days, the collection
+// removes it, and restoring the version is refused like an autosave of that draft.
 describe("restore of a draft whose medium the collection removed", () => {
   it("restoring a version whose medium the media collection removed answers 422 media_unavailable", async () => {
     const gone = await plantMedia(ws, "ready");
-    await fx.admin((client) =>
-      client.query("UPDATE app.media_assets SET created_at = now() - interval '31 days' WHERE id = $1", [
-        gone,
-      ]),
-    );
     const who = user("editor");
     const medium = { media_id: gone, alt_text: null, crop: null };
     const made = await call(who, "POST", base(ws), draftBody(variant(c1, { media: [medium] })));
@@ -489,6 +484,12 @@ describe("restore of a draft whose medium the collection removed", () => {
     const url = `${base(ws)}/${id}`;
     const edited = await call(who, "PATCH", url, draftBody(variant(c1)), match(first as string));
     const head = (await dataOf(edited)).version_id as string;
+    await fx.admin((client) =>
+      client.query(
+        "UPDATE app.media_assets SET unreferenced_since = now() - interval '31 days' WHERE id = $1",
+        [gone],
+      ),
+    );
     const dir = await mkdtemp(join(tmpdir(), "shoutory-posts-gc-"));
     try {
       const sink = createLogger({ secrets: [], stream: { write: () => undefined } });

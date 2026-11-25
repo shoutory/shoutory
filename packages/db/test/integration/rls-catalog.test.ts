@@ -397,6 +397,8 @@ const DEFINERS: Definer[] = [
     callers: ["shoutory_worker"],
   },
   { name: "media_gc_due", args: "workspaces uuid[], only_asset uuid", callers: [], helper: true },
+  { name: "media_unused", args: "workspaces uuid[], only_asset uuid", callers: [], helper: true },
+  { name: "media_mark_unreferenced", args: "lim integer", callers: ["shoutory_worker"] },
   { name: "operation_media_lock", args: "p_ws uuid, p_version uuid, p_op uuid", callers: [] },
   { name: "operation_media_pin", args: "p_ws uuid, p_op uuid, p_version uuid", callers: [] },
   { name: "post_media_guard", args: "", callers: [] },

@@ -449,10 +449,10 @@ async function plantAsset(asset: Asset): Promise<string> {
   const id = randomUUID();
   await rows(
     `INSERT INTO app.media_assets (id, workspace_id, object_key, file_name, source, created_by, state, sha256,
-       created_at, in_library, deleted_at)
+       created_at, in_library, deleted_at, unreferenced_since)
      VALUES ($1::uuid, $2::uuid, 'ws/' || $2::text || '/' || $1::text || '/1/original', 'gc.png', 'upload', $3::uuid, $4::text,
        CASE WHEN $4::text IN ('uploaded', 'scanning', 'processing', 'ready') THEN sha256(convert_to($1::text, 'UTF8')) END,
-       $5, $6, $7)`,
+       $5, $6, $7, CASE WHEN $4::text = 'ready' THEN $5::timestamptz END)`,
     [
       id,
       WA,
