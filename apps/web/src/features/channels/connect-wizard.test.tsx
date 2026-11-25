@@ -17,6 +17,7 @@ import {
   START_URL,
   settle,
   stubApi,
+  type,
   uuidWorkspaces,
 } from "../../../test/support/app";
 
@@ -45,9 +46,9 @@ const dialogOf = () => document.body.querySelector<HTMLElement>('[role="dialog"]
 const stateOf = () => byId(document.body, "wizard-state")?.dataset.state;
 const spyAssign = () => vi.spyOn(window.location, "assign").mockImplementation(() => undefined);
 
-async function visit(api: Api = {}, path = PATH) {
+async function visit(api: Api = {}, path = PATH, locale: "en" | "ar" = "en") {
   const stub = stubApi({ workspaces: uuidWorkspaces(), ...api });
-  const opened = await openApp(path);
+  const opened = await openApp(path, locale);
   await settle();
   return { stub, ...opened };
 }
@@ -193,6 +194,103 @@ describe("what a start answers", () => {
       expect(startTile().getAttribute("aria-busy")).toBeNull();
     },
   );
+});
+
+const withInstance = (more: Api = {}): Api => ({
+  ...listWith(["connect"]),
+  providers: () => json({ data: [provider("i_net", { needs_instance_host: true })] }),
+  ...more,
+});
+const hostField = () => byId(document.body, "host-field") as HTMLInputElement;
+async function askHost(api: Api = withInstance(), locale: "en" | "ar" = "en") {
+  const visited = await visit(api, PATH, locale);
+  await openDialog(visited.host);
+  click(startTile());
+  await settle();
+  return visited;
+}
+async function submitHost(value: string) {
+  type(hostField(), value);
+  click(byId(document.body, "host-continue") as HTMLElement);
+  await settle();
+}
+
+describe("a platform whose accounts live on servers people choose", () => {
+  it("asks for the server first, sends the typed address in its one stored form, and is busy with Back held until the answer", async () => {
+    const assign = spyAssign();
+    const pending = deferred();
+    const { stub } = await askHost(withInstance({ connectStart: pending.answer }));
+    expect(starts(stub)).toHaveLength(0);
+    expect(document.activeElement).toBe(hostField());
+    expect(hostField().getAttribute("dir")).toBe("ltr");
+    await submitHost(" HTTPS://Town.Example./about ");
+    const [[, init]] = starts(stub) as [[string, RequestInit]];
+    expect(JSON.parse(String(init.body))).toEqual({ instance_host: "town.example" });
+    expect(byId(document.body, "host-continue")?.getAttribute("aria-busy")).toBe("true");
+    click(byId(document.body, "host-back") as HTMLElement);
+    await settle();
+    expect(hostField()).not.toBeNull();
+    expect(assign).not.toHaveBeenCalled();
+    pending.release(json({ data: { authorize_url: START_URL } }));
+    await settle();
+    expect(assign).toHaveBeenCalledWith(new URL(START_URL).href);
+  });
+
+  it("Back after a refused server clears its error and returns to the tile that opened the step", async () => {
+    await askHost(
+      withInstance({
+        connectStart: () => refusal("service_unavailable", 503, { reason: "instance_unreachable" }),
+      }),
+    );
+    await submitHost("town.example");
+    expect(byId(document.body, "start-error")).not.toBeNull();
+    click(byId(document.body, "host-back") as HTMLElement);
+    await settle();
+    expect(hostField()).toBeNull();
+    expect(stateOf()).toBe("tiles");
+    expect(byId(document.body, "start-error")).toBeNull();
+    expect(document.activeElement).toBe(startTile());
+  });
+
+  it.each(["10.0.0.5", "http://town.example", "town", "user@town.example"])(
+    "refuses %j at the field, puts focus back on it, and sends nothing",
+    async (value) => {
+      const { stub } = await askHost();
+      type(hostField(), value);
+      const send = byId(document.body, "host-continue") as HTMLElement;
+      send.focus();
+      click(send);
+      await settle();
+      expect(hostField().getAttribute("aria-invalid")).toBe("true");
+      expect(document.activeElement).toBe(hostField());
+      expect(starts(stub)).toHaveLength(0);
+    },
+  );
+});
+
+describe("the reasons a server address was refused", () => {
+  it.each<[string, () => Response]>([
+    ["host_invalid", () => refusal("unprocessable_content", 422, { reason: "host_invalid" })],
+    ["instance_unsupported", () => refusal("unprocessable_content", 422, { reason: "instance_unsupported" })],
+    ["address_not_allowed", () => refusal("unprocessable_content", 422, { reason: "address_not_allowed" })],
+    ["instance_refused", () => refusal("unprocessable_content", 422, { reason: "instance_refused" })],
+    ["instance_rate_limited", () => refusal("too_many_requests", 429, { reason: "instance_rate_limited" })],
+    ["instance_unreachable", () => refusal("service_unavailable", 503, { reason: "instance_unreachable" })],
+  ])("the reason %s has its own line in English and Arabic", async (reason, answer) => {
+    const said: string[] = [];
+    for (const locale of ["en", "ar"] as const) {
+      await askHost(withInstance({ connectStart: answer }), locale);
+      await submitHost("town.example");
+      const line = byId(document.body, "start-error");
+      expect(line?.dataset.reason).toBe(reason);
+      said.push(line?.textContent ?? "");
+      closeApp();
+    }
+    const [en = "", ar = ""] = said;
+    expect(en).not.toMatch(/something went wrong|too many connection attempts/i);
+    expect(ar).toMatch(/[؀-ۿ]/);
+    expect(ar).not.toBe(en);
+  });
 });
 
 describe("a session that ended", () => {

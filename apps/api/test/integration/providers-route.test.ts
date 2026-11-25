@@ -6,7 +6,7 @@ import { createFixtureAdapter } from "@shoutory/testkit/fixture-provider/adapter
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { FAKE_CLIENT } from "../support/oauth-fake.js";
 import { addWorkspaceMember, seedOrganization, seedWorkspace, signedUser } from "../support/tenancy.js";
-import { type Fixture, PEPPER, startFixture } from "./auth/harness.js";
+import { type Fixture, ORIGIN, PEPPER, startFixture } from "./auth/harness.js";
 
 type User = { id: string; cookie: string };
 let fx: Fixture;
@@ -49,7 +49,9 @@ beforeAll(async () => {
       pepper: new SealedSecret(PEPPER),
     },
   });
+  // The first account of an install is its instance admin.
   const founder = await signedUser(fx, "prov-org");
+  users.instanceAdmin = founder;
   ws = await seedWorkspace(fx, await seedOrganization(fx, founder.id));
   for (const name of [...SEATS, "outsider", "foreign"]) users[name] = await signedUser(fx, `prov-${name}`);
   for (const seat of SEATS) await addWorkspaceMember(fx, ws, user(seat).id, seat);
@@ -122,5 +124,32 @@ describe("what the providers route answers", () => {
     for (const internal of fixtureOAuthManifest.scopes) expect(text).not.toContain(internal);
     expect(text).not.toContain(new URL(sim.url).host);
     expect(text).not.toContain("capabilities");
+  });
+});
+
+describe("the operator's provider list (instance admins only)", () => {
+  const adminProviders = (who: User) =>
+    fx.request("/api/v1/admin/providers", { headers: { cookie: who.cookie } });
+
+  it("answers each provider with exactly the allowlisted fields and the redirect URI an operator registers", async () => {
+    const answer = await adminProviders(user("instanceAdmin"));
+    expect(answer.status).toBe(200);
+    const text = await answer.text();
+    const body = JSON.parse(text) as { data: Array<Record<string, unknown>> };
+    const fields = ["auth_kind", "display_name", "id", "lifecycle", "needs_instance_host", "redirect_uri"];
+    expect(body.data.map((row) => Object.keys(row).sort())).toEqual([fields, fields]);
+    expect(body.data).toMatchObject([
+      { id: "fixture_alpha", redirect_uri: `${ORIGIN}/api/v1/connect/fixture_alpha/callback` },
+      // An instance provider registers itself on each server, so it has no one URI to register.
+      { id: "fixture_beta", redirect_uri: null, needs_instance_host: true },
+    ]);
+    for (const internal of fixtureOAuthManifest.scopes) expect(text).not.toContain(internal);
+    expect(text).not.toContain(new URL(sim.url).host);
+    expect(text).not.toContain(FAKE_CLIENT);
+  });
+
+  it.each(["owner", "outsider"])("a %s who is not an instance admin gets 404", async (who) => {
+    const answer = await adminProviders(user(who));
+    expect(await errorOf(answer)).toEqual([404, "not_found"]);
   });
 });

@@ -42,7 +42,7 @@ export interface ConnectDeps {
   readonly logger: Logger;
 }
 
-function redirectUriOf(publicOrigin: string, providerId: string, instanceHost?: string): string {
+export function redirectUriOf(publicOrigin: string, providerId: string, instanceHost?: string): string {
   const base = `${publicOrigin}/api/v1/connect/${providerId}/callback`;
   if (instanceHost === undefined) return base;
   return `${base}?${new URLSearchParams({ instance_host: instanceHost })}`;

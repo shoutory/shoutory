@@ -101,6 +101,7 @@ export interface Api {
   mailCheck?: Answer;
   mailTest?: Answer;
   adminSystem?: Answer;
+  adminProviders?: Answer;
   channel?: Answer;
   channelList?: (query: URLSearchParams, workspace: string) => Response | Promise<Response>;
   providers?: Answer;
@@ -149,6 +150,26 @@ export const PROVIDERS = [
     lifecycle: "ga",
     auth_kind: "oauth2_pkce",
     connectable: true,
+    needs_instance_host: false,
+  },
+];
+
+export const ADMIN_PROVIDERS = [
+  {
+    id: "fixture_oauth",
+    display_name: "Fixture Network",
+    lifecycle: "ga",
+    auth_kind: "oauth2_pkce",
+    needs_instance_host: false,
+    redirect_uri: "https://app.example.test/api/v1/connect/fixture_oauth/callback",
+  },
+  {
+    id: "fixture_instance",
+    display_name: "Instance Network",
+    lifecycle: "beta",
+    auth_kind: "oauth2_pkce",
+    needs_instance_host: true,
+    redirect_uri: null,
   },
 ];
 
@@ -241,6 +262,7 @@ function adminAnswers(api: Api, pathname: string, method: string): Answer | unde
     "/api/v1/admin/settings:GET": api.adminSettings ?? (() => json({ data: [] })),
     "/api/v1/admin/queue:GET": api.adminQueue ?? (() => json({ data: QUEUE })),
     "/api/v1/admin/system:GET": api.adminSystem ?? (() => json({ data: SYSTEM })),
+    "/api/v1/admin/providers:GET": api.adminProviders ?? (() => json({ data: ADMIN_PROVIDERS })),
     "/api/v1/admin/storage/check:POST":
       api.storageCheck ??
       (() =>

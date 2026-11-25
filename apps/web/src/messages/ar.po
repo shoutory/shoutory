@@ -1345,11 +1345,43 @@ msgstr "تطبيقات المزوّدين"
 
 #. js-lingui-explicit-id
 msgid "admin.providers.empty_title"
-msgstr "لا توجد تطبيقات مزوّدين في هذا الإصدار"
+msgstr "لا يوجد مزوّدون في هذا الإصدار"
 
 #. js-lingui-explicit-id
 msgid "admin.providers.empty_body"
 msgstr "يظهر هنا كل مزوّد قناة يحتاج إلى تطبيق خاص بك عند توفره."
+
+#. js-lingui-explicit-id
+msgid "admin.providers.intro"
+msgstr "سجّل تطبيق كل مزوّد بعنوان إعادة التوجيه أدناه. هذه الشاشة لا تغيّر شيئاً."
+
+#. js-lingui-explicit-id
+msgid "admin.providers.table"
+msgstr "المزوّدون"
+
+#. js-lingui-explicit-id
+msgid "admin.providers.col_name"
+msgstr "المزوّد"
+
+#. js-lingui-explicit-id
+msgid "admin.providers.col_stage"
+msgstr "المرحلة"
+
+#. js-lingui-explicit-id
+msgid "admin.providers.col_redirect"
+msgstr "عنوان إعادة التوجيه المطلوب تسجيله"
+
+#. js-lingui-explicit-id
+msgid "admin.providers.beta"
+msgstr "تجريبي"
+
+#. js-lingui-explicit-id
+msgid "admin.providers.ga"
+msgstr "متاح"
+
+#. js-lingui-explicit-id
+msgid "admin.providers.per_server"
+msgstr "لا شيء للتسجيل: يسجّل Shoutory نفسه على كل خادم عند ربط الحساب."
 
 #. js-lingui-explicit-id
 msgid "admin.flags.title"
@@ -1974,3 +2006,43 @@ msgstr "تعذّر علينا بدء الربط. لم يتغيّر شيء. حا�
 #. js-lingui-explicit-id
 msgid "connect.start.server"
 msgstr "حدث خطأ من جهتنا. لم يتغيّر شيء. حاول لاحقاً."
+
+#. js-lingui-explicit-id
+msgid "connect.start.host_invalid"
+msgstr "هذا ليس عنوان خادم. اكتب العنوان وحده، مثل social.example، ثم حاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "connect.start.instance_unsupported"
+msgstr "هذا الخادم لا يشغّل منصة يستطيع Shoutory الربط بها. تحقّق من العنوان وحاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "connect.start.address_not_allowed"
+msgstr "تثبيت Shoutory هذا لا يتصل بهذا العنوان. اسأل الشخص الذي يديره."
+
+#. js-lingui-explicit-id
+msgid "connect.start.instance_refused"
+msgstr "رفض هذا الخادم ربط Shoutory. لم يتغيّر شيء. حاول لاحقاً أو اسأل مشرفيه."
+
+#. js-lingui-explicit-id
+msgid "connect.start.instance_rate_limited"
+msgstr "طلب منا هذا الخادم الانتظار قبل المحاولة مجدداً. لم يتغيّر شيء. حاول بعد بضع دقائق."
+
+#. js-lingui-explicit-id
+msgid "connect.start.instance_unreachable"
+msgstr "تعذّر علينا الوصول إلى هذا الخادم. لم يتغيّر شيء. تحقّق من العنوان أو حاول لاحقاً."
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.host.intro"
+msgstr "حسابك على <0>{provider}</0> موجود على خادم اخترته. اكتب عنوان ذلك الخادم."
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.host.label"
+msgstr "عنوان الخادم، مثل social.example"
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.host.invalid"
+msgstr "اكتب عنوان الخادم بهذا الشكل: social.example."
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.host.back"
+msgstr "رجوع"

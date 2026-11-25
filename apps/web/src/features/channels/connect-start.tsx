@@ -5,7 +5,17 @@ import { ApiError, request } from "../../http/client";
 import { Button } from "../../ui/button";
 import { useSignIn } from "./channels-hub";
 
-export type StartFailure = "forbidden" | "not_found" | "rate_limited" | "unavailable" | "server";
+// The reasons the server gives for a server address a person typed, each with its own words.
+const HOST_REASONS = [
+  "host_invalid",
+  "instance_unsupported",
+  "address_not_allowed",
+  "instance_refused",
+  "instance_rate_limited",
+  "instance_unreachable",
+] as const;
+type HostReason = (typeof HOST_REASONS)[number];
+export type StartFailure = "forbidden" | "not_found" | "rate_limited" | "unavailable" | "server" | HostReason;
 const answerSchema = z.object({ authorize_url: z.string() });
 
 const START_WORDS: Record<StartFailure, ReactNode> = {
@@ -34,6 +44,36 @@ const START_WORDS: Record<StartFailure, ReactNode> = {
       Something went wrong on our side. Nothing was changed. Try again later.
     </Trans>
   ),
+  host_invalid: (
+    <Trans id="connect.start.host_invalid">
+      That is not a server address. Type only the address, like social.example, and try again.
+    </Trans>
+  ),
+  instance_unsupported: (
+    <Trans id="connect.start.instance_unsupported">
+      That server does not run a platform Shoutory can connect to. Check the address and try again.
+    </Trans>
+  ),
+  address_not_allowed: (
+    <Trans id="connect.start.address_not_allowed">
+      This Shoutory install does not connect to that address. Ask the person who runs it.
+    </Trans>
+  ),
+  instance_refused: (
+    <Trans id="connect.start.instance_refused">
+      That server refused to let Shoutory connect. Nothing was changed. Try again later or ask its admins.
+    </Trans>
+  ),
+  instance_rate_limited: (
+    <Trans id="connect.start.instance_rate_limited">
+      That server asked us to wait before trying again. Nothing was changed. Try again in a few minutes.
+    </Trans>
+  ),
+  instance_unreachable: (
+    <Trans id="connect.start.instance_unreachable">
+      We could not reach that server. Nothing was changed. Check the address or try again later.
+    </Trans>
+  ),
 };
 
 export function StartError({ failure, testId }: { failure: StartFailure; testId: string }) {
@@ -55,7 +95,11 @@ function httpsAddress(value: string): string | null {
   }
 }
 
+const isHostReason = (reason: unknown): reason is HostReason => HOST_REASONS.some((one) => one === reason);
+
 function failureOf(error: ApiError): StartFailure {
+  const reason = error.details?.reason;
+  if (isHostReason(reason)) return reason;
   if (error.state === "forbidden") return "forbidden";
   if (error.state === "not_found") return "not_found";
   if (error.status === 429) return "rate_limited";
@@ -70,7 +114,7 @@ export function Reconnect(props: { ws: string; providerId: string; channelId: st
         data-testid="card-reconnect"
         aria-describedby={props.nameId}
         busy={busy}
-        onPress={() => start(props.providerId, props.channelId)}
+        onPress={() => start(props.providerId, { channel_id: props.channelId })}
       >
         <Trans id="channels.hub.reconnect">Reconnect</Trans>
       </Button>
@@ -78,6 +122,8 @@ export function Reconnect(props: { ws: string; providerId: string; channelId: st
     </>
   );
 }
+
+type StartBody = { channel_id?: string; instance_host?: string };
 
 export function useStart(ws: string) {
   const [failure, setFailure] = useState<StartFailure | null>(null);
@@ -120,17 +166,17 @@ export function useStart(ws: string) {
     if (error.state === "session_expired") expired();
     else setFailure(failureOf(error));
   };
-  const start = (providerId: string, channelId?: string): boolean => {
+  const start = (providerId: string, body: StartBody = {}): boolean => {
     if (pressed.current) return false;
     pressed.current = true;
     setBusy(true);
     setFailure(null);
-    const body = channelId === undefined ? {} : { channel_id: channelId };
     request(answerSchema, `/api/v1/workspaces/${ws}/connect/${providerId}/start`, {
       method: "POST",
       body,
     }).then((answer) => live.current && follow(answer.authorize_url), refused);
     return true;
   };
-  return { start, busy, failure };
+  const clear = () => setFailure(null);
+  return { start, busy, failure, clear };
 }

@@ -130,6 +130,7 @@ async function fulfilHub(page: Page, workspace: string): Promise<void> {
             lifecycle: "ga",
             auth_kind: "oauth2_pkce",
             connectable: true,
+            needs_instance_host: false,
           },
         ],
       }),

@@ -1,11 +1,14 @@
-import { Trans } from "@lingui/react/macro";
-import { useEffect, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { normalizeInstanceHost } from "@shoutory/core/connect/host";
+import { useEffect, useRef, useState } from "react";
+import { Form } from "react-aria-components";
 import { z } from "zod";
 import { ApiError, request } from "../../http/client";
 import { Button } from "../../ui/button";
 import { Dialog } from "../../ui/dialog";
 import { DirText } from "../../ui/dir-text";
 import { ErrorPanel } from "../../ui/error-panel";
+import { TextField } from "../../ui/text-field";
 import { useSignIn } from "./channels-hub";
 import { StartError, useStart } from "./connect-start";
 
@@ -15,6 +18,7 @@ const platformSchema = z.object({
   lifecycle: z.string(),
   auth_kind: z.string(),
   connectable: z.boolean(),
+  needs_instance_host: z.boolean(),
 });
 type Platform = z.infer<typeof platformSchema>;
 const OAUTH = new Set(["oauth2", "oauth2_pkce"]);
@@ -51,7 +55,8 @@ function usePlatforms(ws: string) {
   return { state, retry };
 }
 
-function Tile({ platform, busy, onStart }: { platform: Platform; busy: boolean; onStart: () => void }) {
+function Tile(props: { platform: Platform; busy: boolean; returned: boolean; onStart: () => void }) {
+  const { platform, busy, onStart } = props;
   // A plain name, so the messages' `{provider}` placeholder finds its value (a member expression would not).
   const provider = platform.display_name;
   return (
@@ -74,38 +79,121 @@ function Tile({ platform, busy, onStart }: { platform: Platform; busy: boolean; 
           never see your password.
         </Trans>
       </p>
-      <Button data-testid="tile-start" data-provider-id={platform.id} busy={busy} onPress={onStart}>
-        {busy ? (
-          <Trans id="connect.wizard.busy">
-            Opening <DirText>{provider}</DirText>
-          </Trans>
-        ) : (
-          <Trans id="connect.wizard.continue">
-            Continue to <DirText>{provider}</DirText>
-          </Trans>
-        )}
+      <Button
+        data-testid="tile-start"
+        data-provider-id={platform.id}
+        busy={busy}
+        // Back from the server step lands on the tile that opened it.
+        autoFocus={props.returned}
+        onPress={onStart}
+      >
+        <ProviderAction provider={provider} busy={busy} />
       </Button>
     </li>
   );
 }
 
+function ProviderAction({ provider, busy }: { provider: string; busy: boolean }) {
+  return busy ? (
+    <Trans id="connect.wizard.busy">
+      Opening <DirText>{provider}</DirText>
+    </Trans>
+  ) : (
+    <Trans id="connect.wizard.continue">
+      Continue to <DirText>{provider}</DirText>
+    </Trans>
+  );
+}
+
+// The address is checked here with the server's own rules, so a mistyped one never leaves the page.
+function HostStep(props: {
+  platform: Platform;
+  busy: boolean;
+  onBack: () => void;
+  onSubmit: (host: string) => void;
+}) {
+  const { t } = useLingui();
+  const provider = props.platform.display_name;
+  const [typed, setTyped] = useState("");
+  const [invalid, setInvalid] = useState(false);
+  const field = useRef<HTMLInputElement>(null);
+  const bad = t({ id: "connect.wizard.host.invalid", message: "Type an address like social.example." });
+  const submit = () => {
+    const host = normalizeInstanceHost(typed);
+    setInvalid(host === undefined);
+    // Back on the field, a screen reader reads the error it now describes.
+    if (host === undefined) field.current?.focus();
+    else props.onSubmit(host);
+  };
+  return (
+    <Form
+      className="flex flex-col gap-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit();
+      }}
+    >
+      <p className="text-sm">
+        <Trans id="connect.wizard.host.intro">
+          Your <DirText>{provider}</DirText> account lives on a server you chose. Type that server's address.
+        </Trans>
+      </p>
+      <TextField
+        label={t({ id: "connect.wizard.host.label", message: "Server address, like social.example" })}
+        testId="host-field"
+        inputRef={field}
+        autoFocus
+        ltr
+        autoComplete="url"
+        value={typed}
+        onChange={(value) => {
+          setTyped(value);
+          setInvalid(false);
+        }}
+        {...(invalid ? { errorMessage: bad } : {})}
+      />
+      <div className="flex flex-wrap gap-3">
+        {/* Once the start is sent the browser leaves for the server, so Back would only seem to cancel it. */}
+        <Button data-testid="host-back" aria-disabled={props.busy} onPress={props.onBack}>
+          <Trans id="connect.wizard.host.back">Back</Trans>
+        </Button>
+        <Button data-testid="host-continue" type="submit" busy={props.busy}>
+          <ProviderAction provider={provider} busy={props.busy} />
+        </Button>
+      </div>
+    </Form>
+  );
+}
+
 function Tiles({ ws, platforms }: { ws: string; platforms: Platform[] }) {
-  const { start, busy, failure } = useStart(ws);
+  const { start, busy, failure, clear } = useStart(ws);
   const [pressed, setPressed] = useState<string | null>(null);
+  const [asking, setAsking] = useState<Platform | null>(null);
+  const back = () => {
+    clear();
+    setPressed(asking?.id ?? null);
+    setAsking(null);
+  };
+  const begin = (platform: Platform, host?: string) => {
+    if (start(platform.id, host === undefined ? {} : { instance_host: host })) setPressed(platform.id);
+  };
   return (
     <>
-      <ul className="flex flex-col gap-3">
-        {platforms.map((platform) => (
-          <Tile
-            key={platform.id}
-            platform={platform}
-            busy={busy && pressed === platform.id}
-            onStart={() => {
-              if (start(platform.id)) setPressed(platform.id);
-            }}
-          />
-        ))}
-      </ul>
+      {asking === null ? (
+        <ul className="flex flex-col gap-3">
+          {platforms.map((platform) => (
+            <Tile
+              key={platform.id}
+              platform={platform}
+              busy={busy && pressed === platform.id}
+              returned={pressed === platform.id}
+              onStart={() => (platform.needs_instance_host ? setAsking(platform) : begin(platform))}
+            />
+          ))}
+        </ul>
+      ) : (
+        <HostStep platform={asking} busy={busy} onBack={back} onSubmit={(host) => begin(asking, host)} />
+      )}
       {failure === null ? null : <StartError failure={failure} testId="start-error" />}
     </>
   );
