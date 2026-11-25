@@ -1,4 +1,7 @@
+import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   cloneTemplate,
   createRoleLogin,
@@ -43,6 +46,7 @@ function envFor(db: TestDatabase, extra: Record<string, string>): NodeJS.Process
     // Tests listen on loopback only, never on all interfaces; the role is HTTP only unless a test asks for more.
     SHOUTORY_HOST: "127.0.0.1",
     SHOUTORY_ROLE: "api",
+    SHOUTORY_SCRATCH_DIR: scratch,
     ...Object.fromEntries(
       ROLES.flatMap((role) => [
         [`SHOUTORY_DATABASE_PASSWORD_${role.toUpperCase()}`, `${role}-test-secret-1`],
@@ -65,7 +69,9 @@ const refusal = (started: Started): number => {
 
 let migrated: TestDatabase;
 let blank: TestDatabase;
+let scratch: string;
 beforeAll(async () => {
+  scratch = await mkdtemp(join(tmpdir(), "main-scratch-"));
   migrated = await cloneTemplate(testEnv, inject("shoutoryTemplate"));
   blank = await emptyDatabase(testEnv);
   logins.app = await createRoleLogin(testEnv, "app");
@@ -75,6 +81,7 @@ afterAll(async () => {
   await migrated.drop();
   await blank.drop();
   await Promise.all(Object.values(logins).map((login) => login.drop()));
+  await rm(scratch, { recursive: true, force: true });
 });
 
 // `worker` runs no HTTP, `all` runs HTTP and the worker in one process; both beat before the start returns.
