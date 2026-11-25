@@ -78,8 +78,20 @@ export function parseProbe(json: unknown): ProbeResult {
   )
     return refusal("corrupt");
   if (durationMs > MAX_DURATION_MS) return refusal("too_long");
-  return { ok: true, codec, width: width as number, height: height as number, durationMs, family };
+  const [shownWidth, shownHeight] = quarterTurned(stream) ? [height, width] : [width, height];
+  return { ok: true, codec, width: shownWidth as number, height: shownHeight as number, durationMs, family };
 }
+
+// ffprobe prints a container's turn as whole degrees counterclockwise, from -180 to 180, so a quarter turn either way is
+// 90 or -90. Any other turn leaves the size as it is.
+const quarterTurned = (stream: Record<string, unknown>) =>
+  Array.isArray(stream.side_data_list) &&
+  stream.side_data_list.some(
+    (entry) =>
+      isObject(entry) &&
+      entry.side_data_type === "Display Matrix" &&
+      (entry.rotation === 90 || entry.rotation === -90),
+  );
 
 // The argv is fixed: only the demuxer and the path change. `-f` before the input forces the demuxer (ffprobe
 // documentation, "-f format"), and the protocol allowlist is passed whatever the build allows.

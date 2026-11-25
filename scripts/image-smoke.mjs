@@ -279,6 +279,45 @@ function stripVideo() {
   }
 }
 
+// Inside the container: turn the mp4 a quarter in its container, then read it and its shipped copy with the shipped probe.
+const TURN_SCRIPT = `
+const { spawnSync } = require("node:child_process");
+const turn = ["-display_rotation", "90", "-f", "mov", "-i", "/probe/input.mp4", "-c", "copy", "-f", "mp4", "/work/turned.mp4"];
+const ended = spawnSync("/usr/local/bin/ffmpeg", ["-nostdin", "-v", "error", ...turn], { encoding: "utf8" });
+if (ended.status !== 0) throw new Error("ffmpeg exited " + ended.status + ": " + ended.stderr);
+import("/app/apps/api/dist/jobs/media/probe-run.js").then(async ({ runProbe, runRemux }) => {
+  const probe = (inputPath) => runProbe({ ffprobePath: "/usr/local/bin/ffprobe", inputPath, demuxer: "mov" });
+  const out = "/work/turned.copy.mp4";
+  const copied = await runRemux({ ffmpegPath: "/usr/local/bin/ffmpeg", inputPath: "/work/turned.mp4", outputPath: out, type: "video/mp4" });
+  console.log(JSON.stringify({ before: await probe("/work/turned.mp4"), copied, after: await probe(out) }));
+});`;
+
+function turnedVideo() {
+  step(
+    "the shipped probe reads a turned mp4 at the size it is shown, and its shipped copy keeps the turn, offline",
+  );
+  const run = docker(
+    [
+      "run",
+      "--rm",
+      "--read-only",
+      "--network",
+      "none",
+      "--tmpfs",
+      "/work:size=16m,uid=65532,gid=65532",
+    ].concat(["-v", `${VIDEO_FIXTURE}:/probe/input.mp4:ro`, "--entrypoint", NODE, IMAGE, "-e", TURN_SCRIPT]),
+    { allowFailure: true },
+  );
+  expect(run.status === 0, `the turned video did not run (exit ${run.status}): ${tail(run.stderr)}`);
+  const found = JSON.parse(run.stdout.trim().split("\n").at(-1) ?? "null");
+  const shown = (result) => result?.ok === true && result.width === 240 && result.height === 320;
+  expect(found?.copied?.ok === true, `the copy of the turned video failed: ${JSON.stringify(found)}`);
+  expect(
+    shown(found.before) && shown(found.after),
+    `the turned video is not read as shown: ${JSON.stringify(found)}`,
+  );
+}
+
 function startDatabase() {
   step("start PostgreSQL on a network with no way out");
   docker(["network", "create", "--internal", NETWORK]);
@@ -436,6 +475,7 @@ try {
   shipped();
   videoTools();
   probeVideo();
+  turnedVideo();
   stripVideo();
   startDatabase();
   startCollector();

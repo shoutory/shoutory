@@ -62,14 +62,14 @@ interface Facts {
   height?: number;
   /** `false` plants a ready asset whose `stripped` derivative is missing. */
   stripped?: boolean;
-  /** A video made ready before videos had a copy: its type, the size of its original and its length. */
-  video?: { bytes: number; durationMs: number };
+  /** A video and its length; its original is larger than any rule, so only its copy's size can pass. */
+  video?: { durationMs: number };
 }
 async function plantMedia(workspace: string, state: string, facts: Facts = {}): Promise<string> {
   const id = randomUUID();
   const ready = state === "ready";
   const kind = facts.video
-    ? { mime: "video/mp4", bytes: facts.video.bytes, durationMs: facts.video.durationMs }
+    ? { mime: "video/mp4", bytes: 50_000_000, durationMs: facts.video.durationMs }
     : { mime: "image/png", bytes: null, durationMs: null };
   await fx.admin(async (client) => {
     await client.query(
@@ -89,7 +89,7 @@ async function plantMedia(workspace: string, state: string, facts: Facts = {}): 
         kind.durationMs,
       ],
     );
-    if (ready && facts.stripped !== false && !facts.video) await plantStripped(client, workspace, id, facts);
+    if (ready && facts.stripped !== false) await plantStripped(client, workspace, id, facts);
   });
   return id;
 }
@@ -658,15 +658,19 @@ const refusedDetails = async (answer: Response) => [
   ((await answer.json()) as { error?: { details?: unknown } }).error?.details,
 ];
 
+const STATES: [string, () => Promise<string>][] = [
+  ["uploaded", () => plantMedia(ws, "uploaded")],
+  ["processing", () => plantMedia(ws, "processing")],
+  ["rejected", () => plantMedia(ws, "rejected")],
+  ["deleted", () => plantMedia(ws, "deleted")],
+  ["ready without a stripped derivative", () => plantMedia(ws, "ready", { stripped: false })],
+  [
+    "a video ready without a stripped copy",
+    () => plantMedia(ws, "ready", { stripped: false, video: { durationMs: 12_000 } }),
+  ],
+  ["ready in another workspace", () => plantMedia(other, "ready")],
+];
 describe("only ready media is attached, and only media the channel's rule takes", () => {
-  const STATES: [string, () => Promise<string>][] = [
-    ["uploaded", () => plantMedia(ws, "uploaded")],
-    ["processing", () => plantMedia(ws, "processing")],
-    ["rejected", () => plantMedia(ws, "rejected")],
-    ["deleted", () => plantMedia(ws, "deleted")],
-    ["ready without a stripped derivative", () => plantMedia(ws, "ready", { stripped: false })],
-    ["ready in another workspace", () => plantMedia(other, "ready")],
-  ];
   it.each(STATES)("a medium that is %s is refused at create", async (_name, plant) => {
     const answer = await call(user("editor"), "POST", base(ws), attach(await plant()));
     expect(await refusedDetails(answer)).toEqual([422, { reason: "media_unavailable" }]);
@@ -715,22 +719,23 @@ describe("only ready media is attached, and only media the channel's rule takes"
   });
 });
 
-// A video made ready before videos had a copy goes to the provider as it was uploaded, so its size is its original's.
+// A video goes to the provider as its stripped copy, so the copy's size is the one the rule reads.
 describe("a ready video is attached under the channel's video rule", () => {
-  const video = (over: { bytes?: number; durationMs?: number; width?: number; height?: number } = {}) =>
+  const video = (over: { bytes?: number; durationMs?: number } = {}) =>
     plantMedia(ws, "ready", {
-      width: over.width ?? 1280,
-      height: over.height ?? 720,
-      video: { bytes: over.bytes ?? 2_000_000, durationMs: over.durationMs ?? 12_000 },
+      width: 1280,
+      height: 720,
+      bytes: over.bytes ?? 2_000_000,
+      video: { durationMs: over.durationMs ?? 12_000 },
     });
 
-  it("a ready video with no stripped derivative is taken at create", async () => {
+  it("a ready video is taken at create by the size of its copy, not of its larger original", async () => {
     const answer = await call(user("editor"), "POST", base(ws), attach(await video()));
     expect(answer.status).toBe(201);
   });
 
   it.each([
-    ["over videoMaxBytes, by the size of its original", { bytes: 10_000_001 }, "too_large"],
+    ["over videoMaxBytes, by the size of its copy", { bytes: 10_000_001 }, "too_large"],
     ["over videoMaxDurationMs", { durationMs: 60_001 }, "too_long"],
   ])("a video %s is refused at create with the rule named", async (_name, over, rule) => {
     const answer = await call(user("editor"), "POST", base(ws), attach(await video(over)));

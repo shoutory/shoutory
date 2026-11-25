@@ -70,6 +70,34 @@ describe("parseProbe on what the shipped ffprobe printed", () => {
   });
 });
 
+describe("parseProbe stores the size a viewer sees", () => {
+  // Recorded from the image's own binaries: `ffmpeg -display_rotation 90 -i h264.mp4 -c copy`, then the probe argv.
+  it("swaps the size of the recorded quarter-turned video", () => {
+    expect(parseProbe(recorded("h264-rotated.mp4.json"))).toMatchObject({
+      ok: true,
+      width: 240,
+      height: 320,
+    });
+  });
+
+  const matrix = { side_data_type: "Display Matrix", displaymatrix: "\n" };
+  const turned = (entry: Record<string, unknown>) => stream({ side_data_list: [entry] });
+  it.each([
+    ["a quarter turn one way", turned({ ...matrix, rotation: 90 }), 240, 320],
+    ["a quarter turn the other way", turned({ ...matrix, rotation: -90 }), 240, 320],
+    ["no turn", turned({ ...matrix, rotation: 0 }), 320, 240],
+    ["a half turn", turned({ ...matrix, rotation: 180 }), 320, 240],
+    ["a half turn the other way", turned({ ...matrix, rotation: -180 }), 320, 240],
+    ["a turn that is no quarter", turned({ ...matrix, rotation: 45 }), 320, 240],
+    ["a turn just short of a quarter", turned({ ...matrix, rotation: 89 }), 320, 240],
+    ["a turn that is no number", turned({ ...matrix, rotation: "90" }), 320, 240],
+    ["a matrix with no turn printed", turned(matrix), 320, 240],
+    ["other side data", turned({ side_data_type: "Stereo 3D", rotation: 90 }), 320, 240],
+  ])("stores the shown size for %s", (_name, json, width, height) => {
+    expect(parseProbe(json)).toMatchObject({ ok: true, width, height });
+  });
+});
+
 describe("parseProbe refuses what is no usable video", () => {
   const noLength = {
     ...format({ duration: undefined }),

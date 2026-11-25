@@ -1,6 +1,6 @@
 import { type Draft, settingsIssues, supportsVariant } from "@shoutory/core/content";
 import { buildSnapshot, type Resolved, snapshotHash } from "@shoutory/core/content/snapshot";
-import { mediaFits, type RejectReason, VIDEO_TYPES } from "@shoutory/core/media";
+import { mediaFits, type RejectReason } from "@shoutory/core/media";
 import type { TenantTx } from "@shoutory/db/context";
 import { snapshotOf } from "@shoutory/provider-sdk/snapshot";
 import type { HealthProvider } from "../../channels/health.js";
@@ -48,12 +48,11 @@ interface ReadyMedium {
   mime: string;
   width: number;
   height: number;
-  /** The size of the `stripped` copy, or of the original of a video made ready before videos had one. */
+  /** The size of the `stripped` copy, the one a provider receives. */
   bytes: number;
   durationMs: number | null;
 }
 
-// An image needs its `stripped` copy. A video made ready before videos had one is still taken, by its original.
 async function readyMedia(
   tx: TenantTx,
   workspaceId: string,
@@ -63,13 +62,12 @@ async function readyMedia(
   if (ids.length === 0) return new Map();
   const found = await tx.query<ReadyMedium>(
     `SELECT a.id, encode(a.sha256, 'hex') AS sha256, a.mime, a.width, a.height,
-       coalesce(d.byte_size, a.byte_size)::float8 AS bytes, a.duration_ms AS "durationMs"
+       d.byte_size::float8 AS bytes, a.duration_ms AS "durationMs"
      FROM app.media_assets AS a
-     LEFT JOIN app.media_derivatives AS d ON d.workspace_id = a.workspace_id AND d.media_id = a.id
+     JOIN app.media_derivatives AS d ON d.workspace_id = a.workspace_id AND d.media_id = a.id
        AND d.profile = 'stripped' AND d.state = 'ready'
-     WHERE a.workspace_id = $1 AND a.id = ANY ($2::uuid[]) AND a.state = 'ready'
-       AND (d.media_id IS NOT NULL OR a.mime = ANY ($3::text[]))`,
-    [workspaceId, ids, [...VIDEO_TYPES]],
+     WHERE a.workspace_id = $1 AND a.id = ANY ($2::uuid[]) AND a.state = 'ready'`,
+    [workspaceId, ids],
   );
   if (found.rows.length !== ids.length) throw unprocessable("media_unavailable");
   return new Map(found.rows.map((row) => [row.id, row]));

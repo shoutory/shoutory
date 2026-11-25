@@ -38,7 +38,7 @@ interface Medium {
   derivativeSha256: string | null;
 }
 interface PlantedMedium {
-  /** `video/mp4` plants a video, which has no derivative; anything else is an image with a `stripped` copy. */
+  /** An image unless named; either way it gets a ready `stripped` copy unless `stripped` is false. */
   mime?: string;
   stripped?: boolean;
   ageDays?: number;
@@ -55,7 +55,7 @@ async function plantMedium(o: PlantedMedium = {}): Promise<Medium> {
     [id, ws, mime, U.editor, sha, o.ageDays ?? 0],
   );
   let derivative: { id: string; sha: Buffer } | undefined;
-  if (!mime.startsWith("video/") && o.stripped !== false) {
+  if (o.stripped !== false) {
     const dsha = digestOf(`${id}-stripped`);
     const made = await rows(
       `INSERT INTO app.media_derivatives (workspace_id, media_id, profile, object_key, state, sha256, byte_size)
@@ -181,7 +181,7 @@ const pinOf = (m: Medium, position: number) => ({
   position,
   media_id: m.id,
   derivative_id: m.derivativeId,
-  sha256: m.derivativeSha256 ?? m.sha256,
+  sha256: m.derivativeSha256,
 });
 
 async function take(asset: string): Promise<string[]> {
@@ -248,7 +248,7 @@ const PINNED: [string, () => Promise<Pinned>][] = [
     },
   ],
   [
-    "a video: no derivative, and the hash of the original",
+    "a video: the id and the hash of its ready stripped copy, never the original",
     async () => {
       const video = await plantMedium({ mime: "video/mp4" });
       return { target: { media: [video] }, operations: ["pending"], pins: [pinOf(video, 0)] };
@@ -310,6 +310,7 @@ describe("what an operation pins (floor)", () => {
 describe("a medium that is not ready at admission leaves the target scheduled, and the batch goes on (floor)", () => {
   const BAD: [string, () => Promise<Medium>][] = [
     ["ready with no stripped copy", () => plantMedium({ stripped: false })],
+    ["a video ready with no stripped copy", () => plantMedium({ mime: "video/mp4", stripped: false })],
   ];
   it.each(BAD)("%s", async (_what, bad) => {
     const [alongside, fine] = [await plantMedium(), await plantMedium()];
@@ -485,11 +486,23 @@ async function resolve(operation: string, kind: string) {
   }
 }
 
+const SENDS: [string, string, string, string][] = [
+  ["supersede", "needs_human", "possible", "an operation that needs a person"],
+  ["publish_late", "missed", "none", "a missed operation"],
+];
+const UNAVAILABLE: [string, () => Promise<Medium>, (m: Medium) => Promise<unknown>][] = [
+  [
+    "a medium that was deleted since",
+    () => plantMedium(),
+    (m) => rows("UPDATE app.media_assets SET state = 'deleted', deleted_at = now() WHERE id = $1", [m.id]),
+  ],
+  [
+    "an older video that has no stripped copy",
+    () => plantMedium({ mime: "video/mp4", stripped: false }),
+    async () => undefined,
+  ],
+];
 describe("a resolution that sends again pins like admission, and refuses a medium that is no longer ready (floor)", () => {
-  const SENDS: [string, string, string, string][] = [
-    ["supersede", "needs_human", "possible", "an operation that needs a person"],
-    ["publish_late", "missed", "none", "a missed operation"],
-  ];
   it.each(SENDS)("%s of %s pins the same media from the frozen snapshot", async (kind, state, effect) => {
     const media = [await plantMedium(), await plantMedium({ mime: "video/mp4" })];
     const target = await plantTarget({ media });
@@ -506,15 +519,15 @@ describe("a resolution that sends again pins like admission, and refuses a mediu
     expect(pinned).toEqual(media.map((m, at) => pinOf(m, at)));
   });
 
-  it.each(SENDS)(
-    "%s with a medium that was deleted since inserts no operation, no pin and no resolution",
-    async (kind, state, effect) => {
-      const media = [await plantMedium()];
+  it.each(
+    SENDS.flatMap(([kind, state, effect]) => UNAVAILABLE.map((u) => [kind, ...u, state, effect] as const)),
+  )(
+    "%s with %s inserts no operation, no pin and no resolution",
+    async (kind, _what, plant, spoil, state, effect) => {
+      const media = [await plant()];
       const target = await plantTarget({ media });
       const operation = await plantOperation(target, state, effect);
-      await rows("UPDATE app.media_assets SET state = 'deleted', deleted_at = now() WHERE id = $1", [
-        media[0]?.id,
-      ]);
+      await spoil(media[0] as Medium);
       const answer = await resolve(operation, kind);
       expect(answer.error).toMatchObject({ code: "SH422", message: "resolve_operation: media_unavailable" });
       expect(await rows("SELECT state FROM app.operations WHERE id = $1", [operation])).toEqual([{ state }]);

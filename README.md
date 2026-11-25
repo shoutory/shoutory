@@ -103,8 +103,10 @@ holds the tarball URL, its sha256 and the configure line; the build has no encod
 files only and has no network protocol. The image sets `SHOUTORY_FFPROBE_PATH` and `SHOUTORY_FFMPEG_PATH` to them, so an
 uploaded mp4, QuickTime or webm video is probed for its size, duration and codec (15 seconds at most), then copied
 without re-encoding into the same container with its first picture and first sound only and no metadata (no location,
-no device or encoder tags; 10 minutes at most). The video becomes ready only with that copy, and the copy is what a
-provider receives; [`docs/dependencies.md`](docs/dependencies.md) records the signature check and the build packages.
+no device or encoder tags; 10 minutes at most). A video recorded on its side is stored at the size it is shown. The
+video becomes ready only with that copy, and the copy is what a provider receives; [`docs/dependencies.md`](docs/dependencies.md)
+records the signature check and the build packages. When upgrading: a video made ready before the copy existed has none,
+so a post cannot use it and a scheduled post that holds it stays scheduled until the video is uploaded again.
 
 The worker handles uploaded media one file at a time, apart from its other work, and gives each file up to 30 minutes
 while it keeps its claim on it. Within that time it copies the original from storage and writes what it derives back, so a
