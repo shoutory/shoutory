@@ -1,11 +1,12 @@
+import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { processAsset } from "../../src/jobs/media/pipeline.js";
 import { createFsDriver } from "../../src/storage/fs-driver.js";
-import { jpeg } from "../support/images.js";
 import { addWorkspaceMember, seedOrganization, seedWorkspace, signedUser } from "../support/tenancy.js";
 import { type Fixture, startFixture, WEB } from "./auth/harness.js";
 
@@ -144,13 +145,27 @@ const assetOf = (id: string) =>
       ).rows[0] as { state: string; sha256: string | null; byte_size: number | null },
   );
 
+// Only a video may be this large. The child that would run ffprobe prints the answer recorded from the real binary.
+vi.mock("node:child_process", async (importOriginal) => {
+  const original = await importOriginal<typeof import("node:child_process")>();
+  return { ...original, spawn: vi.fn(original.spawn) };
+});
+const fixture = (path: string) => readFileSync(new URL(`../fixtures/${path}`, import.meta.url));
+async function probePrintsRecordedMp4(): Promise<void> {
+  const real = await vi.importActual<typeof import("node:child_process")>("node:child_process");
+  const text = fixture("ffprobe/h264.mp4.json").toString("utf8");
+  vi.mocked(spawn).mockImplementationOnce((_command, _args, options) =>
+    real.spawn(process.execPath, ["-e", `process.stdout.write(${JSON.stringify(text)})`], options as never),
+  );
+}
+
 describe("a file above 64 MiB goes to the filesystem in parts", () => {
   it("registers, takes its parts, completes and is ready after the pipeline, with its part files gone", async () => {
-    const image = await jpeg();
-    const body = Buffer.concat([image, Buffer.alloc(LARGE - image.length)]);
+    const video = fixture("h264.mp4");
+    const body = Buffer.concat([video, Buffer.alloc(LARGE - video.length)]);
     const answer = await post(user("editor"), base(ws), {
-      file_name: "big.jpg",
-      mime: "image/jpeg",
+      file_name: "big.mp4",
+      mime: "video/mp4",
       byte_size: LARGE,
       sha256: sha(body),
     });
@@ -162,10 +177,17 @@ describe("a file above 64 MiB goes to the filesystem in parts", () => {
     expect([done.status, await dataOf(done)]).toEqual([200, { id }]);
     expect(await assetOf(id)).toMatchObject({ state: "uploaded", sha256: sha(body), byte_size: LARGE });
     expect(await real.head(originalKey(id))).toMatchObject({ size: LARGE, sha256: sha(body) });
-    // The part files are gone once the original is stored (the empty folder is the sweeper's, after 7 days).
-    expect(await readdir(join(dir, "ws", ws, id, "parts"))).toEqual([]);
+    // The part files and their folder are gone once the original is stored.
+    expect(await readdir(join(dir, "ws", ws, id))).toEqual(["1"]);
     for (const number of NUMBERS) expect(await real.head(partKey(ws, id, number))).toBeNull();
-    await processAsset({ pool: fx.db.pool("worker"), storage: real }, ws, id);
+    await probePrintsRecordedMp4();
+    const deps = {
+      pool: fx.db.pool("worker"),
+      storage: real,
+      scratchDir: tmpdir(),
+      ffprobe: process.execPath,
+    };
+    await processAsset(deps, ws, id);
     expect((await assetOf(id)).state).toBe("ready");
   }, 180_000);
 

@@ -15,8 +15,6 @@ export const EDIT_SPLIT = { ...EDIT, split: true } as const;
 export const VIEW_SPLIT = { workspace: "workspace_id", permission: "library.view", split: true } as const;
 export const LIVE = ["uploaded", "scanning", "processing", "ready"];
 
-export const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
-
 // The type of the file comes from its bytes, never from the sender, so every upload body is plain octet-stream.
 export const OCTET_STREAM = /^application\/octet-stream\s*(;|$)/i;
 

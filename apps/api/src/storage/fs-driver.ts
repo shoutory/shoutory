@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream, type Stats } from "node:fs";
-import { link, lstat, mkdir, rename, rm, stat, statfs, unlink } from "node:fs/promises";
+import { link, lstat, mkdir, rename, rm, rmdir, stat, statfs, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -150,5 +150,19 @@ async function headFile(root: string, key: string): Promise<{ size: number; sha2
 
 async function deleteFile(root: string, key: string): Promise<void> {
   const path = await fileOf(root, key);
-  if (path !== null) await unlink(path);
+  if (path === null) return;
+  await unlink(path);
+  await removeEmptyFolders(root, storageKeySegments(key).slice(0, -1));
+}
+
+// Folders a delete leaves empty go, up to the first two segments of the key (the workspace's own folder), which stay.
+async function removeEmptyFolders(root: string, folders: string[]): Promise<void> {
+  for (let depth = folders.length; depth > 2; depth--) {
+    try {
+      await rmdir(join(root, ...folders.slice(0, depth)));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOTEMPTY" || isAbsent(error)) return;
+      throw error;
+    }
+  }
 }

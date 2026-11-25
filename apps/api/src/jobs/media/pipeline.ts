@@ -1,12 +1,18 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
-import { isImageType, isVideoType, type RejectReason, type VideoType } from "@shoutory/core/media";
+import {
+  claimedType,
+  isImageType,
+  isVideoType,
+  MAX_UPLOAD_BYTES,
+  type RejectReason,
+  type VideoType,
+} from "@shoutory/core/media";
 import { type StorageDriver, StorageError } from "@shoutory/core/storage";
 import { type TenantTx, withTenant } from "@shoutory/db/context";
 import type { AppPool } from "@shoutory/db/pool";
@@ -14,6 +20,7 @@ import { fileTypeFromBuffer } from "file-type";
 import type { Logger } from "../../logging/logger.js";
 import { runProbe } from "./probe-run.js";
 import type { Scan } from "./scan.js";
+import { scratchFor } from "./scratch.js";
 import { runSharpChild } from "./sharp-run.js";
 
 // Every step is safe to run again: the state of the asset and of its derivatives says where a crashed run stopped, and
@@ -27,6 +34,7 @@ export interface PipelineDeps {
   // Without it a video is refused as an unsupported type.
   readonly ffprobe?: string;
   readonly logger?: Pick<Logger, "warn">;
+  readonly scratchDir: string;
 }
 
 // `fileTypeFromBuffer` needs no more than this to name any type it knows.
@@ -40,6 +48,8 @@ interface Asset {
   object_key: string;
   // For a large upload this is the sender's claim, which the bytes are checked against.
   sha256: string | null;
+  // Proved against the stored object when the upload was marked uploaded.
+  byte_size: number;
 }
 const CORRUPT = { ok: false, reason: "corrupt" } as const;
 type Job = <T>(run: (tx: TenantTx) => Promise<T>) => Promise<T>;
@@ -55,7 +65,7 @@ const readAsset = async (job: Job, ws: string, id: string): Promise<Asset | unde
   (
     await sql<Asset>(
       job,
-      `SELECT state, mime, object_key, encode(sha256, 'hex') AS sha256
+      `SELECT state, mime, object_key, encode(sha256, 'hex') AS sha256, byte_size::float8 AS byte_size
        FROM app.media_assets WHERE workspace_id = $1 AND id = $2`,
       [ws, id],
     )
@@ -165,6 +175,9 @@ async function copyOriginal(deps: PipelineDeps, asset: Asset, path: string): Pro
   return hash.digest("hex");
 }
 
+// Called once the scan of an asset in `scanning` has run, before anything is decoded.
+type Scanned = (() => Promise<void>) | undefined;
+
 // The bytes are proved first, whatever way they were uploaded: bytes that are not the asset's sha256 are `corrupt`, and
 // nothing is scanned or decoded.
 async function withOriginal<T>(
@@ -172,15 +185,18 @@ async function withOriginal<T>(
   ws: string,
   id: string,
   asset: Asset,
-  scan: boolean,
+  scanned: Scanned,
   use: (input: string, dir: string) => Promise<T>,
 ): Promise<T | typeof CORRUPT> {
-  const dir = await mkdtemp(join(tmpdir(), "shoutory-media-"));
+  const dir = await scratchFor(deps.scratchDir, asset.byte_size);
   try {
     const input = join(dir, "input");
     const digest = await copyOriginal(deps, asset, input);
     if (digest !== asset.sha256) return CORRUPT;
-    if (scan) await warnScan(deps, ws, id, input);
+    if (scanned) {
+      await warnScan(deps, ws, id, input);
+      await scanned();
+    }
     return await use(input, dir);
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -193,10 +209,10 @@ function derive(
   ws: string,
   id: string,
   asset: Asset,
-  scan: boolean,
+  scanned: Scanned,
   signal?: AbortSignal,
 ) {
-  return withOriginal(deps, ws, id, asset, scan, async (input, dir) => {
+  return withOriginal(deps, ws, id, asset, scanned, async (input, dir) => {
     const result = await runSharpChild({ inputPath: input, outputDir: dir, ...(signal ? { signal } : {}) });
     if (!result.ok) return result;
     for (const profile of PROFILES)
@@ -204,11 +220,6 @@ function derive(
     return result;
   });
 }
-
-const claimedType = (mime: string | null): string => {
-  const claimed = (mime ?? "").trim().toLowerCase();
-  return claimed === "image/jpg" ? "image/jpeg" : claimed;
-};
 
 type Verdict =
   | {
@@ -226,13 +237,13 @@ async function judgeVideo(
   id: string,
   asset: Asset,
   sniffed: VideoType,
-  scan: boolean,
+  scanned: Scanned,
   signal?: AbortSignal,
 ): Promise<Verdict> {
   const ffprobePath = deps.ffprobe;
   if (ffprobePath === undefined) return { ok: false, reason: "unsupported_type" };
   if (sniffed !== claimedType(asset.mime)) return { ok: false, reason: "type_mismatch" };
-  const probed = await withOriginal(deps, ws, id, asset, scan, (inputPath) =>
+  const probed = await withOriginal(deps, ws, id, asset, scanned, (inputPath) =>
     runProbe({ ffprobePath, inputPath, demuxer: FAMILY_OF[sniffed], ...(signal ? { signal } : {}) }),
   );
   if (!probed.ok) return probed;
@@ -251,21 +262,23 @@ async function judge(
   ws: string,
   id: string,
   asset: Asset,
-  scan: boolean,
+  scanned: Scanned,
   signal?: AbortSignal,
 ): Promise<Verdict> {
   const sniffed = await sniff(deps.storage, asset.object_key);
   if (sniffed !== undefined && isVideoType(sniffed))
-    return judgeVideo(deps, ws, id, asset, sniffed, scan, signal);
+    return judgeVideo(deps, ws, id, asset, sniffed, scanned, signal);
   if (sniffed === undefined || !isImageType(sniffed)) return { ok: false, reason: "unsupported_type" };
   if (sniffed !== claimedType(asset.mime)) return { ok: false, reason: "type_mismatch" };
-  const derived = await derive(deps, job, ws, id, asset, scan, signal);
+  if (asset.byte_size > MAX_UPLOAD_BYTES) return { ok: false, reason: "too_large" };
+  const derived = await derive(deps, job, ws, id, asset, scanned, signal);
   if (!derived.ok) return derived;
   if (derived.mime !== sniffed) return { ok: false, reason: "type_mismatch" };
   return { ok: true, facts: { width: derived.width, height: derived.height, mime: derived.mime } };
 }
 
-// An asset that is not `uploaded` or `processing` is left as it is, so a repeated or late call changes nothing.
+// An asset that is not `uploaded`, `scanning` or `processing` is left as it is, so a repeated or late call changes
+// nothing.
 export async function processAsset(
   deps: PipelineDeps,
   workspaceId: string,
@@ -280,11 +293,12 @@ export async function processAsset(
 export async function failAsset(deps: PipelineDeps, workspaceId: string, mediaId: string): Promise<void> {
   const job = jobOf(deps, workspaceId);
   const state = (await readAsset(job, workspaceId, mediaId))?.state;
-  if (state !== "uploaded" && state !== "processing") return;
+  if (state !== "uploaded" && state !== "scanning" && state !== "processing") return;
   await unlessLost(
     (async () => {
       if (state === "uploaded") await advance(job, workspaceId, mediaId, "uploaded", "processing", null);
-      await advance(job, workspaceId, mediaId, "processing", "rejected", "processing_failed");
+      const from = state === "scanning" ? "scanning" : "processing";
+      await advance(job, workspaceId, mediaId, from, "rejected", "processing_failed");
     })(),
   );
 }
@@ -317,15 +331,23 @@ async function advanceAsset(
   mediaId: string,
   signal?: AbortSignal,
 ): Promise<void> {
-  let asset = await readAsset(job, workspaceId, mediaId);
-  // The scan belongs to the run that takes the asset out of `uploaded`; a resume of a `processing` one does not repeat it.
-  const fresh = asset?.state === "uploaded";
-  if (asset && fresh) {
-    await advance(job, workspaceId, mediaId, "uploaded", "processing", null);
-    asset = { ...asset, state: "processing" };
+  const asset = await readAsset(job, workspaceId, mediaId);
+  if (asset === undefined) return;
+  let state = asset.state;
+  if (state === "uploaded") {
+    state = deps.scan ? "scanning" : "processing";
+    await advance(job, workspaceId, mediaId, "uploaded", state, null);
   }
-  if (asset?.state !== "processing") return;
-  const verdict = await judge(deps, job, workspaceId, mediaId, asset, fresh, signal);
-  if (verdict.ok) await advance(job, workspaceId, mediaId, "processing", "ready", null, verdict.facts);
-  else await advance(job, workspaceId, mediaId, "processing", "rejected", verdict.reason);
+  if (state !== "scanning" && state !== "processing") return;
+  // A resume of a `scanning` asset scans again; one of a `processing` asset does not.
+  const scanned =
+    state === "scanning"
+      ? async () => {
+          await advance(job, workspaceId, mediaId, "scanning", "processing", null);
+          state = "processing";
+        }
+      : undefined;
+  const verdict = await judge(deps, job, workspaceId, mediaId, asset, scanned, signal);
+  if (verdict.ok) await advance(job, workspaceId, mediaId, state, "ready", null, verdict.facts);
+  else await advance(job, workspaceId, mediaId, state, "rejected", verdict.reason);
 }

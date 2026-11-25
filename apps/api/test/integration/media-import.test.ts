@@ -279,6 +279,11 @@ describe("no secret or full URL reaches the log, a row or an answer (floor)", ()
     const rows = JSON.stringify(await assets());
     const text = [await answer.text(), rows, ...fx.logged.slice(logFrom)].join("\n");
     expect(leaks(text, spellings)).toEqual([]);
+    // An import's own log line names what happened, never the host it reached.
+    const lines = fx.logged
+      .slice(logFrom)
+      .filter((line) => /an import was refused|a file was imported/.test(line));
+    expect(lines.filter((line) => line.includes("127.0.0.1"))).toEqual([]);
     return rows;
   };
 
@@ -350,7 +355,7 @@ describe("an import leaves an ordinary asset", () => {
       maxBytes: 64 * MIB,
       headers: { "accept-encoding": "identity" },
     });
-    await processAsset({ pool: fx.db.pool("worker"), storage }, ws, id);
+    await processAsset({ pool: fx.db.pool("worker"), storage, scratchDir: tmpdir() }, ws, id);
     expect(await rowOf(id)).toMatchObject({ state: "ready", mime: "image/png" });
   });
 

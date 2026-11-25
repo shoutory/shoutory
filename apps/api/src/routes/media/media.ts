@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { claimedType, isImageType, MAX_UPLOAD_BYTES } from "@shoutory/core/media";
 import { type StorageDriver, StorageError } from "@shoutory/core/storage";
 import { z } from "zod";
 import { Refusal } from "../../errors/refusal.js";
@@ -22,7 +23,6 @@ import {
   conflict,
   EDIT_SPLIT,
   LIVE,
-  MAX_UPLOAD_BYTES,
   markUploaded,
   mediaParams,
   OCTET_STREAM,
@@ -92,6 +92,7 @@ function registerUpload(app: App, { presigner, multipart, logger, parts }: S3Sid
     handler: async ({ scoped, body }) => {
       const large = body.byte_size > MAX_UPLOAD_BYTES;
       if (body.byte_size > MAX_MULTIPART_BYTES || (large && !parts)) throw tooLarge();
+      if (large && isImageType(claimedType(body.mime))) throw tooLarge();
       const made = await scoped(true, async (tx, scope) => ({
         workspaceId: scope.workspaceId,
         id: (

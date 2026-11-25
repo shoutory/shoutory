@@ -22,6 +22,7 @@ import { createLedgerTick } from "./ledger/tick.js";
 import { createMailSender, type MailSenderOptions } from "./mail-sender.js";
 import { collectMedia } from "./media/gc.js";
 import type { PipelineDeps } from "./media/pipeline.js";
+import { sweepScratch } from "./media/scratch.js";
 import { mediaUploadedHandler } from "./media/uploaded.js";
 import { createOutboxRelay } from "./outbox-relay.js";
 import {
@@ -37,7 +38,7 @@ export interface WorkerOptions {
   readonly pool: AppPool;
   readonly logger: Logger;
   readonly role: "worker" | "all";
-  readonly media: Pick<PipelineDeps, "storage" | "scan" | "ffprobe"> & {
+  readonly media: Pick<PipelineDeps, "storage" | "scan" | "ffprobe" | "scratchDir"> & {
     // Set only for the filesystem driver: the nightly sweep of upload parts runs over it.
     readonly partsRoot?: string;
   };
@@ -248,6 +249,7 @@ export async function startWorker({
   });
   // A failed start stops the client, so its pool never stays open: `start` opens the pool before it checks the schema.
   try {
+    await sweepScratch(media.scratchDir);
     await boss.start();
     // Idempotent: a provider added without `shoutory migrate` must not stall admission on a queue that is missing.
     for (const name of registry.allQueueNames()) await boss.createQueue(name, PROVIDER_QUEUE_OPTIONS);

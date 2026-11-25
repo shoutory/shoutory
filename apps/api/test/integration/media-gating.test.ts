@@ -58,7 +58,7 @@ beforeEach(async () => {
       smtpUrl: new SealedSecret("smtp://127.0.0.1:9"),
       from: "noreply@mail.example.test",
     },
-    media: { storage },
+    media: { storage, scratchDir: join(tmpdir(), "shoutory-media-gating-scratch") },
     relayIntervalMs: 10,
   });
   stop = () => worker.close();

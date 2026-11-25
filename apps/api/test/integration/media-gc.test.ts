@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -232,6 +233,11 @@ describe("the garbage collection keeps every workspace's objects to itself (floo
       const own = deleted.slice(before).filter((key) => key.includes(`/${asset.id}/`));
       expect(own.sort()).toEqual([asset.key, asset.derivativeKey].sort());
       expect(own.every((key) => key.startsWith(`ws/${asset.ws}/`))).toBe(true);
+      // Its emptied folders go with it, up to the workspace's own folder, which stays.
+      expect([
+        existsSync(join(dir, "ws", asset.ws, asset.id)),
+        existsSync(join(dir, "ws", asset.ws)),
+      ]).toEqual([false, true]);
     }
     const second = deleted.length;
     await run();

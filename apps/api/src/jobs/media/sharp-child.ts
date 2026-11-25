@@ -30,7 +30,8 @@ async function run(inputPath: string, outputDir: string) {
   const open = (animated: boolean) => sharp(inputPath, { limitInputPixels: MAX_PIXELS, animated });
   const format = (await open(true).metadata()).format ?? "";
   if (!Object.hasOwn(EXTENSIONS, format)) return { ok: false, reason: "unsupported_type" };
-  // sharp writes no metadata (EXIF, GPS, XMP, IPTC, ICC) unless asked, so the outputs carry none.
+  // sharp writes no metadata (EXIF, GPS, XMP, IPTC, ICC) unless asked, so the outputs carry none
+  // (https://sharp.pixelplumbing.com/api-output/, read 2026-11-25).
   const strippedPath = join(outputDir, `stripped.${EXTENSIONS[format]}`);
   const stripped = await open(format === "gif" || format === "webp")
     .rotate()

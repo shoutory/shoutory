@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { isImageType, isVideoType } from "@shoutory/core/media";
+import { isImageType, isVideoType, MAX_UPLOAD_BYTES } from "@shoutory/core/media";
 import type { StorageDriver } from "@shoutory/core/storage";
 import type { EgressRequest, EgressResponse } from "@shoutory/provider-sdk/egress";
 import { EgressError } from "@shoutory/provider-sdk/egress/errors";
@@ -12,7 +12,6 @@ import {
   BASE,
   callDefiner,
   EDIT_SPLIT,
-  MAX_UPLOAD_BYTES,
   markUploaded,
   originalKey,
   type Scope,
@@ -105,7 +104,7 @@ async function download(
     });
   } catch (error) {
     if (!(error instanceof EgressError)) throw error;
-    logger.warn({ class: error.class, host: error.host }, "an import was refused");
+    logger.warn({ class: error.class }, "an import was refused");
     throw refused(reasonOf(error));
   }
   if (response.status !== 200) throw refused("fetch_failed");
@@ -209,6 +208,6 @@ async function importOne(
   const asset = { id, state: "pending_upload", created_at: new Date(), mime, byte_size: null, sha256: null };
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const live = await markUploaded(storage, workspaceId, asset, scoped, { sha256, size: bytes.length });
-  logger.info({ mediaId: live.id, host: new URL(body.url).host }, "a file was imported");
+  logger.info({ mediaId: live.id }, "a file was imported");
   return { id: live.id };
 }

@@ -8,6 +8,15 @@ export type ImageType = keyof typeof IMAGE_EXTENSIONS;
 export const IMAGE_TYPES = Object.keys(IMAGE_EXTENSIONS) as readonly ImageType[];
 export const isImageType = (mime: string): mime is ImageType => Object.hasOwn(IMAGE_EXTENSIONS, mime);
 
+// The largest file sent in one request, and the largest image of any size: a bigger image never reaches a decoder.
+export const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
+
+// The type a sender claimed, in the one spelling the sniffed type is compared with.
+export const claimedType = (mime: string | null): string => {
+  const claimed = (mime ?? "").trim().toLowerCase();
+  return claimed === "image/jpg" ? "image/jpeg" : claimed;
+};
+
 // Matroska files other than webm are not accepted.
 export const VIDEO_TYPES = ["video/mp4", "video/quicktime", "video/webm"] as const;
 export type VideoType = (typeof VIDEO_TYPES)[number];

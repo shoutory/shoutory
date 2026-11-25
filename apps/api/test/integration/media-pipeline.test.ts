@@ -1,12 +1,12 @@
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { processAsset } from "../../src/jobs/media/pipeline.js";
+import { failAsset, processAsset } from "../../src/jobs/media/pipeline.js";
 import { createFsDriver } from "../../src/storage/fs-driver.js";
 import { animatedGif, jpeg, png } from "../support/images.js";
 import { seedOrganization, seedWorkspace, signedUser } from "../support/tenancy.js";
@@ -22,10 +22,14 @@ let fx: Fixture;
 let ws: string;
 let owner: string;
 let dir: string;
+let scratchDir: string;
 let storage: ReturnType<typeof createFsDriver>;
+const MIB = 1024 * 1024;
 
 beforeAll(async () => {
   dir = await mkdtemp(join(tmpdir(), "shoutory-pipeline-"));
+  scratchDir = join(dir, "scratch");
+  await mkdir(scratchDir);
   storage = createFsDriver(dir);
   fx = await startFixture({ storage });
   const founder = await signedUser(fx, "pipeline-org");
@@ -37,7 +41,13 @@ afterAll(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-async function uploaded(bytes: Buffer, claimedMime: string, declared?: Buffer): Promise<string> {
+// `byteSize` is the size the upload was proved to have; a row may plant a size its few bytes stand in for.
+async function uploaded(
+  bytes: Buffer,
+  claimedMime: string,
+  declared?: Buffer,
+  byteSize = bytes.length,
+): Promise<string> {
   const id = randomUUID();
   // The digest of an upload is the hash of its bytes unless a row says what its sender declared.
   const digest = (declared ?? createHash("sha256").update(bytes).digest()).toString("hex");
@@ -51,7 +61,7 @@ async function uploaded(bytes: Buffer, claimedMime: string, declared?: Buffer): 
       `INSERT INTO app.media_assets (id, workspace_id, object_key, file_name, mime, source, created_by, state, sha256, byte_size)
        VALUES ($1::uuid, $2::uuid, 'ws/' || $2::text || '/' || $1::text || '/1/original', 'p.png', $3, 'upload',
          $4::uuid, 'uploaded', decode($5, 'hex'), $6)`,
-      [id, ws, claimedMime, owner, digest, bytes.length],
+      [id, ws, claimedMime, owner, digest, byteSize],
     );
   });
   await storage.put(`ws/${ws}/${id}/1/original`, new Blob([new Uint8Array(bytes)]).stream(), 1024 * 1024);
@@ -69,7 +79,8 @@ const rowOf = (id: string) =>
       ).rows[0] as { state: string; reject_reason: string | null; derivatives: number },
   );
 
-const run = (id: string) => processAsset({ pool: fx.db.pool("worker"), storage }, ws, id);
+const depsWith = (extra: object = {}) => ({ pool: fx.db.pool("worker"), storage, scratchDir, ...extra });
+const run = (id: string) => processAsset(depsWith(), ws, id);
 const sha = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 const derivativesOf = (id: string) =>
   fx.admin(
@@ -166,7 +177,7 @@ describe("the scan hook in warn mode", () => {
       const id = await uploaded(await jpeg(), "image/jpeg");
       const lines: object[] = [];
       const logger = { warn: (fields: object) => lines.push(fields) };
-      await processAsset({ pool: fx.db.pool("worker"), storage, scan: async () => verdict, logger }, ws, id);
+      await processAsset(depsWith({ scan: async () => verdict, logger }), ws, id);
       expect((await rowOf(id)).state).toBe("ready");
       expect(lines.map((line) => (line as { verdict: string }).verdict)).toEqual(
         verdict === "clean" ? [] : [verdict],
@@ -182,7 +193,7 @@ describe("the scan runs once", () => {
       scans += 1;
       return "clean" as const;
     };
-    const deps = { pool: fx.db.pool("worker"), storage, scan };
+    const deps = depsWith({ scan });
     await processAsset(deps, ws, await uploaded(await jpeg(), "image/jpeg"));
     expect(scans).toBe(1);
     const resumed = await uploaded(await jpeg(), "image/jpeg");
@@ -263,7 +274,7 @@ async function probePrints(output: unknown, exitCode = 0) {
   );
 }
 const runVideo = (id: string, extra: object = { ffprobe: process.execPath }) =>
-  processAsset({ pool: fx.db.pool("worker"), storage, ...extra }, ws, id);
+  processAsset(depsWith(extra), ws, id);
 
 // A block, not an arrow with a value: a function that a hook returns is run after the test as its cleanup.
 beforeEach(() => {
@@ -438,5 +449,78 @@ describe("the claimed type of an upload is never trusted", () => {
     expect(await rowOf(id)).toEqual({ state: "rejected", reject_reason: "type_mismatch", derivatives: 0 });
     for (const profile of ["stripped", "thumb"])
       expect(await storage.head(`ws/${ws}/${id}/1/${profile}`)).toBeNull();
+  });
+});
+
+// A scan that records what it was given: the path, or what `look` reads while it runs.
+const counting = (look: (path: string) => Promise<string> | string = (path) => path) => {
+  const seen: string[] = [];
+  const scan = async (path: string) => {
+    seen.push(await look(path));
+    return "clean" as const;
+  };
+  return { seen, scan };
+};
+
+describe("a run never takes more memory or disk than it may (floor)", () => {
+  it("an image proved larger than 64 MiB is rejected too_large, and is never copied, scanned or decoded", async () => {
+    const { seen, scan } = counting();
+    const id = await uploaded(await jpeg(), "image/jpeg", undefined, 64 * MIB + 1);
+    await processAsset(depsWith({ scan }), ws, id);
+    expect(await rowOf(id)).toEqual({ state: "rejected", reject_reason: "too_large", derivatives: 0 });
+    expect([seen, vi.mocked(spawn).mock.calls.length]).toEqual([[], 0]);
+  });
+
+  it.each([
+    ["less free space than twice its size and a margin", () => scratchDir, 2 ** 50],
+    ["a scratch folder whose free space cannot be read", () => join(dir, "missing"), mp4.length],
+  ])("a run with %s throws before any byte is written, for the retry", async (_n, folder, size) => {
+    const id = await uploaded(mp4, "video/mp4", undefined, size);
+    await expect(runVideo(id, { ffprobe: process.execPath, scratchDir: folder() })).rejects.toThrow();
+    expect(await rowOf(id)).toEqual({ state: "processing", reject_reason: null, derivatives: 0 });
+    expect(await readdir(scratchDir)).toEqual([]);
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it("copies the original only under the scratch folder, and removes the copy when done", async () => {
+    const { seen, scan } = counting();
+    const id = await uploaded(await jpeg(), "image/jpeg");
+    await processAsset(depsWith({ scan }), ws, id);
+    expect(seen.map((path) => path.startsWith(join(scratchDir, "shoutory-media-")))).toEqual([true]);
+    expect([(await rowOf(id)).state, await readdir(scratchDir)]).toEqual(["ready", []]);
+  });
+});
+
+describe("an asset being scanned", () => {
+  const stateOf = async (id: string) => (await rowOf(id)).state;
+
+  it("is in scanning while the scanner reads it, then becomes ready", async () => {
+    const id = await uploaded(await jpeg(), "image/jpeg");
+    const { seen, scan } = counting(() => stateOf(id));
+    await processAsset(depsWith({ scan }), ws, id);
+    expect([seen, await stateOf(id)]).toEqual([["scanning"], "ready"]);
+  });
+
+  it("is scanned again on the resume of a run that stopped there, and becomes ready", async () => {
+    const { seen, scan } = counting();
+    const id = await uploaded(await jpeg(), "image/jpeg");
+    await fx.admin((client) =>
+      client.query("UPDATE app.media_assets SET state = 'scanning' WHERE id = $1", [id]),
+    );
+    await processAsset(depsWith({ scan }), ws, id);
+    expect([seen.length, await stateOf(id)]).toEqual([1, "ready"]);
+  });
+
+  it("ends rejected processing_failed when its run fails for good", async () => {
+    const id = await uploaded(await jpeg(), "image/jpeg");
+    await fx.admin((client) =>
+      client.query("UPDATE app.media_assets SET state = 'scanning' WHERE id = $1", [id]),
+    );
+    await failAsset(depsWith(), ws, id);
+    expect(await rowOf(id)).toEqual({
+      state: "rejected",
+      reject_reason: "processing_failed",
+      derivatives: 0,
+    });
   });
 });

@@ -318,6 +318,16 @@ describe("start-up: the ffprobe path", () => {
   });
 });
 
+describe("start-up: the media scratch folder", () => {
+  it("is /data/scratch unless set, takes an absolute path, and refuses a relative one", () => {
+    expect(parseEnv(valid).scratchDir).toBe("/data/scratch");
+    expect(parseEnv(withValue("SHOUTORY_SCRATCH_DIR", "/var/lib/shoutory/scratch")).scratchDir).toBe(
+      "/var/lib/shoutory/scratch",
+    );
+    expect(refusedVariable(withValue("SHOUTORY_SCRATCH_DIR", "scratch"))).toBe("SHOUTORY_SCRATCH_DIR");
+  });
+});
+
 describe("start-up: the upload scan hook", () => {
   const scan = (extra: Record<string, string>) => ({ ...valid, ...extra });
 

@@ -153,6 +153,7 @@ requires `TZ=UTC`.
 | `SHOUTORY_MEDIA_SCAN`                                                       | `off` (default) or `warn`: with `warn` each uploaded image or video is scanned by your own ClamAV (`clamd`) and a finding or a failed scan is logged; the upload goes on either way |
 | `SHOUTORY_CLAMAV_HOST`, `SHOUTORY_CLAMAV_PORT`                              | With `warn`: the `clamd` TCP address (host required; port default 3310, 1-65535). `clamd` has no authentication, so keep it on a private network                         |
 | `SHOUTORY_FFPROBE_PATH`                                                     | The absolute path of the `ffprobe` that reads uploaded videos; the image sets it to `/usr/local/bin/ffprobe`. Unset (the default outside the image) or empty turns video off, so an empty value turns it off over the image's setting: a video upload is rejected as an unsupported type. A path that is not an executable file stops the worker at start |
+| `SHOUTORY_SCRATCH_DIR`                                                      | The absolute folder, on disk and not in memory, where the worker copies an upload while it checks it, with any storage driver; default `/data/scratch`. A run needs free space of twice the upload's size plus 256 MiB there, or it waits and retries; copies left by a crash are removed when the worker starts |
 | `SHOUTORY_S3_REGION`, `SHOUTORY_S3_BUCKET`                                  | With driver `s3`: the region and the bucket, which must already exist (the server never creates one)                                                                                                                                                   |
 | `SHOUTORY_S3_ACCESS_KEY_ID`, `SHOUTORY_S3_SECRET_ACCESS_KEY`                | With driver `s3`: the access key pair; secrets, never logged and never part of an answer                                                                                                                                                               |
 | `SHOUTORY_S3_FORCE_PATH_STYLE`                                              | With driver `s3`: `true` for servers that need path-style addressing; default `false`                                                                                                                                                                  |
@@ -190,7 +191,10 @@ so an upload can be resumed. Complete lists the parts the bucket holds (never a 
 is not the declared size, and refuses to replace an existing original (the bucket must support `If-None-Match` on completing an
 upload). A file above 5 GiB is refused with 422. The bucket
 checks each part's sha256, not the whole file, so the digest declared at register is proved by the worker, which hashes the
-original: bytes that differ end the upload as `corrupt`. Until then another member's upload of the same bytes is answered as
+original: bytes that differ end the upload as `corrupt`. A file of 64 MiB or less is proved by the `x-amz-checksum-sha256`
+the bucket returns on `HeadObject`, so a server that does not return it fails those uploads with `no_checksum`
+([HeadObject](https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html)); the checksum of a multipart object
+may be a composite of its parts, which is why the worker proves those. Until then another member's upload of the same bytes is answered as
 a duplicate of it, and registers again if it is rejected. S3 keeps the parts of an upload that is never completed until it is
 aborted, so give the bucket a lifecycle rule that aborts incomplete multipart uploads after 7 days
 (`AbortIncompleteMultipartUpload`, `DaysAfterInitiation` 7); the app aborts the uploads it refuses itself. Save this as

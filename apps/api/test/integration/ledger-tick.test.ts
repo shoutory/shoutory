@@ -19,7 +19,10 @@ import { ledgerCredentials } from "../support/ledger-credentials.js";
 import { connectThrough, seedDueTarget, seedWorkspace } from "../support/ledger-seed.js";
 
 const env = readTestEnv();
-const media = { storage: createFsDriver(join(tmpdir(), "shoutory-ledger-tick-unused")) };
+const media = {
+  storage: createFsDriver(join(tmpdir(), "shoutory-ledger-tick-unused")),
+  scratchDir: join(tmpdir(), "shoutory-ledger-tick-scratch"),
+};
 
 let db: TestDatabase;
 let ws: string;

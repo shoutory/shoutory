@@ -274,6 +274,15 @@ export function parseFfprobeEnv(env: Env): string | undefined {
   return parseWith(ffprobeSchema, env).SHOUTORY_FFPROBE_PATH || undefined;
 }
 
+// A disk folder for the copies the media worker reads, whatever the storage driver: the system temp folder may be
+// held in memory.
+const scratchSchema = z.object({
+  SHOUTORY_SCRATCH_DIR: z
+    .string()
+    .refine(isAbsolutePath, "must be an absolute path")
+    .default("/data/scratch"),
+});
+
 export interface Config {
   role: ServerRole;
   publicOrigin: string | undefined;
@@ -293,6 +302,7 @@ export interface Config {
   storage: StorageConfig;
   mediaScan: MediaScanConfig;
   ffprobePath: string | undefined;
+  scratchDir: string;
   databaseUrls: Readonly<Partial<Record<Role, SealedSecret>>>;
 }
 
@@ -381,6 +391,7 @@ export function parseEnv(env: Env): Config {
     storage: parseStorageEnv(env),
     mediaScan: parseMediaScanEnv(env),
     ffprobePath: parseFfprobeEnv(env),
+    scratchDir: parseWith(scratchSchema, env).SHOUTORY_SCRATCH_DIR,
     databaseUrls: Object.fromEntries(
       URL_ROLES[http.data.SHOUTORY_ROLE].map((r) => [r, secret(roleVariable("SHOUTORY_DATABASE_URL_", r))]),
     ),

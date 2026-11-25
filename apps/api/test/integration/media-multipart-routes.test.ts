@@ -134,12 +134,19 @@ interface Big {
   workspace?: string;
   size?: number;
   digest?: string;
+  mime?: string;
 }
 // Every upload declares a digest of its own: a second upload of the same bytes would be answered as a duplicate.
-const registerBig = ({ who = user("editor"), workspace = ws, size = 70 * MIB, digest }: Big = {}) =>
+const registerBig = ({
+  who = user("editor"),
+  workspace = ws,
+  size = 70 * MIB,
+  digest,
+  mime = "application/octet-stream",
+}: Big = {}) =>
   call(who, base(workspace), {
     file_name: "big.bin",
-    mime: "application/octet-stream",
+    mime,
     byte_size: size,
     sha256: digest ?? sha(randomUUID()),
   });
@@ -214,14 +221,23 @@ describe("a file above 64 MiB goes to storage in parts and never through the API
     expect(sent).toBeLessThan(4096);
   }, 120_000);
 
-  // [declared size, the answer, what the answer carries]
+  // [declared size, the answer, what the answer carries, the declared type]
   it.each([
-    ["exactly 64 MiB is one PUT", 64 * MIB, 201, "single"],
-    ["64 MiB + 1 is multipart", 64 * MIB + 1, 201, "multipart"],
-    ["exactly 5 GiB is multipart", CAP, 201, "multipart"],
-    ["5 GiB + 1 is refused", CAP + 1, 422, "refused"],
-  ])("register of %s", async (_name, size, status, kind) => {
-    const answer = await registerBig({ size });
+    ["exactly 64 MiB is one PUT", 64 * MIB, 201, "single", undefined],
+    ["64 MiB + 1 is multipart", 64 * MIB + 1, 201, "multipart", undefined],
+    ["exactly 5 GiB is multipart", CAP, 201, "multipart", undefined],
+    ["5 GiB + 1 is refused", CAP + 1, 422, "refused", undefined],
+    ["an image of exactly 64 MiB is one PUT", 64 * MIB, 201, "single", "image/png"],
+    [
+      "an image of 64 MiB + 1 is refused, as no image may be larger",
+      64 * MIB + 1,
+      422,
+      "refused",
+      "image/png",
+    ],
+    ["a video of 64 MiB + 1 is multipart", 64 * MIB + 1, 201, "multipart", "video/mp4"],
+  ])("register of %s", async (_name, size, status, kind, mime) => {
+    const answer = await registerBig({ size, ...(mime ? { mime } : {}) });
     expect(answer.status).toBe(status);
     if (kind === "refused") return expect((await errorOf(answer)).code).toBe("unprocessable_content");
     const data = await dataOf(answer);

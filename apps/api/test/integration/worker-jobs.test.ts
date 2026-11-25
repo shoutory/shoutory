@@ -41,6 +41,7 @@ const options = (database: TestDatabase, smtpUrl = "smtp://127.0.0.1:9") => ({
   media: {
     storage: createFsDriver(join(tmpdir(), "shoutory-worker-jobs-unused")),
     partsRoot: join(tmpdir(), "shoutory-worker-jobs-unused"),
+    scratchDir: join(tmpdir(), "shoutory-worker-jobs-scratch"),
   },
   mail: { keys, pepper, smtpUrl: new SealedSecret(smtpUrl), from: "noreply@mail.example.test" },
 });
@@ -126,7 +127,10 @@ describe("the part sweep is the filesystem's alone", () => {
     try {
       const worker = await startWorker({
         ...options(fresh),
-        media: { storage: createFsDriver(join(tmpdir(), "shoutory-worker-jobs-unused")) },
+        media: {
+          storage: createFsDriver(join(tmpdir(), "shoutory-worker-jobs-unused")),
+          scratchDir: join(tmpdir(), "shoutory-worker-jobs-scratch"),
+        },
       });
       const names = await adminOf(() => fresh)(
         async (a) => (await a.query("SELECT DISTINCT name FROM pgboss.schedule ORDER BY name")).rows,
