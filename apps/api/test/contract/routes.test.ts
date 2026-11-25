@@ -46,7 +46,9 @@ describe("route registration", () => {
     for (const route of handlers)
       expect(keys, `${route.method} ${route.path}`).toContain(`${route.method} ${route.path}`);
   });
+});
 
+describe("media route registration", () => {
   it("the media routes are session routes with a library permission; the PUT exists only without a presigner", () => {
     const storage = createFsDriver(".");
     const signed = async () => ({ url: "", headers: {} });
