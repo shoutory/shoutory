@@ -62,7 +62,7 @@ interface Facts {
   height?: number;
   /** `false` plants a ready asset whose `stripped` derivative is missing. */
   stripped?: boolean;
-  /** A video as the pipeline leaves it: its type, the size of its original and its length; it has no derivative. */
+  /** A video made ready before videos had a copy: its type, the size of its original and its length. */
   video?: { bytes: number; durationMs: number };
 }
 async function plantMedia(workspace: string, state: string, facts: Facts = {}): Promise<string> {
@@ -715,7 +715,7 @@ describe("only ready media is attached, and only media the channel's rule takes"
   });
 });
 
-// A ready video has no derivative: it goes to the provider as it was uploaded, so its size is its original's.
+// A video made ready before videos had a copy goes to the provider as it was uploaded, so its size is its original's.
 describe("a ready video is attached under the channel's video rule", () => {
   const video = (over: { bytes?: number; durationMs?: number; width?: number; height?: number } = {}) =>
     plantMedia(ws, "ready", {

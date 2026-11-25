@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
+import type { VideoTools } from "@shoutory/core/config";
 import {
   claimedType,
   isImageType,
@@ -18,7 +19,7 @@ import { type TenantTx, withTenant } from "@shoutory/db/context";
 import type { AppPool } from "@shoutory/db/pool";
 import { fileTypeFromBuffer } from "file-type";
 import type { Logger } from "../../logging/logger.js";
-import { runProbe } from "./probe-run.js";
+import { FAMILY_OF, runProbe, runRemux } from "./probe-run.js";
 import type { Scan } from "./scan.js";
 import { scratchFor } from "./scratch.js";
 import { runSharpChild } from "./sharp-run.js";
@@ -31,8 +32,8 @@ export interface PipelineDeps {
   readonly storage: StorageDriver;
   // The verdict never blocks an upload; a verdict that is not clean is logged.
   readonly scan?: Scan;
-  // Without it a video is refused as an unsupported type.
-  readonly ffprobe?: string;
+  // Without them a video is refused as an unsupported type.
+  readonly video?: VideoTools;
   readonly logger?: Pick<Logger, "warn">;
   readonly scratchDir: string;
 }
@@ -252,11 +253,11 @@ type Verdict =
     }
   | { ok: false; reason: RejectReason };
 
-const FAMILY_OF = { "video/mp4": "mov", "video/quicktime": "mov", "video/webm": "matroska" } as const;
-
-// A video is never transcoded or copied: ffprobe's facts must agree with what its bytes and the sender said.
+// ffprobe's facts must agree with what the bytes and the sender said; only then is the copy without metadata made, from
+// the same scratch copy, and a video is never ready without it.
 async function judgeVideo(
   deps: PipelineDeps,
+  job: Job,
   ws: string,
   id: string,
   asset: Asset,
@@ -264,19 +265,35 @@ async function judgeVideo(
   scanned: Scanned,
   signal?: AbortSignal,
 ): Promise<Verdict> {
-  const ffprobePath = deps.ffprobe;
-  if (ffprobePath === undefined) return { ok: false, reason: "unsupported_type" };
+  const tools = deps.video;
+  if (tools === undefined) return { ok: false, reason: "unsupported_type" };
   if (sniffed !== claimedType(asset.mime)) return { ok: false, reason: "type_mismatch" };
-  const probed = await withOriginal(deps, ws, id, asset, scanned, signal, (inputPath) =>
-    runProbe({ ffprobePath, inputPath, demuxer: FAMILY_OF[sniffed], ...(signal ? { signal } : {}) }),
-  );
-  if (!probed.ok) return probed;
-  if (probed.family !== FAMILY_OF[sniffed]) return { ok: false, reason: "type_mismatch" };
-  const { width, height, durationMs, codec } = probed;
-  return {
-    ok: true,
-    facts: { width, height, mime: sniffed, duration_ms: durationMs, codec: { name: codec } },
-  };
+  const aborts = signal ? { signal } : {};
+  return withOriginal(deps, ws, id, asset, scanned, signal, async (inputPath, dir): Promise<Verdict> => {
+    const probed = await runProbe({
+      ffprobePath: tools.ffprobe,
+      inputPath,
+      demuxer: FAMILY_OF[sniffed],
+      ...aborts,
+    });
+    if (!probed.ok) return probed;
+    if (probed.family !== FAMILY_OF[sniffed]) return { ok: false, reason: "type_mismatch" };
+    const outputPath = join(dir, "stripped");
+    const copied = await runRemux({
+      ffmpegPath: tools.ffmpeg,
+      inputPath,
+      outputPath,
+      type: sniffed,
+      ...aborts,
+    });
+    if (!copied.ok) return copied;
+    await putDerivative(deps, job, ws, id, "stripped", outputPath, asset.object_key, signal);
+    const { width, height, durationMs, codec } = probed;
+    return {
+      ok: true,
+      facts: { width, height, mime: sniffed, duration_ms: durationMs, codec: { name: codec } },
+    };
+  });
 }
 
 // The type is checked before any pixel is decoded, and the format the decoder then reads must be that type too.
@@ -291,7 +308,7 @@ async function judge(
 ): Promise<Verdict> {
   const sniffed = await sniff(deps.storage, asset.object_key);
   if (sniffed !== undefined && isVideoType(sniffed))
-    return judgeVideo(deps, ws, id, asset, sniffed, scanned, signal);
+    return judgeVideo(deps, job, ws, id, asset, sniffed, scanned, signal);
   if (sniffed === undefined || !isImageType(sniffed)) return { ok: false, reason: "unsupported_type" };
   if (sniffed !== claimedType(asset.mime)) return { ok: false, reason: "type_mismatch" };
   if (asset.byte_size > MAX_UPLOAD_BYTES) return { ok: false, reason: "too_large" };

@@ -19,7 +19,7 @@ import { RANGE_HOST } from "./auth/hibp.js";
 import type { HealthProvider } from "./channels/health.js";
 import { type CliIo, collectSecrets, run } from "./cli/main.js";
 import { refuseEgress } from "./jobs/ledger/held.js";
-import { checkFfprobePath } from "./jobs/media/probe-run.js";
+import { checkFfmpegPath, checkFfprobePath } from "./jobs/media/probe-run.js";
 import { createClamdScan } from "./jobs/media/scan.js";
 import { startWorker } from "./jobs/worker.js";
 import { createLogger, type Logger } from "./logging/logger.js";
@@ -184,10 +184,13 @@ async function startServer(config: Config, logger: Logger): Promise<RunningServe
   }
 }
 
-async function checkVideoProbing(config: Config, logger: Logger): Promise<void> {
-  if (config.ffprobePath === undefined)
-    logger.info({ variable: "SHOUTORY_FFPROBE_PATH" }, "video probing is off: the variable is not set");
-  else await checkFfprobePath(config.ffprobePath);
+async function checkVideoTools(config: Config, logger: Logger): Promise<void> {
+  if (config.videoTools === undefined) {
+    const variables = ["SHOUTORY_FFPROBE_PATH", "SHOUTORY_FFMPEG_PATH"];
+    return logger.info({ variables }, "video is off: the variables are not set");
+  }
+  await checkFfprobePath(config.videoTools.ffprobe);
+  await checkFfmpegPath(config.videoTools.ffmpeg);
 }
 
 async function startWorkerRole(
@@ -202,7 +205,7 @@ async function startWorkerRole(
   try {
     storage = createStorageDriver(config.storage);
     await assertMigrationsApplied(pool);
-    await checkVideoProbing(config, logger);
+    await checkVideoTools(config, logger);
     if (config.mailFrom === undefined) throw new Error("SHOUTORY_MAIL_FROM is required");
     const mail = {
       keys: config.keys,
@@ -223,7 +226,7 @@ async function startWorkerRole(
         scratchDir: config.scratchDir,
         ...(config.storage.driver === "fs" ? { partsRoot: config.storage.dataDir } : {}),
         ...(config.mediaScan.mode === "warn" ? { scan: createClamdScan(config.mediaScan) } : {}),
-        ...(config.ffprobePath === undefined ? {} : { ffprobe: config.ffprobePath }),
+        ...(config.videoTools === undefined ? {} : { video: config.videoTools }),
       },
       adapters: createBuiltInAdapters(),
       fetchFor: providerFetch(config),

@@ -313,8 +313,18 @@ async function probePrints(output: unknown, exitCode = 0) {
     ),
   );
 }
-const runVideo = (id: string, extra: object = { ffprobe: process.execPath }) =>
-  processAsset(depsWith(extra), ws, id);
+// The copy's fake child writes known bytes where ffmpeg would write the stripped file (the last argument).
+async function remuxWrites(bytes: Buffer, exitCode = 0) {
+  const real = await vi.importActual<typeof import("node:child_process")>("node:child_process");
+  vi.mocked(spawn).mockImplementationOnce((_command, args, options) => {
+    const out = JSON.stringify((args as string[]).at(-1));
+    const write = `require("node:fs").writeFileSync(${out},Buffer.from("${bytes.toString("hex")}","hex"))`;
+    return real.spawn(process.execPath, ["-e", `${write};process.exit(${exitCode})`], options as never);
+  });
+}
+const COPY = Buffer.from("the stripped copy of the video");
+const TOOLS = { video: { ffprobe: process.execPath, ffmpeg: process.execPath } };
+const runVideo = (id: string, extra: object = TOOLS) => processAsset(depsWith(extra), ws, id);
 
 // A block, not an arrow with a value: a function that a hook returns is run after the test as its cleanup.
 beforeEach(() => {
@@ -323,17 +333,25 @@ beforeEach(() => {
 
 describe("an uploaded video becomes ready", () => {
   it.each([
-    ["an mp4", () => mp4, "video/mp4", "h264.mp4", "h264", "mov"],
-    ["a QuickTime movie", () => withBrand("qt  "), "video/quicktime", "hevc.mov", "hevc", "mov"],
-    ["a webm", () => WEBM, "video/webm", "vp9.webm", "vp9", "matroska"],
+    ["an mp4", () => mp4, "video/mp4", "h264.mp4", "h264", "mov", "mp4"],
+    ["a QuickTime movie", () => withBrand("qt  "), "video/quicktime", "hevc.mov", "hevc", "mov", "mov"],
+    ["a webm", () => WEBM, "video/webm", "vp9.webm", "vp9", "matroska", "webm"],
   ])(
-    "%s becomes ready with its size, length and codec, no derivative, and a second run changes nothing",
-    async (_name, bytes, mime, file, codec, demuxer) => {
+    "%s becomes ready with its size, length and codec and its stripped copy, and a second run changes nothing",
+    async (_name, bytes, mime, file, codec, demuxer, muxer) => {
       const id = await uploaded(bytes(), mime);
       await probePrints(recorded(file));
+      await remuxWrites(COPY);
       await runVideo(id);
       // The demuxer is the one of the type the bytes name, set before the input.
       expect(vi.mocked(spawn).mock.calls[0]?.[1]?.slice(-3, -1)).toEqual(["-f", demuxer]);
+      // The copy reads the same scratch copy the probe judged and writes beside it, in the sender's container.
+      const copyArgv = vi.mocked(spawn).mock.calls[1]?.[1] as string[];
+      const input = copyArgv[copyArgv.indexOf("-i") + 1] as string;
+      expect([input.startsWith(join(scratchDir, "shoutory-media-")), copyArgv.slice(-3)]).toEqual([
+        true,
+        ["-f", muxer, join(input, "..", "stripped")],
+      ]);
       const row = await fx.admin(
         async (client) =>
           (
@@ -352,10 +370,12 @@ describe("an uploaded video becomes ready", () => {
         codec_facts: { name: codec },
         byte_size: bytes().length,
       });
-      expect(await derivativesOf(id)).toEqual([]);
-      expect(await storage.head(`ws/${ws}/${id}/1/stripped`)).toBeNull();
+      expect(await derivativesOf(id)).toEqual([
+        { profile: "stripped", state: "ready", sha256: sha(COPY), size: COPY.length },
+      ]);
+      expect(await bytesOf(`ws/${ws}/${id}/1/stripped`)).toEqual(COPY);
       await runVideo(id);
-      expect(spawn).toHaveBeenCalledTimes(1);
+      expect(spawn).toHaveBeenCalledTimes(2);
     },
   );
 });
@@ -408,11 +428,21 @@ describe("an uploaded video the pipeline refuses", () => {
     },
   );
 
-  it("is rejected as an unsupported type, with no probe, when no ffprobe is configured", async () => {
+  it("is rejected as an unsupported type, with no child run, when the video tools are off", async () => {
     const id = await uploaded(mp4, "video/mp4");
     await runVideo(id, {});
     expect(await rowOf(id)).toEqual({ state: "rejected", reject_reason: "unsupported_type", derivatives: 0 });
     expect(spawn).not.toHaveBeenCalled();
+  });
+
+  // Never ready without its copy: a copy that fails leaves no derivative behind.
+  it("that probed fine but cannot be copied is rejected corrupt, with no derivative", async () => {
+    const id = await uploaded(mp4, "video/mp4");
+    await probePrints(h264);
+    await remuxWrites(Buffer.from("half a file"), 1);
+    await runVideo(id);
+    expect(await rowOf(id)).toEqual({ state: "rejected", reject_reason: "corrupt", derivatives: 0 });
+    expect(await storage.head(`ws/${ws}/${id}/1/stripped`)).toBeNull();
   });
 });
 
@@ -423,6 +453,7 @@ describe("the run of an uploaded video", () => {
     await expect(runVideo(id)).rejects.toThrow();
     expect(await rowOf(id)).toEqual({ state: "processing", reject_reason: null, derivatives: 0 });
     await probePrints(h264);
+    await remuxWrites(COPY);
     await runVideo(id);
     expect((await rowOf(id)).state).toBe("ready");
   });
@@ -435,7 +466,8 @@ describe("the run of an uploaded video", () => {
     };
     const id = await uploaded(mp4, "video/mp4");
     await probePrints(h264);
-    await runVideo(id, { ffprobe: process.execPath, scan });
+    await remuxWrites(COPY);
+    await runVideo(id, { ...TOOLS, scan });
     expect([scans, (await rowOf(id)).state]).toEqual([1, "ready"]);
   });
 });
@@ -516,7 +548,7 @@ describe("a run never takes more memory or disk than it may (floor)", () => {
     ["a scratch folder whose free space cannot be read", () => join(dir, "missing"), mp4.length],
   ])("a run with %s throws before any byte is written, for the retry", async (_n, folder, size) => {
     const id = await uploaded(mp4, "video/mp4", undefined, size);
-    await expect(runVideo(id, { ffprobe: process.execPath, scratchDir: folder() })).rejects.toThrow();
+    await expect(runVideo(id, { ...TOOLS, scratchDir: folder() })).rejects.toThrow();
     expect(await rowOf(id)).toEqual({ state: "processing", reject_reason: null, derivatives: 0 });
     expect(await readdir(scratchDir)).toEqual([]);
     expect(spawn).not.toHaveBeenCalled();

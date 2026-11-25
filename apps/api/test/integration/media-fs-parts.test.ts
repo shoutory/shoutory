@@ -145,7 +145,8 @@ const assetOf = (id: string) =>
       ).rows[0] as { state: string; sha256: string | null; byte_size: number | null },
   );
 
-// Only a video may be this large. The child that would run ffprobe prints the answer recorded from the real binary.
+// Only a video may be this large. The child that would run ffprobe prints the answer recorded from the real binary, and
+// the one that would run ffmpeg writes a small copy where it is told to.
 vi.mock("node:child_process", async (importOriginal) => {
   const original = await importOriginal<typeof import("node:child_process")>();
   return { ...original, spawn: vi.fn(original.spawn) };
@@ -157,6 +158,14 @@ async function probePrintsRecordedMp4(): Promise<void> {
   vi.mocked(spawn).mockImplementationOnce((_command, _args, options) =>
     real.spawn(process.execPath, ["-e", `process.stdout.write(${JSON.stringify(text)})`], options as never),
   );
+  vi.mocked(spawn).mockImplementationOnce((_command, args, options) => {
+    const out = JSON.stringify((args as string[]).at(-1));
+    return real.spawn(
+      process.execPath,
+      ["-e", `require("node:fs").writeFileSync(${out},"copy")`],
+      options as never,
+    );
+  });
 }
 
 describe("a file above 64 MiB goes to the filesystem in parts", () => {
@@ -185,7 +194,7 @@ describe("a file above 64 MiB goes to the filesystem in parts", () => {
       pool: fx.db.pool("worker"),
       storage: real,
       scratchDir: tmpdir(),
-      ffprobe: process.execPath,
+      video: { ffprobe: process.execPath, ffmpeg: process.execPath },
     };
     await processAsset(deps, ws, id);
     expect((await assetOf(id)).state).toBe("ready");

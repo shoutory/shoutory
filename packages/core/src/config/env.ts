@@ -262,16 +262,35 @@ export function parseMediaScanEnv(env: Env): MediaScanConfig {
   return { mode: "warn", host: scan.SHOUTORY_CLAMAV_HOST, port: scan.SHOUTORY_CLAMAV_PORT };
 }
 
-const ffprobeSchema = z.object({
-  SHOUTORY_FFPROBE_PATH: z
-    .string()
-    .refine((value) => value === "" || isAbsolutePath(value), "must be an absolute path")
-    .optional(),
-});
+const toolPath = z
+  .string()
+  .refine((value) => value === "" || isAbsolutePath(value), "must be an absolute path")
+  .optional();
+const videoToolsSchema = z.object({ SHOUTORY_FFPROBE_PATH: toolPath, SHOUTORY_FFMPEG_PATH: toolPath });
 
-// An empty value is unset, so an operator can turn video probing off over the image's own setting.
-export function parseFfprobeEnv(env: Env): string | undefined {
-  return parseWith(ffprobeSchema, env).SHOUTORY_FFPROBE_PATH || undefined;
+export interface VideoTools {
+  readonly ffprobe: string;
+  readonly ffmpeg: string;
+}
+
+// An empty value is unset, so an operator can turn video off over the image's own setting. One tool alone is refused:
+// a video is never made ready without the copy ffmpeg writes.
+export function parseVideoToolsEnv(env: Env): VideoTools | undefined {
+  const data = parseWith(videoToolsSchema, env);
+  const ffprobe = data.SHOUTORY_FFPROBE_PATH || undefined;
+  const ffmpeg = data.SHOUTORY_FFMPEG_PATH || undefined;
+  if (ffprobe === undefined && ffmpeg === undefined) return undefined;
+  if (ffmpeg === undefined)
+    throw new ConfigError(
+      "SHOUTORY_FFMPEG_PATH",
+      "SHOUTORY_FFMPEG_PATH is required with SHOUTORY_FFPROBE_PATH",
+    );
+  if (ffprobe === undefined)
+    throw new ConfigError(
+      "SHOUTORY_FFPROBE_PATH",
+      "SHOUTORY_FFPROBE_PATH is required with SHOUTORY_FFMPEG_PATH",
+    );
+  return { ffprobe, ffmpeg };
 }
 
 // A disk folder for the copies the media worker reads, whatever the storage driver: the system temp folder may be
@@ -311,7 +330,7 @@ export interface Config {
   releaseChannel: (typeof RELEASE_CHANNELS)[number];
   storage: StorageConfig;
   mediaScan: MediaScanConfig;
-  ffprobePath: string | undefined;
+  videoTools: VideoTools | undefined;
   scratchDir: string;
   mediaWorkspaceMaxBytes: number | undefined;
   databaseUrls: Readonly<Partial<Record<Role, SealedSecret>>>;
@@ -401,7 +420,7 @@ export function parseEnv(env: Env): Config {
     releaseChannel: http.data.SHOUTORY_RELEASE_CHANNEL,
     storage: parseStorageEnv(env),
     mediaScan: parseMediaScanEnv(env),
-    ffprobePath: parseFfprobeEnv(env),
+    videoTools: parseVideoToolsEnv(env),
     scratchDir: parseWith(scratchSchema, env).SHOUTORY_SCRATCH_DIR,
     mediaWorkspaceMaxBytes: parseWith(workspaceCapSchema, env).SHOUTORY_MEDIA_WORKSPACE_MAX_BYTES,
     databaseUrls: Object.fromEntries(

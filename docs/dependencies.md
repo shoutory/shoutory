@@ -506,11 +506,13 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
 - Rejected: the client's `Content-Type` and the file extension (both are chosen by the sender); `mmmagic` and `libmagic`
   bindings (native modules).
 
-## FFmpeg 9.0.2 (ffprobe only)
+## FFmpeg 9.0.2 (ffprobe and ffmpeg, stream copy only)
 
-- Used for: `ffprobe` in the production image (`/usr/local/bin/ffprobe`), to read the size, duration and codec of an
-  uploaded video. Built from source in the `ffprobe` stage of `docker/Dockerfile` and copied into both runtime targets;
-  there is no `ffmpeg` binary and no distro package.
+- Used for: `ffprobe` and `ffmpeg` in the production image (`/usr/local/bin`). `ffprobe` reads the size, duration and
+  codec of an uploaded video; `ffmpeg` then copies its first picture and first sound, without re-encoding, into the same
+  container with no container, stream or chapter metadata (`-map_metadata -1`, `-fflags +bitexact`), so a location or
+  device tag never reaches a provider. Built from source in the `ffmpeg` stage of `docker/Dockerfile` and copied into
+  both runtime targets; no distro package.
 - Source: `https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz`, released 2026-09-18 (more than 14 days before adoption), pinned
   by `ADD --checksum=sha256:8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e` (12,040,788 bytes).
 - Signature: checked once, at pin time (2026-11-23), with `gpg --verify` of `ffmpeg-9.0.2.tar.xz.asc` against
@@ -520,18 +522,21 @@ adoption), and had no advisory in `pnpm audit --audit-level=high` at adoption (r
   key the site names, not that the key is the maintainers'. The `.pq.asc` post-quantum signatures the page also lists were
   not checked. The build verifies only the sha256.
 - Licence: LGPL-2.1-or-later, as built: no `--enable-gpl`, no `--enable-nonfree`, no external libraries. The
-  image test reads `ffprobe -buildconf` and fails on either option.
-- Configure line: `--disable-everything --disable-autodetect --disable-network --disable-doc --disable-ffmpeg
-  --disable-ffplay --disable-x86asm --enable-protocol=file --enable-demuxer=mov,matroska`. No decoders and no parsers:
-  width, height, duration and codec name were present for h264, hevc and vp9 fixtures without them (a parser adds only
-  profile and level). `--disable-x86asm` avoids a nasm install; probing uses no assembly. `ffprobe -protocols` lists only
-  `file`. `--disable-autodetect` also leaves out zlib, so a QuickTime file with a compressed `moov` cannot be probed and is to be
-  rejected as unreadable.
+  image test reads `-buildconf` of both binaries and fails on either option.
+- Configure line: `--disable-everything --disable-autodetect --disable-network --disable-doc --disable-ffplay
+  --disable-x86asm --enable-protocol=file --enable-demuxer=mov,matroska --enable-muxer=mp4,mov,webm`. No encoders,
+  decoders or parsers: width, height, duration and codec name were present for h264, hevc and vp9 fixtures without them
+  (a parser adds only profile and level), and a stream copy decodes nothing. The `ffmpeg` program pulls in the few
+  filters and bitstream filters its own build rules select. `--disable-x86asm` avoids a nasm install; neither tool uses
+  assembly here. `-protocols` of both lists only `file`. The image smoke test plants a location in a QuickTime movie and
+  an mp4, runs the shipped copy, and fails if ffprobe or the copy's bytes still show it or the picture changed.
+  `--disable-autodetect` also leaves out zlib, so a QuickTime file with a compressed `moov` cannot be probed and is to
+  be rejected as unreadable.
 - Source offer: the source is the unmodified upstream tarball above, so the URL, the sha256 and the configure line are the
   whole offer; they are in `docker/Dockerfile` at the tag of each release. Libraries are linked statically into the
   binary; it links only glibc (`libc`, `libm`) dynamically.
-- Size and build: 3.27 MB stripped on amd64. The stage builds in about 2 minutes cold and about 1 second cached
-  (2026-11-23, 12 cores).
+- Size and build: stripped on amd64, `ffmpeg` 3.89 MB and `ffprobe` 3.66 MB (2026-11-25). The stage builds in a few
+  minutes cold and about 1 second cached (12 cores).
 - Build packages (VERIFY): `gcc`, `make`, `libc6-dev` and `xz-utils` come from Debian 13's package index at build time and
   are not pinned, because they are never shipped and a pin would break at each Debian security rebuild. Seen 2026-11-23:
   gcc 4:14.2.0-1 (GCC 14.2.0-19), make 4.4.1-2, libc6-dev 2.41-12+deb13u5, xz-utils 5.8.1-1+deb13u2. Verify by reading the

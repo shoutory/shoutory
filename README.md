@@ -97,12 +97,14 @@ by the published `127.0.0.1:3000` port, so `SHOUTORY_PORT` and `SHOUTORY_HOST` a
 The container runs as a non-root user with a read-only filesystem, keeps uploads in the `/data` volume, and `pnpm verify
 --only image-smoke` (needs Docker) checks the built image end to end.
 
-The image carries `ffprobe` (LGPL-2.1-or-later, no GPL or nonfree options) at `/usr/local/bin/ffprobe`, to read the size,
-duration and codec of uploaded videos. It is built from the unmodified FFmpeg 9.0.2 source in the `ffprobe` stage of
-[`docker/Dockerfile`](docker/Dockerfile), which holds the tarball URL, its sha256 and the configure line; the build
-reads local files only and has no network protocol. The image sets `SHOUTORY_FFPROBE_PATH` to it, so an uploaded mp4,
-QuickTime or webm video is probed (15 seconds at most) and becomes ready without being converted or copied;
-[`docs/dependencies.md`](docs/dependencies.md) records the signature check and the build packages.
+The image carries `ffprobe` and `ffmpeg` (LGPL-2.1-or-later, no GPL or nonfree options) in `/usr/local/bin`. They are
+built from the unmodified FFmpeg 9.0.2 source in the `ffmpeg` stage of [`docker/Dockerfile`](docker/Dockerfile), which
+holds the tarball URL, its sha256 and the configure line; the build has no encoder or decoder, reads and writes local
+files only and has no network protocol. The image sets `SHOUTORY_FFPROBE_PATH` and `SHOUTORY_FFMPEG_PATH` to them, so an
+uploaded mp4, QuickTime or webm video is probed for its size, duration and codec (15 seconds at most), then copied
+without re-encoding into the same container with its first picture and first sound only and no metadata (no location,
+no device or encoder tags; 10 minutes at most). The video becomes ready only with that copy, and the copy is what a
+provider receives; [`docs/dependencies.md`](docs/dependencies.md) records the signature check and the build packages.
 
 The worker handles uploaded media one file at a time, apart from its other work, and gives each file up to 30 minutes
 while it keeps its claim on it. Within that time it copies the original from storage and writes what it derives back, so a
@@ -157,7 +159,7 @@ requires `TZ=UTC`.
 | `SHOUTORY_S3_PUBLIC_ENDPOINT`                                               | With driver `s3`: the address browsers upload to through presigned URLs, with the same rules as the endpoint; default the endpoint itself. Set it when the server reaches the bucket at an internal address                                           |
 | `SHOUTORY_MEDIA_SCAN`                                                       | `off` (default) or `warn`: with `warn` each uploaded image or video is scanned by your own ClamAV (`clamd`) and a finding or a failed scan is logged; the upload goes on either way |
 | `SHOUTORY_CLAMAV_HOST`, `SHOUTORY_CLAMAV_PORT`                              | With `warn`: the `clamd` TCP address (host required; port default 3310, 1-65535). `clamd` has no authentication, so keep it on a private network                         |
-| `SHOUTORY_FFPROBE_PATH`                                                     | The absolute path of the `ffprobe` that reads uploaded videos; the image sets it to `/usr/local/bin/ffprobe`. Unset (the default outside the image) or empty turns video off, so an empty value turns it off over the image's setting: a video upload is rejected as an unsupported type. A path that is not an executable file stops the worker at start |
+| `SHOUTORY_FFPROBE_PATH`, `SHOUTORY_FFMPEG_PATH`                             | The absolute paths of the `ffprobe` that reads uploaded videos and the `ffmpeg` that copies them without metadata; the image sets them to `/usr/local/bin/ffprobe` and `/usr/local/bin/ffmpeg`. Set both or neither: one without the other stops the start. Both unset (the default outside the image) or empty turns video off, so empty values turn it off over the image's setting: a video upload is rejected as an unsupported type. A path that is not a working executable stops the worker at start |
 | `SHOUTORY_SCRATCH_DIR`                                                      | The absolute folder, on disk and not in memory, where the worker copies an upload while it checks it, with any storage driver; default `/data/scratch`. A run needs free space of twice the upload's size plus 256 MiB there, or it waits and retries; copies left by a crash are removed when the worker starts |
 | `SHOUTORY_MEDIA_WORKSPACE_MAX_BYTES`                                        | The most bytes one workspace may store, in whole bytes; unset is no cap. It counts stored originals, their resized copies, the sizes of uploads not yet finished and deleted files not yet removed from storage. An upload or import that would pass it answers 422 `storage_full`, and, so the cap holds, an upload longer than the size given at register answers 422 `too_large` |
 | `SHOUTORY_S3_REGION`, `SHOUTORY_S3_BUCKET`                                  | With driver `s3`: the region and the bucket, which must already exist (the server never creates one)                                                                                                                                                   |

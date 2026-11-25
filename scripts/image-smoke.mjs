@@ -109,16 +109,15 @@ function shipped() {
   expect(found.migrations > 0, "no migration file is at /app/packages/db/migrations");
 }
 
-// The rows run independently so every failure is reported together.
-const FFPROBE = "/usr/local/bin/ffprobe";
-const FFPROBE_ROWS = [
+// The rows run independently, for both tools, so every failure is reported together.
+const TOOL_ROWS = (tool) => [
   [
-    "the image's ffprobe starts on a read-only root with no network as the image's user",
+    "starts on a read-only root with no network as the image's user",
     ["-version"],
-    (out) => expect(/^ffprobe version /.test(out), `-version printed: ${tail(out)}`),
+    (out) => expect(new RegExp(`^${tool} version `).test(out), `-version printed: ${tail(out)}`),
   ],
   [
-    "the image's ffprobe is LGPL: -buildconf has no --enable-gpl or --enable-nonfree",
+    "is LGPL: -buildconf has no --enable-gpl or --enable-nonfree",
     ["-buildconf"],
     (out) =>
       expect(
@@ -127,7 +126,7 @@ const FFPROBE_ROWS = [
       ),
   ],
   [
-    "the image's ffprobe names the GNU Lesser General Public License: -L",
+    "names the GNU Lesser General Public License: -L",
     ["-L"],
     // The licence text wraps lines, so the words are compared with their white space collapsed.
     (out) => {
@@ -140,7 +139,7 @@ const FFPROBE_ROWS = [
     },
   ],
   [
-    "the image's ffprobe reads only local files: -protocols lists file and no network protocol as input",
+    "reads only local files: -protocols lists file and no network protocol as input",
     ["-protocols"],
     (out) => {
       const input = /Input:\n([\s\S]*?)\nOutput:/
@@ -155,33 +154,33 @@ const FFPROBE_ROWS = [
   ],
 ];
 
-function ffprobe() {
+function videoTools() {
   const failures = [];
-  for (const [title, args, check] of FFPROBE_ROWS) {
-    step(title);
-    const run = docker(
-      [
-        "run",
-        "--rm",
-        "--read-only",
-        "--network",
-        "none",
-        "--entrypoint",
-        FFPROBE,
-        IMAGE,
-        "-hide_banner",
-        ...args,
-      ],
-      { allowFailure: true },
-    );
-    try {
-      expect(run.status === 0, `ffprobe ${args[0]} exited ${run.status} in the image: ${tail(run.stderr)}`);
-      check(`${run.stdout}${run.stderr}`);
-    } catch (error) {
-      if (!(error instanceof SmokeFailure)) throw error;
-      failures.push(`${title}: ${error.message}`);
+  for (const tool of ["ffprobe", "ffmpeg"])
+    for (const [what, args, check] of TOOL_ROWS(tool)) {
+      const title = `the image's ${tool} ${what}`;
+      step(title);
+      const run = docker(
+        [
+          "run",
+          "--rm",
+          "--read-only",
+          "--network",
+          "none",
+          "--entrypoint",
+          `/usr/local/bin/${tool}`,
+          IMAGE,
+        ].concat(["-hide_banner", ...args]),
+        { allowFailure: true },
+      );
+      try {
+        expect(run.status === 0, `${tool} ${args[0]} exited ${run.status} in the image: ${tail(run.stderr)}`);
+        check(`${run.stdout}${run.stderr}`);
+      } catch (error) {
+        if (!(error instanceof SmokeFailure)) throw error;
+        failures.push(`${title}: ${error.message}`);
+      }
     }
-  }
   expect(failures.length === 0, failures.join(" || "));
 }
 
@@ -208,6 +207,76 @@ function probeVideo() {
     Object.entries(wanted).every(([key, value]) => found?.[key] === value),
     `the shipped probe answered ${JSON.stringify(found)}, not ${JSON.stringify(wanted)}`,
   );
+}
+
+// Inside the container: plant a location in a QuickTime movie (its udta key) and in an mp4 (Apple's metadata key), run
+// the shipped copy on each, and report what ffprobe and the bytes show before and after.
+const GPS = "+40.7128-074.0060/";
+const STRIP_SCRIPT = `
+const { spawnSync } = require("node:child_process");
+const { readFileSync } = require("node:fs");
+const run = (tool, args) => {
+  const quiet = tool === "ffmpeg" ? ["-nostdin", "-v", "error"] : ["-v", "error"];
+  const ended = spawnSync("/usr/local/bin/" + tool, [...quiet, ...args], { encoding: "utf8" });
+  if (ended.status !== 0) throw new Error(tool + " exited " + ended.status + ": " + ended.stderr);
+  return ended.stdout;
+};
+const facts = (path) => {
+  const json = JSON.parse(run("ffprobe", ["-of", "json", "-show_format", "-show_streams", path]));
+  const video = json.streams.find((stream) => stream.codec_type === "video");
+  return { tags: JSON.stringify(json.format.tags ?? {}), video: [video.codec_name, video.width, video.height] };
+};
+const planted = {
+  "/work/gps.mov": ["-metadata", "location=${GPS}", "-f", "mov"],
+  "/work/gps.mp4": ["-metadata", "com.apple.quicktime.location.ISO6709=${GPS}", "-movflags", "use_metadata_tags", "-f", "mp4"],
+};
+import("/app/apps/api/dist/jobs/media/probe-run.js").then(async ({ runRemux }) => {
+  const results = [];
+  for (const [path, how] of Object.entries(planted)) {
+    run("ffmpeg", ["-f", "mov", "-i", "/probe/input.mp4", "-c", "copy", ...how, path]);
+    const out = path + ".stripped";
+    const type = path.endsWith(".mov") ? "video/quicktime" : "video/mp4";
+    const copied = await runRemux({ ffmpegPath: "/usr/local/bin/ffmpeg", inputPath: path, outputPath: out, type });
+    const bytes = readFileSync(out);
+    results.push({
+      path, copied, before: facts(path), after: facts(out),
+      coordinate: bytes.includes("40.7128"), xyz: bytes.includes(Buffer.from([0xa9, 0x78, 0x79, 0x7a])),
+    });
+  }
+  console.log(JSON.stringify(results));
+});`;
+
+function stripVideo() {
+  step(
+    "the shipped copy drops a planted location from a QuickTime movie and an mp4 and keeps the picture, offline",
+  );
+  const run = docker(
+    [
+      "run",
+      "--rm",
+      "--read-only",
+      "--network",
+      "none",
+      "--tmpfs",
+      "/work:size=64m,uid=65532,gid=65532",
+    ].concat(["-v", `${VIDEO_FIXTURE}:/probe/input.mp4:ro`, "--entrypoint", NODE, IMAGE, "-e", STRIP_SCRIPT]),
+    { allowFailure: true },
+  );
+  expect(run.status === 0, `the shipped copy did not run (exit ${run.status}): ${tail(run.stderr)}`);
+  const results = JSON.parse(run.stdout.trim().split("\n").at(-1) ?? "[]");
+  expect(results.length === 2, `the copy reported ${results.length} files, not 2`);
+  for (const result of results) {
+    const said = `${result.path}: ${JSON.stringify(result)}`;
+    expect(result.before.tags.includes("40.7128"), `the location was not planted in ${said}`);
+    expect(result.copied.ok === true, `the copy failed on ${said}`);
+    expect(
+      !/40\.7128|location|ISO6709/i.test(result.after.tags),
+      `ffprobe still shows a location in ${said}`,
+    );
+    expect(!result.coordinate && !result.xyz, `the copy's bytes still hold the location in ${said}`);
+    const same = JSON.stringify(result.before.video) === JSON.stringify(result.after.video);
+    expect(same && result.after.video[0] === "h264", `the picture changed in ${said}`);
+  }
 }
 
 function startDatabase() {
@@ -365,8 +434,9 @@ try {
   build();
   inspect();
   shipped();
-  ffprobe();
+  videoTools();
   probeVideo();
+  stripVideo();
   startDatabase();
   startCollector();
   await migrate();

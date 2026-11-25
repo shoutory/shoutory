@@ -1,13 +1,15 @@
 import { spawn } from "node:child_process";
 import { access, constants, stat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
-import type { RejectReason } from "@shoutory/core/media";
+import type { RejectReason, VideoType } from "@shoutory/core/media";
 
 // The child starts with an empty environment and can open only local files (the image's build has no network protocol,
 // and the argv whitelists `file` again). Its output is checked field by field: nothing is trusted beyond the few facts
 // the pipeline stores.
 
 const TIME_LIMIT_MS = 15_000;
+// A stream copy only reads and writes: a 5 GiB video at 10 MiB/s takes about 8.5 minutes.
+const REMUX_LIMIT_MS = 10 * 60_000;
 const MAX_OUTPUT_BYTES = 256 * 1024;
 // Any other signal that was not ours (the memory killer's, a stop of the host) says nothing of the file, so the run
 // throws and the asset is retried.
@@ -26,8 +28,11 @@ export type ProbeResult =
     }
   | { readonly ok: false; readonly reason: RejectReason };
 
-// The demuxers the image's ffprobe is built with: `mov` reads mp4 and QuickTime, `matroska` reads webm.
+// The demuxers the image's build has: `mov` reads mp4 and QuickTime, `matroska` reads webm.
 type Family = "mov" | "matroska";
+export const FAMILY_OF = { "video/mp4": "mov", "video/quicktime": "mov", "video/webm": "matroska" } as const;
+// The copy keeps the container the sender named, so the stored type stays true.
+const MUXER_OF = { "video/mp4": "mp4", "video/quicktime": "mov", "video/webm": "webm" } as const;
 
 interface Options {
   readonly ffprobePath: string;
@@ -110,13 +115,16 @@ interface Ended {
   readonly tooMuch: boolean;
 }
 
+type Tool = "ffprobe" | "ffmpeg";
+
 function runBounded(
+  tool: Tool,
   binary: string,
   argv: readonly string[],
   timeoutMs: number,
   signal?: AbortSignal,
 ): Promise<Ended> {
-  if (!isAbsolute(binary)) throw new Error("ffprobe is named by an absolute path");
+  if (!isAbsolute(binary)) throw new Error(`${tool} is named by an absolute path`);
   const child = spawn(binary, argv, {
     env: {},
     stdio: ["ignore", "pipe", "ignore"],
@@ -155,51 +163,110 @@ function runBounded(
       if (killing) return;
       clearTimeout(timer);
       if (child.pid !== undefined) child.kill("SIGKILL");
-      reject(new Error(`ffprobe failed: ${error.message}`));
+      reject(new Error(`${tool} failed: ${error.message}`));
     });
   });
 }
 
-// A file ffprobe cannot read, or that prints too much or runs too long, is a verdict on the file. A child that cannot
-// start, is killed by a signal that was not ours or prints no JSON throws, and the asset stays as it was for a retry.
+// A file the tool cannot read, or that prints too much or runs too long, is a verdict on the file. A child that cannot
+// start or is killed by a signal that was not ours throws, and the asset stays as it was for a retry.
+function failureOf(tool: Tool, ended: Ended): RejectReason | undefined {
+  if (ended.timedOut) return "timeout";
+  if (ended.tooMuch) return "corrupt";
+  if (ended.code === null) {
+    if (ended.signal !== null && CRASH_SIGNALS.has(ended.signal)) return "corrupt";
+    throw new Error(`${tool} was killed by ${ended.signal}`);
+  }
+  return ended.code === 0 ? undefined : "corrupt";
+}
+
 export async function runProbe(options: Options): Promise<ProbeResult> {
   if (!isAbsolute(options.inputPath)) throw new Error("the input of ffprobe is named by an absolute path");
   const ended = await runBounded(
+    "ffprobe",
     options.ffprobePath,
     argvFor(options.inputPath, options.demuxer),
     options.timeoutMs ?? TIME_LIMIT_MS,
     options.signal,
   );
-  if (ended.timedOut) return refusal("timeout");
-  if (ended.tooMuch) return refusal("corrupt");
-  if (ended.code === null) {
-    if (ended.signal !== null && CRASH_SIGNALS.has(ended.signal)) return refusal("corrupt");
-    throw new Error(`ffprobe was killed by ${ended.signal}`);
-  }
-  if (ended.code !== 0) return refusal("corrupt");
-  return parseProbe(parseOutput(ended.stdout));
+  const failure = failureOf("ffprobe", ended);
+  return failure ? refusal(failure) : parseProbe(parseOutput(ended.stdout));
 }
 
-const refusedPath = (why: string) => new Error(`SHOUTORY_FFPROBE_PATH ${why}`);
+interface RemuxOptions {
+  readonly ffmpegPath: string;
+  readonly inputPath: string;
+  readonly outputPath: string;
+  readonly type: VideoType;
+  readonly signal?: AbortSignal;
+}
+
+// The first picture that is not a cover (as the probe judged it) and the first sound are copied as they are; no
+// container, stream or chapter metadata is carried over, and bitexact keeps the muxer's own tags out. `-n` never
+// overwrites a file.
+const remuxArgv = ({ inputPath, outputPath, type }: RemuxOptions) => [
+  "-nostdin",
+  "-n",
+  "-protocol_whitelist",
+  "file",
+  "-f",
+  FAMILY_OF[type],
+  "-i",
+  inputPath,
+  "-map",
+  "0:V:0",
+  "-map",
+  "0:a:0?",
+  "-sn",
+  "-dn",
+  "-map_metadata",
+  "-1",
+  "-map_chapters",
+  "-1",
+  "-fflags",
+  "+bitexact",
+  "-c",
+  "copy",
+  "-f",
+  MUXER_OF[type],
+  outputPath,
+];
+
+// A file the probe passed but that cannot be copied is judged as the probe would judge it.
+export async function runRemux(
+  options: RemuxOptions,
+): Promise<{ ok: true } | { ok: false; reason: RejectReason }> {
+  if (!isAbsolute(options.inputPath) || !isAbsolute(options.outputPath))
+    throw new Error("the files of ffmpeg are named by absolute paths");
+  const ended = await runBounded(
+    "ffmpeg",
+    options.ffmpegPath,
+    remuxArgv(options),
+    REMUX_LIMIT_MS,
+    options.signal,
+  );
+  const failure = failureOf("ffmpeg", ended);
+  return failure ? refusal(failure) : { ok: true };
+}
+
 const hasCode = (error: unknown, ...codes: string[]) =>
   error instanceof Error && codes.includes((error as NodeJS.ErrnoException).code ?? "");
 
-async function checkExecutableFile(path: string): Promise<void> {
+// A wrong program at the path would otherwise reject every video as corrupt.
+async function checkToolPath(tool: Tool, variable: string, path: string): Promise<void> {
+  const refused = (why: string) => new Error(`${variable} ${why}`);
   try {
-    if (!(await stat(path)).isFile()) throw refusedPath("is not a file");
+    if (!(await stat(path)).isFile()) throw refused("is not a file");
     await access(path, constants.X_OK);
   } catch (error) {
-    if (hasCode(error, "ENOENT", "ENOTDIR")) throw refusedPath("names no file");
-    if (hasCode(error, "EACCES", "EPERM")) throw refusedPath("is not executable");
+    if (hasCode(error, "ENOENT", "ENOTDIR")) throw refused("names no file");
+    if (hasCode(error, "EACCES", "EPERM")) throw refused("is not executable");
     throw error;
   }
+  const ended = await runBounded(tool, path, ["-version"], TIME_LIMIT_MS);
+  const firstLine = ended.stdout.toString("utf8").split("\n", 1)[0] ?? "";
+  if (ended.code !== 0 || !firstLine.startsWith(`${tool} version`)) throw refused(`is not a working ${tool}`);
 }
 
-// A wrong program at the path would otherwise reject every video as corrupt.
-export async function checkFfprobePath(path: string): Promise<void> {
-  await checkExecutableFile(path);
-  const ended = await runBounded(path, ["-version"], TIME_LIMIT_MS);
-  const firstLine = ended.stdout.toString("utf8").split("\n", 1)[0] ?? "";
-  if (ended.code !== 0 || !firstLine.startsWith("ffprobe version"))
-    throw refusedPath("is not a working ffprobe");
-}
+export const checkFfprobePath = (path: string) => checkToolPath("ffprobe", "SHOUTORY_FFPROBE_PATH", path);
+export const checkFfmpegPath = (path: string) => checkToolPath("ffmpeg", "SHOUTORY_FFMPEG_PATH", path);

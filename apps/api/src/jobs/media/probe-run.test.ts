@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { checkFfprobePath, parseProbe, runProbe } from "./probe-run.js";
+import { checkFfmpegPath, checkFfprobePath, parseProbe, runProbe, runRemux } from "./probe-run.js";
 
 // `spawn` is replaced by a fake child (a real one cannot be killed by a signal on every host); what ffprobe prints is
 // recorded from the shipped binary, and the binary itself is proved in the image smoke test.
@@ -320,5 +320,96 @@ describe("the worker start check on SHOUTORY_FFPROBE_PATH", () => {
     await vi.advanceTimersByTimeAsync(15_000);
     await done;
     expect(child.killed).toEqual(["SIGKILL"]);
+  });
+});
+
+describe("the worker start check on SHOUTORY_FFMPEG_PATH", () => {
+  it("takes ffmpeg and refuses an ffprobe there", async () => {
+    const taken = expect(checkFfmpegPath(BINARY)).resolves.toBeUndefined();
+    await settle();
+    await child.exit(0, "ffmpeg version 9.0.2 Copyright (c) 2000-2026 the FFmpeg developers\n");
+    await taken;
+    child = new FakeChild();
+    const refused = expect(checkFfmpegPath(BINARY)).rejects.toThrow(/SHOUTORY_FFMPEG_PATH/);
+    await settle();
+    await child.exit(0, "ffprobe version 9.0.2\n");
+    await refused;
+  });
+});
+
+const OUTPUT = join(tmpdir(), "remux-output");
+const remux = (extra: object = {}) =>
+  runRemux({ ffmpegPath: BINARY, inputPath: INPUT, outputPath: OUTPUT, type: "video/quicktime", ...extra });
+
+const COPY_FLAGS =
+  "-map 0:V:0 -map 0:a:0? -sn -dn -map_metadata -1 -map_chapters -1 -fflags +bitexact -c copy -f";
+
+describe("the stream copy that strips a video (floor)", () => {
+  // The child reads one local file with no metadata copied, cannot overwrite, and gets nothing of ours.
+  it.each([
+    ["video/mp4", "mov", "mp4"],
+    ["video/quicktime", "mov", "mov"],
+    ["video/webm", "matroska", "webm"],
+  ])(
+    "%s is copied from its own demuxer into the same container, with an empty environment",
+    async (type, demuxer, muxer) => {
+      const done = expect(remux({ type })).resolves.toEqual({ ok: true });
+      await settle();
+      await child.exit(0);
+      await done;
+      const [command, args, options] = vi.mocked(spawn).mock.calls[0] as unknown as [
+        string,
+        string[],
+        Record<string, unknown>,
+      ];
+      expect(command).toBe(BINARY);
+      expect(args).toEqual([
+        ..."-nostdin -n -protocol_whitelist file -f".split(" "),
+        demuxer,
+        "-i",
+        INPUT,
+        ...COPY_FLAGS.split(" "),
+        muxer,
+        OUTPUT,
+      ]);
+      expect([options.env, options.shell ?? false]).toEqual([{}, false]);
+    },
+  );
+
+  it.each([
+    ["an output path that is not absolute", { outputPath: "stripped" }],
+    ["a relative input", { inputPath: "-i" }],
+  ])("refuses %s before anything is started", async (_name, extra) => {
+    await expect(remux(extra)).rejects.toThrow();
+    expect(spawn).not.toHaveBeenCalled();
+  });
+});
+
+describe("the verdict of the stream copy", () => {
+  // A file that probed fine but cannot be copied is judged as the probe would; a failure of ours is retried.
+  it.each([
+    ["exits non-zero", () => child.exit(1), CORRUPT],
+    ["dies of SIGSEGV", async () => void child.emit("close", null, "SIGSEGV"), CORRUPT],
+    [
+      "is killed by a signal that was not ours",
+      async () => void child.emit("close", null, "SIGTERM"),
+      undefined,
+    ],
+  ])("a copy that %s", async (_name, happen, verdict) => {
+    const done = verdict
+      ? expect(remux()).resolves.toEqual(verdict)
+      : expect(remux()).rejects.toThrow(/ffmpeg/);
+    await settle();
+    await happen();
+    await done;
+  });
+
+  it("is killed at 10 minutes and the video is rejected as a timeout", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const done = remux();
+    await vi.advanceTimersByTimeAsync(599_999);
+    expect(child.killed).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(done).resolves.toEqual(TIMEOUT);
   });
 });

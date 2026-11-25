@@ -48,12 +48,12 @@ interface ReadyMedium {
   mime: string;
   width: number;
   height: number;
-  /** The size of the `stripped` copy of an image, or of the original of a video: the bytes a provider receives. */
+  /** The size of the `stripped` copy, or of the original of a video made ready before videos had one. */
   bytes: number;
   durationMs: number | null;
 }
 
-// A video has no derivative and is sent as the original; an image needs its `stripped` copy.
+// An image needs its `stripped` copy. A video made ready before videos had one is still taken, by its original.
 async function readyMedia(
   tx: TenantTx,
   workspaceId: string,

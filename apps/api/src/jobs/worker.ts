@@ -38,7 +38,7 @@ export interface WorkerOptions {
   readonly pool: AppPool;
   readonly logger: Logger;
   readonly role: "worker" | "all";
-  readonly media: Pick<PipelineDeps, "storage" | "scan" | "ffprobe" | "scratchDir"> & {
+  readonly media: Pick<PipelineDeps, "storage" | "scan" | "video" | "scratchDir"> & {
     // Set only for the filesystem driver: the nightly sweep of upload parts runs over it.
     readonly partsRoot?: string;
   };

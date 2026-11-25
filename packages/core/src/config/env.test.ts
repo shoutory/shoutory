@@ -300,21 +300,42 @@ describe("start-up: storage settings", () => {
   });
 });
 
-describe("start-up: the ffprobe path", () => {
-  it("is optional (video probing is off without it, or with an empty value over the image's) and an absolute path is taken as given", () => {
-    expect(parseEnv(valid).ffprobePath).toBeUndefined();
-    expect(parseEnv(withValue("SHOUTORY_FFPROBE_PATH", "")).ffprobePath).toBeUndefined();
-    expect(parseEnv(withValue("SHOUTORY_FFPROBE_PATH", "/usr/local/bin/ffprobe")).ffprobePath).toBe(
-      "/usr/local/bin/ffprobe",
-    );
+describe("start-up: the video tools", () => {
+  const tools = (ffprobe: string, ffmpeg: string): Env => ({
+    ...valid,
+    SHOUTORY_FFPROBE_PATH: ffprobe,
+    SHOUTORY_FFMPEG_PATH: ffmpeg,
+  });
+
+  it("are both set or both off (unset, or empty over the image's values), and absolute paths are taken as given", () => {
+    expect(parseEnv(valid).videoTools).toBeUndefined();
+    expect(parseEnv(tools("", "")).videoTools).toBeUndefined();
+    expect(parseEnv(tools("/usr/local/bin/ffprobe", "/usr/local/bin/ffmpeg")).videoTools).toEqual({
+      ffprobe: "/usr/local/bin/ffprobe",
+      ffmpeg: "/usr/local/bin/ffmpeg",
+    });
+  });
+
+  // A video is never made ready without its stripped copy, so one tool alone is a wrong setup, not video off.
+  it.each([
+    ["ffprobe without ffmpeg", tools("/usr/local/bin/ffprobe", ""), "SHOUTORY_FFMPEG_PATH"],
+    ["ffmpeg without ffprobe", tools("", "/usr/local/bin/ffmpeg"), "SHOUTORY_FFPROBE_PATH"],
+    [
+      "ffprobe alone, ffmpeg unset",
+      withValue("SHOUTORY_FFPROBE_PATH", "/usr/local/bin/ffprobe"),
+      "SHOUTORY_FFMPEG_PATH",
+    ],
+  ])("refuses %s and names the missing variable", (_name, env, missing) => {
+    expect(refusedVariable(env)).toBe(missing);
   });
 
   it.each([
-    ["a bare program name, which would be searched on the path", "ffprobe"],
-    ["a relative path", "bin/ffprobe"],
-    ["a URL", "https://media.example.test/ffprobe"],
-  ])("refuses %s and names the variable", (_name, value) => {
-    expect(refusedVariable(withValue("SHOUTORY_FFPROBE_PATH", value))).toBe("SHOUTORY_FFPROBE_PATH");
+    ["a bare program name, which would be searched on the path", "SHOUTORY_FFPROBE_PATH", "ffprobe"],
+    ["a relative path", "SHOUTORY_FFMPEG_PATH", "bin/ffmpeg"],
+    ["a URL", "SHOUTORY_FFMPEG_PATH", "https://media.example.test/ffmpeg"],
+  ])("refuses %s and names the variable", (_name, key, value) => {
+    const env = { ...tools("/usr/local/bin/ffprobe", "/usr/local/bin/ffmpeg"), [key]: value };
+    expect(refusedVariable(env)).toBe(key);
   });
 });
 

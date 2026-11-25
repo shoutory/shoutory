@@ -76,16 +76,16 @@ test("the debug and the default runtime bases name the same Node version", () =>
   assert.equal(debug, base, "the debug image runs another Node than the shipped one");
 });
 
-test("the ffprobe stage uses the build stage's base and a checksummed FFmpeg tarball with an LGPL-only, local-files-only configure line", () => {
-  const at = lines.findIndex((line) => /^FROM node:\S+ AS ffprobe$/.test(line));
-  assert.ok(at > 0, "no ffprobe stage");
+test("the ffmpeg stage uses the build stage's base and a checksummed FFmpeg tarball with an LGPL-only, local-files-only configure line", () => {
+  const at = lines.findIndex((line) => /^FROM node:\S+ AS ffmpeg$/.test(line));
+  assert.ok(at > 0, "no ffmpeg stage");
   assert.match(
     lines[at - 1],
     /[Ii]ndex digest read 20\d\d-\d\d-\d\d/,
     "no digest-read date on the line above the pin",
   );
   const base = lines.find((line) => /^FROM node:\S+ AS build$/.test(line))?.replace(/ AS build$/, "");
-  assert.equal(lines[at], `${base} AS ffprobe`, "the ffprobe stage is not on the build stage's base digest");
+  assert.equal(lines[at], `${base} AS ffmpeg`, "the ffmpeg stage is not on the build stage's base digest");
   const end = lines.findIndex((line, index) => index > at && line.startsWith("FROM "));
   const stage = lines.slice(at, end).join("\n");
   assert.match(
@@ -99,17 +99,17 @@ test("the ffprobe stage uses the build stage's base and a checksummed FFmpeg tar
     .join("\n")
     .replaceAll(/\\\n/g, " ");
   const configures = command.match(/\.\/configure\b[^&|;\n]*/g) ?? [];
-  assert.equal(configures.length, 1, "the ffprobe stage must run ./configure exactly once");
+  assert.equal(configures.length, 1, "the ffmpeg stage must run ./configure exactly once");
   const options = configures[0].split(/\s+/).slice(1).filter(Boolean).sort();
   assert.deepEqual(options, [
     "--disable-autodetect",
     "--disable-doc",
     "--disable-everything",
-    "--disable-ffmpeg",
     "--disable-ffplay",
     "--disable-network",
     "--disable-x86asm",
     "--enable-demuxer=mov,matroska",
+    "--enable-muxer=mp4,mov,webm",
     "--enable-protocol=file",
   ]);
 });
@@ -120,29 +120,31 @@ test("every ADD of a URL carries a sha256 checksum", () => {
   for (const add of adds) assert.match(add, /^ADD --checksum=sha256:[0-9a-f]{64} https?:\/\//, add);
 });
 
-test("the nonroot and debug runtime stages copy ffprobe from the one ffprobe stage and tell the app where it is", () => {
-  const copy = /^COPY --from=ffprobe \/usr\/local\/bin\/ffprobe \/usr\/local\/bin\/ffprobe$/m;
-  const where = /^ENV SHOUTORY_FFPROBE_PATH=\/usr\/local\/bin\/ffprobe$/m;
+test("the nonroot and debug runtime stages copy ffprobe and ffmpeg from the one ffmpeg stage and tell the app where they are", () => {
   const debug = lines.findIndex((line) => / AS debug$/.test(line));
   const last = lines.findLastIndex((line) => line.startsWith("FROM "));
   for (const [name, stage] of [
     ["debug", lines.slice(debug, last).join("\n")],
     ["default", lines.slice(last).join("\n")],
   ]) {
-    assert.match(stage, copy, `the ${name} image lacks ffprobe`);
-    assert.match(stage, where, `the ${name} image does not set SHOUTORY_FFPROBE_PATH`);
+    for (const tool of ["ffprobe", "ffmpeg"]) {
+      const copy = new RegExp(`^COPY --from=ffmpeg /usr/local/bin/${tool} /usr/local/bin/${tool}$`, "m");
+      const where = new RegExp(`^ENV SHOUTORY_${tool.toUpperCase()}_PATH=/usr/local/bin/${tool}$`, "m");
+      assert.match(stage, copy, `the ${name} image lacks ${tool}`);
+      assert.match(stage, where, `the ${name} image does not tell the app where ${tool} is`);
+    }
   }
 });
 
-test("the Dockerfile uses no package runner, corepack or downloader, and apt-get only in the ffprobe stage with retries", () => {
+test("the Dockerfile uses no package runner, corepack or downloader, and apt-get only in the ffmpeg stage with retries", () => {
   assert.ok(dockerfile.length > 0, "there is no docker/Dockerfile");
   for (const word of ["npx", "dlx", "corepack", "curl", "wget"]) {
     assert.doesNotMatch(dockerfile, new RegExp(`\\b${word}\\b`), word);
   }
   for (const stage of dockerfile.split(/^(?=FROM )/m)) {
-    const own = /^FROM .* AS ffprobe$/m.test(stage.split("\n")[0]);
+    const own = /^FROM .* AS ffmpeg$/m.test(stage.split("\n")[0]);
     if (!own)
-      assert.doesNotMatch(stage, /\bapt-get\b/, `apt-get outside the ffprobe stage: ${stage.split("\n")[0]}`);
+      assert.doesNotMatch(stage, /\bapt-get\b/, `apt-get outside the ffmpeg stage: ${stage.split("\n")[0]}`);
     for (const call of stage.match(/\bapt-get\b[^\n]*/g) ?? []) {
       assert.match(call, /^apt-get -o Acquire::Retries=5 /, `apt-get without retries: ${call}`);
     }
