@@ -150,6 +150,7 @@ export interface Api {
   mediaFit?: (query: URLSearchParams) => Response | Promise<Response>;
   mediaPatch?: MediumAnswer;
   mediaDelete?: MediumAnswer;
+  archive?: (action: string, workspace: string) => Response | Promise<Response>;
 }
 type MediumAnswer = (id: string, body: unknown) => Response | Promise<Response>;
 
@@ -278,6 +279,15 @@ function mediaAnswers(
   if (/^media\/[^/]+\/fit$/.test(rest))
     return () => (api.mediaFit ?? (() => mediaPage([])))(url.searchParams);
   return undefined;
+}
+
+const archived = (action: string, workspace: string) =>
+  json({ data: { id: workspace, archived_at: action === "archive" ? "2026-11-26T10:00:00.000Z" : null } });
+
+function archiveAnswers(api: Api, pathname: string, method: string): Answer | undefined {
+  const [, workspace = "", action = ""] =
+    /^\/api\/v1\/workspaces\/([^/]+)\/(archive|unarchive)$/.exec(pathname) ?? [];
+  return method === "POST" && action !== "" ? () => (api.archive ?? archived)(action, workspace) : undefined;
 }
 
 function hubAnswers(api: Api, url: URL, method: string, body?: BodyInit | null): Answer | undefined {
@@ -551,6 +561,7 @@ export function stubApi(api: Api = {}) {
       answers[pathname] ??
       membersAnswers(api, pathname, method) ??
       channelAnswers(api, pathname, method) ??
+      archiveAnswers(api, pathname, method) ??
       hubAnswers(api, url, method, init?.body) ??
       adminAnswers(api, pathname, method);
     return Promise.resolve(answer ? answer() : refusal("not_found", 404));

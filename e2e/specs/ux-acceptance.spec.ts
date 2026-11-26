@@ -327,6 +327,28 @@ function topBarCase(locale: "en" | "ar", width: number) {
   });
 }
 
+// Archive is three steps (open the clients, Archive, confirm) and Restore two; the workspace is active again at the end.
+test("archiving a client states its impact first, marks the workspace read-only, and Restore undoes it", async ({
+  browser,
+}) => {
+  await inPage(browser, { audience: "founder", locale: "en", theme: "light" }, async (page) => {
+    const client = await createClient(page, `Archive target ${randomUUID().slice(0, 8)}`);
+    await page.goto(`/o/${client.organization}/clients`);
+    const row = page.locator("tr", { hasText: client.name });
+    await row.getByTestId("workspace-archive").click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toContainText(message("archive.impact", "en"));
+    await dialog.getByRole("button", { name: message("archive.archive", "en") }).click();
+    await expect(dialog).toBeHidden();
+    await expect(row).toHaveCount(0);
+    await page.goto(`/w/${client.id}`);
+    const banner = page.getByTestId("archived-banner");
+    await expect(banner).toContainText(client.name);
+    await banner.getByTestId("workspace-restore").click();
+    await expect(banner).toBeHidden();
+  });
+});
+
 // Last in its project: this person makes an organization of their own, which nothing after it may count on. They signed
 // up through an invitation they never accepted, so they have no workspace and are shown the form that makes one.
 test("a creator-only account shows no organization, client or billing UI, and gets its workspace from one form", async ({

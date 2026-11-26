@@ -6,6 +6,7 @@ import {
   closeApp,
   json,
   openApp,
+  pageOf,
   refusal,
   stubApi,
   WORKSPACE_KEY,
@@ -83,6 +84,38 @@ describe("opening a workspace", () => {
     stubApi({ workspaces: () => json({ data: [], meta: { next_cursor: null } }) });
     const { host } = await openApp("/w/w1");
     expect(host.querySelector('main [data-kind="first-use"]')).not.toBeNull();
+  });
+});
+
+const ARCHIVED = "2026-11-25T10:00:00.000Z";
+const archivedOnly = (ids: string[]) =>
+  pageOf(WORKSPACES.map((row) => (ids.includes(row.id) ? { ...row, archived_at: ARCHIVED } : row)));
+
+describe("an archived workspace", () => {
+  it.each([
+    ["a stored workspace that is archived", ["w2"], "w2", "/w/w1"],
+    ["the first workspace archived", ["w1"], null, "/w/w2"],
+    ["every workspace archived", ["w1", "w2", "w3"], "w2", "/w/w2"],
+  ])("`/` with %s lands on an active one while one exists", async (_name, ids, stored, expected) => {
+    stubApi({ workspaces: archivedOnly(ids) });
+    if (stored) localStorage.setItem(WORKSPACE_KEY, stored);
+    const { router } = await openApp("/");
+    expect(router.state.location.pathname).toBe(expected);
+  });
+
+  it("an archived workspace shows the read-only banner with Restore on its screens, and the switcher marks it", async () => {
+    stubApi({ workspaces: archivedOnly(["w1"]) });
+    const { host } = await openApp("/w/w1");
+    const banner = host.querySelector('main [data-testid="archived-banner"]');
+    expect(banner?.textContent).toMatch(/acme one is archived\. it is read-only/i);
+    expect(banner?.querySelector('[data-testid="workspace-restore"]')).not.toBeNull();
+    click(byText(host, "button", "Ctrl/Cmd+K"));
+    const marks = [...document.querySelectorAll('[role="option"]')].map((option) => option.textContent);
+    expect(marks.slice(0, 2)).toEqual(["Acme One (Archived)", "Acme Two"]);
+    closeApp();
+    stubApi({ workspaces: archivedOnly(["w1"]) });
+    const other = await openApp("/w/w2");
+    expect(other.host.querySelector('[data-testid="archived-banner"]')).toBeNull();
   });
 });
 

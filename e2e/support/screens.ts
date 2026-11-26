@@ -203,6 +203,22 @@ async function fulfilLibrary(page: Page, workspace: string): Promise<void> {
   );
 }
 
+// The image's workspace is active, so its list answer is rewritten to show it archived, under a fixed name.
+async function archiveInList(page: Page, workspace: string): Promise<void> {
+  await page.route(/\/api\/v1\/workspaces\?/, async (route) => {
+    const answer = await route.fetch();
+    const body = (await answer.json()) as {
+      data: { id: string; name: string; archived_at: string | null }[];
+    };
+    for (const row of body.data) {
+      if (row.id !== workspace) continue;
+      row.name = "Archived Client";
+      row.archived_at = "2026-11-22T10:00:00.000Z";
+    }
+    return route.fulfill({ response: answer, json: body });
+  });
+}
+
 export const SCREENS: readonly Screen[] = [
   signedOut("sign-in", "/sign-in"),
   // The challenge screen is open only after a password step; the spec makes that step before it opens this.
@@ -219,6 +235,15 @@ export const SCREENS: readonly Screen[] = [
   founder("security", "/account/security", () => "/account/security", ["sessions-scroll"]),
   founder("two-factor-setup", "/account/security/two-factor", () => "/account/security/two-factor"),
   founder("workspace", "/w/:ws", (c) => `/w/${c.workspace}`),
+  {
+    id: "archived-workspace",
+    pattern: "/w/:ws",
+    audience: "founder",
+    open: async (page, context) => {
+      await archiveInList(page, context.workspace);
+      await visit((c) => `/w/${c.workspace}`)(page, context);
+    },
+  },
   founder("general", "/w/:ws/settings/general", (c) => `/w/${c.workspace}/settings/general`),
   founder("members", "/w/:ws/settings/members", (c) => `/w/${c.workspace}/settings/members`, [
     "members-scroll",
@@ -360,6 +385,24 @@ export const DIALOGS: readonly Dialog[] = [
     titleId: "org.clients.add",
     open: async (page) => {
       await page.getByTestId("clients-add").click();
+      await dialog(page);
+    },
+  },
+  {
+    id: "archive-client",
+    screen: "clients",
+    titleId: "archive.title",
+    open: async (page) => {
+      await page.getByTestId("workspace-archive").first().click();
+      await dialog(page);
+    },
+  },
+  {
+    id: "avatar",
+    screen: "general",
+    titleId: "avatar.choose",
+    open: async (page) => {
+      await page.getByTestId("avatar-choose").click();
       await dialog(page);
     },
   },

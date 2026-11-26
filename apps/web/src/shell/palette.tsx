@@ -13,6 +13,7 @@ import { useNavigate } from "react-router";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { DirText } from "../ui/dir-text";
+import { ArchivedMark } from "./choice-list";
 import type { Workspace } from "./shell-data";
 
 export function Palette({ workspaces }: { workspaces: Workspace[] }) {
@@ -76,6 +77,7 @@ export function Palette({ workspaces }: { workspaces: Workspace[] }) {
                 className="min-h-6 pointer-coarse:min-h-11 cursor-default rounded-sm px-3 py-2 outline-none data-[focused]:bg-highlight"
               >
                 <DirText>{workspace.name}</DirText>
+                <ArchivedMark choice={workspace} />
               </ListBoxItem>
             )}
           </ListBox>

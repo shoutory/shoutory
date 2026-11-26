@@ -2580,3 +2580,111 @@ msgstr "Make <0>{name}</0> the Owner?"
 #. js-lingui-explicit-id
 msgid "members.make_owner_body"
 msgstr "<0>{name}</0> becomes the Owner of this workspace and you become an Admin. Only the new Owner can undo this."
+
+#. js-lingui-explicit-id
+msgid "auth.copy.archived.what"
+msgstr "This workspace is archived"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.archived.meaning"
+msgstr "It is read-only, so nothing was changed. An owner or admin can restore it."
+
+#. js-lingui-explicit-id
+msgid "auth.copy.deletion_requested.what"
+msgstr "This workspace is being deleted"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.deletion_requested.meaning"
+msgstr "Nothing was changed. A workspace waiting for deletion cannot be archived."
+
+#. js-lingui-explicit-id
+msgid "shell.archived_mark"
+msgstr "(Archived)"
+
+#. js-lingui-explicit-id
+msgid "archive.archive"
+msgstr "Archive"
+
+#. js-lingui-explicit-id
+msgid "archive.restore"
+msgstr "Restore"
+
+#. js-lingui-explicit-id
+msgid "archive.need_admin"
+msgstr "Only an owner or admin can archive or restore."
+
+#. js-lingui-explicit-id
+msgid "archive.title"
+msgstr "Archive <0>{name}</0>?"
+
+#. js-lingui-explicit-id
+msgid "archive.impact"
+msgstr "The workspace becomes read-only and nothing in it is published while it is archived. Posts already being published finish. Its history stays. Restore undoes this; a post whose time passed beyond the late-publish window while archived is marked missed."
+
+#. js-lingui-explicit-id
+msgid "archive.banner"
+msgstr "<0>{0}</0> is archived. It is read-only and nothing in it is published."
+
+#. js-lingui-explicit-id
+msgid "org.clients.show_archived"
+msgstr "Show archived clients"
+
+#. js-lingui-explicit-id
+msgid "org.clients.all_archived"
+msgstr "Every client is archived"
+
+#. js-lingui-explicit-id
+msgid "org.clients.template"
+msgstr "Copy settings from"
+
+#. js-lingui-explicit-id
+msgid "org.clients.no_template"
+msgstr "No template"
+
+#. js-lingui-explicit-id
+msgid "org.clients.template_hint"
+msgstr "Copies the colour, the time zone and the late-publish window. Channels, posts and members are not copied."
+
+#. js-lingui-explicit-id
+msgid "org.clients.template_gone.what"
+msgstr "That template client is no longer available"
+
+#. js-lingui-explicit-id
+msgid "org.clients.template_gone.meaning"
+msgstr "Nothing was created. Choose another template or none."
+
+#. js-lingui-explicit-id
+msgid "avatar.title"
+msgstr "Picture"
+
+#. js-lingui-explicit-id
+msgid "avatar.choose"
+msgstr "Choose picture"
+
+#. js-lingui-explicit-id
+msgid "avatar.remove"
+msgstr "Remove picture"
+
+#. js-lingui-explicit-id
+msgid "avatar.use"
+msgstr "Use {0}"
+
+#. js-lingui-explicit-id
+msgid "avatar.more"
+msgstr "Show more images"
+
+#. js-lingui-explicit-id
+msgid "avatar.empty.title"
+msgstr "No images yet"
+
+#. js-lingui-explicit-id
+msgid "avatar.empty.body"
+msgstr "Images in the <0>media library</0> appear here once they are ready."
+
+#. js-lingui-explicit-id
+msgid "avatar.unavailable.what"
+msgstr "That image can no longer be used"
+
+#. js-lingui-explicit-id
+msgid "avatar.unavailable.meaning"
+msgstr "It was deleted or is not ready. Choose another. Nothing was changed."

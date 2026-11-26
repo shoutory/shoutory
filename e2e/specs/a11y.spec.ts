@@ -7,6 +7,15 @@ import { DIALOGS, ERROR_PAGES, LOCALES, message, openErrorPage, SCREENS, THEMES 
 const TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 const DIRECTIONS = { en: "ltr", ar: "rtl" } as const;
 
+// A title that names a record (`Archive <0>{name}</0>?`) matches with any text where its placeholders are.
+const titled = (text: string): RegExp =>
+  new RegExp(
+    `^${text
+      .split(/<\d+>\{\w+\}<\/\d+>|\{\w+\}/)
+      .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join(".+")}$`,
+  );
+
 async function violations(page: Page): Promise<string[]> {
   const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
   return results.violations.map(
@@ -55,7 +64,9 @@ for (const locale of LOCALES) {
         await inPage(browser, options(screen.audience), async (page) => {
           await openScreen(page, screen, browser);
           await dialog.open(page, (await qualityRun(browser)).context);
-          await expect(page.getByRole("dialog", { name: message(dialog.titleId, locale) })).toBeVisible();
+          await expect(
+            page.getByRole("dialog", { name: titled(message(dialog.titleId, locale)) }),
+          ).toBeVisible();
           await expectCell(page, locale, theme);
           expect(await violations(page)).toEqual([]);
         });

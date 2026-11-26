@@ -4,6 +4,7 @@ import { Link as AriaLink } from "react-aria-components";
 import { Link, Navigate, NavLink, Outlet, useParams, useRevalidator, useSearchParams } from "react-router";
 import { Onboarding } from "../onboarding/onboarding";
 import { NotFoundPage } from "../pages/system-pages";
+import { ArchivedBanner } from "../settings/archive";
 import { DirText } from "../ui/dir-text";
 import { EmptyState } from "../ui/empty-state";
 import { ErrorPanel } from "../ui/error-panel";
@@ -136,6 +137,7 @@ export function Shell() {
       <Rail />
       <main id="main" tabIndex={-1} className="flex flex-col gap-5 px-5 py-8 pb-20 outline-none md:pb-8">
         <OfflineBanner />
+        <ArchivedBanner />
         <Outlet />
       </main>
     </div>
@@ -186,8 +188,11 @@ export function StartPage() {
   const [params] = useSearchParams();
   if ("error" in data) return <Welcome />;
   if (data.workspaces.length > 0) {
+    // An archived workspace is never the landing while an active one exists; it stays reachable by the switcher.
+    const active = data.workspaces.filter((workspace) => !workspace.archived_at);
+    const candidates = active.length > 0 ? active : data.workspaces;
     const stored = lastWorkspace();
-    const target = data.workspaces.find((workspace) => workspace.id === stored) ?? data.workspaces[0];
+    const target = candidates.find((workspace) => workspace.id === stored) ?? candidates[0];
     return <Navigate to={`/w/${target?.id}`} replace />;
   }
   // An organization I own or administer with no workspace is always resumed, `?new` or not: a reload after a failed

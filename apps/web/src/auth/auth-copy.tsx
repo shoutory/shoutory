@@ -130,8 +130,30 @@ const KEY_REUSED: Words = {
   ),
 };
 
+// A refusal that any write screen can meet is named by its reason, whatever the screen.
+const BY_REASON: Record<string, Words> = {
+  idempotency_key_reused: KEY_REUSED,
+  workspace_archived: {
+    what: <Trans id="auth.copy.archived.what">This workspace is archived</Trans>,
+    meaning: (
+      <Trans id="auth.copy.archived.meaning">
+        It is read-only, so nothing was changed. An owner or admin can restore it.
+      </Trans>
+    ),
+  },
+  deletion_requested: {
+    what: <Trans id="auth.copy.deletion_requested.what">This workspace is being deleted</Trans>,
+    meaning: (
+      <Trans id="auth.copy.deletion_requested.meaning">
+        Nothing was changed. A workspace waiting for deletion cannot be archived.
+      </Trans>
+    ),
+  },
+};
+
 export function authCopy(screen: Screen, error: ApiError): Words {
-  if (error.details?.reason === "idempotency_key_reused") return KEY_REUSED;
+  const named = BY_REASON[error.details?.reason ?? ""];
+  if (named) return named;
   const own = BY_CODE[screen][error.code];
   if (own) return own;
   if (error.code === "too_many_requests") return TOO_MANY;

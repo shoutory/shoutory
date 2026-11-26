@@ -15,9 +15,10 @@ const cells = (table: string, ...columns: number[]): string[] =>
 const VOLATILE: Readonly<Record<string, readonly string[]>> = {
   start: [HEADING],
   workspace: [HEADING],
+  "archived-workspace": [HEADING],
   profile: ['main input[name="name"]', 'main input[type="email"]'],
   security: cells("sessions-scroll", 1, 2),
-  general: ['main input[name="name"]', 'main input[name="slug"]'],
+  general: ['main input[name="name"]', 'main input[name="slug"]', '[data-testid="workspace-avatar"]'],
   members: [...cells("members-scroll", 1), ...cells("invitations-scroll", 1, 3)],
   clients: cells("clients-scroll", 1, 2),
   flags: ['[data-testid="flag-remove-by"]'],

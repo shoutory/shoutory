@@ -14,7 +14,9 @@ import { Button } from "../ui/button";
 import { ErrorPanel } from "../ui/error-panel";
 import { TextField } from "../ui/text-field";
 import { ZonePicker } from "../zones/zone-picker";
+import { ArchiveControl } from "./archive";
 import { SWATCHES } from "./swatches";
+import { AvatarPicker } from "./workspace-avatar";
 
 const MAX_NAME = 128;
 const SLUG = /^[a-z0-9][a-z0-9-]{0,62}$/;
@@ -51,7 +53,8 @@ function changesOf(draft: Draft, saved: Profile) {
 }
 
 function saveCopy(error: ApiError) {
-  if (error.code === "conflict")
+  // A conflict with a reason (an archived workspace) is not a taken address name.
+  if (error.code === "conflict" && !error.details?.reason)
     return {
       what: <Trans id="settings.general.slug_taken.what">That address name is already used</Trans>,
       meaning: (
@@ -254,10 +257,13 @@ const WorkspaceHeading = () => (
 function General({ workspace }: { workspace: Workspace }) {
   const { state, reload } = useLoad(profileSchema, `/api/v1/workspaces/${workspace.id}`);
   const permissions: Readonly<Record<string, readonly string[] | undefined>> = ROLE_PERMISSIONS;
-  const canEdit = permissions[workspace.role]?.includes("settings.manage") ?? false;
+  const allowed = permissions[workspace.role]?.includes("settings.manage") ?? false;
+  // An archived workspace is read-only; the banner above offers Restore.
+  const canEdit = allowed && !workspace.archived_at;
   return (
     <>
       <WorkspaceHeading />
+      <AvatarPicker workspace={workspace} canEdit={canEdit} />
       {state.status === "loading" ? (
         <p role="status">
           <Trans id="system.loading">Loading</Trans>
@@ -267,6 +273,7 @@ function General({ workspace }: { workspace: Workspace }) {
         <ErrorPanel focusOnMount error={state.error} onRetry={reload} {...authCopy("link", state.error)} />
       ) : null}
       {state.status === "done" ? <GeneralForm profile={state.data} canEdit={canEdit} /> : null}
+      {workspace.archived_at ? null : <ArchiveControl workspace={workspace} />}
     </>
   );
 }

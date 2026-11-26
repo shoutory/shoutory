@@ -2578,3 +2578,111 @@ msgstr "جعل <0>{name}</0> مالكًا لمساحة العمل؟"
 #. js-lingui-explicit-id
 msgid "members.make_owner_body"
 msgstr "سيصبح <0>{name}</0> مالك مساحة العمل هذه وتصبح أنت مديرًا. لا يتراجع عن ذلك إلا المالك الجديد."
+
+#. js-lingui-explicit-id
+msgid "auth.copy.archived.what"
+msgstr "مساحة العمل هذه مؤرشفة"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.archived.meaning"
+msgstr "هي للقراءة فقط، لذلك لم يتغير شيء. يستطيع المالك أو المدير استعادتها."
+
+#. js-lingui-explicit-id
+msgid "auth.copy.deletion_requested.what"
+msgstr "مساحة العمل هذه قيد الحذف"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.deletion_requested.meaning"
+msgstr "لم يتغير شيء. لا يمكن أرشفة مساحة عمل تنتظر الحذف."
+
+#. js-lingui-explicit-id
+msgid "shell.archived_mark"
+msgstr "(مؤرشفة)"
+
+#. js-lingui-explicit-id
+msgid "archive.archive"
+msgstr "أرشفة"
+
+#. js-lingui-explicit-id
+msgid "archive.restore"
+msgstr "استعادة"
+
+#. js-lingui-explicit-id
+msgid "archive.need_admin"
+msgstr "الأرشفة والاستعادة للمالك أو المدير فقط."
+
+#. js-lingui-explicit-id
+msgid "archive.title"
+msgstr "أرشفة <0>{name}</0>؟"
+
+#. js-lingui-explicit-id
+msgid "archive.impact"
+msgstr "تصبح مساحة العمل للقراءة فقط ولا يُنشر منها شيء ما دامت مؤرشفة. المنشورات التي بدأ نشرها تكتمل. يبقى سجلها كما هو. الاستعادة تلغي هذا؛ والمنشور الذي فات موعده أكثر من مهلة التأخير أثناء الأرشفة يُعلَّم بأنه فائت."
+
+#. js-lingui-explicit-id
+msgid "archive.banner"
+msgstr "<0>{0}</0> مؤرشفة. هي للقراءة فقط ولا يُنشر منها شيء."
+
+#. js-lingui-explicit-id
+msgid "org.clients.show_archived"
+msgstr "إظهار العملاء المؤرشفين"
+
+#. js-lingui-explicit-id
+msgid "org.clients.all_archived"
+msgstr "كل العملاء مؤرشفون"
+
+#. js-lingui-explicit-id
+msgid "org.clients.template"
+msgstr "نسخ الإعدادات من"
+
+#. js-lingui-explicit-id
+msgid "org.clients.no_template"
+msgstr "بلا قالب"
+
+#. js-lingui-explicit-id
+msgid "org.clients.template_hint"
+msgstr "يُنسخ اللون والمنطقة الزمنية ومهلة التأخير. لا تُنسخ القنوات ولا المنشورات ولا الأعضاء."
+
+#. js-lingui-explicit-id
+msgid "org.clients.template_gone.what"
+msgstr "لم يعد هذا العميل متاحًا كقالب"
+
+#. js-lingui-explicit-id
+msgid "org.clients.template_gone.meaning"
+msgstr "لم يُنشأ شيء. اختر قالبًا آخر أو بلا قالب."
+
+#. js-lingui-explicit-id
+msgid "avatar.title"
+msgstr "الصورة"
+
+#. js-lingui-explicit-id
+msgid "avatar.choose"
+msgstr "اختيار صورة"
+
+#. js-lingui-explicit-id
+msgid "avatar.remove"
+msgstr "إزالة الصورة"
+
+#. js-lingui-explicit-id
+msgid "avatar.use"
+msgstr "استخدام {0}"
+
+#. js-lingui-explicit-id
+msgid "avatar.more"
+msgstr "إظهار صور أخرى"
+
+#. js-lingui-explicit-id
+msgid "avatar.empty.title"
+msgstr "لا توجد صور بعد"
+
+#. js-lingui-explicit-id
+msgid "avatar.empty.body"
+msgstr "تظهر هنا صور <0>مكتبة الوسائط</0> حين تجهز."
+
+#. js-lingui-explicit-id
+msgid "avatar.unavailable.what"
+msgstr "لم يعد ممكنًا استخدام هذه الصورة"
+
+#. js-lingui-explicit-id
+msgid "avatar.unavailable.meaning"
+msgstr "حُذفت أو لم تجهز بعد. اختر غيرها. لم يتغير شيء."
