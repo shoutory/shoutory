@@ -8,6 +8,7 @@ import {
   json,
   openApp,
   refusal,
+  SESSION,
   stubApi,
   type,
 } from "../../test/support/app";
@@ -85,6 +86,142 @@ describe("the profile name", () => {
     await save(host, "Kept Name");
     expect(host.querySelector('[role="alert"]')).not.toBeNull();
     expect(nameField(host)?.value).toBe("Kept Name");
+  });
+});
+
+const AT = "2026-11-20T08:00:00.000Z";
+const withPicture = () => json({ data: { ...SESSION.data, user: { ...SESSION.data.user, avatarAt: AT } } });
+const picture = (host: ParentNode) => host.querySelector<HTMLElement>('[data-testid="profile-picture"]');
+const fileInput = (host: ParentNode) => {
+  const input = host.querySelector<HTMLInputElement>('input[type="file"]');
+  if (!input) throw new Error("the page has no file input");
+  return input;
+};
+async function pickFile(host: ParentNode, file: File) {
+  const input = fileInput(host);
+  Object.defineProperty(input, "files", { value: [file], configurable: true });
+  await act(async () => {
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await settle();
+}
+const pictureStatus = (host: ParentNode) =>
+  picture(host)?.closest("section")?.querySelector('[role="status"]')?.textContent;
+const image = (type = "image/png", size = 2048) => new File([new Uint8Array(size)], "me.png", { type });
+
+describe("choosing a profile picture", () => {
+  it("offers only the accepted types, sends the chosen file in one PUT and reloads the session", async () => {
+    const stub = stubApi();
+    const { host } = await openApp("/account/profile");
+    expect(fileInput(host).accept).toBe("image/jpeg,image/png,image/webp");
+    expect(picture(host)?.textContent).toBe("P");
+    const sessionReads = callsTo(stub, "get-session").length;
+    const file = image();
+    await pickFile(host, file);
+    const puts = callsTo(stub, "/api/v1/me/avatar").filter(([, init]) => init?.method === "PUT");
+    expect(puts).toHaveLength(1);
+    expect(puts[0]?.[1]?.body).toBe(file);
+    expect(callsTo(stub, "get-session").length).toBe(sessionReads + 1);
+    expect(pictureStatus(host)).toBe("Picture saved");
+  });
+
+  it.each([
+    ["a file over 10 MB", image("image/png", 10 * 1024 * 1024 + 1), /too large/],
+    ["a file that is not an image", image("application/pdf"), /cannot be used as a picture/],
+  ])("%s sends nothing and says why", async (_name, file, said) => {
+    const stub = stubApi();
+    const { host } = await openApp("/account/profile");
+    await pickFile(host, file);
+    expect(callsTo(stub, "/api/v1/me/avatar")).toHaveLength(0);
+    expect(host.querySelector('[role="alert"]')?.textContent).toMatch(said);
+  });
+
+  it.each([
+    ["a too large answer", refusal("payload_too_large", 413), /too large/],
+    ["an unreadable image", refusal("unprocessable_content", 422, { reason: "corrupt" }), /cannot be used/],
+    [
+      "an image of too many pixels",
+      refusal("unprocessable_content", 422, { reason: "pixel_limit" }),
+      /too big to read/,
+    ],
+  ])("%s from the server is named and the picture is kept", async (_name, answer, said) => {
+    stubApi({ putPicture: () => answer });
+    const { host } = await openApp("/account/profile");
+    await pickFile(host, image());
+    expect(host.querySelector('[role="alert"]')?.textContent).toMatch(said);
+    expect(picture(host)?.textContent).toBe("P");
+  });
+});
+
+describe("the profile picture while offline or saving", () => {
+  it("offline, the choose button says why and a picked file is not sent", async () => {
+    const stub = stubApi();
+    const { host } = await openApp("/account/profile");
+    vi.stubGlobal("navigator", { ...navigator, onLine: false });
+    await act(async () => {
+      window.dispatchEvent(new Event("offline"));
+    });
+    const button = host.querySelector('[data-testid="picture-choose"]');
+    expect(button?.getAttribute("aria-disabled")).toBe("true");
+    expect(host.textContent).toContain("You are offline. This needs the server.");
+    await pickFile(host, image());
+    expect(callsTo(stub, "/api/v1/me/avatar")).toHaveLength(0);
+    expect(host.querySelector('[role="alert"]')?.textContent).toMatch(/Nothing was sent/);
+    vi.unstubAllGlobals();
+  });
+
+  it("the choose button is busy and unavailable while the picture is saving, and a second pick is not sent", async () => {
+    let answer: (response: Response) => void = () => undefined;
+    const stub = stubApi({ putPicture: () => new Promise<Response>((resolve) => (answer = resolve)) });
+    const { host } = await openApp("/account/profile");
+    await pickFile(host, image());
+    const button = host.querySelector('[data-testid="picture-choose"]');
+    expect(button?.getAttribute("aria-busy")).toBe("true");
+    expect(button?.getAttribute("aria-disabled")).toBe("true");
+    await pickFile(host, image());
+    expect(callsTo(stub, "/api/v1/me/avatar")).toHaveLength(1);
+    await act(async () => answer(json({ data: { avatar_at: AT } })));
+  });
+});
+
+describe("a saved profile picture", () => {
+  it("shows the saved picture by its change time, and Remove sends one DELETE", async () => {
+    const stub = stubApi({ session: withPicture });
+    const { host } = await openApp("/account/profile");
+    const img = picture(host)?.querySelector("img");
+    expect(img?.getAttribute("src")).toBe(`/api/v1/me/avatar?v=${encodeURIComponent(AT)}`);
+    click(byText(host, "button", "Remove picture"));
+    await settle();
+    const deletes = callsTo(stub, "/api/v1/me/avatar").filter(([, init]) => init?.method === "DELETE");
+    expect(deletes).toHaveLength(1);
+  });
+
+  it("after Remove the focus moves to Choose picture and the removal is announced", async () => {
+    let removed = false;
+    stubApi({
+      session: () => (removed ? json(SESSION) : withPicture()),
+      deletePicture: () => {
+        removed = true;
+        return new Response(null, { status: 204 });
+      },
+    });
+    const { host } = await openApp("/account/profile");
+    click(byText(host, "button", "Remove picture"));
+    await settle();
+    expect(host.querySelector('[data-testid="picture-remove"]')).toBeNull();
+    expect(document.activeElement?.getAttribute("data-testid")).toBe("picture-choose");
+    expect(pictureStatus(host)).toBe("Picture removed");
+  });
+
+  it("a picture that cannot be shown falls back to the first letter", async () => {
+    stubApi({ session: withPicture });
+    const { host } = await openApp("/account/profile");
+    const img = picture(host)?.querySelector("img");
+    await act(async () => {
+      img?.dispatchEvent(new Event("error"));
+    });
+    expect(picture(host)?.querySelector("img")).toBeNull();
+    expect(picture(host)?.textContent).toBe("P");
   });
 });
 

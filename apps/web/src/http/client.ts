@@ -52,6 +52,8 @@ export interface RequestInit {
   /** `false`: the answer has no `{data}` envelope (a library-forwarded one). */
   envelope?: boolean;
   idempotencyKey?: string;
+  /** For a call that sends a file: a large one needs longer than the default on a slow link. */
+  timeoutMs?: number;
 }
 
 // Only these failures are treated as maintenance; anything else is a bug and is not hidden.
@@ -62,17 +64,19 @@ const isNetworkFailure = (error: unknown) =>
 
 async function send(path: string, init: RequestInit): Promise<Response> {
   const hasBody = init.body !== undefined;
+  // A file goes as its own bytes; the browser states its length.
+  const file = init.body instanceof Blob ? init.body : null;
   return await fetch(path, {
     method: init.method ?? "GET",
     // The server refuses an unsafe call without this header (CSRF); it is sent on every call.
     headers: {
       "X-Shoutory-Client": "web",
-      ...(hasBody ? { "Content-Type": "application/json" } : {}),
+      ...(hasBody ? { "Content-Type": file ? "application/octet-stream" : "application/json" } : {}),
       ...(init.idempotencyKey ? { "Idempotency-Key": init.idempotencyKey } : {}),
     },
-    body: hasBody ? JSON.stringify(init.body) : null,
+    body: file ?? (hasBody ? JSON.stringify(init.body) : null),
     // The same signal also ends a stalled body read, so the limit covers the whole call.
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: AbortSignal.timeout(init.timeoutMs ?? TIMEOUT_MS),
   });
 }
 

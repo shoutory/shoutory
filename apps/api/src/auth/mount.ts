@@ -1,5 +1,6 @@
 import { Refusal } from "../errors/refusal.js";
 import { type App, defineRoute } from "../routes/define-route.js";
+import { avatarAtOf } from "../routes/me/avatar.js";
 import type { AuthService } from "./auth.js";
 import { liveSessionCookie } from "./cookie.js";
 import { CREDENTIAL_HANDLERS } from "./credential-handlers.js";
@@ -102,9 +103,11 @@ const verifyEmail: Handler = async (ctx) => {
 
 const getSession: Handler = async (ctx) => {
   const { id, userId, name, email, emailVerified, expiresAt } = ctx.c.get("session");
+  if (!ctx.inUserTx) throw new Error("get-session runs with a session");
+  const avatarAt = await ctx.inUserTx((tx) => avatarAtOf(tx, userId));
   return respond(
     ctx.c,
-    { data: { session: { id, expiresAt }, user: { id: userId, name, email, emailVerified } } },
+    { data: { session: { id, expiresAt }, user: { id: userId, name, email, emailVerified, avatarAt } } },
     [],
   );
 };
@@ -170,8 +173,8 @@ export function registerAuthRoutes(app: App, auth: AuthService): void {
       access: row.policy === "public" ? "none" : "user",
       cookieOnly: true,
       ...(row.body ? { body: row.body } : {}),
-      handler: ({ body, c, clientAddress }) =>
-        handler({ auth, row, body: (body ?? {}) as Record<string, unknown>, c, ip: clientAddress }),
+      handler: ({ body, c, clientAddress, inUserTx }) =>
+        handler({ auth, row, body: (body ?? {}) as Record<string, unknown>, c, ip: clientAddress, inUserTx }),
     });
   }
 }

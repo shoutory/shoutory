@@ -119,6 +119,7 @@ export const userProfiles = app.table("user_profiles", {
     .references(() => authUser.id, { onDelete: "cascade" }),
   lastWorkspaceId: uuid("last_workspace_id"),
   passwordRecheckAt: stamp("password_recheck_at"),
+  avatarAt: stamp("avatar_at"),
 });
 
 // The sealed fields of a stored secret are raw bytes; Drizzle has no bytea builder at the pin.

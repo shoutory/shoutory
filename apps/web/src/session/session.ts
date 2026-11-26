@@ -5,7 +5,13 @@ import { forgetWorkspace } from "../shell/last-workspace";
 
 const sessionSchema = z.object({
   session: z.object({ id: z.string(), expiresAt: z.string() }),
-  user: z.object({ id: z.string(), name: z.string(), email: z.string(), emailVerified: z.boolean() }),
+  user: z.object({
+    id: z.string(),
+    name: z.string(),
+    email: z.string(),
+    emailVerified: z.boolean(),
+    avatarAt: z.string().nullable(),
+  }),
 });
 
 export type Session = z.infer<typeof sessionSchema>;

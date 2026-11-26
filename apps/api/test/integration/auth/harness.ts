@@ -254,6 +254,8 @@ export interface FixtureOptions {
   readonly mediaImportFetch?: AppOptions["mediaImportFetch"];
   /** The most bytes one workspace may store; absent, no cap. */
   readonly mediaWorkspaceMaxBytes?: number;
+  /** The folder the profile picture decoder works in; absent, the app has no profile picture routes. */
+  readonly scratchDir?: string;
   /** The plan limits of the app; absent, the app answers the core self-host value. */
   readonly entitlements?: Entitlements;
   /** The providers and egress client of the channel check; absent, the app has no check route. */
@@ -351,6 +353,7 @@ function buildOn({ logger, hibp, authPool, appPool, options }: Parts, libraryPoo
   const cap = options.mediaWorkspaceMaxBytes
     ? { mediaWorkspaceMaxBytes: options.mediaWorkspaceMaxBytes }
     : {};
+  const scratch = options.scratchDir ? { scratchDir: options.scratchDir } : {};
   const app = createApp({
     publicOrigin: ORIGIN,
     trustedProxies: [],
@@ -366,6 +369,7 @@ function buildOn({ logger, hibp, authPool, appPool, options }: Parts, libraryPoo
     ...limits,
     ...channels,
     ...cap,
+    ...scratch,
   });
   return { app, auth };
 }

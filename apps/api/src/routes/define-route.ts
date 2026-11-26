@@ -206,9 +206,10 @@ function assertStrict(where: string, schema: Shape | undefined): void {
 
 function assertAccess(spec: RouteSpec<Shape | undefined, Shape, Shape | undefined, Access>): void {
   const { access, policy, method, params } = spec;
-  if (spec.rawBody && (method !== "put" || spec.body || typeof access !== "object" || !access.permission)) {
+  const bodyOwner = access === "user" || (typeof access === "object" && access.permission !== undefined);
+  if (spec.rawBody && (method !== "put" || spec.body || !bodyOwner)) {
     throw new Error(
-      `defineRoute: ${method} ${spec.path}: a raw body is for a PUT with a workspace permission and no JSON body`,
+      `defineRoute: ${method} ${spec.path}: a raw body is for a PUT by a user or with a workspace permission, and no JSON body`,
     );
   }
   if (spec.csrf === "token" && (policy !== "public" || method !== "post" || !params)) {

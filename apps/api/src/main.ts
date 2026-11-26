@@ -21,6 +21,7 @@ import { type CliIo, collectSecrets, run } from "./cli/main.js";
 import { refuseEgress } from "./jobs/ledger/held.js";
 import { checkFfmpegPath, checkFfprobePath } from "./jobs/media/probe-run.js";
 import { createClamdScan } from "./jobs/media/scan.js";
+import { sweepScratch } from "./jobs/media/scratch.js";
 import { startWorker } from "./jobs/worker.js";
 import { createLogger, type Logger } from "./logging/logger.js";
 import { createScrubber } from "./logging/scrub.js";
@@ -104,6 +105,7 @@ function appSettingsOf(config: Config) {
     mail: { from: config.mailFrom, dkimSelector: config.mailDkimSelector },
     releaseChannel: config.releaseChannel,
     mediaWorkspaceMaxBytes: config.mediaWorkspaceMaxBytes,
+    scratchDir: config.scratchDir,
     channels: {
       providers: builtInProviders(),
       fetch: refuseEgress(),
@@ -156,6 +158,8 @@ async function startServer(config: Config, logger: Logger): Promise<RunningServe
     await auth.library.$context;
     const stores = { ...storageOptions(config.storage), mediaImportFetch: importFetch(config) };
     opened = stores.storage;
+    // The profile picture is decoded in this process, so its scratch folder is swept here as the worker sweeps its own.
+    await sweepScratch(config.scratchDir);
     const app = createApp({
       publicOrigin,
       trustedProxies: config.trustedProxies,

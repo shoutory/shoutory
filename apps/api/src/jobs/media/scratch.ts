@@ -6,12 +6,16 @@ const PREFIX = "shoutory-media-";
 const MARGIN_BYTES = 256 * 1024 * 1024;
 const STALE_MS = 60 * 60 * 1000;
 
+export class ScratchFull extends Error {}
+
 // A run that cannot have the room throws before it writes a byte, so the job retries and in the end fails the asset.
 export async function scratchFor(dir: string, byteSize: number): Promise<string> {
   const disk = await statfs(dir);
   const free = disk.bavail * disk.bsize;
   if (free < 2 * byteSize + MARGIN_BYTES)
-    throw new Error(`the media scratch folder has ${free} bytes free, too few for an upload of ${byteSize}`);
+    throw new ScratchFull(
+      `the media scratch folder has ${free} bytes free, too few for an upload of ${byteSize}`,
+    );
   return mkdtemp(join(dir, PREFIX));
 }
 

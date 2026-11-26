@@ -60,6 +60,70 @@ describe("password_recheck_set", () => {
   });
 });
 
+describe("user_avatar_set (floor)", () => {
+  const t = useUser();
+  const other = randomUUID();
+  const OTHER_AT = new Date("2030-03-01T00:00:00Z");
+  beforeAll(() =>
+    withAdminClient(env, t.db().name, async (admin) => {
+      await admin.query(
+        `INSERT INTO auth."user" (id, name, email) VALUES ($1, 'behaviour-2', 'behaviour-2@example.test')`,
+        [other],
+      );
+      await admin.query("INSERT INTO app.user_profiles (user_id, avatar_at) VALUES ($1, $2)", [
+        other,
+        OTHER_AT,
+      ]);
+    }),
+  );
+  const avatars = () =>
+    withAdminClient(
+      env,
+      t.db().name,
+      async (admin) =>
+        (await admin.query("SELECT user_id, avatar_at AS at FROM app.user_profiles ORDER BY avatar_at")).rows,
+    );
+  const call = async (ctx: Parameters<typeof openTx>[1], at: Date | null, prior?: string) => {
+    const client = await openTx(t.db().pool("app"), ctx);
+    try {
+      if (prior) await client.query("SELECT set_config('app.job_purpose', $1, true)", [prior]);
+      await client.query("SELECT app.user_avatar_set($1)", [at]);
+      const after = await client.query("SELECT current_setting('app.job_purpose', true) AS purpose");
+      await client.query("COMMIT");
+      return after.rows[0].purpose || undefined;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  };
+
+  it("sets and clears only the caller's own row and puts the caller's purpose back", async () => {
+    const at = new Date("2030-01-01T00:00:00Z");
+    expect(await call(asUser(t.user), at, "x")).toBe("x");
+    expect(await avatars()).toEqual([
+      { user_id: t.user, at },
+      { user_id: other, at: OTHER_AT },
+    ]);
+    expect(await call(asUser(t.user), null)).toBeUndefined();
+    expect(await avatars()).toEqual([
+      { user_id: other, at: OTHER_AT },
+      { user_id: t.user, at: null },
+    ]);
+  });
+
+  it.each([
+    ["no principal", null],
+    ["a job", { principalKind: "job", jobPurpose: "user_avatar_set" }],
+    ["a service", { principalKind: "service", principalId: randomUUID(), serviceKind: "api_key" }],
+  ] as const)("refuses a call by %s", async (_who, ctx) => {
+    await expect(call(ctx as Parameters<typeof openTx>[1], new Date())).rejects.toMatchObject({
+      code: "42501",
+    });
+  });
+});
+
 // A definer sets its purpose at entry and puts the caller's value back at exit, so a job's own purpose does not
 // change under it.
 describe("every 0005 definer restores the caller's job purpose", () => {

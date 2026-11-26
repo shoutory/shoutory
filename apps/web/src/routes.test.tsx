@@ -13,7 +13,13 @@ const catalogs = import.meta.glob<{ messages: Messages }>("./messages/*.po", { e
 const SESSION = {
   data: {
     session: { id: "s1", expiresAt: "2026-12-01T00:00:00Z" },
-    user: { id: "u1", name: "Person Sample", email: "person@example.test", emailVerified: true },
+    user: {
+      id: "u1",
+      name: "Person Sample",
+      email: "person@example.test",
+      emailVerified: true,
+      avatarAt: null,
+    },
   },
 };
 const json = (body: unknown, status = 200) =>

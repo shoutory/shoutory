@@ -5,6 +5,7 @@ const VALID = [
   "a",
   "media/0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
   ".shoutory-check/0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+  "users/0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b/avatar.webp",
   "a.b_c-D/9",
   Array.from({ length: MAX_KEY_SEGMENTS }, () => "s").join("/"),
   "k".repeat(MAX_KEY_BYTES),

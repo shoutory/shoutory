@@ -219,6 +219,7 @@ const DEFINERS: Definer[] = [
     callers: ["shoutory_app"],
   },
   { name: "workspace_avatar_set", args: "workspace_id uuid, media_id uuid", callers: ["shoutory_app"] },
+  { name: "user_avatar_set", args: "at timestamp with time zone", callers: ["shoutory_app"] },
   { name: "workspace_guard", args: "", callers: [], helper: true },
   { name: "member_directory", args: "workspace_id uuid, lim integer, after uuid", callers: ["shoutory_app"] },
   { name: "role_weight", args: "key text", callers: [], helper: true },

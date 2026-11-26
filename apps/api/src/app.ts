@@ -28,6 +28,7 @@ import { registerConnect } from "./routes/connect/connect.js";
 import { type App, type AppEnv, initRoutes } from "./routes/define-route.js";
 import { registerInstance } from "./routes/instance.js";
 import { registerInvitations } from "./routes/invitations/invitations.js";
+import { registerUserAvatar } from "./routes/me/avatar.js";
 import type { ImportFetch } from "./routes/media/import.js";
 import { registerMedia, sandboxDownloads } from "./routes/media/media.js";
 import { registerMembers } from "./routes/members/members.js";
@@ -62,6 +63,8 @@ export interface AppOptions {
   readonly mediaImportFetch?: ImportFetch;
   /** The most bytes one workspace may store; absent, no cap. */
   readonly mediaWorkspaceMaxBytes?: number | undefined;
+  /** The folder the profile picture decoder works in; with `storage`, the app has the profile picture routes. */
+  readonly scratchDir?: string | undefined;
   readonly webRoot?: string | undefined;
   readonly releaseChannel?: string;
   readonly mail?: MailSettings;
@@ -207,6 +210,7 @@ export function createApp(options: AppOptions): App {
   const { storage } = options;
   if (storage)
     registerMedia(app, { storage, providers }, options, () => new Date(options.now?.() ?? Date.now()));
+  if (storage && options.scratchDir) registerUserAvatar(app, storage, options.scratchDir);
   app.notFound((c) => errorResponse(c, new Refusal("not_found", "no such route")));
   // Last, so a route added before it is never shadowed by the shell.
   if (options.webRoot) registerStatic(app, options.webRoot, shell);

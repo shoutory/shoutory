@@ -38,18 +38,21 @@ beforeAll(async () => {
 afterAll(() => rm(base, { recursive: true, force: true }));
 
 describe.each(["fs", "s3"] as const)("%s driver: put, get, delete", (name) => {
-  it("round trips an object, replaces it and deletes it; a missing key reads null and deletes quietly", async () => {
-    const shared = pick(name);
-    await shared.put("media/a1", stream("first"), MAX);
-    expect(await read(await shared.get("media/a1"))).toBe("first");
-    await shared.put("media/a1", stream("second"), MAX);
-    expect(await read(await shared.get("media/a1"))).toBe("second");
-    await shared.delete("media/a1");
-    expect(await shared.get("media/a1")).toBeNull();
-    expect(await shared.get("media/never-written")).toBeNull();
-    expect(await shared.get("no-folder/never-written")).toBeNull();
-    await expect(shared.delete("media/never-written")).resolves.toBeUndefined();
-  });
+  it.each(["media/a1", "users/0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b/avatar.webp"])(
+    "round trips %s, replaces it and deletes it; a missing key reads null and deletes quietly",
+    async (key) => {
+      const shared = pick(name);
+      await shared.put(key, stream("first"), MAX);
+      expect(await read(await shared.get(key))).toBe("first");
+      await shared.put(key, stream("second"), MAX);
+      expect(await read(await shared.get(key))).toBe("second");
+      await shared.delete(key);
+      expect(await shared.get(key)).toBeNull();
+      expect(await shared.get("media/never-written")).toBeNull();
+      expect(await shared.get("no-folder/never-written")).toBeNull();
+      await expect(shared.delete("media/never-written")).resolves.toBeUndefined();
+    },
+  );
 
   it("refuses a body over maxBytes, leaves nothing and keeps the object it would have replaced", async () => {
     const shared = pick(name);

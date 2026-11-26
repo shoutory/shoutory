@@ -21,7 +21,7 @@ const saved = z.object({ id: z.string() });
 
 const thumbOf = (ws: string, id: string) => `/api/v1/workspaces/${ws}/media/${id}/derivatives/thumb`;
 const bare = <T,>(schema: ZodType<T>, path: string) => request(schema, path, { envelope: false });
-const initialOf = (name: string) => [...name.trim()][0]?.toLocaleUpperCase() ?? "";
+export const initialOf = (name: string) => [...name.trim()][0]?.toLocaleUpperCase() ?? "";
 
 /** The workspace picture, or its first letter when it has none or the picture cannot be shown. */
 export function WorkspaceAvatar({ workspace }: { workspace: Pick<Workspace, "id" | "name" | "avatar"> }) {

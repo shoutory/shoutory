@@ -8,6 +8,7 @@ import { z } from "zod";
 import { Refusal } from "../../errors/refusal.js";
 import type { Logger } from "../../logging/logger.js";
 import { type App, defineRoute } from "../define-route.js";
+import { inFlightLimit } from "../in-flight.js";
 import {
   BASE,
   callDefiner,
@@ -144,26 +145,8 @@ async function register(
   ).id;
 }
 
-// An import holds its file (up to 64 MiB, about twice that while it is read) for its whole run, so the bound is a memory
-// bound and the right level is the process: two at a time, whoever asks. A third is told to try again shortly; fairness
-// between workspaces belongs to the rate limits, not to this.
-const MAX_IN_FLIGHT = 2;
-const RETRY_AFTER_SECONDS = 5;
-let inFlight = 0;
-
-function takeSlot(): () => void {
-  if (inFlight >= MAX_IN_FLIGHT)
-    throw new Refusal("too_many_requests", "too many imports are running", {
-      retryAfterSeconds: RETRY_AFTER_SECONDS,
-    });
-  inFlight++;
-  let given = false;
-  return () => {
-    if (given) return;
-    given = true;
-    inFlight--;
-  };
-}
+// An import holds its file (up to 64 MiB, about twice that while it is read) for its whole run.
+const takeSlot = inFlightLimit(2, "too many imports are running");
 
 export function registerImport(
   app: App,

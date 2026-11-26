@@ -111,6 +111,8 @@ export interface Api {
   enable?: Answer;
   acceptInvitation?: Answer;
   profile?: Answer;
+  putPicture?: Answer;
+  deletePicture?: Answer;
   createOrganization?: Answer;
   createWorkspace?: Answer;
   workspaceProfile?: Answer;
@@ -526,6 +528,9 @@ function moreAnswers(api: Api): Record<string, Answer> {
       api.acceptInvitation ??
       (() => json({ data: { workspace_id: "0190a000-0000-7000-8000-000000000001" } })),
     "/api/auth/profile": api.profile ?? (() => json({ data: { name: "Person Sample" } })),
+    "/api/v1/me/avatar:PUT":
+      api.putPicture ?? (() => json({ data: { avatar_at: "2026-11-26T10:00:00.000Z" } })),
+    "/api/v1/me/avatar:DELETE": api.deletePicture ?? (() => new Response(null, { status: 204 })),
     "/api/v1/instance/signup": api.signUpMode ?? (() => json({ data: { open: true } })),
     "/api/auth/sign-up/email":
       api.signUp ?? (() => json({ user: { name: "T", email: "new@example.test", emailVerified: false } })),
@@ -573,7 +578,13 @@ export function stubApi(api: Api = {}) {
 export const SESSION = {
   data: {
     session: { id: "s1", expiresAt: "2026-12-01T00:00:00Z" },
-    user: { id: "u1", name: "Person Sample", email: "person@example.test", emailVerified: true },
+    user: {
+      id: "u1",
+      name: "Person Sample",
+      email: "person@example.test",
+      emailVerified: true,
+      avatarAt: null,
+    },
   },
 };
 

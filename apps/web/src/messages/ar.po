@@ -2686,3 +2686,59 @@ msgstr "لم يعد ممكنًا استخدام هذه الصورة"
 #. js-lingui-explicit-id
 msgid "avatar.unavailable.meaning"
 msgstr "حُذفت أو لم تجهز بعد. اختر غيرها. لم يتغير شيء."
+
+#. js-lingui-explicit-id
+msgid "account.picture.title"
+msgstr "الصورة"
+
+#. js-lingui-explicit-id
+msgid "account.picture.choose"
+msgstr "اختيار صورة"
+
+#. js-lingui-explicit-id
+msgid "account.picture.remove"
+msgstr "إزالة الصورة"
+
+#. js-lingui-explicit-id
+msgid "account.picture.saving"
+msgstr "جارٍ حفظ الصورة"
+
+#. js-lingui-explicit-id
+msgid "account.picture.unusable.what"
+msgstr "لا يمكن استخدام هذا الملف صورةً"
+
+#. js-lingui-explicit-id
+msgid "account.picture.unusable.meaning"
+msgstr "اختر صورة بصيغة JPEG أو PNG أو WebP. لم تتغير صورتك."
+
+#. js-lingui-explicit-id
+msgid "account.picture.too_large.what"
+msgstr "هذا الملف كبير جدًا"
+
+#. js-lingui-explicit-id
+msgid "account.picture.too_large.meaning"
+msgstr "اختر صورة حجمها 10 ميغابايت أو أقل. لم تتغير صورتك."
+
+#. js-lingui-explicit-id
+msgid "account.picture.pixels.what"
+msgstr "هذه الصورة أكبر من أن تُقرأ"
+
+#. js-lingui-explicit-id
+msgid "account.picture.pixels.meaning"
+msgstr "اختر صورة أصغر، أقل من 50 ميغابكسل. لم تتغير صورتك."
+
+#. js-lingui-explicit-id
+msgid "account.picture.saved"
+msgstr "حُفظت الصورة"
+
+#. js-lingui-explicit-id
+msgid "account.picture.removed"
+msgstr "أُزيلت الصورة"
+
+#. js-lingui-explicit-id
+msgid "account.picture.offline.what"
+msgstr "أنت غير متصل بالإنترنت"
+
+#. js-lingui-explicit-id
+msgid "account.picture.offline.meaning"
+msgstr "لم يُرسل شيء. اختر الصورة مرة أخرى عند عودة الاتصال."

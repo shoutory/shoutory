@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import type { ApiError } from "../http/client";
 
 export type Screen = "sign-in" | "challenge" | "step-up" | "step-up-code" | "sign-up" | "reset" | "link";
-interface Words {
+export interface Words {
   what: ReactNode;
   meaning: ReactNode;
 }

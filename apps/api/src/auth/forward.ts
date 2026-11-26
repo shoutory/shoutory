@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import type { AppEnv } from "../routes/define-route.js";
+import type { AppEnv, InUserTx } from "../routes/define-route.js";
 import { type AuditEntry, type AuthService, CLIENT_IP_HEADER } from "./auth.js";
 import { authCookies, liveSessionCookie, withoutForgedSession } from "./cookie.js";
 import { answerCode, refusalFromAnswer } from "./error-map.js";
@@ -12,6 +12,8 @@ export interface Ctx {
   readonly body: Record<string, unknown>;
   readonly c: Context<AppEnv>;
   readonly ip: string;
+  /** Present on every route that has a session. */
+  readonly inUserTx: InUserTx | undefined;
 }
 export type Handler = (ctx: Ctx) => Promise<unknown>;
 

@@ -2688,3 +2688,59 @@ msgstr "That image can no longer be used"
 #. js-lingui-explicit-id
 msgid "avatar.unavailable.meaning"
 msgstr "It was deleted or is not ready. Choose another. Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "account.picture.title"
+msgstr "Picture"
+
+#. js-lingui-explicit-id
+msgid "account.picture.choose"
+msgstr "Choose picture"
+
+#. js-lingui-explicit-id
+msgid "account.picture.remove"
+msgstr "Remove picture"
+
+#. js-lingui-explicit-id
+msgid "account.picture.saving"
+msgstr "Saving picture"
+
+#. js-lingui-explicit-id
+msgid "account.picture.unusable.what"
+msgstr "That file cannot be used as a picture"
+
+#. js-lingui-explicit-id
+msgid "account.picture.unusable.meaning"
+msgstr "Choose a JPEG, PNG or WebP image. Your picture was not changed."
+
+#. js-lingui-explicit-id
+msgid "account.picture.too_large.what"
+msgstr "That file is too large"
+
+#. js-lingui-explicit-id
+msgid "account.picture.too_large.meaning"
+msgstr "Choose an image of 10 MB or less. Your picture was not changed."
+
+#. js-lingui-explicit-id
+msgid "account.picture.pixels.what"
+msgstr "That image is too big to read"
+
+#. js-lingui-explicit-id
+msgid "account.picture.pixels.meaning"
+msgstr "Choose a smaller image, under 50 megapixels. Your picture was not changed."
+
+#. js-lingui-explicit-id
+msgid "account.picture.saved"
+msgstr "Picture saved"
+
+#. js-lingui-explicit-id
+msgid "account.picture.removed"
+msgstr "Picture removed"
+
+#. js-lingui-explicit-id
+msgid "account.picture.offline.what"
+msgstr "You are offline"
+
+#. js-lingui-explicit-id
+msgid "account.picture.offline.meaning"
+msgstr "Nothing was sent. Choose the picture again when you are back online."
