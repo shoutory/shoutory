@@ -61,6 +61,35 @@ const GLOBAL_FETCH = new RegExp(
   ].join("|"),
 );
 
+// HTTP client packages other than undici (which only the egress directory may import). One is a finding as an import
+// in a scanned file and as a dependency of any workspace package.
+const CLIENT_PACKAGES = [
+  "axios",
+  "got",
+  `node-${FETCH}`,
+  `cross-${FETCH}`,
+  "ky",
+  `o${FETCH}`,
+  "superagent",
+  "needle",
+];
+const CLIENT_IMPORT = new RegExp(
+  `(?:from\\s*|import\\(\\s*|require\\(\\s*|import\\s*)["'](?:${CLIENT_PACKAGES.join("|")})(?:/[^"']*)?["']`,
+);
+const PACKAGE_JSONS = ["package.json", "{apps/*,packages/*,packages/providers/*}/package.json"];
+
+function clientDependencies(base) {
+  const exclude = (name) => SKIPPED.has(name);
+  return PACKAGE_JSONS.flatMap((pattern) => globSync(pattern, { cwd: base, exclude }))
+    .map((file) => file.replaceAll("\\", "/"))
+    .filter((file) => {
+      const manifest = JSON.parse(readFileSync(join(base, file), "utf8"));
+      return ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"]
+        .flatMap((key) => Object.keys(manifest[key] ?? {}))
+        .some((name) => CLIENT_PACKAGES.includes(name));
+    });
+}
+
 // One entry per way of opening a connection: [name, (code, bare) => found]. `import type` is removed before the
 // tests run. In `code` string literals are kept (module names are strings); in `bare` they are blanked.
 const RULES = [
@@ -71,6 +100,7 @@ const RULES = [
     "an undici import",
     (code) => new RegExp(`(?:from\\s*|import\\(\\s*|require\\(\\s*)${MODULE("undici")}`).test(code),
   ],
+  ["an HTTP client package", (code) => CLIENT_IMPORT.test(code)],
   ["a websocket", (code) => new RegExp(`new\\s+WebSocket\\b|from\\s*${MODULE("ws")}`).test(code)],
   ["the S3 driver", (code) => /(?:from\s*|import\(\s*)["']@aws-sdk\/client-s3["']/.test(code)],
   ["the SMTP driver", (code) => new RegExp(`(?:from\\s*|import\\(\\s*)${MODULE("nodemailer")}`).test(code)],
@@ -245,7 +275,27 @@ test("the exceptions list is closed: every row names a file that exists, holds a
   assert.deepEqual(rowProblems(root, EXCEPTIONS), []);
 });
 
+test("no workspace package depends on an HTTP client package", () => {
+  assert.deepEqual(clientDependencies(root), []);
+});
+
+test("a planted HTTP client dependency in a package is found", () => {
+  const base = plant({
+    "package.json": "{}",
+    "packages/x/package.json": JSON.stringify({ dependencies: { axios: "1.0.0" } }),
+    "packages/y/package.json": JSON.stringify({ devDependencies: { zod: "4.0.0" } }),
+  });
+  try {
+    assert.deepEqual(clientDependencies(base), ["packages/x/package.json"]);
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
 const FLAGGED = [
+  ["an axios import", `import axios from "axios";\n`],
+  ["a got require", `const got = require("got");\n`],
+  ["a client package subpath import", `import send from "node-${FETCH}/lib/x";\n`],
   ["a fetch call", `const r = await ${FETCH}("https://example.test");\n`],
   ["globalThis fetch", `await globalThis.${FETCH}(url);\n`],
   ["the global fetch passed as a value", `const deps = { ${FETCH} };\n`],

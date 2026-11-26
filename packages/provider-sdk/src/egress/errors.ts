@@ -38,6 +38,9 @@ const BEFORE_SENDING: Readonly<Record<string, EgressErrorClass>> = {
   ENETUNREACH: "connect",
   ENOTFOUND: "dns",
   EAI_AGAIN: "dns",
+  ENODATA: "dns",
+  ETIMEOUT: "dns",
+  ESERVFAIL: "dns",
 };
 const AFTER_SENDING: Readonly<Record<string, EgressErrorClass>> = {
   UND_ERR_HEADERS_TIMEOUT: "timeout",

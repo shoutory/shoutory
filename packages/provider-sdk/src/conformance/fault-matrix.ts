@@ -3,7 +3,6 @@ import { type Effect, MAX_RETRY_DELAY_MS, type ProviderErrorClass, type Provider
 import { PLANTED, problemWith } from "./kit.js";
 
 export type MatrixOperation = "commit" | "readBack" | "delete" | "edit";
-export type MatrixCapability = "edit" | "thread" | "first_comment";
 
 export type MatrixFault =
   | {
@@ -37,11 +36,18 @@ export interface MatrixHarness {
   requestCount(): number;
 }
 
-export interface MatrixProfile {
+/** The manifest fields the matrix plays against. */
+export interface MatrixManifest {
+  readonly absentAnswers: readonly { readonly status: number }[];
+  readonly capabilities: readonly string[];
+  readonly retryAfterMaxSeconds: number;
+  readonly readBackMode: "A" | "B" | "C" | "D" | "E";
+}
+
+export interface MatrixOptions {
+  readonly manifest: MatrixManifest;
   readonly badRequestCodes: readonly string[];
-  readonly absentStatus: number;
   readonly revokedCode: string;
-  readonly capabilities: readonly MatrixCapability[];
 }
 
 export interface FaultRow {
@@ -139,16 +145,18 @@ async function chain(harness: MatrixHarness, texts: readonly string[]): Promise<
     throw new Error("the parts were not published in order, each a reply to the one before");
 }
 
-async function successRow(harness: MatrixHarness): Promise<void> {
+async function successRow(harness: MatrixHarness, readBack: boolean): Promise<void> {
   const before = harness.effects();
   const commit = await harness.adapter.commit(harness.context, commitInput());
   if (!commit.ok || commit.effect !== "confirmed" || !commit.externalId)
     throw new Error("a commit that succeeds must be ok, confirmed and carry an externalId");
   if (harness.effects() - before !== 1) throw new Error("one commit must produce one effect");
   const post = { externalId: commit.externalId };
-  const found = await harness.adapter.readBack(harness.context, post);
-  if (!found.ok || found.externalId !== commit.externalId)
-    throw new Error("the read-back must find the post");
+  if (readBack) {
+    const found = await harness.adapter.readBack(harness.context, post);
+    if (!found.ok || found.externalId !== commit.externalId)
+      throw new Error("the read-back must find the post");
+  }
   if (!(await harness.adapter.delete(harness.context, post)).ok) throw new Error("the delete must succeed");
 }
 
@@ -183,7 +191,14 @@ async function expectRetryAfter(
   return answer.result;
 }
 
-function rateLimitRows(): FaultRow[] {
+// A header the ledger cannot wait on must leave the delay out, so its own back-off applies; zero may stay zero.
+const UNUSABLE_RETRY_AFTER: readonly [string, string, boolean][] = [
+  ["malformed", "soon", false],
+  ["negative", "-5", true],
+  ["zero", "0", true],
+];
+
+function rateLimitRows(manifest: MatrixManifest): FaultRow[] {
   return [
     {
       id: "rate-limit-with-retry-after",
@@ -212,15 +227,88 @@ function rateLimitRows(): FaultRow[] {
       },
     },
     {
-      id: "rate-limit-retry-after-above-maximum",
-      title: "a 429 with a ten-day Retry-After is rate_limited with no effect and a bounded delay",
+      id: "rate-limit-retry-after-above-day",
+      title: "a 429 with a ten-day Retry-After is rate_limited with no effect and a delay of one day",
       run: async (harness) => {
         const { retryAfterMs } = await expectRetryAfter(harness, "864000");
-        if (retryAfterMs !== undefined && retryAfterMs > MAX_RETRY_DELAY_MS)
+        if (retryAfterMs !== MAX_RETRY_DELAY_MS)
           throw new Error(`a ten-day Retry-After reached the result as ${retryAfterMs} ms`);
       },
     },
+    {
+      id: "rate-limit-retry-after-above-manifest-maximum",
+      title:
+        "a 429 whose Retry-After is above the manifest maximum keeps the whole delay, so the ledger pauses",
+      run: async (harness) => {
+        const seconds = manifest.retryAfterMaxSeconds + 60;
+        const { retryAfterMs } = await expectRetryAfter(harness, String(seconds));
+        const expected = Math.min(seconds * 1000, MAX_RETRY_DELAY_MS);
+        if (retryAfterMs !== expected) throw new Error(`Retry-After ${seconds} became ${retryAfterMs} ms`);
+      },
+    },
+    ...UNUSABLE_RETRY_AFTER.map(([id, value, zeroAllowed]) => ({
+      id: `rate-limit-retry-after-${id}`,
+      title: `a 429 with a ${id} Retry-After is rate_limited with no effect and no usable delay`,
+      run: async (harness: MatrixHarness) => {
+        const { retryAfterMs } = await expectRetryAfter(harness, value);
+        if (retryAfterMs !== undefined && !(zeroAllowed && retryAfterMs === 0))
+          throw new Error(`Retry-After ${value} became ${retryAfterMs} ms`);
+      },
+    })),
   ];
+}
+
+type FaultOperation = Exclude<MatrixOperation, "commit">;
+
+function targetCall(
+  harness: MatrixHarness,
+  operation: FaultOperation,
+  post: RemotePost,
+  ctx: AdapterContext,
+) {
+  const { adapter } = harness;
+  if (operation === "readBack") return adapter.readBack(ctx, post);
+  if (operation === "delete") return adapter.delete(ctx, post);
+  if (!adapter.edit) throw new Error("the manifest declares edit but the adapter has none");
+  return adapter.edit(ctx, post, { text: "matrix edited" });
+}
+
+// A read changes nothing, so it may also report no effect for what a write must call possible.
+function operationRow(operation: FaultOperation, kind: string, title: string, fault: MatrixFault): FaultRow {
+  const read = operation === "readBack";
+  const allowed: Allowed[] = [];
+  if (fault.kind === "respond" && fault.status === 429) allowed.push(NO_EFFECT("rate_limited"));
+  else if (read) allowed.push(NO_EFFECT("retryable_before_send", "unknown"));
+  else if (fault.kind === "respond") allowed.push(NO_EFFECT("retryable_before_send"), MAYBE_EFFECT);
+  else allowed.push(MAYBE_EFFECT);
+  return {
+    id: `${kind}-${operation}`,
+    title: `${title} on ${operation}`,
+    run: async (harness) => {
+      const post = await seeded(harness);
+      const ctx = fault.kind === "hang" ? withTimeout(harness.context) : harness.context;
+      const call = () => targetCall(harness, operation, post, ctx);
+      expectError(`${title} on ${operation}`, await played(harness, operation, fault, call), allowed);
+    },
+  };
+}
+
+function operationRows(manifest: MatrixManifest): FaultRow[] {
+  const operations: FaultOperation[] = [
+    ...(manifest.readBackMode === "E" ? [] : (["readBack"] as const)),
+    "delete",
+    ...(manifest.capabilities.includes("edit") ? (["edit"] as const) : []),
+  ];
+  return operations.flatMap((operation) => [
+    operationRow(operation, "rate-limited", "a 429 is rate_limited with no effect", respond(429)),
+    operationRow(
+      operation,
+      "server-error",
+      "a 503 is never reported as confirmed or as a send that cannot have happened",
+      respond(503),
+    ),
+    operationRow(operation, "timeout", "a read timeout is an unknown outcome for a write", { kind: "hang" }),
+  ]);
 }
 
 function afterEffectRow(operation: "edit" | "delete"): FaultRow {
@@ -242,7 +330,9 @@ function afterEffectRow(operation: "edit" | "delete"): FaultRow {
   };
 }
 
-function targetRows(profile: MatrixProfile): FaultRow[] {
+function targetRows(manifest: MatrixManifest): FaultRow[] {
+  const absent = manifest.absentAnswers[0]?.status;
+  if (absent === undefined) return [afterEffectRow("delete")];
   return [
     {
       id: "read-back-absent",
@@ -250,7 +340,7 @@ function targetRows(profile: MatrixProfile): FaultRow[] {
       run: async (harness) => {
         const post = await seeded(harness);
         const call = () => harness.adapter.readBack(harness.context, post);
-        const fault = respond(profile.absentStatus);
+        const fault = respond(absent);
         expectError("a read-back absent answer", await played(harness, "readBack", fault, call), [
           NO_EFFECT("permanent"),
         ]);
@@ -262,7 +352,7 @@ function targetRows(profile: MatrixProfile): FaultRow[] {
       run: async (harness) => {
         const post = await seeded(harness);
         const call = () => harness.adapter.delete(harness.context, post);
-        const { result, delta } = await played(harness, "delete", respond(profile.absentStatus), call);
+        const { result, delta } = await played(harness, "delete", respond(absent), call);
         if (!result.ok || result.effect !== "none" || delta !== 0)
           throw new Error(
             "deleting an absent post must be ok with effect none and no effect at the provider",
@@ -273,8 +363,12 @@ function targetRows(profile: MatrixProfile): FaultRow[] {
   ];
 }
 
-function capabilityRows(capabilities: readonly MatrixCapability[]): FaultRow[] {
-  const rows: [MatrixCapability, FaultRow][] = [
+// Capabilities whose faults are not played through a publish call: text and delete are the base rows, refresh is
+// covered by the oauth fake's contract test, and image faults get their rows with the media upload work.
+const PLAYED_ELSEWHERE = new Set(["text", "delete", "image", "refresh"]);
+
+function capabilityRows(capabilities: readonly string[]): FaultRow[] {
+  const rows: [string, FaultRow][] = [
     [
       "edit",
       {
@@ -311,25 +405,55 @@ function capabilityRows(capabilities: readonly MatrixCapability[]): FaultRow[] {
       },
     ],
   ];
+  const missing = capabilities.filter(
+    (capability) => !PLAYED_ELSEWHERE.has(capability) && !rows.some(([name]) => name === capability),
+  );
+  if (missing.length > 0) throw new Error(`the matrix has no row for the capability ${missing.join(", ")}`);
   return rows.filter(([capability]) => capabilities.includes(capability)).map(([, row]) => row);
 }
 
 // The 401, 403 and 409 rows name the situation played and accept only the classes that situation allows; no row maps a
 // status to a class.
-export function faultMatrixRows(profile: MatrixProfile): readonly FaultRow[] {
-  return [
-    { id: "success", title: "a commit, read-back and delete that succeed", run: successRow },
-    ...refusalRows(profile),
-    ...targetRows(profile),
-    ...rateLimitRows(),
+export function faultMatrixRows({
+  manifest,
+  badRequestCodes,
+  revokedCode,
+}: MatrixOptions): readonly FaultRow[] {
+  const noReadBack = manifest.readBackMode === "E";
+  const rows = [
+    {
+      id: "success",
+      title: noReadBack ? "a commit and delete that succeed" : "a commit, read-back and delete that succeed",
+      run: (harness: MatrixHarness) => successRow(harness, !noReadBack),
+    },
+    ...refusalRows(badRequestCodes, revokedCode),
+    ...targetRows(manifest),
+    ...operationRows(manifest),
+    ...rateLimitRows(manifest),
     ...uncertainRows(),
-    ...capabilityRows(profile.capabilities),
+    ...capabilityRows(manifest.capabilities),
   ];
+  return noReadBack ? rows.filter((row) => row.id !== "read-back-absent").map(withoutReadBack) : rows;
 }
 
-function refusalRows(profile: MatrixProfile): FaultRow[] {
+// A provider with no read-back is never read back: a row that reaches for one fails.
+const withoutReadBack = (row: FaultRow): FaultRow => ({
+  ...row,
+  run: (harness) =>
+    row.run({
+      ...harness,
+      adapter: {
+        ...harness.adapter,
+        readBack: () => {
+          throw new Error(`${row.id}: a provider with no read-back must never be read back`);
+        },
+      },
+    }),
+});
+
+function refusalRows(badRequestCodes: readonly string[], revokedCode: string): FaultRow[] {
   return [
-    ...profile.badRequestCodes.map((code) =>
+    ...badRequestCodes.map((code) =>
       commitRow(
         `bad-request-${code}`,
         `a 400 coded ${code} is permanent with no effect`,
@@ -340,7 +464,13 @@ function refusalRows(profile: MatrixProfile): FaultRow[] {
     commitRow(
       "revoked-grant",
       "a 401 for a revoked grant is auth_revoked with no effect",
-      respond(401, { providerCode: profile.revokedCode }),
+      respond(401, { providerCode: revokedCode }),
+      [NO_EFFECT("auth_revoked")],
+    ),
+    commitRow(
+      "expired-token",
+      "a 401 for an expired token is auth_revoked with no effect; the ledger's refresh decides the disconnect",
+      respond(401, { providerCode: "token_expired" }),
       [NO_EFFECT("auth_revoked")],
     ),
     commitRow(

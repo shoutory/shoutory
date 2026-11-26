@@ -101,10 +101,22 @@ const MOVES: [string, CallResult, Partial<DispatchFacts>, object][] = [
     { row: 21, to: "paused", reasonCode: "provider_cooldown", waitSeconds: 60 },
   ],
   [
-    "a rate limit with no delay still waits a second",
+    "a rate limit with no delay waits the back-off of its attempt, not a second",
     sent({ errorClass: "rate_limited" }),
+    { attemptCount: 3 },
+    { row: 19, to: "retry_wait", waitSeconds: 900 },
+  ],
+  [
+    "a rate limit with no delay whose back-off is beyond the maximum pauses with a cooldown",
+    sent({ errorClass: "rate_limited" }),
+    { attemptCount: 5 },
+    { row: 21, to: "paused", reasonCode: "provider_cooldown", waitSeconds: 21_600 },
+  ],
+  [
+    "a rate limit of one day, the most an adapter reports, pauses with a cooldown",
+    sent({ errorClass: "rate_limited", retryAfterMs: 86_400_000 }),
     {},
-    { row: 19, to: "retry_wait", waitSeconds: 1 },
+    { row: 21, to: "paused", reasonCode: "provider_cooldown", waitSeconds: 86_400 },
   ],
 ];
 

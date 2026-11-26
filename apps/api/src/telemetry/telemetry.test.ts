@@ -1,4 +1,4 @@
-import { SpanKind, trace } from "@opentelemetry/api";
+import { SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
 import { InMemorySpanExporter, TracerProvider } from "@opentelemetry/sdk-trace";
 import { afterEach, describe, expect, it } from "vitest";
 import { createSpanProcessor, startTelemetry, tracesUrl } from "./telemetry.js";
@@ -56,7 +56,7 @@ describe("telemetry strips sensitive attributes through the span processor", () 
 
   async function exportedAttributes(kind: SpanKind, key: string, value: string) {
     const exporter = new InMemorySpanExporter();
-    const provider = new TracerProvider({ spanProcessors: [await createSpanProcessor(exporter)] });
+    const provider = new TracerProvider({ spanProcessors: [await createSpanProcessor(exporter, [])] });
     provider
       .getTracer("strip-test")
       .startSpan("span", { kind, attributes: { [key]: value } })
@@ -81,5 +81,131 @@ describe("telemetry strips sensitive attributes through the span processor", () 
     );
     expect(exported).not.toContain("path-value-0001");
     expect(exported).toContain("api.example.test");
+  });
+});
+
+describe("an exported client span keeps only scheme, host and port", () => {
+  // [what the request was, the url.full that is kept]
+  const CLIENT_URLS = [
+    [
+      "a range path",
+      "https://api.range-host.example.test/range/5BAA6",
+      "https://api.range-host.example.test",
+    ],
+    [
+      "a bot token path and a query",
+      "https://bot-host.example.test/bot123456:path-value-0001/sendMessage?chat=query-value-0001",
+      "https://bot-host.example.test",
+    ],
+    [
+      "a webhook path with a port and userinfo",
+      "http://mailer:userinfo-value-0001@hooks.example.test:8443/webhooks/id-1/path-value-0001",
+      "http://hooks.example.test:8443",
+    ],
+  ] as const;
+
+  it.each(CLIENT_URLS)("%s", async (_title, url, kept) => {
+    const parsed = new URL(url);
+    const exporter = new InMemorySpanExporter();
+    const provider = new TracerProvider({ spanProcessors: [await createSpanProcessor(exporter, [])] });
+    provider
+      .getTracer("client-test")
+      .startSpan("span", {
+        kind: SpanKind.CLIENT,
+        attributes: {
+          "url.full": url,
+          "url.path": parsed.pathname,
+          "url.query": parsed.search.slice(1),
+          "url.scheme": parsed.protocol.slice(0, -1),
+          "server.address": parsed.hostname,
+        },
+      })
+      .end();
+    await provider.forceFlush();
+    const attributes = exporter.getFinishedSpans()[0]?.attributes ?? {};
+    expect(attributes["url.full"]).toBe(kept);
+    expect(attributes["server.address"]).toBe(parsed.hostname);
+    const exported = JSON.stringify(attributes);
+    for (const secret of [
+      "query-value-0001",
+      "userinfo-value-0001",
+      "path-value-0001",
+      "sendMessage",
+      "5BAA6",
+    ]) {
+      expect(exported).not.toContain(secret);
+    }
+  });
+});
+
+describe("span text is scrubbed before export", () => {
+  const CANARY = "canary-span-secret-0001";
+  const KEY_VALUE = "person-key-value-0001@example.test";
+  const DUPLICATE = `duplicate key value violates unique constraint "users_email_key": Key (email)=(${KEY_VALUE}) already exists.`;
+
+  it("an exception event, a status message and `db.query.text` with a registered canary and a key value are exported masked", async () => {
+    const exporter = new InMemorySpanExporter();
+    const provider = new TracerProvider({ spanProcessors: [await createSpanProcessor(exporter, [CANARY])] });
+    const span = provider.getTracer("scrub-test").startSpan("query", {
+      kind: SpanKind.CLIENT,
+      attributes: { "db.query.text": `SELECT * FROM users WHERE token = '${CANARY}'` },
+    });
+    span.recordException(new Error(`${DUPLICATE} ${CANARY}`));
+    span.setStatus({ code: SpanStatusCode.ERROR, message: `${DUPLICATE} ${CANARY}` });
+    span.end();
+    await provider.forceFlush();
+    const [finished] = exporter.getFinishedSpans();
+    const exported = JSON.stringify({
+      attributes: finished?.attributes,
+      events: finished?.events,
+      status: finished?.status,
+    });
+    expect(exported).not.toContain(CANARY);
+    expect(exported).not.toContain(KEY_VALUE);
+    expect(finished?.events[0]?.name).toBe("exception");
+    expect(finished?.status.code).toBe(SpanStatusCode.ERROR);
+    expect(exported).toContain("users_email_key");
+  });
+});
+
+describe("PostgreSQL detail values are masked whole", () => {
+  it.each([
+    [
+      "a key value holding a closing parenthesis",
+      "Key (email)=(canary-key-0001) b) already exists.",
+      "canary-key-0001",
+    ],
+    ["a failing row", "Failing row contains (1, canary-row-0001, 2026-01-01).", "canary-row-0001"],
+    [
+      "an invalid input value",
+      'invalid input syntax for type uuid: "canary-input-0001"',
+      "canary-input-0001",
+    ],
+  ])("%s is absent from the exported exception event and status message", async (_title, detail, canary) => {
+    const exporter = new InMemorySpanExporter();
+    const provider = new TracerProvider({ spanProcessors: [await createSpanProcessor(exporter, [])] });
+    const span = provider.getTracer("detail-test").startSpan("query", { kind: SpanKind.CLIENT });
+    span.recordException(new Error(detail));
+    span.setStatus({ code: SpanStatusCode.ERROR, message: detail });
+    span.end();
+    await provider.forceFlush();
+    const [finished] = exporter.getFinishedSpans();
+    const exported = JSON.stringify({ events: finished?.events, status: finished?.status });
+    expect(exported).not.toContain(canary);
+    expect(exported).not.toContain("b)");
+  });
+
+  it.each(["db.query.text", "db.statement"])("`%s` is scrubbed", async (key) => {
+    const exporter = new InMemorySpanExporter();
+    const provider = new TracerProvider({
+      spanProcessors: [await createSpanProcessor(exporter, ["canary-stmt-0001"])],
+    });
+    const span = provider.getTracer("detail-test").startSpan("query", {
+      kind: SpanKind.CLIENT,
+      attributes: { [key]: "SELECT 1 WHERE token = 'canary-stmt-0001'" },
+    });
+    span.end();
+    await provider.forceFlush();
+    expect(JSON.stringify(exporter.getFinishedSpans()[0]?.attributes)).not.toContain("canary-stmt-0001");
   });
 });

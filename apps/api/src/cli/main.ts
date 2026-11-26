@@ -1,5 +1,4 @@
-import { SECRET_VARIABLES, STORAGE_SECRET_VARIABLES } from "@shoutory/core/config";
-import { createScrubber } from "../logging/scrub.js";
+import { collectSecrets, createScrubber } from "../logging/scrub.js";
 import { auditVerifyCommand } from "./audit-verify.js";
 import { mailCheckCommand } from "./mail-check.js";
 import { migrateCommand } from "./migrate.js";
@@ -14,32 +13,6 @@ export interface CliIo {
 
 const USAGE =
   "usage: shoutory <command>; commands: migrate, mail check, storage check, secrets check, secrets reseal, audit verify [YYYY-MM-DD]";
-const KEK_PREFIX = "SHOUTORY_KEK_";
-const MIN_SECRET_LENGTH = 8;
-
-function decodedPassword(value: string): string | undefined {
-  if (!URL.canParse(value)) return undefined;
-  try {
-    return decodeURIComponent(new URL(value).password);
-  } catch (error) {
-    if (error instanceof URIError) return undefined;
-    throw error;
-  }
-}
-
-export function collectSecrets(env: NodeJS.ProcessEnv): string[] {
-  const names = [
-    ...SECRET_VARIABLES,
-    ...STORAGE_SECRET_VARIABLES,
-    ...Object.keys(env).filter((name) => name.startsWith(KEK_PREFIX)),
-  ];
-  const values = names.flatMap((name) => {
-    const value = env[name];
-    return value ? [value, decodedPassword(value)] : [];
-  });
-  const usable = values.filter((v): v is string => v !== undefined && v.length >= MIN_SECRET_LENGTH);
-  return [...new Set(usable)];
-}
 
 type Command = (env: NodeJS.ProcessEnv, io: CliIo) => Promise<number>;
 

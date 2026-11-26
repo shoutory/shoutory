@@ -75,9 +75,11 @@ const CLASSES_AFTER_POSSIBLE_EFFECT: readonly ProviderErrorClass[] = ["unknown",
 
 export const MAX_RETRY_DELAY_MS = 86_400_000;
 
-// A delay outside a whole number of milliseconds up to a day is dropped, so the ledger uses its own back-off.
-function isUsableDelay(value: number | undefined): value is number {
-  return value !== undefined && Number.isInteger(value) && value >= 0 && value <= MAX_RETRY_DELAY_MS;
+// A delay that is not a whole number of milliseconds is dropped, so the ledger uses its own back-off; one above a day is
+// reported as a day, so the ledger still pauses the provider instead of retrying at once.
+function usableDelay(value: number | undefined): number | undefined {
+  if (value === undefined || !Number.isInteger(value) || value < 0) return undefined;
+  return Math.min(value, MAX_RETRY_DELAY_MS);
 }
 
 function assertPair({ effect, errorClass }: ErrorInput): void {
@@ -90,12 +92,13 @@ function assertPair({ effect, errorClass }: ErrorInput): void {
 // carries no `externalId` or `permalink`.
 export function errorResult(input: ErrorInput): ProviderResult {
   assertPair(input);
-  const { effect, errorClass, providerCode, retryAfterMs } = input;
+  const { effect, errorClass, providerCode } = input;
+  const retryAfterMs = usableDelay(input.retryAfterMs);
   return {
     ok: false,
     effect,
     errorClass,
-    ...(isUsableDelay(retryAfterMs) ? { retryAfterMs } : {}),
+    ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
     ...(providerCode !== undefined && SAFE_CODE.test(providerCode) ? { providerCode } : {}),
   };
 }

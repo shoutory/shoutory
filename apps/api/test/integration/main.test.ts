@@ -11,9 +11,20 @@ import {
   type TestDatabase,
   withAdminClient,
 } from "@shoutory/db/testing";
+import { closeEgress } from "@shoutory/provider-sdk/egress";
+import { createOperatorPolicy } from "@shoutory/provider-sdk/egress/policy";
 import { listenLoopback } from "@shoutory/provider-sdk/loopback";
 import { afterAll, beforeAll, describe, expect, inject, it, vi } from "vitest";
 import { main, type Started } from "../../src/main.js";
+
+vi.mock("@shoutory/provider-sdk/egress/policy", async (original) => {
+  const actual = await original<typeof import("@shoutory/provider-sdk/egress/policy")>();
+  return { ...actual, createOperatorPolicy: vi.fn(actual.createOperatorPolicy) };
+});
+vi.mock("@shoutory/provider-sdk/egress", async (original) => {
+  const actual = await original<typeof import("@shoutory/provider-sdk/egress")>();
+  return { ...actual, closeEgress: vi.fn(actual.closeEgress) };
+});
 
 const testEnv = readTestEnv();
 const ROLES = ["owner", "app", "worker", "auth", "readonly"] as const;
@@ -176,6 +187,26 @@ describe("process entry and held key ids", () => {
     } finally {
       await held.drop();
     }
+  });
+});
+
+describe("the egress policy", () => {
+  it("one policy object serves all four callers and its pools are closed at shutdown", async () => {
+    vi.mocked(createOperatorPolicy).mockClear();
+    vi.mocked(closeEgress).mockClear();
+    const sink = io();
+    const port = await freePort();
+    const started = await main(
+      [],
+      envFor(migrated, { SHOUTORY_PORT: String(port), SHOUTORY_ROLE: "all" }),
+      sink.io,
+    );
+    if (!("server" in started)) throw new Error(`did not start: ${sink.err.join("; ")}`);
+    expect(createOperatorPolicy).toHaveBeenCalledTimes(1);
+    expect(closeEgress).not.toHaveBeenCalled();
+    await started.server.close();
+    const [operator] = vi.mocked(createOperatorPolicy).mock.results;
+    expect(vi.mocked(closeEgress).mock.calls).toEqual([[operator?.value]]);
   });
 });
 

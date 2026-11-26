@@ -47,7 +47,7 @@ export async function listSessions(auth: AuthService, current: AuthSession): Pro
     model: "session",
     where: [
       { field: "userId", value: current.userId },
-      { field: "expiresAt", value: new Date(), operator: "gt" },
+      { field: "expiresAt", value: new Date(auth.now()), operator: "gt" },
       // A session at or over the 30-day cap is already gone to the API: the list does not show it.
       { field: "createdAt", value: new Date(auth.now() - SESSION_CAP_MS), operator: "gt" },
     ],
@@ -64,7 +64,8 @@ export async function listSessions(auth: AuthService, current: AuthSession): Pro
   return rows.map((row) => ({
     id: row.id,
     createdAt: row.createdAt,
-    expiresAt: row.expiresAt,
+    // A refresh may push the stored expiry past the cap; what the list reports never does.
+    expiresAt: new Date(Math.min(row.expiresAt.getTime(), row.createdAt.getTime() + SESSION_CAP_MS)),
     userAgent: row.userAgent ?? null,
     current: row.id === current.id,
   }));

@@ -59,7 +59,17 @@ const tokenAnswer = (member: string) => (s: string) => ({
   response: { headers: JSON_HEADERS, body: JSON.stringify({ token_type: "bearer", [member]: s }) },
 });
 
+const JSON_MEMBERS = ["accessJwt", "refreshJwt", "credential", "bearer", "session", "sessionId"];
+
 const KINDS: [string, (secret: string) => Placed][] = [
+  ...JSON_MEMBERS.map((member): [string, (secret: string) => Placed] => [
+    `${member} member in a json answer`,
+    (s) => ({
+      url: `${HOST}/session`,
+      headers: {},
+      response: { headers: JSON_HEADERS, body: JSON.stringify({ did: "did-1", [member]: s }) },
+    }),
+  ]),
   [
     "set-cookie response header",
     (s) => ({
@@ -224,6 +234,18 @@ describe("recorder", () => {
       expect(text, `${kind} survived as ${seen.name}`).not.toContain(seen.needle(secret));
     }
     expect(text).toContain(PLANTED);
+  });
+
+  it("does not treat a member that only starts with a secret word as a secret", () => {
+    const exchange: RecordedExchange = {
+      request: { method: "GET", url: `${HOST}/stats`, headers: {} },
+      response: {
+        status: 200,
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ sessionCount: PLANTED, bearerOnly: PLANTED }),
+      },
+    };
+    expect(scrubExchange(exchange)).toEqual(exchange);
   });
 
   it("leaves an exchange without secrets unchanged", () => {

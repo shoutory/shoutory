@@ -200,8 +200,50 @@ function hostSourceIssues({ egressHosts, egressHostSource }: ManifestShape): Cro
   return [];
 }
 
+function capabilityIssues(manifest: ManifestShape): CrossFieldIssue[] {
+  const { capabilities, followUpRoles, refreshErrorMap, limits } = manifest;
+  const issues: CrossFieldIssue[] = [];
+  if (new Set(capabilities).size !== capabilities.length) {
+    issues.push({ path: ["capabilities"], message: "a capability is listed once" });
+  }
+  if (capabilities.includes("refresh") && Object.keys(refreshErrorMap).length === 0) {
+    issues.push({ path: ["refreshErrorMap"], message: "a refresh capability needs refresh error classes" });
+  }
+  const roles = [
+    ["thread", "thread_reply"],
+    ["first_comment", "first_comment"],
+  ] as const;
+  for (const [capability, role] of roles) {
+    if (capabilities.includes(capability) && !followUpRoles.includes(role)) {
+      issues.push({ path: ["followUpRoles"], message: `${capability} needs the ${role} follow-up role` });
+    }
+  }
+  if (capabilities.includes("image") && limits.imageMaxBytes === undefined) {
+    issues.push({
+      path: ["limits", "imageMaxBytes"],
+      message: "an image capability needs an imageMaxBytes limit",
+    });
+  }
+  return issues;
+}
+
+function versionIssues({ apiVersions }: ManifestShape): CrossFieldIssue[] {
+  return apiVersions.flatMap((version, index) =>
+    version.sunset !== undefined && version.sunset < version.introduced
+      ? [
+          {
+            path: ["apiVersions", String(index), "sunset"],
+            message: "an api version sunsets after it starts",
+          },
+        ]
+      : [],
+  );
+}
+
 export const manifestSchema = manifestShape.superRefine((manifest, context) => {
   const issues = [
+    ...capabilityIssues(manifest),
+    ...versionIssues(manifest),
     ...declaredActionIssues(manifest),
     ...resendIssues(manifest),
     ...hostSourceIssues(manifest),

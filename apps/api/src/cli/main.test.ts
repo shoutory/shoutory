@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { collectSecrets, run } from "./main.js";
+import { run } from "./main.js";
 import { migrateCommand } from "./migrate.js";
 
 // The real command stays in place; one row makes it throw so the assertion is on `run`'s own output.
@@ -63,44 +63,5 @@ describe("a command failure is printed without a registered secret", () => {
     expect(code).toBe(1);
     expect(sink.err).toHaveLength(1);
     for (const spelling of spellings(CANARY)) expect(sink.err[0]).not.toContain(spelling);
-  });
-});
-
-describe("collectSecrets", () => {
-  it("takes set secret variables, every KEK and the decoded URL password, and skips short values", () => {
-    const secrets = collectSecrets({
-      SHOUTORY_HMAC_PEPPER: "planted-pepper-value-0001",
-      SHOUTORY_SESSION_SECRET: "short",
-      SHOUTORY_KEK_ONE: "planted-kek-value-0001",
-      SHOUTORY_SMTP_URL: "smtps://mailer:p%40ss-word-0001@mail.example.test:465",
-      SHOUTORY_DATABASE_URL_APP: "postgres://app:db-password-0001@db.example.test/shoutory",
-      SHOUTORY_DATABASE_PASSWORD_APP: "",
-      SHOUTORY_S3_ACCESS_KEY_ID: "planted-s3-access-value",
-      SHOUTORY_S3_SECRET_ACCESS_KEY: "planted-s3-secret-value",
-    });
-    expect(secrets.sort()).toEqual(
-      [
-        "db-password-0001",
-        "p@ss-word-0001",
-        "planted-kek-value-0001",
-        "planted-pepper-value-0001",
-        "planted-s3-access-value",
-        "planted-s3-secret-value",
-        "postgres://app:db-password-0001@db.example.test/shoutory",
-        "smtps://mailer:p%40ss-word-0001@mail.example.test:465",
-      ].sort(),
-    );
-  });
-
-  it.each(
-    ["OWNER", "APP", "WORKER", "AUTH", "READONLY"].flatMap((role) => [
-      [
-        `SHOUTORY_DATABASE_URL_${role}`,
-        `postgres://${role.toLowerCase()}:planted-db-${role}@db.example.test/shoutory`,
-      ],
-      [`SHOUTORY_DATABASE_PASSWORD_${role}`, `planted-role-password-${role}`],
-    ]),
-  )("collects %s so the logger never prints it", (name, value) => {
-    expect(collectSecrets({ [name as string]: value })).toContain(value);
   });
 });

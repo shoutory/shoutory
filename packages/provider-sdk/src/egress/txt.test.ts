@@ -44,15 +44,16 @@ describe("egressResolveTxt (the _atproto lookup)", () => {
     expect((failure as EgressError).class).toBe("size_exceeded");
   });
 
-  it("a failed lookup is an EgressError of class dns that holds no part of the original", async () => {
-    const policy = withAnswer(async () => {
-      throw Object.assign(new Error("queryTxt ENOTFOUND _atproto.example.com?token=txt-canary-1"), {
-        code: "ENOTFOUND",
+  it.each(["ENOTFOUND", "ENODATA", "ETIMEOUT", "ESERVFAIL"])(
+    "a %s lookup is an EgressError of class dns with no effect that holds no part of the original",
+    async (code) => {
+      const policy = withAnswer(async () => {
+        throw Object.assign(new Error("queryTxt failed _atproto.example.com?token=txt-canary-1"), { code });
       });
-    });
-    const failure = await egressResolveTxt("_atproto.example.com", policy).catch((error: unknown) => error);
-    expect(failure).toBeInstanceOf(EgressError);
-    expect((failure as EgressError).class).toBe("dns");
-    expect(`${String(failure)}${(failure as Error).stack}`).not.toContain("txt-canary-1");
-  });
+      const failure = await egressResolveTxt("_atproto.example.com", policy).catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(EgressError);
+      expect([(failure as EgressError).class, (failure as EgressError).effect]).toEqual(["dns", "none"]);
+      expect(`${String(failure)}${(failure as Error).stack}`).not.toContain("txt-canary-1");
+    },
+  );
 });

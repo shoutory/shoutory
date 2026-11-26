@@ -46,8 +46,9 @@ export const mastodonManifest = manifestSchema.parse({
   // An access token does not expire and there is no refresh token, so nothing is ever refreshed.
   refreshErrorMap: {},
   absentAnswers: [{ status: 404 }],
-  // The instance counts code points, and a link counts `characters_reserved_per_url` whatever its length.
-  counting: { unit: "weighted", urlWeight: 23, weights: { defaultWeight: 1, ranges: [] } },
+  // The instance counts graphemes, a link counts `characters_reserved_per_url` whatever its length, and a remote
+  // mention counts as `@name` (status_length_validator.rb in the Mastodon source).
+  counting: { unit: "graphemes", urlWeight: 23, mentions: "local_part" },
   apiAccess: "official",
   apiVersions: [
     // VERIFY: `introduced` is the release date of 4.0.0, the first version with the v2 instance answer (GitHub releases).

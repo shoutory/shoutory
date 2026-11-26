@@ -36,12 +36,13 @@ describe("errorResult", () => {
   it.each([
     [0, 0],
     [86_400_000, 86_400_000],
-    [86_400_001, undefined],
+    [86_400_001, 86_400_000],
+    [864_000_000, 86_400_000],
     [-1, undefined],
     [1.5, undefined],
     [Number.NaN, undefined],
     [Number.POSITIVE_INFINITY, undefined],
-  ])("keeps the retry delay %s only as a whole number of at most a day: %s", (retryAfterMs, kept) => {
+  ])("reports the retry delay %s as %s: a whole number, a day at most", (retryAfterMs, kept) => {
     const result = errorResult({ effect: "none", errorClass: "rate_limited", retryAfterMs });
     expect(result.retryAfterMs).toBe(kept);
   });

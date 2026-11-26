@@ -15,9 +15,8 @@ import { accountOf, recorder } from "../support/instance.js";
 // code is played and a 422 is classed by its status; the text a 401 carries is the documented one
 // (docs.joinmastodon.org/methods/statuses, accessed 2026-11-24).
 const rows = faultMatrixRows({
+  manifest: mastodonManifest,
   badRequestCodes: [],
-  capabilities: [],
-  absentStatus: mastodonManifest.absentAnswers[0]?.status ?? 404,
   revokedCode: "The access token is invalid",
 });
 

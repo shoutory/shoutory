@@ -8,23 +8,23 @@ import type { StorageDriver } from "@shoutory/core/storage";
 import { createAppPool, createAuthDb } from "@shoutory/db/pool";
 import { assertMigrationsApplied, sealedKeyIds } from "@shoutory/db/startup";
 import { builtInManifests, createBuiltInAdapters } from "@shoutory/provider-registry";
-import { type EgressRequest, egressFetch } from "@shoutory/provider-sdk/egress";
+import { closeEgress, type EgressRequest, egressFetch } from "@shoutory/provider-sdk/egress";
 import { fetchOf } from "@shoutory/provider-sdk/egress/fetch-adapter";
-import { createOperatorPolicy } from "@shoutory/provider-sdk/egress/policy";
+import { createOperatorPolicy, type OperatorPolicy } from "@shoutory/provider-sdk/egress/policy";
 import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import { createRegistry } from "@shoutory/provider-sdk/registry";
 import { createApp } from "./app.js";
 import { createAuth } from "./auth/auth.js";
 import { RANGE_HOST } from "./auth/hibp.js";
 import type { HealthProvider } from "./channels/health.js";
-import { type CliIo, collectSecrets, run } from "./cli/main.js";
+import { type CliIo, run } from "./cli/main.js";
 import { refuseEgress } from "./jobs/ledger/held.js";
 import { checkFfmpegPath, checkFfprobePath } from "./jobs/media/probe-run.js";
 import { createClamdScan } from "./jobs/media/scan.js";
 import { sweepScratch } from "./jobs/media/scratch.js";
 import { startWorker } from "./jobs/worker.js";
 import { createLogger, type Logger } from "./logging/logger.js";
-import { createScrubber } from "./logging/scrub.js";
+import { collectSecrets, createScrubber } from "./logging/scrub.js";
 import { closeServer, closeTogether, drain, firstOnly } from "./shutdown.js";
 import { createStorageDriver } from "./storage/driver.js";
 import {
@@ -63,20 +63,32 @@ function listen(
   });
 }
 
+// One policy per process, so every caller shares the same connection pools and one call closes them.
+const operators = new WeakMap<Config, OperatorPolicy>();
+
+function operatorOf(config: Config): OperatorPolicy {
+  let operator = operators.get(config);
+  if (operator === undefined) {
+    operator = createOperatorPolicy({ allowCidrs: config.egressAllowCidrs });
+    operators.set(config, operator);
+  }
+  return operator;
+}
+
 function boundEgress(config: Config) {
-  const operator = createOperatorPolicy({ allowCidrs: config.egressAllowCidrs });
+  const operator = operatorOf(config);
   const request = { kind: "provider", egressHosts: [RANGE_HOST] } as const;
   return (req: EgressRequest) => egressFetch(req, { request, operator });
 }
 
 function importFetch(config: Config) {
-  const operator = createOperatorPolicy({ allowCidrs: config.egressAllowCidrs });
+  const operator = operatorOf(config);
   const request = { kind: "user_url" } as const;
   return (req: EgressRequest) => egressFetch(req, { request, operator });
 }
 
 function providerFetch(config: Config) {
-  const operator = createOperatorPolicy({ allowCidrs: config.egressAllowCidrs });
+  const operator = operatorOf(config);
   return (manifest: Manifest, instanceHost?: string): typeof fetch => {
     const request = manifest.egressHosts
       ? ({ kind: "provider", egressHosts: manifest.egressHosts } as const)
@@ -297,7 +309,11 @@ async function start(env: NodeJS.ProcessEnv, io: CliIo): Promise<Started> {
     try {
       await running?.close();
     } finally {
-      await telemetry?.shutdown();
+      try {
+        await closeEgress(operatorOf(config));
+      } finally {
+        await telemetry?.shutdown();
+      }
     }
   };
   return "server" in started ? { server: { port: started.server.port, close } } : { worker: { close } };

@@ -263,6 +263,13 @@ describe("the oauth fake refuses a defective DPoP proof", () => {
     ],
     ["a bad signature", async (nonce) => proofWith(nonce, { signedBy: otherKeys.privateKey })],
     [
+      "a key that is not on the curve",
+      async (nonce) => {
+        const zero = Buffer.alloc(32).toString("base64url");
+        return proofWith(nonce, { header: { jwk: { ...publicJwk, x: zero, y: zero } } });
+      },
+    ],
+    [
       "an iat outside the window",
       async (nonce) => proofWith(nonce, { claims: { iat: Math.floor(nowMs / 1000) - 120 } }),
     ],
@@ -285,6 +292,34 @@ describe("the oauth fake refuses a defective DPoP proof", () => {
     const answer = await exchange(code, secret, proof === undefined ? {} : { dpop: proof });
     expect(answer.status).toBe(400);
     expect(await answer.json()).toEqual({ error: "invalid_dpop_proof" });
+  });
+});
+
+const BOUND = 1000;
+
+describe("the oauth fake forgets its oldest proof past the bound", () => {
+  withDpop();
+
+  it("the first proof can be replayed after more than the bound of others", async () => {
+    const nonce = await serverNonce();
+    const send = async (index: number) =>
+      (
+        await token({ grant_type: "none" }, { dpop: proofWith(nonce, { claims: { jti: `bound-${index}` } }) })
+      ).json() as Promise<{ error: string }>;
+    expect(await send(0)).toEqual({ error: "unsupported_grant_type" });
+    expect(await send(0)).toEqual({ error: "invalid_dpop_proof" });
+    for (let index = 1; index <= BOUND; index++) await send(index);
+    expect(await send(0)).toEqual({ error: "unsupported_grant_type" });
+  });
+});
+
+describe("the oauth fake forgets its oldest refresh token past the bound", () => {
+  it("the first token is refused after more than the bound of others, the last still works", async () => {
+    const issued: Tokens[] = [];
+    for (let index = 0; index <= BOUND; index++) issued.push(await connect());
+    const status = async (held: Tokens | undefined) => (await refreshWith(held?.refresh_token ?? "")).status;
+    expect(await status(issued[0])).toBe(400);
+    expect(await status(issued[BOUND])).toBe(200);
   });
 });
 

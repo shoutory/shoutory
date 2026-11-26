@@ -1,4 +1,4 @@
-import { createHash, createPublicKey, timingSafeEqual, verify } from "node:crypto";
+import { createHash, createPublicKey, type KeyObject, timingSafeEqual, verify } from "node:crypto";
 import { z } from "zod";
 
 function sameText(left: string, right: string): boolean {
@@ -33,6 +33,14 @@ const proofClaims = z.object({
 
 const IAT_WINDOW_S = 60;
 
+const MAX_REMEMBERED = 1000;
+
+// The fake only runs inside tests, so the oldest entry is dropped instead of letting a long run grow the set.
+export function rememberBounded(set: Set<string>, value: string): void {
+  set.add(value);
+  if (set.size > MAX_REMEMBERED) set.delete(set.values().next().value as string);
+}
+
 export type DpopVerdict = "ok" | "invalid_dpop_proof" | "use_dpop_nonce";
 
 export interface DpopExpectation {
@@ -53,8 +61,19 @@ function decodedJson(part: string): unknown {
   }
 }
 
+function importedKey(jwk: z.infer<typeof publicJwk>): KeyObject | undefined {
+  try {
+    return createPublicKey({ key: jwk, format: "jwk" });
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ERR_CRYPTO_INVALID_JWK")
+      return undefined;
+    throw error;
+  }
+}
+
 function signatureHolds(parts: readonly string[], jwk: z.infer<typeof publicJwk>): boolean {
-  const key = createPublicKey({ key: jwk, format: "jwk" });
+  const key = importedKey(jwk);
+  if (key === undefined) return false;
   const signed = Buffer.from(`${parts[0]}.${parts[1]}`);
   // A JWS signature is the raw r and s values, not DER.
   return verify(
@@ -81,6 +100,6 @@ export function checkDpopProof(proof: string, expected: DpopExpectation): DpopVe
     !expected.seen.has(jti);
   if (!sound) return "invalid_dpop_proof";
   if (nonce === undefined || !sameText(nonce, expected.nonce)) return "use_dpop_nonce";
-  expected.seen.add(jti);
+  rememberBounded(expected.seen, jti);
   return "ok";
 }

@@ -101,6 +101,14 @@ test("the app reads its keys from a required, git-ignored keys file, so a retire
   assert.ok(ignored.includes(`docker/${files[0].path}`), "the keys file must be git-ignored");
 });
 
+test("the app passes the OTLP endpoint and headers when they are set where compose runs", () => {
+  const keys = Object.keys(services.shoutory.environment);
+  for (const name of ["OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_HEADERS"]) {
+    assert.ok(keys.includes(name), name);
+    assert.equal(services.shoutory.environment[name], null, `${name} is passed through with no value`);
+  }
+});
+
 test("every README operator variable is in a compose service environment", () => {
   const readme = readFileSync(join(root, "README.md"), "utf8");
   const table = readme.slice(readme.indexOf("## Configuration"));

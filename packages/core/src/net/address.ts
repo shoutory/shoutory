@@ -52,6 +52,10 @@ function embeddedV4(bytes: Bytes): Bytes | undefined {
   return bytes[0] === 0x20 && bytes[1] === 0x02 ? bytes.slice(2, 6) : undefined;
 }
 
+// A range written in IPv4 matches only the IPv4-mapped form: 6to4 and NAT64 addresses are other networks.
+const mappedV4 = (bytes: Bytes): Bytes | undefined =>
+  zeroTo(bytes, 10) && bytes[10] === 0xff && bytes[11] === 0xff ? bytes.slice(12) : undefined;
+
 const inPrefix = (bytes: Bytes, range: Cidr) => {
   if (bytes.length !== range.bytes.length) return false;
   for (let bit = 0; bit < range.bits; bit += 1) {
@@ -136,6 +140,6 @@ export function parseCidr(text: string): Cidr {
 export function cidrContains(range: Cidr, address: string): boolean {
   const bytes = toBytes(address);
   if (bytes === undefined) return false;
-  const effective = range.bytes.length === 4 && bytes.length === 16 ? embeddedV4(bytes) : bytes;
+  const effective = range.bytes.length === 4 && bytes.length === 16 ? mappedV4(bytes) : bytes;
   return effective !== undefined && inPrefix(effective, range);
 }

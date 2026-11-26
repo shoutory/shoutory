@@ -124,3 +124,63 @@ describe("countText URL weight", () => {
     expect(countingRuleSchema.safeParse(rule).success).toBe(accepted);
   });
 });
+
+// Arabic meem-reh-hah, CJK ni-hao and a family emoji written as escapes; the link is 23 under this rule.
+const GRAPHEME_LINK_RULE: CountingRule = { unit: "graphemes", urlWeight: 23 };
+
+describe("countText link edges", () => {
+  it.each([
+    ["a link stops where Arabic starts", "https://example.com/a\u{645}\u{631}\u{62D}", 26],
+    ["a link stops where CJK starts", "https://example.com/a\u{4F60}\u{597D}", 25],
+    ["a link stops at a space", "https://example.com/a hi", 26],
+    ["two links glued by CJK text count twice", "https://a.example/x\u{4F60}https://b.example/y", 47],
+    ["a link glued after a Latin letter is plain text", "abchttps://example.com/x", 24],
+    ["a link keeps the closing parenthesis it opened", "https://example.org/a_(b) x", 25],
+    ["a link drops a parenthesis it did not open", "(https://example.org/a_(b))", 25],
+    ["a bare host is not a link", "see example.com now", 19],
+    [
+      "a family emoji is one grapheme beside a link",
+      "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466} https://example.com",
+      25,
+    ],
+    ["a decomposed letter is one grapheme beside a link", "cafe\u{301} https://example.com", 28],
+    ["a precomposed letter is one grapheme beside a link", "caf\u{E9} https://example.com", 28],
+  ])("counts %s", (_title, text, expected) => {
+    expect(countText(GRAPHEME_LINK_RULE, text)).toBe(expected);
+  });
+});
+
+const MENTION_RULE: CountingRule = { unit: "graphemes", urlWeight: 23, mentions: "local_part" };
+
+describe("countText mentions", () => {
+  it.each([
+    ["a remote mention counts its local part", "@user@example.com", 5],
+    ["a bare mention counts as written", "@user", 5],
+    ["a mention after a space is stripped", "hi @user@example.com", 8],
+    [
+      "a mention after Arabic and a space is stripped",
+      "\u{645}\u{631}\u{62D}\u{628}\u{627} @user@example.com",
+      11,
+    ],
+    ["a mention glued after a letter counts in full", "abc@user@example.com", 20],
+    ["a mention inside a link is part of the link", "https://example.com/@user@example.org", 23],
+    [
+      "a mention beside a link is stripped and the link weighs 23",
+      "@user@example.com https://example.org/x",
+      29,
+    ],
+  ])("counts %s", (_title, text, expected) => {
+    expect(countText(MENTION_RULE, text)).toBe(expected);
+  });
+
+  it("counts a remote mention in full when the rule has no mention setting", () => {
+    expect(countText(GRAPHEME_LINK_RULE, "@user@example.com")).toBe(17);
+  });
+
+  it.each([
+    ["local_part", true],
+    ["full", false],
+  ])("the mentions setting %s is accepted: %s", (mentions, accepted) => {
+    expect(countingRuleSchema.safeParse({ unit: "graphemes", mentions }).success).toBe(accepted);
+  });
+});

@@ -1,6 +1,44 @@
 import { describe, expect, it } from "vitest";
 import { errorResult } from "../result.js";
+import { faultMatrixRows } from "./fault-matrix.js";
 import { conformanceRows, type ErrorMapper } from "./kit.js";
+
+const manifest = {
+  absentAnswers: [{ status: 404 }],
+  capabilities: ["text", "delete"],
+  retryAfterMaxSeconds: 900,
+  readBackMode: "A",
+} as const;
+
+describe("the fault matrix reads its profile from the manifest", () => {
+  const ids = (capabilities: readonly string[]) =>
+    faultMatrixRows({
+      manifest: { ...manifest, capabilities },
+      badRequestCodes: [],
+      revokedCode: "revoked",
+    }).map((row) => row.id);
+
+  it("plays the rows of each declared capability and none of an undeclared one", () => {
+    expect(ids(["edit", "thread", "first_comment"])).toEqual(
+      expect.arrayContaining(["edit-published-post", "thread-parts-in-order", "first-comment"]),
+    );
+    expect(ids(["text"])).not.toContain("edit-published-post");
+  });
+
+  it("refuses a manifest that declares a capability the matrix has no row for", () => {
+    // fails first because: the profile was typed by hand, so a declared capability could be left out unnoticed
+    expect(() => ids(["text", "teleport"])).toThrow(/no row.*teleport/);
+  });
+
+  it.each([
+    ["an exempt capability", ["text", "image", "refresh"], undefined],
+    ["a declared video with no row", ["text", "video"], /no row.*video/],
+    ["a declared link_card with no row", ["text", "link_card"], /no row.*link_card/],
+  ])("%s", (_title, capabilities, error) => {
+    if (error) expect(() => ids(capabilities)).toThrow(error);
+    else expect(() => ids(capabilities)).not.toThrow();
+  });
+});
 
 function errorRow() {
   const row = conformanceRows.find((candidate) => candidate.id === "error-result-carries-no-id");

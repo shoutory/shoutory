@@ -20,7 +20,9 @@ const SECRET_JSON_KEYS = [
 ];
 // A query string, fragment or form body also carries the one-time OAuth values, which a JSON answer uses for plain codes.
 const SECRET_FORM_FIELDS = [...SECRET_JSON_KEYS, "code", "state"];
-const SECRET_NAME = /token|secret|key|signature|password|assertion/i;
+// The last four match only at the end of a name, so `sessionCount` stays readable.
+const SECRET_NAME =
+  /token|secret|key|signature|password|assertion|(jwt|credentials?|bearer|session|session_?id)$/i;
 const isSecretName = (list: readonly string[], name: string) =>
   list.includes(lower(name)) || SECRET_NAME.test(name);
 // A bot token follows `bot<digits>:` and a webhook token follows `webhooks/<digits>/` in the path.

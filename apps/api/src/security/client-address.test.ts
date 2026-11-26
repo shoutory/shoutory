@@ -66,6 +66,39 @@ const ROWS: Row[] = [
     PROXIES,
     "10.0.0.5",
   ],
+  ["an entry with a port is its address", "10.0.0.1", ["203.0.113.7:51234"], PROXIES, "203.0.113.7"],
+  [
+    "a bracketed IPv6 entry with a port is its address",
+    "10.0.0.1",
+    ["[2001:db8::5]:443"],
+    PROXIES,
+    "2001:db8::5",
+  ],
+  ["a bare IPv6 entry is its address, not an address with a port", "10.0.0.1", ["::1:80"], PROXIES, "::1:80"],
+  [
+    "a bracketed IPv6 entry without a port is its address",
+    "10.0.0.1",
+    ["[2001:db8::5]"],
+    PROXIES,
+    "2001:db8::5",
+  ],
+  ["port 0 is refused: the peer is used", "10.0.0.1", ["203.0.113.7:0"], PROXIES, "10.0.0.1"],
+  ["port 65536 is refused: the peer is used", "10.0.0.1", ["203.0.113.7:65536"], PROXIES, "10.0.0.1"],
+  ["a bracketed entry with port 65536 is refused", "10.0.0.1", ["[2001:db8::5]:65536"], PROXIES, "10.0.0.1"],
+  [
+    "a bracketed IPv4 entry is not an address: the peer is used",
+    "10.0.0.1",
+    ["[1.2.3.4]:80"],
+    PROXIES,
+    "10.0.0.1",
+  ],
+  [
+    "a spoofed leftmost entry with a port is still skipped",
+    "10.0.0.1",
+    ["1.1.1.1:80, 203.0.113.7:51234"],
+    PROXIES,
+    "203.0.113.7",
+  ],
 ];
 
 describe("client address behind proxies", () => {

@@ -19,6 +19,9 @@ services:
     environment:
       SHOUTORY_ACTIVE_KEY_ID: ${SHOUTORY_ACTIVE_KEY_ID:?set SHOUTORY_ACTIVE_KEY_ID}
       SHOUTORY_KEK_K1: ${SHOUTORY_KEK_K1:?set SHOUTORY_KEK_K1}
+      # A published port reaches the app from the Docker network's gateway, so the private ranges Docker hands out are the
+      # proxy. Each test project and each member then sends its own X-Forwarded-For and is counted as its own client.
+      SHOUTORY_TRUSTED_PROXIES: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
     # Only the app is pointed at the sidecar: Docker's own resolver still answers the names of this stack, and every
     # other name goes to the sidecar, which records it and refuses it. The address is read after the sidecar starts.
     dns:

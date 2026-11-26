@@ -12,7 +12,10 @@ const VISUAL = "rtl-visual.spec.ts";
 // and that run has no other.
 const RESTORE = "restore-drill.spec.ts";
 const RESTORE_RUN = process.env.SHOUTORY_E2E_RESTORE === "true";
-const JOURNEY = { name: "journey", testMatch: "onboarding.spec.ts" };
+// Each project sends its own client address (the stack's compose overlay trusts the Docker gateway to say so), so the
+// per-address limits of sign-up and sign-in count a project's people apart from every other project's.
+const from = (n: number) => ({ extraHTTPHeaders: { "x-forwarded-for": `198.51.100.${n}` } });
+const JOURNEY = { name: "journey", testMatch: "onboarding.spec.ts", use: from(1) };
 // Screenshots differ between platforms, so baselines are made and compared on Linux only. A listing runs nothing, so it
 // may show the visual cells on any machine for the contract tests.
 const LINUX = process.platform === "linux" || process.argv.includes("--list");
@@ -33,7 +36,7 @@ const FULL = [
     name: "founder",
     testIgnore: ["onboarding.spec.ts", "no-telemetry.spec.ts", UX, VISUAL, RESTORE, ...QUALITY],
     dependencies: ["journey"],
-    use: { storageState: FOUNDER_STATE },
+    use: { storageState: FOUNDER_STATE, ...from(2) },
   },
   // The accessibility spec is its own project, the longest of the quality checks, so a shard can hold it alone.
   {
@@ -41,13 +44,13 @@ const FULL = [
     testMatch: A11Y,
     // The founder project's keyboard spec makes the member this spec opens the challenge screen with.
     dependencies: ["founder"],
-    use: { storageState: FOUNDER_STATE },
+    use: { storageState: FOUNDER_STATE, ...from(3) },
   },
   {
     name: "quality",
     testMatch: QUALITY.filter((file) => file !== A11Y),
     dependencies: ["founder", "a11y"],
-    use: { storageState: FOUNDER_STATE },
+    use: { storageState: FOUNDER_STATE, ...from(4) },
   },
   // Before the UX checks, which change the workspace's members.
   ...(LINUX
@@ -58,7 +61,7 @@ const FULL = [
           grep: /\(\d+ px, en, /,
           snapshotPathTemplate: VISUAL_SNAPSHOT_PATH,
           dependencies: ["quality", "a11y"],
-          use: { storageState: FOUNDER_STATE },
+          use: { storageState: FOUNDER_STATE, ...from(5) },
         },
         {
           name: "visual-ar",
@@ -66,7 +69,7 @@ const FULL = [
           grep: /\(\d+ px, ar, /,
           snapshotPathTemplate: VISUAL_SNAPSHOT_PATH,
           dependencies: ["quality", "a11y", "visual-en"],
-          use: { storageState: FOUNDER_STATE },
+          use: { storageState: FOUNDER_STATE, ...from(6) },
         },
       ]
     : []),
@@ -76,14 +79,14 @@ const FULL = [
     name: "ux",
     testMatch: UX,
     dependencies: ["quality", "a11y", ...(LINUX ? ["visual-en", "visual-ar"] : [])],
-    use: { storageState: FOUNDER_STATE },
+    use: { storageState: FOUNDER_STATE, ...from(7) },
   },
   // Last, so the lookups it reads cover the start-up and every spec above, whatever the files are called.
   {
     name: "telemetry",
     testMatch: "no-telemetry.spec.ts",
     dependencies: ["founder", "quality", "a11y", "ux"],
-    use: { storageState: FOUNDER_STATE },
+    use: { storageState: FOUNDER_STATE, ...from(8) },
   },
 ];
 

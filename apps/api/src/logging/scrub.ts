@@ -1,3 +1,7 @@
+import { SECRET_VARIABLES, STORAGE_SECRET_VARIABLES } from "@shoutory/core/config";
+
+const KEK_PREFIX = "SHOUTORY_KEK_";
+const OTLP_HEADER_VARIABLES = ["OTEL_EXPORTER_OTLP_HEADERS", "OTEL_EXPORTER_OTLP_TRACES_HEADERS"];
 const CENSORED_KEYS: ReadonlySet<string> = new Set([
   "authorization",
   "cookie",
@@ -21,6 +25,52 @@ const MAX_ENTRIES = 100;
 const MIN_SECRET_LENGTH = 8;
 
 export type Scrubber = (value: unknown) => unknown;
+
+function decodedPassword(value: string): string | undefined {
+  if (!URL.canParse(value)) return undefined;
+  try {
+    return decodeURIComponent(new URL(value).password);
+  } catch (error) {
+    if (error instanceof URIError) return undefined;
+    throw error;
+  }
+}
+
+// `name=value,name=value`, values percent-encoded (OpenTelemetry exporter configuration). A value such as
+// `Bearer <token>` also registers its last word, since the token shows up alone in a request log.
+function headerValues(list: string): string[] {
+  return list.split(",").flatMap((pair) => {
+    const value = pair.slice(pair.indexOf("=") + 1).trim();
+    const decoded = safeDecode(value);
+    return [value, decoded, decoded.split(/\s+/).at(-1) ?? decoded];
+  });
+}
+
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch (error) {
+    if (error instanceof URIError) return value;
+    throw error;
+  }
+}
+
+export function collectSecrets(env: NodeJS.ProcessEnv): string[] {
+  const headers = OTLP_HEADER_VARIABLES.flatMap((name) => headerValues(env[name] ?? ""));
+  const names = [
+    ...SECRET_VARIABLES,
+    ...STORAGE_SECRET_VARIABLES,
+    ...Object.keys(env).filter((name) => name.startsWith(KEK_PREFIX)),
+  ];
+  const values = names.flatMap((name) => {
+    const value = env[name];
+    return value ? [value, decodedPassword(value)] : [];
+  });
+  const usable = [...values, ...headers].filter(
+    (v): v is string => v !== undefined && v.length >= MIN_SECRET_LENGTH,
+  );
+  return [...new Set(usable)];
+}
 
 function spellings(secret: string): string[] {
   const buffer = Buffer.from(secret);

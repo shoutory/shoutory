@@ -11,6 +11,7 @@ import type {
 } from "@shoutory/provider-sdk/adapter";
 import { errorResult, type ProviderResult } from "@shoutory/provider-sdk/result";
 import { z } from "zod";
+import { fixtureManifest } from "./manifest.js";
 
 interface FailureInput {
   readonly status: number;
@@ -44,7 +45,7 @@ function mapFailure({ status, code, retryAfter, now, write }: FailureInput): Pro
   // A duplicate means an earlier send may have created the post: only a read-back can tell.
   if (code === "duplicate")
     return errorResult({ effect: "possible", errorClass: "unknown", providerCode: code });
-  const errorClass = code === "grant_revoked" ? "auth_revoked" : "permanent";
+  const errorClass = status === 401 || code === "grant_revoked" ? "auth_revoked" : "permanent";
   return errorResult({ effect: "none", errorClass, ...(code === undefined ? {} : { providerCode: code }) });
 }
 
@@ -56,6 +57,8 @@ export interface FixtureAdapterOptions {
   readonly clientId?: string | undefined;
   /** The issuer a connect callback must carry; a connect with none expected accepts any. */
   readonly issuer?: string | undefined;
+  /** The answers that mean a post is gone; the fixture manifest's by default. */
+  readonly absentAnswers?: readonly { readonly status: number }[] | undefined;
 }
 
 const oauthError = z.object({ error: z.string() });
@@ -67,8 +70,6 @@ type Answer =
   | { readonly ok: true; readonly json: unknown }
   // `status` is the provider's answer, absent when there was none (a network failure).
   | { readonly ok: false; readonly result: ProviderResult; readonly status?: number };
-
-const ABSENT_STATUS = 404;
 
 // A connection that never opened sent nothing; the others may have been cut after the request went out.
 const NOT_SENT = new Set(["UND_ERR_CONNECT_TIMEOUT", "ECONNREFUSED"]);
@@ -248,6 +249,9 @@ function connectOf(options: FixtureAdapterOptions & { readonly clientId: string 
   };
 }
 
+const isAbsent = (options: FixtureAdapterOptions, status: number | undefined): boolean =>
+  (options.absentAnswers ?? fixtureManifest.absentAnswers).some((answer) => answer.status === status);
+
 export function createFixtureAdapter(options: FixtureAdapterOptions): ProviderAdapter {
   const call = (
     context: AdapterContext,
@@ -288,7 +292,7 @@ export function createFixtureAdapter(options: FixtureAdapterOptions): ProviderAd
     delete: async (context, post) => {
       const answer = await call(context, "DELETE", target(post));
       if (answer.ok) return { ok: true, effect: "confirmed" };
-      return answer.status === ABSENT_STATUS ? { ok: true, effect: "none" } : answer.result;
+      return isAbsent(options, answer.status) ? { ok: true, effect: "none" } : answer.result;
     },
     edit: async (context, post, input) =>
       withId(await call(context, "PATCH", target(post), { body: { text: input.text } }), "confirmed", true),

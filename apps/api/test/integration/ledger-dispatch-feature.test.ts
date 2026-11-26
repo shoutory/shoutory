@@ -11,6 +11,7 @@ import {
   admin,
   called,
   holdFirst,
+  isCommit,
   logger,
   makeEnv,
   marked,
@@ -357,6 +358,51 @@ describe("a failing read-back", () => {
       } finally {
         await first.close();
         await second.close();
+      }
+    },
+    30_000,
+  );
+});
+
+describe("a provider error body", () => {
+  // [the status the provider answers with]
+  it.each([[500], [422], [429]])(
+    "a provider error body canary is absent from every log line and from the stored attempt (status %s)",
+    async (status) => {
+      const e = await makeEnv();
+      const lines: string[] = [];
+      const canaryFetch: typeof fetch = async (input, init) =>
+        isCommit(String(input), init?.method ?? "GET")
+          ? new Response(`{"error":{"code":"canary-body-code","message":"canary-error-body-0001"}}`, {
+              status: Number(status),
+            })
+          : fetch(input, init);
+      try {
+        const id = await plant(e);
+        await runTurn({
+          pool: workerPool(),
+          logger: createLogger({ secrets: [], stream: { write: (line) => void lines.push(line) } }),
+          registry: e.registry,
+          adapters: e.adapters,
+          fetchFor: () => canaryFetch,
+          credentials: ledgerCredentials(workerPool(), {
+            registry: e.registry,
+            adapters: e.adapters,
+            fetchFor: () => canaryFetch,
+          }),
+          queue: e.queueName,
+          owner: "owner-body",
+          closing: new AbortController().signal,
+        });
+        const [attempt] = await rows(
+          "SELECT row_to_json(a)::text AS stored FROM app.operation_attempts a WHERE operation_id = $1",
+          [id],
+        );
+        expect(attempt?.stored).toBeDefined();
+        expect(String(attempt?.stored)).not.toContain("canary-error-body-0001");
+        expect(lines.join("\n")).not.toContain("canary-error-body-0001");
+      } finally {
+        await e.close();
       }
     },
     30_000,

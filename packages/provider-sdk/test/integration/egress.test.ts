@@ -247,6 +247,37 @@ describe("egressFetch caller's signal", () => {
   });
 });
 
+describe("egressFetch first hop headers", () => {
+  it.each([
+    ["host", "evil.test"],
+    ["Host", "evil.test"],
+    ["content-length", "1"],
+    ["Content-Length", "1"],
+    ["transfer-encoding", "chunked"],
+    ["Transfer-Encoding", "chunked"],
+  ])("a caller's %s header is not sent on the first hop", async (name, value) => {
+    const seen: { host: string | undefined; length: string | undefined; body: string }[] = [];
+    handler = (req, res) => {
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk: Buffer) => chunks.push(chunk));
+      req.on("end", () => {
+        seen.push({
+          host: req.headers.host,
+          length: req.headers["content-length"],
+          body: Buffer.concat(chunks).toString(),
+        });
+        res.end("ok");
+      });
+    };
+    const reply = await egressFetch(
+      { url: `http://slow.test:${port}/`, method: "POST", body: "payload", headers: { [name]: value } },
+      policyOf(["127.0.0.0/8"], local().lookup),
+    );
+    expect(reply.status).toBe(200);
+    expect(seen).toEqual([{ host: `slow.test:${port}`, length: "7", body: "payload" }]);
+  });
+});
+
 describe("egressFetch connections and retry", () => {
   it("keep-alive reuses one connection per host", async () => {
     const policy = policyOf(["127.0.0.0/8"], local().lookup);
@@ -282,7 +313,36 @@ describe("egressFetch connections and retry", () => {
     );
     expect([failure.class, failure.effect]).toEqual(["connect_timeout", "none"]);
   });
+});
 
+describe("egressFetch connect timer", () => {
+  // The connect timer is held below the total one, so a lookup that hangs ends as a connect timeout and not as a
+  // timeout that could have sent something.
+  it.each([
+    ["no connect timeout is given", undefined, 2_500],
+    ["the total timeout is below the connect timeout", 4_000, 2_000],
+  ])(
+    "a lookup that never answers ends as connect_timeout with no effect when %s",
+    async (_name, connect, total) => {
+      const lookup = () => new Promise<never>(() => undefined);
+      const began = Date.now();
+      const failure = await refusal(
+        egressFetch(
+          {
+            url: `http://slow.test:${port}/`,
+            ...(connect === undefined ? {} : { connectTimeoutMs: connect }),
+            timeoutMs: total,
+          },
+          policyOf(["127.0.0.0/8"], lookup),
+        ),
+      );
+      expect([failure.class, failure.effect]).toEqual(["connect_timeout", "none"]);
+      expect(Date.now() - began).toBeLessThan(total);
+    },
+  );
+});
+
+describe("egressFetch send timeout", () => {
   it("a timeout after the request was sent reports effect possible", async () => {
     handler = () => undefined;
     const failure = await refusal(

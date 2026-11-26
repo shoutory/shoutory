@@ -13,6 +13,7 @@ export const countingRuleSchema = z
   .strictObject({
     unit: z.enum(["graphemes", "utf16", "bytes", "weighted"]),
     urlWeight: z.int().positive().optional(),
+    mentions: z.literal("local_part").optional(),
     weights: z
       .strictObject({
         defaultWeight: z.int().nonnegative(),
@@ -32,8 +33,31 @@ export type CountingRule = z.infer<typeof countingRuleSchema>;
 
 const graphemes = new Intl.Segmenter("en", { granularity: "grapheme" });
 const encoder = new TextEncoder();
-const URL_PATTERN = /https?:\/\/\S+/giu;
-const TRAILING_PUNCTUATION = /[.,;:!?)\]}'"،؛؟]+$/u;
+// A link may not follow a Latin letter, digit or one of `_@$#`, and its path ends where Arabic, CJK or a space begins.
+const URL_PATTERN =
+  /(?<![a-z0-9_@$#])https?:\/\/[^\s\p{Script=Arabic}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+/giu;
+const TRAILING_PUNCTUATION = /[.,;:!?\]}'"،؛؟]+$/u;
+
+// A mention is `@name` with an optional `@domain` and does not follow a word character, `=` or `/`.
+const MENTION_PATTERN =
+  /(?<![=/\p{L}\p{N}_])@([a-z0-9_]+(?:[a-z0-9_.-]+[a-z0-9_]+)?)(?:@[\p{L}\p{N}_.-]*[\p{L}\p{N}_])?/giu;
+
+function countPlain(rule: CountingRule, text: string): number {
+  const counted = rule.mentions === "local_part" ? text.replace(MENTION_PATTERN, "@$1") : text;
+  return countSegment(rule, counted);
+}
+
+function occurrences(text: string, char: string): number {
+  return text.split(char).length - 1;
+}
+
+function trimUrl(match: string): string {
+  let url = match.replace(TRAILING_PUNCTUATION, "");
+  while (url.endsWith(")") && occurrences(url, ")") > occurrences(url, "(")) {
+    url = url.slice(0, -1).replace(TRAILING_PUNCTUATION, "");
+  }
+  return url;
+}
 
 function countSegment(rule: CountingRule, text: string): number {
   switch (rule.unit) {
@@ -62,11 +86,11 @@ export function countText(rule: CountingRule, text: string): number {
   let total = 0;
   let cursor = 0;
   for (const match of text.matchAll(URL_PATTERN)) {
-    const url = match[0].replace(TRAILING_PUNCTUATION, "");
+    const url = trimUrl(match[0]);
     const start = match.index;
-    total += countSegment(rule, text.slice(cursor, start));
+    total += countPlain(rule, text.slice(cursor, start));
     total += rule.urlWeight ?? countSegment(rule, url);
     cursor = start + url.length;
   }
-  return total + countSegment(rule, text.slice(cursor));
+  return total + countPlain(rule, text.slice(cursor));
 }

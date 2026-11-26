@@ -2,14 +2,16 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type Fixture, PASSWORD, startFixture } from "./harness.js";
 
 let fx: Fixture;
+let clock: number | undefined;
 beforeAll(async () => {
-  fx = await startFixture();
+  fx = await startFixture({ now: () => clock ?? Date.now() });
 });
 afterAll(() => fx.close());
 
 interface Listed {
   id: string;
   current: boolean;
+  expiresAt: string;
 }
 const list = async (cookie: string): Promise<Listed[]> => {
   const answer = await fx.request("/api/auth/sessions", { headers: { cookie } });
@@ -51,7 +53,41 @@ describe("session list and revoke", () => {
     );
     expect((await fx.request("/api/auth/sessions", { headers: { cookie: second } })).status).toBe(401);
   });
+});
 
+describe("session list expiry", () => {
+  it("the list clamps a rolled expiry to the 30-day cap and cuts off by the injected clock", async () => {
+    const email = "list-clock-1@example.test";
+    const first = await fx.signedIn(email);
+    await secondSession(email);
+    const created = new Date(Date.now() - 29 * 86_400_000);
+    // The first row is the one the cookie belongs to; the second ends in an hour, which the clock below has passed.
+    await fx.admin((client) =>
+      client.query(
+        `WITH mine AS (
+           SELECT s.id, row_number() OVER (ORDER BY s.created_at) AS n FROM auth.session s
+           JOIN auth."user" u ON u.id = s.user_id WHERE u.email = $1)
+         UPDATE auth.session s SET
+           created_at = CASE WHEN mine.n = 1 THEN $2::timestamptz ELSE s.created_at END,
+           updated_at = CASE WHEN mine.n = 1 THEN $2::timestamptz ELSE s.updated_at END,
+           expires_at = CASE WHEN mine.n = 1 THEN s.expires_at ELSE now() + interval '1 hour' END
+         FROM mine WHERE s.id = mine.id`,
+        [email, created],
+      ),
+    );
+    clock = Date.now() + 2 * 3_600_000;
+    const items = await list(first);
+    const current = items.find((item) => item.current);
+    expect(items).toHaveLength(1);
+    expect(current).toBeDefined();
+    expect(new Date(current?.expiresAt ?? 0).getTime()).toBeLessThanOrEqual(
+      created.getTime() + 30 * 86_400_000,
+    );
+    clock = undefined;
+  });
+});
+
+describe("revoking another user's session", () => {
   it("a session id of another user revokes nothing", async () => {
     const mine = await fx.signedIn("revoke-3@example.test");
     const theirs = await fx.signedIn("revoke-4@example.test");

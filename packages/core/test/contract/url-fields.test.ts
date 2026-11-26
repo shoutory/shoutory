@@ -1,4 +1,4 @@
-import { globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -22,7 +22,20 @@ const FIELD_IDS = [
   "mail-check-dns",
 ];
 
-function problems(fields: readonly Partial<UrlField>[], knownExceptionIds: readonly string[]): string[] {
+function readerProblem(id: string, reader: string | undefined, base: string): string[] {
+  if (reader === undefined) return [`${id}: egress row with no reader`];
+  const path = join(base, reader);
+  if (!existsSync(path)) return [`${id}: reader does not exist`];
+  return /\bimport\b[^;]*\begressFetch\b/.test(readFileSync(path, "utf8"))
+    ? []
+    : [`${id}: reader does not import egressFetch`];
+}
+
+function problems(
+  fields: readonly Partial<UrlField>[],
+  knownExceptionIds: readonly string[],
+  base = root,
+): string[] {
   const seen = new Set<string>();
   return fields.flatMap((field) => {
     const id = field.id ?? "(no id)";
@@ -34,6 +47,7 @@ function problems(fields: readonly Partial<UrlField>[], knownExceptionIds: reado
       found.push(`${id}: exception id missing from the exceptions list`);
     if (field.route === "egress" && field.exceptionId !== undefined)
       found.push(`${id}: egress row with an exception id`);
+    if (field.route === "egress") found.push(...readerProblem(id, field.reader, base));
     return found;
   });
 }
@@ -66,21 +80,54 @@ describe("every URL field names a guard route", () => {
       [{ id: "x", route: "operator_exception" }],
       ["x: exception id missing from the exceptions list"],
     ],
+    ["an egress row with no reader", [{ id: "x", route: "egress" }], ["x: egress row with no reader"]],
+    [
+      "an egress row whose reader is missing",
+      [{ id: "x", route: "egress", reader: "apps/api/src/gone.ts" }],
+      ["x: reader does not exist"],
+    ],
+    [
+      "an egress row whose reader does not import egressFetch",
+      [{ id: "x", route: "egress", reader: "apps/api/src/app.ts" }],
+      ["x: reader does not import egressFetch"],
+    ],
   ] as const)("fails for %s", (_name, fields, expected) => {
     expect(problems(fields, exceptionIds)).toEqual(expected);
   });
 });
 
 const SKIPPED = new Set(["node_modules", "dist", ".git", ".artifacts"]);
-// A new URL schema in the API, or a `*_url` column in a migration, is a field that needs a registry row first.
+// The three schemas outside the API that never name a host to connect to: a docs link in a manifest, a redirect target in
+// the test OAuth server, and the otpauth URI the sign-in app shows as a QR code.
+const SCHEMA_ALLOWLIST: readonly { path: string; reason: string }[] = [
+  {
+    path: "packages/provider-sdk/src/manifest/manifest.ts",
+    reason: "Documentation links the manifest cites; nothing fetches them.",
+  },
+  {
+    path: "packages/testkit/src/oauth-fake/server.ts",
+    reason: "The OAuth test server checks a redirect target the test itself chose; it is never fetched.",
+  },
+  {
+    path: "apps/web/src/auth/two-factor-setup.tsx",
+    reason: "The otpauth URI of a TOTP secret, shown as a QR code and never fetched.",
+  },
+];
+// A new URL schema in the API or a package, or a `*_url` column in a migration, is a field that needs a registry row first.
 const ZOD_URL = /\bz\s*\.\s*(?:url|httpUrl)\s*\(|\.url\s*\(\s*\)/;
+const SOURCES = ["apps/{api,web}/src/**/*.{ts,tsx}", "packages/{*,providers/*}/src/**/*.{ts,tsx}"];
 const URL_COLUMN = /\b[a-z][a-z0-9_]*_url\b/i;
 
 function unregisteredSites(base: string): string[] {
   const exclude = (name: string) => SKIPPED.has(name);
-  const api = globSync("apps/api/src/**/*.ts", { cwd: base, exclude })
+  const api = globSync(SOURCES, { cwd: base, exclude })
     .map((file) => file.replaceAll("\\", "/"))
-    .filter((file) => !file.endsWith(".test.ts") && ZOD_URL.test(readFileSync(join(base, file), "utf8")));
+    .filter(
+      (file) =>
+        !/.test.tsx?$/.test(file) &&
+        !SCHEMA_ALLOWLIST.some((row) => row.path === file) &&
+        ZOD_URL.test(readFileSync(join(base, file), "utf8")),
+    );
   const sql = globSync("packages/db/migrations/*.sql", { cwd: base, exclude })
     .map((file) => file.replaceAll("\\", "/"))
     // Comments are not columns, and neither is the credential kind `webhook_url`, an enum value: only that literal is
@@ -105,13 +152,23 @@ function plant(files: Record<string, string>): string {
 }
 
 describe("the tripwire for a new URL field", () => {
-  it("finds no unregistered URL schema in apps/api/src and no *_url column in a migration", () => {
+  it("every allowlisted schema file exists, holds a URL schema and has a reason", () => {
+    for (const row of SCHEMA_ALLOWLIST) {
+      expect(row.reason.trim(), row.path).not.toBe("");
+      expect(ZOD_URL.test(readFileSync(join(root, row.path), "utf8")), row.path).toBe(true);
+    }
+  });
+
+  it("finds no unregistered URL schema in the sources and no *_url column in a migration", () => {
     expect(unregisteredSites(root)).toEqual([]);
   });
 
   it.each([
     ["a z.url( schema", "apps/api/src/routes/x.ts", "const s = z.url({ protocol: /^https$/ });\n"],
     ["a chained .url() string", "apps/api/src/routes/y.ts", "const s = z.string().url();\n"],
+    ["a z.url( schema in a package", "packages/core/src/x.ts", "const s = z.url();\n"],
+    ["a z.url( schema in a provider package", "packages/providers/x/src/x.ts", "const s = z.url();\n"],
+    ["a z.url( schema in the web app", "apps/web/src/x.tsx", "const s = z.url();\n"],
     [
       "a *_url column",
       "packages/db/migrations/9999_x.sql",

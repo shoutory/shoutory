@@ -60,7 +60,10 @@ function receipt(result: CallResult & { externalId: string }): ResultMove {
 
 function rateLimited(result: CallResult, facts: DispatchFacts): ResultMove {
   const move = denialMove({
-    retryAfterSeconds: Math.ceil((result.retryAfterMs ?? 0) / 1000),
+    retryAfterSeconds:
+      result.retryAfterMs === undefined
+        ? backoffSeconds(facts.attemptCount)
+        : Math.ceil(result.retryAfterMs / 1000),
     retryAfterMaxSeconds: facts.retryAfterMaxSeconds,
     latenessLeftSeconds: facts.latenessLeftSeconds,
   });

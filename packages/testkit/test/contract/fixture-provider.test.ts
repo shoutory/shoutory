@@ -13,9 +13,8 @@ const revoked = Object.entries(fixtureManifest.refreshErrorMap).find(([, kind]) 
 if (!revoked) throw new Error("the fixture manifest declares no revoked refresh code");
 
 const rows = faultMatrixRows({
+  manifest: fixtureManifest,
   badRequestCodes: ["validation", "text_too_long"],
-  capabilities: ["edit", "thread", "first_comment"],
-  absentStatus: fixtureManifest.absentAnswers[0].status,
   revokedCode: revoked[0],
 });
 
@@ -71,6 +70,33 @@ describe("the fixture provider passes the fault matrix", () => {
 
   it.each(rows.map((row): [string, FaultRow] => [row.id, row]))("row %s", async (_id, row) => {
     await row.run(harness());
+  });
+});
+
+describe("the matrix for a provider with no read-back", () => {
+  const rowsE = faultMatrixRows({
+    manifest: { ...fixtureManifest, readBackMode: "E" },
+    badRequestCodes: [],
+    revokedCode: revoked[0],
+  });
+
+  it("plays no read-back row and never calls the adapter's read-back", async () => {
+    // fails first because: the success row reads the post back and the read-back rows are played whatever the mode
+    const base = harness();
+    let readBacks = 0;
+    const spied: MatrixHarness = {
+      ...base,
+      adapter: {
+        ...base.adapter,
+        readBack: (...args) => {
+          readBacks += 1;
+          return base.adapter.readBack(...args);
+        },
+      },
+    };
+    for (const row of rowsE) await row.run(spied);
+    expect(readBacks).toBe(0);
+    expect(rowsE.map((row) => row.id)).not.toContain("read-back-absent");
   });
 });
 
@@ -143,6 +169,23 @@ describe("what the dispatch needs of the fixture provider", () => {
     });
     expect(wrong.httpStatus).toBe(fixtureManifest.absentAnswers[0].status);
   });
+
+  it.each([
+    [410, 410, true],
+    [404, 410, false],
+  ])(
+    "a %s answer to delete under a manifest whose absent answer is %s: ok is %s",
+    async (status, absent, ok) => {
+      // fails first because: the adapter reads a 404 as absent whatever the manifest lists
+      const adapter = createFixtureAdapter({ baseUrl: simulator.url, absentAnswers: [{ status: absent }] });
+      const context = { fetch, now: () => new Date("2026-11-21T00:00:00Z") };
+      const post = await adapter.commit(context, { idempotencyKey: "absent-1", text: "hi" });
+      simulator.arm("delete", { kind: "respond", status });
+      const result = await adapter.delete(context, { externalId: post.externalId ?? "" });
+      expect(result.ok).toBe(ok);
+      if (ok) expect(result.effect).toBe("none");
+    },
+  );
 
   it("a request hook runs before the handler's effect, with the route it is for", async () => {
     // fails first because: the simulator has no hook, so a test cannot look at the ledger while the provider holds a call

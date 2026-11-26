@@ -218,6 +218,51 @@ const REFUSALS: [string, Mutate, string][] = [
     (m) => delete at(m, "leaseSeconds").delete,
     "leaseSeconds.delete",
   ],
+  [
+    "a capability listed twice",
+    (m) => {
+      m.capabilities = ["text", "edit", "delete", "text"];
+    },
+    "capabilities",
+  ],
+  [
+    "a refresh capability with no refresh error classes",
+    (m) => {
+      m.capabilities = ["text", "refresh"];
+      m.refreshErrorMap = {};
+    },
+    "refreshErrorMap",
+  ],
+  [
+    "a thread capability with no thread_reply follow-up role",
+    (m) => {
+      m.capabilities = ["text", "thread"];
+      m.followUpRoles = ["first_comment"];
+    },
+    "followUpRoles",
+  ],
+  [
+    "a first_comment capability with no first_comment follow-up role",
+    (m) => {
+      m.capabilities = ["text", "first_comment"];
+      m.followUpRoles = ["thread_reply"];
+    },
+    "followUpRoles",
+  ],
+  [
+    "an image capability with no imageMaxBytes limit",
+    (m) => {
+      m.capabilities = ["text", "image"];
+    },
+    "limits.imageMaxBytes",
+  ],
+  [
+    "an api version that sunsets before it starts",
+    (m) => {
+      first(m, "apiVersions").sunset = "2025-12-31";
+    },
+    "apiVersions.0.sunset",
+  ],
 ];
 
 // The unknown-outcome and quota fields of the dispatch: each is required (a default would hide a provider that never
@@ -336,6 +381,21 @@ describe("manifestSchema: token refresh", () => {
   it("accepts the refresh capability", () => {
     const manifest = fixtureManifest();
     manifest.capabilities = [...(manifest.capabilities as string[]), "refresh"];
+    expect(manifestSchema.safeParse(manifest).success).toBe(true);
+  });
+});
+
+describe("manifestSchema: capabilities with what they need", () => {
+  it("accepts image, thread, first_comment and refresh together with their role and limit", () => {
+    const manifest = fixtureManifest({
+      capabilities: ["text", "image", "thread", "first_comment", "refresh"],
+      followUpRoles: ["thread_reply", "first_comment"],
+    });
+    (manifest.limits as Record<string, unknown>).imageMaxBytes = {
+      value: 1_000_000,
+      source: "https://docs.fixture.example/limits",
+      checked: "2026-11-21",
+    };
     expect(manifestSchema.safeParse(manifest).success).toBe(true);
   });
 });

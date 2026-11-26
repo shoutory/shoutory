@@ -10,6 +10,20 @@ function normalise(address: string): string {
   return isIP(mapped) === 4 ? mapped : address;
 }
 
+const WITH_PORT = /^(?:\[([^\]]+)\]|([^:[\]]+))(?::(\d{1,5}))?$/;
+
+// A proxy may append the client's port (`1.2.3.4:5678`, `[2001:db8::1]:443`). A bare address is tried first so that an
+// IPv6 address is never read as an address and a port. Anything else, an out-of-range port included, is returned
+// unchanged and is not an address.
+function withoutPort(entry: string): string {
+  if (isIP(entry) > 0) return entry;
+  const [, bracketed, plain, port] = WITH_PORT.exec(entry) ?? [];
+  const address = bracketed ?? plain;
+  if (address === undefined || isIP(address) === 0) return entry;
+  if ((plain !== undefined) !== (isIP(address) === 4)) return entry;
+  return port === undefined || (Number(port) >= 1 && Number(port) <= 65_535) ? address : entry;
+}
+
 function trustedList(cidrs: readonly string[]): BlockList {
   const list = new BlockList();
   for (const cidr of cidrs) {
@@ -37,7 +51,7 @@ export function clientAddressResolver(
       .split(",")
       .map((entry) => entry.trim())
       .filter(Boolean)
-      .map(normalise);
+      .map((entry) => normalise(withoutPort(entry)));
     for (const entry of entries.toReversed()) {
       // An entry that is not an IP stops the scan and the peer address is used.
       if (isIP(entry) === 0) return peer;

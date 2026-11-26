@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { type Browser, expect, type Page } from "@playwright/test";
 import { waitForLink } from "./mail";
@@ -131,6 +131,13 @@ export async function inviteMember(page: Page, workspaceId: string, email: strin
 // The file's modification time is when the member's last code was used (enrolment).
 export const memberStatePath = (label: string): string => `${STATE_DIR}/member-${label}.json`;
 
+// The server counts sign-ups and sign-ins per client address, so each member comes from an address of its own (the
+// documentation range of RFC 3849); the compose overlay trusts the Docker gateway to say so.
+export function memberHeaders(label: string): Record<string, string> {
+  const hash = createHash("sha256").update(label).digest("hex");
+  return { "x-forwarded-for": `2001:db8:${hash.slice(0, 4)}:${hash.slice(4, 8)}::1` };
+}
+
 export async function createMember(options: {
   browser: Browser;
   inviter: Page;
@@ -139,7 +146,10 @@ export async function createMember(options: {
   accept?: boolean;
 }): Promise<{ account: Account; secret: string }> {
   const account = newAccount(options.label);
-  const context = await options.browser.newContext({ storageState: { cookies: [], origins: [] } });
+  const context = await options.browser.newContext({
+    storageState: { cookies: [], origins: [] },
+    extraHTTPHeaders: memberHeaders(options.label),
+  });
   try {
     const page = await context.newPage();
     const used: string[] = [];

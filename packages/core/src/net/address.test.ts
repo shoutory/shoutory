@@ -72,6 +72,14 @@ describe("the metadata check and the CIDR parser", () => {
     expect(cidrContains(parseCidr("10.0.0.0/8"), "::ffff:10.1.1.1")).toBe(true);
   });
 
+  it.each([
+    ["::ffff:10.0.0.1", true],
+    ["2002:0a00::1", false],
+    ["64:ff9b::a00:1", false],
+  ])("an IPv4 range matches only the IPv4-mapped form: %s is %s", (address, inside) => {
+    expect(cidrContains(parseCidr("10.0.0.0/8"), address)).toBe(inside);
+  });
+
   it.each(["", "10.0.0.0", "10.0.0.0/33", "10.0.0.0/-1", "nope/8", "fd00::/129", "10.0.0.0/8/8"])(
     "refuses the malformed CIDR %j",
     (text) => {

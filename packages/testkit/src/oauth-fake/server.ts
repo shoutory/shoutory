@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { checkDpopProof, pkceMatches } from "../simulator/auth.js";
+import { checkDpopProof, pkceMatches, rememberBounded } from "../simulator/auth.js";
 import { type Handler, type SimReply, startSimulator } from "../simulator/server.js";
 
 export interface OAuthFakeOptions {
@@ -108,7 +108,7 @@ const push =
 
 function issue(store: Store, withRefreshToken = true): SimReply {
   const refresh = store.next("refresh-token");
-  if (withRefreshToken) store.refreshTokens.add(refresh);
+  if (withRefreshToken) rememberBounded(store.refreshTokens, refresh);
   return {
     status: 200,
     headers: store.requireDpop ? { ...NO_STORE, "dpop-nonce": DPOP_NONCE } : NO_STORE,

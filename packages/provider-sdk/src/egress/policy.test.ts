@@ -5,6 +5,18 @@ import { checkUrl, createOperatorPolicy } from "./policy.js";
 const userUrl = { kind: "user_url" } as const;
 const strict = createOperatorPolicy({ allowCidrs: [] });
 
+describe("the operator allowlist", () => {
+  const allowTen = createOperatorPolicy({ allowCidrs: ["10.0.0.0/8"] });
+
+  it.each([
+    ["::ffff:10.0.0.1", true],
+    ["2002:0a00::1", false],
+    ["64:ff9b::a00:1", false],
+  ])("allow 10.0.0.0/8 admits only the mapped form: %s is %s", (address, admitted) => {
+    expect(allowTen.allows(address)).toBe(admitted);
+  });
+});
+
 describe("the egress URL check", () => {
   it.each([
     ["decimal", "https://2130706433/"],
