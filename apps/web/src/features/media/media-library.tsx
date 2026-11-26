@@ -8,7 +8,7 @@ import {
   Button as PlainButton,
   SearchField,
 } from "react-aria-components";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 import { z } from "zod";
 import { ApiError, request } from "../../http/client";
 import { ForbiddenPage, NotFoundPage } from "../../pages/system-pages";
@@ -66,6 +66,7 @@ interface Ready {
   next: string | null;
   more: "idle" | "busy" | "failed";
   updating: boolean;
+  refreshFailed: ApiError | null;
 }
 type ListState = { status: "loading" } | { status: "failed"; error: ApiError } | Ready;
 
@@ -75,7 +76,15 @@ const firstPage = (page: Page): Ready => ({
   next: page.meta.next_cursor,
   more: "idle",
   updating: false,
+  refreshFailed: null,
 });
+
+// A failed read keeps the tiles already shown (with a notice); only a first read failing, or a refusal, replaces them.
+function afterFailure(now: ListState, error: ApiError): ListState {
+  if (now.status === "ready" && error.state !== "forbidden")
+    return { ...now, updating: false, refreshFailed: error };
+  return { status: "failed", error };
+}
 
 function appended(now: Ready, page: Page): Ready {
   const known = new Set(now.rows.map((one) => one.id));
@@ -110,7 +119,7 @@ function useMediaList(ws: string, filters: Filters, attempt: number) {
         const answer = asApiError(error);
         if (!live) return;
         if (answer.state === "session_expired") expired();
-        else setState({ status: "failed", error: answer });
+        else setState((now) => afterFailure(now, answer));
       },
     );
     return () => {
@@ -159,10 +168,10 @@ function useWords() {
 }
 type Words = ReturnType<typeof useWords>;
 
-function KindIcon({ kind }: { kind: "image" | "video" }) {
+export function KindIcon({ kind, testId }: { kind: "image" | "video"; testId: string }) {
   return (
     <span
-      data-testid="tile-icon"
+      data-testid={testId}
       data-kind={kind}
       aria-hidden="true"
       className="flex size-full items-center justify-center"
@@ -200,12 +209,14 @@ function Tile({ media, ws, words, onTag }: TileProps) {
             className="size-full object-cover"
           />
         ) : (
-          <KindIcon kind={kindOf(media.mime)} />
+          <KindIcon kind={kindOf(media.mime)} testId="tile-icon" />
         )}
       </div>
       <div className="flex min-w-0 flex-col gap-1">
         <span data-testid="tile-name" className="truncate font-medium">
-          <DirText>{media.file_name}</DirText>
+          <Link data-testid="tile-link" to={`/w/${ws}/media/${media.id}`} className="text-link underline">
+            <DirText>{media.file_name}</DirText>
+          </Link>
         </span>
         <span data-testid="tile-state" data-state={stateOf(media.state)} className="text-sm">
           {words.state(media)}
@@ -236,32 +247,46 @@ function Tile({ media, ws, words, onTag }: TileProps) {
 interface SearchProps {
   label: string;
   clearLabel: string;
+  submitLabel: string;
   testId: string;
   onSearch: (text: string) => void;
 }
 
-function Search({ label, clearLabel, testId, onSearch }: SearchProps) {
+function Search({ label, clearLabel, submitLabel, testId, onSearch }: SearchProps) {
+  const [text, setText] = useState("");
+  // Outside the field: a button inside it takes the field's clear-button behaviour and name.
   return (
-    <SearchField
-      onSubmit={(value) => onSearch(value.trim())}
-      onClear={() => onSearch("")}
-      className="flex flex-col gap-2"
-    >
-      <Label className="text-sm font-medium">{label}</Label>
-      <div className="flex items-center gap-1 rounded-md border border-border-control bg-surface px-3">
-        <Input
-          data-testid={testId}
-          className="min-h-10 pointer-coarse:min-h-11 grow bg-transparent text-md outline-none [&::-webkit-search-cancel-button]:hidden"
-        />
-        <PlainButton
-          data-testid={`${testId}-clear`}
-          aria-label={clearLabel}
-          className="size-6 pointer-coarse:size-11 rounded-full outline-offset-2 focus-visible:outline-2 focus-visible:outline-focus"
-        >
-          ×
-        </PlainButton>
-      </div>
-    </SearchField>
+    <div className="flex items-end gap-1">
+      <SearchField
+        value={text}
+        onChange={setText}
+        onSubmit={(value) => onSearch(value.trim())}
+        onClear={() => onSearch("")}
+        className="flex flex-col gap-2"
+      >
+        <Label className="text-sm font-medium">{label}</Label>
+        <div className="flex items-center gap-1 rounded-md border border-border-control bg-surface px-3">
+          <Input
+            data-testid={testId}
+            className="min-h-10 pointer-coarse:min-h-11 grow bg-transparent text-md outline-none [&::-webkit-search-cancel-button]:hidden"
+          />
+          <PlainButton
+            data-testid={`${testId}-clear`}
+            aria-label={clearLabel}
+            className="size-6 pointer-coarse:size-11 rounded-full outline-offset-2 focus-visible:outline-2 focus-visible:outline-focus"
+          >
+            ×
+          </PlainButton>
+        </div>
+      </SearchField>
+      <PlainButton
+        data-testid={`${testId}-submit`}
+        onPress={() => onSearch(text.trim())}
+        className="min-h-10 pointer-coarse:min-h-11 rounded-md border border-border-control px-3 text-sm font-medium outline-offset-2 focus-visible:outline-2 focus-visible:outline-focus"
+      >
+        {submitLabel}
+      </PlainButton>
+    </div>
   );
 }
 
@@ -280,12 +305,14 @@ function Toolbar({ filters, words, onChange }: ToolbarProps) {
       <Search
         label={t({ id: "media.search.label", message: "Search by file name" })}
         clearLabel={t({ id: "media.search.clear", message: "Clear the search" })}
+        submitLabel={t({ id: "media.search.submit", message: "Search" })}
         testId="media-search"
         onSearch={(q) => set({ q })}
       />
       <Search
         label={t({ id: "media.filter.tag", message: "Tag" })}
         clearLabel={t({ id: "media.filter.tag_clear", message: "Clear the tag" })}
+        submitLabel={t({ id: "media.filter.tag_submit", message: "Filter by tag" })}
         testId="media-tag-filter"
         onSearch={(text) => set({ tag: text })}
       />
@@ -348,14 +375,37 @@ interface LoadedProps {
   filters: Filters;
   onChange: (filters: Filters) => void;
   loadMore: () => void;
+  retry: () => void;
 }
 
-function Loaded({ state, ws, words, filters, onChange, loadMore }: LoadedProps) {
+function RefreshFailed({ error, retry }: { error: ApiError; retry: () => void }) {
+  return (
+    <div data-testid="media-refresh-error" role="alert" className="flex flex-col items-start gap-3">
+      <ErrorPanel
+        what={<Trans id="media.refresh_failed.what">We could not apply these filters</Trans>}
+        meaning={<Trans id="media.refresh_failed.meaning">The files below are from before. Try again.</Trans>}
+        error={error}
+      />
+      <Button data-testid="media-refresh-retry" onPress={retry}>
+        <Trans id="media.retry">Try again</Trans>
+      </Button>
+    </div>
+  );
+}
+
+function Loaded({ state, ws, words, filters, onChange, loadMore, retry }: LoadedProps) {
   const { t } = useLingui();
+  const notice = state.refreshFailed ? <RefreshFailed error={state.refreshFailed} retry={retry} /> : null;
   if (state.rows.length === 0)
-    return <Empty filtered={isFiltered(filters)} onClear={() => onChange(NO_FILTERS)} />;
+    return (
+      <>
+        {notice}
+        <Empty filtered={isFiltered(filters)} onClear={() => onChange(NO_FILTERS)} />
+      </>
+    );
   return (
     <>
+      {notice}
       {state.updating ? (
         <p data-testid="media-updating" role="status">
           <Trans id="media.updating">Updating</Trans>
@@ -404,7 +454,8 @@ function Empty({ filtered, onClear }: { filtered: boolean; onClear: () => void }
 const SKELETON_DELAY_MS = 300;
 const SKELETON_TILES = ["a", "b", "c", "d", "e", "f"];
 
-function Loading() {
+// The placeholder shows only when a read is slow, so a fast read never flashes it.
+export function Late({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
   const [late, setLate] = useState(false);
   useEffect(() => {
     const timer = setTimeout(() => setLate(true), SKELETON_DELAY_MS);
@@ -412,17 +463,21 @@ function Loading() {
   }, []);
   return (
     <div role="status" aria-busy="true" className="flex flex-col gap-3">
-      <span className="sr-only">
-        <Trans id="media.loading">Loading your media</Trans>
-      </span>
-      {late ? (
-        <div data-testid="media-skeleton" className={GRID}>
-          {SKELETON_TILES.map((key) => (
-            <div key={key} className="h-20 rounded-md bg-surface-sunken sm:aspect-square sm:h-auto" />
-          ))}
-        </div>
-      ) : null}
+      <span className="sr-only">{label}</span>
+      {late ? children : null}
     </div>
+  );
+}
+
+function Loading() {
+  return (
+    <Late label={<Trans id="media.loading">Loading your media</Trans>}>
+      <div data-testid="media-skeleton" className={GRID}>
+        {SKELETON_TILES.map((key) => (
+          <div key={key} className="h-20 rounded-md bg-surface-sunken sm:aspect-square sm:h-auto" />
+        ))}
+      </div>
+    </Late>
   );
 }
 
@@ -472,6 +527,7 @@ function MediaLibrary({ ws }: { ws: string }) {
           filters={filters}
           onChange={setFilters}
           loadMore={loadMore}
+          retry={() => setAttempt((now) => now + 1)}
         />
       ) : null}
     </div>

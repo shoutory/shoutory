@@ -138,6 +138,52 @@ async function fulfilHub(page: Page, workspace: string): Promise<void> {
   );
 }
 
+// The image starts with no media, so one file and where it fits are shown from fixed answers. With no ready thumbnail
+// the page asks for no image, and the picture is the same on every run.
+const MEDIUM_ID = "0190a000-0000-7000-8000-0000000002b1";
+
+async function fulfilMedium(page: Page, workspace: string): Promise<void> {
+  const base = `**/api/v1/workspaces/${workspace}`;
+  const reply = (body: unknown) => ({ contentType: "application/json", body: JSON.stringify(body) });
+  const [fits, misfit] = CHANNEL_CARDS;
+  await page.addInitScript(() => localStorage.setItem("shoutory.zone", "UTC"));
+  await page.route(`${base}/media/${MEDIUM_ID}`, (route) =>
+    route.fulfill(
+      reply({
+        data: {
+          id: MEDIUM_ID,
+          file_name: "launch-banner.png",
+          mime: "image/png",
+          state: "ready",
+          reject_reason: null,
+          tags: ["launch"],
+          derivatives: { thumb: "pending", stripped: "ready" },
+          byte_size: 482_133,
+          width: 1200,
+          height: 630,
+          duration_ms: null,
+          created_at: "2026-11-22T10:00:00.000Z",
+          post_count: 2,
+        },
+      }),
+    ),
+  );
+  await page.route(`${base}/media/${MEDIUM_ID}/fit*`, (route) =>
+    route.fulfill(
+      reply({
+        data: [
+          { channel_id: fits?.id, ok: true },
+          { channel_id: misfit?.id, ok: false, reason: "too_large" },
+        ],
+        meta: { next_cursor: null },
+      }),
+    ),
+  );
+  await page.route(`${base}/channels?*`, (route) =>
+    route.fulfill(reply({ data: CHANNEL_CARDS, meta: { next_cursor: null, actions: [] } })),
+  );
+}
+
 export const SCREENS: readonly Screen[] = [
   signedOut("sign-in", "/sign-in"),
   // The challenge screen is open only after a password step; the spec makes that step before it opens this.
@@ -169,6 +215,15 @@ export const SCREENS: readonly Screen[] = [
     },
   },
   founder("media", "/w/:ws/media", (c) => `/w/${c.workspace}/media`),
+  {
+    id: "media-detail",
+    pattern: "/w/:ws/media/:id",
+    audience: "founder",
+    open: async (page, context) => {
+      await fulfilMedium(page, context.workspace);
+      await visit((c) => `/w/${c.workspace}/media/${MEDIUM_ID}`)(page, context);
+    },
+  },
   // The outcome that needs no channel read, so the screen is the same on every run.
   founder("connect-result", "/connect/result", () => "/connect/result?reason=rate_limited"),
   founder("clients", "/o/:org/clients", (c) => `/o/${c.organization}/clients`, ["clients-scroll"]),

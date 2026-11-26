@@ -55,8 +55,8 @@ export async function activateLocale(locale: Locale) {
 // Digits and calendar are always explicit, so a locale's own default (Arabic-Indic, Hijri) never leaks in.
 const tagOf = ({ locale, digits }: FormatPrefs) => `${locale}-u-nu-${digits}-ca-gregory`;
 
-export function formatNumber(value: number, prefs: FormatPrefs) {
-  return new Intl.NumberFormat(tagOf(prefs)).format(value);
+export function formatNumber(value: number, prefs: FormatPrefs, options?: Intl.NumberFormatOptions) {
+  return new Intl.NumberFormat(tagOf(prefs), options).format(value);
 }
 
 export function formatDate(

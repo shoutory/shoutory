@@ -2214,3 +2214,135 @@ msgstr "حاول مرة أخرى"
 #. js-lingui-explicit-id
 msgid "media.loading"
 msgstr "جارٍ تحميل الوسائط"
+
+#. js-lingui-explicit-id
+msgid "media.search.submit"
+msgstr "ابحث"
+
+#. js-lingui-explicit-id
+msgid "media.filter.tag_submit"
+msgstr "تصفية حسب الوسم"
+
+#. js-lingui-explicit-id
+msgid "media.refresh_failed.what"
+msgstr "تعذّر تطبيق هذه المرشحات"
+
+#. js-lingui-explicit-id
+msgid "media.refresh_failed.meaning"
+msgstr "الملفات أدناه من قبل. حاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "media.detail.back"
+msgstr "العودة إلى المكتبة"
+
+#. js-lingui-explicit-id
+msgid "media.detail.loading"
+msgstr "جارٍ تحميل هذا الملف"
+
+#. js-lingui-explicit-id
+msgid "media.detail.failed.what"
+msgstr "تعذّر تحميل هذا الملف"
+
+#. js-lingui-explicit-id
+msgid "media.detail.facts"
+msgstr "التفاصيل"
+
+#. js-lingui-explicit-id
+msgid "media.detail.size"
+msgstr "الحجم"
+
+#. js-lingui-explicit-id
+msgid "media.detail.dimensions"
+msgstr "الأبعاد"
+
+#. js-lingui-explicit-id
+msgid "media.detail.duration"
+msgstr "المدة"
+
+#. js-lingui-explicit-id
+msgid "media.detail.created"
+msgstr "أُضيف في"
+
+#. js-lingui-explicit-id
+msgid "media.detail.posts"
+msgstr "{count, plural, =0 {لا يستخدمه أي منشور} zero {يستخدمه {shown} منشور} one {يستخدمه منشور واحد} two {يستخدمه منشوران} few {يستخدمه {shown} منشورات} many {يستخدمه {shown} منشورًا} other {يستخدمه {shown} منشور}}"
+
+#. js-lingui-explicit-id
+msgid "media.detail.copies"
+msgstr "النسخ"
+
+#. js-lingui-explicit-id
+msgid "media.copy.thumb"
+msgstr "صورة مصغّرة"
+
+#. js-lingui-explicit-id
+msgid "media.copy.stripped"
+msgstr "نسخة بلا بيانات الموقع"
+
+#. js-lingui-explicit-id
+msgid "media.copy.other"
+msgstr "نسخة أخرى"
+
+#. js-lingui-explicit-id
+msgid "media.copy_state.pending"
+msgstr "قيد الإنشاء"
+
+#. js-lingui-explicit-id
+msgid "media.copy_state.ready"
+msgstr "جاهزة"
+
+#. js-lingui-explicit-id
+msgid "media.copy_state.failed"
+msgstr "تعذّر إنشاؤها"
+
+#. js-lingui-explicit-id
+msgid "media.fit.title"
+msgstr "أين يناسب"
+
+#. js-lingui-explicit-id
+msgid "media.fit.check_again"
+msgstr "تحقّق مرة أخرى"
+
+#. js-lingui-explicit-id
+msgid "media.fit.loading"
+msgstr "جارٍ فحص قنواتك"
+
+#. js-lingui-explicit-id
+msgid "media.fit.failed.what"
+msgstr "تعذّر فحص القنوات المناسبة لهذا الملف"
+
+#. js-lingui-explicit-id
+msgid "media.fit.failed.meaning"
+msgstr "لم يتغيّر الملف. تحقّق مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "media.fit.summary"
+msgstr "القنوات التي يناسبها الملف: {ok} من {total}"
+
+#. js-lingui-explicit-id
+msgid "media.fit.channel"
+msgstr "القناة {n}"
+
+#. js-lingui-explicit-id
+msgid "media.fit.ok"
+msgstr "يناسب"
+
+#. js-lingui-explicit-id
+msgid "media.fit.empty"
+msgstr "لا توجد قناة متصلة بعد."
+
+#. js-lingui-explicit-id
+msgid "media.fit.more_failed"
+msgstr "تعذّر تحميل المزيد من القنوات. حاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "media.fit.provider_unavailable"
+msgstr "الشبكة غير متاحة الآن."
+
+#. js-lingui-explicit-id
+msgid "media.fit.capability_missing"
+msgstr "هذه القناة لا تقبل هذا النوع."
+
+#. js-lingui-explicit-id
+msgid "media.fit.unknown"
+msgstr "هذه القناة لا تقبل هذا الملف."

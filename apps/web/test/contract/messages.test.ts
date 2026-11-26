@@ -19,7 +19,12 @@ const WITHOUT_ID = [
   /\b(?:t|msg)\(\s*["'`]/,
   /\b(?:t|msg)\(\{(?![^}]*\bid:)/,
 ];
-const withoutId = (text: string) => text.split("\n").filter((line) => WITHOUT_ID.some((re) => re.test(line)));
+// A call whose object the formatter breaks open (`t({` at the end of a line) carries its id on the next line.
+const withoutId = (text: string) =>
+  text.split("\n").filter((line, index, lines) => {
+    const call = /\(\{\s*$/.test(line) ? `${line}${lines[index + 1] ?? ""}` : line;
+    return WITHOUT_ID.some((re) => re.test(call));
+  });
 
 // The messages of a PO catalog, by id; the header entry (empty id) is not a message. A long message continues on
 // further quoted lines, which are joined.
@@ -77,6 +82,7 @@ describe("explicit message ids", () => {
     ["a t template", "const s = t`Hello`;"],
     ["a t call with a string", 'const s = t("Hello");'],
     ["a msg call without an id", 'const m = msg({ message: "Hello" });'],
+    ["a broken-open t call without an id", 't({\n  message: plural(n, { one: "a", other: "b" }),\n})'],
   ])("the id scan finds %s", (_name, text) => {
     expect(withoutId(text)).toHaveLength(1);
   });
@@ -84,6 +90,10 @@ describe("explicit message ids", () => {
   it.each([
     ["a Trans element with an id", '<Trans id="a.b">Hello</Trans>'],
     ["a t call with an id", 't({ id: "a.b", message: "Hello" })'],
+    [
+      "a broken-open t call with its id on the next line",
+      't({\n  id: "a.b",\n  message: plural(n, { one: "a" }),\n})',
+    ],
   ])("the id scan accepts %s", (_name, text) => {
     expect(withoutId(text)).toEqual([]);
   });

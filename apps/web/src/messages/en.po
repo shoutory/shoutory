@@ -2216,3 +2216,135 @@ msgstr "Try again"
 #. js-lingui-explicit-id
 msgid "media.loading"
 msgstr "Loading your media"
+
+#. js-lingui-explicit-id
+msgid "media.search.submit"
+msgstr "Search"
+
+#. js-lingui-explicit-id
+msgid "media.filter.tag_submit"
+msgstr "Filter by tag"
+
+#. js-lingui-explicit-id
+msgid "media.refresh_failed.what"
+msgstr "We could not apply these filters"
+
+#. js-lingui-explicit-id
+msgid "media.refresh_failed.meaning"
+msgstr "The files below are from before. Try again."
+
+#. js-lingui-explicit-id
+msgid "media.detail.back"
+msgstr "Back to the library"
+
+#. js-lingui-explicit-id
+msgid "media.detail.loading"
+msgstr "Loading this file"
+
+#. js-lingui-explicit-id
+msgid "media.detail.failed.what"
+msgstr "We could not load this file"
+
+#. js-lingui-explicit-id
+msgid "media.detail.facts"
+msgstr "Details"
+
+#. js-lingui-explicit-id
+msgid "media.detail.size"
+msgstr "Size"
+
+#. js-lingui-explicit-id
+msgid "media.detail.dimensions"
+msgstr "Dimensions"
+
+#. js-lingui-explicit-id
+msgid "media.detail.duration"
+msgstr "Length"
+
+#. js-lingui-explicit-id
+msgid "media.detail.created"
+msgstr "Added"
+
+#. js-lingui-explicit-id
+msgid "media.detail.posts"
+msgstr "{count, plural, =0 {No post uses this file} one {Used in {shown} post} other {Used in {shown} posts}}"
+
+#. js-lingui-explicit-id
+msgid "media.detail.copies"
+msgstr "Copies"
+
+#. js-lingui-explicit-id
+msgid "media.copy.thumb"
+msgstr "Thumbnail"
+
+#. js-lingui-explicit-id
+msgid "media.copy.stripped"
+msgstr "Copy without location data"
+
+#. js-lingui-explicit-id
+msgid "media.copy.other"
+msgstr "Other copy"
+
+#. js-lingui-explicit-id
+msgid "media.copy_state.pending"
+msgstr "Being made"
+
+#. js-lingui-explicit-id
+msgid "media.copy_state.ready"
+msgstr "Ready"
+
+#. js-lingui-explicit-id
+msgid "media.copy_state.failed"
+msgstr "Could not be made"
+
+#. js-lingui-explicit-id
+msgid "media.fit.title"
+msgstr "Where it fits"
+
+#. js-lingui-explicit-id
+msgid "media.fit.check_again"
+msgstr "Check again"
+
+#. js-lingui-explicit-id
+msgid "media.fit.loading"
+msgstr "Checking your channels"
+
+#. js-lingui-explicit-id
+msgid "media.fit.failed.what"
+msgstr "We could not check where this file fits"
+
+#. js-lingui-explicit-id
+msgid "media.fit.failed.meaning"
+msgstr "The file is unchanged. Check again."
+
+#. js-lingui-explicit-id
+msgid "media.fit.summary"
+msgstr "Channels this file fits: {ok} of {total}"
+
+#. js-lingui-explicit-id
+msgid "media.fit.channel"
+msgstr "Channel {n}"
+
+#. js-lingui-explicit-id
+msgid "media.fit.ok"
+msgstr "Fits"
+
+#. js-lingui-explicit-id
+msgid "media.fit.empty"
+msgstr "No channel is connected yet."
+
+#. js-lingui-explicit-id
+msgid "media.fit.more_failed"
+msgstr "We could not load more channels. Try again."
+
+#. js-lingui-explicit-id
+msgid "media.fit.provider_unavailable"
+msgstr "The network is not available now."
+
+#. js-lingui-explicit-id
+msgid "media.fit.capability_missing"
+msgstr "This channel cannot take this type."
+
+#. js-lingui-explicit-id
+msgid "media.fit.unknown"
+msgstr "This channel cannot take this file."

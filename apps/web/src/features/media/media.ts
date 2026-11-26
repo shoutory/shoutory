@@ -14,6 +14,22 @@ export const mediaSchema = z.object({
 });
 export type Media = z.infer<typeof mediaSchema>;
 
+export const detailSchema = mediaSchema.extend({
+  byte_size: z.number(),
+  width: z.number().nullable(),
+  height: z.number().nullable(),
+  duration_ms: z.number().nullable(),
+  created_at: z.iso.datetime({ offset: true }),
+  post_count: z.number().int(),
+});
+export type Detail = z.infer<typeof detailSchema>;
+
+export const fitSchema = z.object({
+  data: z.array(z.object({ channel_id: z.uuid(), ok: z.boolean(), reason: z.string().optional() })),
+  meta: z.object({ next_cursor: z.string().nullable() }),
+});
+export type Fit = z.infer<typeof fitSchema>["data"][number];
+
 export const LISTED_STATES = [
   "pending_upload",
   "uploaded",
@@ -47,6 +63,34 @@ export const REASON_WORDS: Record<RejectReason, MessageDescriptor> = {
   infected: msg({ id: "media.reason.infected", message: "The safety check found a threat in this file." }),
 };
 export const UNKNOWN_REASON = msg({ id: "media.reason.unknown", message: "This file cannot be used." });
+
+const DOWN = msg({ id: "media.fit.provider_unavailable", message: "The network is not available now." });
+const CANNOT = msg({ id: "media.fit.capability_missing", message: "This channel cannot take this type." });
+const FIT_ONLY_WORDS: Record<string, MessageDescriptor> = {
+  provider_unavailable: DOWN,
+  capability_missing: CANNOT,
+};
+const FIT_UNKNOWN = msg({ id: "media.fit.unknown", message: "This channel cannot take this file." });
+
+export const fitWords = (reason: string | undefined): MessageDescriptor => {
+  const known = reasonOf(reason ?? null);
+  if (known !== "unknown") return REASON_WORDS[known];
+  return (reason !== undefined && FIT_ONLY_WORDS[reason]) || FIT_UNKNOWN;
+};
+
+const COPY_WORDS: Record<string, MessageDescriptor> = {
+  thumb: msg({ id: "media.copy.thumb", message: "Thumbnail" }),
+  stripped: msg({ id: "media.copy.stripped", message: "Copy without location data" }),
+};
+const OTHER_COPY = msg({ id: "media.copy.other", message: "Other copy" });
+export const copyWords = (profile: string) => COPY_WORDS[profile] ?? OTHER_COPY;
+
+const COPY_STATE_WORDS: Record<string, MessageDescriptor> = {
+  pending: msg({ id: "media.copy_state.pending", message: "Being made" }),
+  ready: msg({ id: "media.copy_state.ready", message: "Ready" }),
+  failed: msg({ id: "media.copy_state.failed", message: "Could not be made" }),
+};
+export const copyStateWords = (state: string) => COPY_STATE_WORDS[state] ?? UNKNOWN_STATE;
 
 export const stateOf = (state: string): ListedState | "unknown" =>
   LISTED_STATES.find((known) => known === state) ?? "unknown";

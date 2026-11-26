@@ -24,6 +24,7 @@ import { VerifyPage } from "./auth/verify";
 import { BillingPage } from "./billing/billing";
 import { ChannelsHubPage } from "./features/channels/channels-hub";
 import { ConnectResultPage } from "./features/channels/connect-result";
+import { MediaDetailPage } from "./features/media/media-detail";
 import { MediaLibraryPage } from "./features/media/media-library";
 import { ApiError } from "./http/client";
 import { ClientsPage } from "./org/clients";
@@ -218,6 +219,11 @@ export const routes: RouteObject[] = [
                 path: "w/:ws/media",
                 handle: titled(TITLES.media, (shell, params) => isUnknownWorkspace(shell, params.ws)),
                 element: <MediaLibraryPage />,
+              },
+              {
+                path: "w/:ws/media/:id",
+                handle: titled(TITLES.media, (shell, params) => isUnknownWorkspace(shell, params.ws)),
+                element: <MediaDetailPage />,
               },
               {
                 path: "connect/result",

@@ -3,7 +3,7 @@ import { useDigits } from "../account/prefs";
 import { type FormatPrefs, formatDate, formatNumber, type Locale } from "../i18n/i18n";
 import { DirText } from "./dir-text";
 
-function useFormatPrefs(): FormatPrefs {
+export function useFormatPrefs(): FormatPrefs {
   const { i18n } = useLingui();
   return { locale: i18n.locale as Locale, digits: useDigits() };
 }

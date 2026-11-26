@@ -241,6 +241,44 @@ describe("while filtering", () => {
     expect(tile(host, 3)).toBeDefined();
   });
 
+  it("a failed read under a new filter keeps the old tiles with a notice, and Try again reads it again", async () => {
+    let calls = 0;
+    const { host } = await visit({
+      mediaList: () => {
+        calls += 1;
+        return calls === 2 ? refusal("internal_error", 500) : mediaPage([row(calls)]);
+      },
+    });
+    const search = byId(host, "media-search") as HTMLInputElement;
+    type(search, "beach");
+    press(search, "Enter");
+    await settle();
+    expect(stateOf(host)).toBe("list");
+    expect(tile(host, 1)).toBeDefined();
+    expect(byId(host, "media-refresh-error")).not.toBeNull();
+    click(byId(host, "media-refresh-retry") as HTMLElement);
+    await settle();
+    expect(byId(host, "media-refresh-error")).toBeNull();
+    expect(tile(host, 3)).toBeDefined();
+  });
+});
+
+describe("the search buttons", () => {
+  it("the search has its own named, focusable button that sends it and keeps the text", async () => {
+    const { host, stub } = await visit(listOf(row(1)));
+    const field = byId(host, "media-search") as HTMLInputElement;
+    type(field, "beach");
+    const submit = byId(host, "media-search-submit") as HTMLElement;
+    expect(submit.getAttribute("aria-label")).toBeNull();
+    expect(submit.textContent).toBe("Search");
+    expect(submit.getAttribute("tabindex")).not.toBe("-1");
+    click(submit);
+    await settle();
+    expect(field.value).toBe("beach");
+    expect(listCalls(stub).map((call) => call.searchParams.get("q"))).not.toContain("");
+    expect(listCalls(stub).at(-1)?.searchParams.get("q")).toBe("beach");
+  });
+
   it("the search clear button has a name in the page's language", async () => {
     const { host } = await visit(listOf(row(1)), "ar");
     type(byId(host, "media-search") as HTMLInputElement, "x");

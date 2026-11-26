@@ -108,6 +108,8 @@ export interface Api {
   check?: Answer;
   connectStart?: Answer;
   mediaList?: (query: URLSearchParams, workspace: string) => Response | Promise<Response>;
+  medium?: Answer;
+  mediaFit?: (query: URLSearchParams) => Response | Promise<Response>;
 }
 
 export const mediaRow = (change: Record<string, unknown> = {}) => ({
@@ -202,15 +204,22 @@ export const channelPage = (
   actions: string[] = ["connect"],
 ) => json({ data: rows, meta: { next_cursor: nextCursor, actions } });
 
+function mediaAnswers(api: Api, url: URL, workspace: string, rest: string): Answer | undefined {
+  if (rest === "media") return () => (api.mediaList ?? (() => mediaPage([])))(url.searchParams, workspace);
+  if (/^media\/[^/]+$/.test(rest))
+    return api.medium ?? (() => json({ data: { ...mediaRow(), post_count: 0 } }));
+  if (/^media\/[^/]+\/fit$/.test(rest))
+    return () => (api.mediaFit ?? (() => mediaPage([])))(url.searchParams);
+  return undefined;
+}
+
 function hubAnswers(api: Api, url: URL, method: string): Answer | undefined {
   const [, workspace = "", rest = ""] = /^\/api\/v1\/workspaces\/([^/]+)\/(.*)$/.exec(url.pathname) ?? [];
   if (workspace === "") return undefined;
   if (method === "GET" && rest === "channels") {
     return () => (api.channelList ?? (() => channelPage([channelRow()])))(url.searchParams, workspace);
   }
-  if (method === "GET" && rest === "media") {
-    return () => (api.mediaList ?? (() => mediaPage([])))(url.searchParams, workspace);
-  }
+  if (method === "GET" && rest.startsWith("media")) return mediaAnswers(api, url, workspace, rest);
   if (method === "GET" && rest === "providers") return api.providers ?? (() => json({ data: PROVIDERS }));
   if (method === "POST" && /^channels\/[^/]+\/check$/.test(rest)) {
     return api.check ?? (() => json({ data: channelRow({ health_checked_at: "2026-11-22T11:00:00.000Z" }) }));
