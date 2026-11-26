@@ -23,15 +23,32 @@ function useArchiveCall(workspace: Workspace, action: "archive" | "unarchive") {
   };
 }
 
-function useCanArchive(workspace: Workspace) {
-  const { t } = useLingui();
-  const allowed = rankOf(workspace.role) >= ADMIN_RANK;
-  const why = t({ id: "archive.need_admin", message: "Only an owner or admin can archive or restore." });
-  return allowed ? {} : { "aria-disabled": true, reason: why };
+const mayArchive = (workspace: Workspace) => rankOf(workspace.role) >= ADMIN_RANK;
+
+/** A list states the reason once and each unavailable control points to it, instead of one note per row. */
+export const archiveBlockedIn = (workspaces: Workspace[]) =>
+  workspaces.some((workspace) => workspace.organization_type !== "personal" && !mayArchive(workspace));
+
+export function ArchiveReason({ id }: { id: string }) {
+  return (
+    <p id={id} className="text-sm text-text-muted">
+      <Trans id="archive.need_admin">Only an owner or admin can archive or restore.</Trans>
+    </p>
+  );
 }
 
-function RestoreButton({ workspace }: { workspace: Workspace }) {
-  const blocked = useCanArchive(workspace);
+type Note = { noteId?: string | undefined };
+
+function useCanArchive(workspace: Workspace, noteId: string | undefined) {
+  const { t } = useLingui();
+  if (mayArchive(workspace)) return {};
+  if (noteId) return { "aria-disabled": true, "aria-describedby": noteId };
+  const why = t({ id: "archive.need_admin", message: "Only an owner or admin can archive or restore." });
+  return { "aria-disabled": true, reason: why };
+}
+
+function RestoreButton({ workspace, noteId }: { workspace: Workspace } & Note) {
+  const blocked = useCanArchive(workspace, noteId);
   const restore = useChange(useArchiveCall(workspace, "unarchive"));
   return (
     <div className="flex flex-col items-start gap-2">
@@ -55,8 +72,8 @@ function RestoreButton({ workspace }: { workspace: Workspace }) {
   );
 }
 
-function ArchiveButton({ workspace }: { workspace: Workspace }) {
-  const blocked = useCanArchive(workspace);
+function ArchiveButton({ workspace, noteId }: { workspace: Workspace } & Note) {
+  const blocked = useCanArchive(workspace, noteId);
   const [open, setOpen] = useState(false);
   const run = useArchiveCall(workspace, "archive");
   const { name } = workspace;
@@ -91,12 +108,12 @@ function ArchiveButton({ workspace }: { workspace: Workspace }) {
 }
 
 /** Archive, or Restore when archived: one control for the clients list and the workspace settings. */
-export function ArchiveControl({ workspace }: { workspace: Workspace }) {
+export function ArchiveControl({ workspace, noteId }: { workspace: Workspace } & Note) {
   if (workspace.organization_type === "personal") return null;
   return workspace.archived_at ? (
-    <RestoreButton workspace={workspace} />
+    <RestoreButton workspace={workspace} noteId={noteId} />
   ) : (
-    <ArchiveButton workspace={workspace} />
+    <ArchiveButton workspace={workspace} noteId={noteId} />
   );
 }
 

@@ -46,6 +46,18 @@ describe("a workspace list longer than one page", () => {
   });
 });
 
+describe("an archived workspace in the switcher", () => {
+  it("stays in the list, marked Archived", async () => {
+    const rows = WORKSPACES.map((w) =>
+      w.id === "w2" ? { ...w, archived_at: "2026-11-25T10:00:00.000Z" } : w,
+    );
+    stubApi({ workspaces: page(rows) });
+    const { host } = await openApp("/w/w1");
+    openList(combobox(host, "Workspace"));
+    expect(options()).toEqual(["Acme One", "Acme Two (Archived)"]);
+  });
+});
+
 describe("the switchers", () => {
   it.each<[string, Organization[], Workspace[], boolean, boolean]>([
     ["an agency with two workspaces", ORGS, WORKSPACES.slice(0, 2), true, true],

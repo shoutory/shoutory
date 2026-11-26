@@ -1,5 +1,5 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { Form } from "react-aria-components";
 import { Link, useNavigate, useParams, useRevalidator } from "react-router";
 import { z } from "zod";
@@ -8,7 +8,7 @@ import { authCopy } from "../auth/auth-copy";
 import { SubmitButton, useAction } from "../auth/auth-frame";
 import { type ApiError, keyedPost } from "../http/client";
 import { NotFoundPage } from "../pages/system-pages";
-import { ArchiveControl } from "../settings/archive";
+import { ArchiveControl, ArchiveReason, archiveBlockedIn } from "../settings/archive";
 import { ROLES } from "../settings/roles";
 import { WorkspaceAvatar } from "../settings/workspace-avatar";
 import { ArchivedMark } from "../shell/choice-list";
@@ -26,8 +26,9 @@ import { ZonePicker } from "../zones/zone-picker";
 const MAX_NAME = 128;
 const created = z.object({ id: z.string() });
 
-function clientCopy(error: ApiError) {
-  if (error.state === "not_found")
+// Only a create that named a template can fail because the template is gone.
+function clientCopy(error: ApiError, template: string) {
+  if (error.state === "not_found" && template !== "")
     return {
       what: <Trans id="org.clients.template_gone.what">That template client is no longer available</Trans>,
       meaning: (
@@ -168,7 +169,9 @@ function AddClient({
       <SubmitButton testId="clients-create" pending={add.pending} online={add.online}>
         <Trans id="onboarding.create">Create</Trans>
       </SubmitButton>
-      {add.failure ? <ErrorPanel focusOnMount error={add.failure} {...clientCopy(add.failure)} /> : null}
+      {add.failure ? (
+        <ErrorPanel focusOnMount error={add.failure} {...clientCopy(add.failure, template)} />
+      ) : null}
     </Form>
   );
 }
@@ -176,7 +179,7 @@ function AddClient({
 // A link in a table cell is not exempt from the target size rule: 24 px each way, 44 px on a touch screen.
 const ROW_LINK = "inline-flex min-h-6 min-w-6 pointer-coarse:min-h-11 items-center text-link underline";
 
-function ClientRow({ client }: { client: Workspace }) {
+function ClientRow({ client, noteId }: { client: Workspace; noteId: string | undefined }) {
   const { i18n } = useLingui();
   const role = ROLES[client.role as keyof typeof ROLES];
   return (
@@ -203,7 +206,7 @@ function ClientRow({ client }: { client: Workspace }) {
               <DirText>{client.name}</DirText>
             </span>
           </Link>
-          <ArchiveControl workspace={client} />
+          <ArchiveControl workspace={client} noteId={noteId} />
         </div>
       </td>
     </tr>
@@ -212,33 +215,38 @@ function ClientRow({ client }: { client: Workspace }) {
 
 function ClientTable({ clients }: { clients: Workspace[] }) {
   const { t } = useLingui();
+  const reasonId = useId();
+  const noteId = archiveBlockedIn(clients) ? reasonId : undefined;
   return (
-    // Positioned, so the hidden names of the row buttons stay inside the scroll box instead of widening the page.
-    <div className="relative overflow-x-auto" data-testid="clients-scroll">
-      <table aria-label={t({ id: "org.clients.title", message: "Clients" })} className="w-full text-start">
-        <thead>
-          <tr>
-            <th className="pe-5 text-start">
-              <Trans id="org.clients.col_name">Name</Trans>
-            </th>
-            <th className="pe-5 text-start">
-              <Trans id="org.clients.col_slug">Address name</Trans>
-            </th>
-            <th className="pe-5 text-start">
-              <Trans id="org.clients.col_role">Your role</Trans>
-            </th>
-            <th className="sr-only">
-              <Trans id="org.clients.col_action">Action</Trans>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {clients.map((client) => (
-            <ClientRow key={client.id} client={client} />
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <>
+      {noteId ? <ArchiveReason id={noteId} /> : null}
+      {/* Positioned, so the hidden names of the row buttons stay inside the scroll box instead of widening the page. */}
+      <div className="relative overflow-x-auto" data-testid="clients-scroll">
+        <table aria-label={t({ id: "org.clients.title", message: "Clients" })} className="w-full text-start">
+          <thead>
+            <tr>
+              <th className="pe-5 text-start">
+                <Trans id="org.clients.col_name">Name</Trans>
+              </th>
+              <th className="pe-5 text-start">
+                <Trans id="org.clients.col_slug">Address name</Trans>
+              </th>
+              <th className="pe-5 text-start">
+                <Trans id="org.clients.col_role">Your role</Trans>
+              </th>
+              <th className="sr-only">
+                <Trans id="org.clients.col_action">Action</Trans>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {clients.map((client) => (
+              <ClientRow key={client.id} client={client} noteId={noteId} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 

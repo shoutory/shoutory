@@ -163,12 +163,17 @@ describe("adding a client from a template", () => {
     expect(() => selectTrigger(document.body, "Copy settings from")).toThrow();
   });
 
-  it("a template that is gone has its own words and nothing is created", async () => {
+  it.each([
+    ["with a template, names the template", "Acme Two", true],
+    ["without one, does not blame a template", "", false],
+  ])("a not-found answer %s", async (_name, template, blamed) => {
     await openWith(WORKSPACES.slice(0, 2), { createWorkspace: () => refusal("not_found", 404) });
-    pick(document.body, "Copy settings from", "Acme Two");
+    if (template) pick(document.body, "Copy settings from", template);
     create();
     await settle();
-    expect(document.body.querySelector('[role="alert"]')?.textContent).toMatch(/no longer available/i);
+    const alert = document.body.querySelector('[role="alert"]')?.textContent ?? "";
+    expect(alert).not.toBe("");
+    expect(/template client is no longer available/i.test(alert)).toBe(blamed);
   });
 });
 
@@ -237,13 +242,16 @@ describe("archiving and restoring a client", () => {
 
 describe("who may archive a client", () => {
   it.each(["editor", "viewer"])(
-    "a %s sees Archive unavailable with a reason and sends nothing",
+    "a %s sees Archive unavailable with the reason stated once for the list, and sends nothing",
     async (role) => {
-      const stub = stubApi({ organizations: page(org("owner")), workspaces: roleOf(role) });
+      const rows = WORKSPACES.slice(0, 2).map((row) => ({ ...row, role }));
+      const stub = stubApi({ organizations: page(org("owner")), workspaces: page(rows) });
       const { host } = await openApp(PATH);
-      const button = byText<HTMLButtonElement>(rowOf(host, "Acme One"), "button", "Archive");
+      const button = byText<HTMLButtonElement>(rowOf(host, "Acme Two"), "button", "Archive");
       expect(button.getAttribute("aria-disabled")).toBe("true");
-      expect(host.textContent).toMatch(/only an owner or admin can archive/i);
+      expect(host.textContent?.match(/only an owner or admin can archive/gi)).toHaveLength(1);
+      const note = document.getElementById(button.getAttribute("aria-describedby") ?? "");
+      expect(note?.textContent).toMatch(/only an owner or admin can archive/i);
       click(button);
       await settle();
       expect(document.body.querySelector('[role="dialog"]')).toBeNull();

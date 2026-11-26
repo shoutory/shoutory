@@ -105,6 +105,19 @@ describe("archive on the workspace General page", () => {
     expect(callsTo(stub, "POST", "/api/v1/workspaces/w1/unarchive")).toHaveLength(1);
   });
 
+  it("a refused Restore names the reason and keeps the workspace archived with Restore offered", async () => {
+    stubApi({
+      workspaces: withW1({ archived_at: GONE }),
+      archive: () => refusal("conflict", 409, { reason: "deletion_requested" }),
+    });
+    const { host } = await openApp(PATH);
+    click(host.querySelector('[data-testid="workspace-restore"]') as HTMLElement);
+    await settle();
+    expect(host.querySelector('[role="alert"]')?.textContent).toMatch(/being deleted/i);
+    expect(host.querySelector('[data-testid="archived-banner"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="workspace-restore"]')).not.toBeNull();
+  });
+
   it("a workspace of a personal organization has no Archive control", async () => {
     stubApi({ workspaces: withW1({ organization_type: "personal" }) });
     const { host } = await openApp(PATH);
