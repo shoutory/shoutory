@@ -5,7 +5,8 @@ import { migrateCommand } from "../../src/cli/migrate.js";
 
 const env = readTestEnv();
 
-describe("shoutory migrate", () => {
+// Each of the first two tests applies every shipped migration to an empty database, so its time grows with each new migration.
+describe("shoutory migrate", { timeout: 30_000 }, () => {
   it("applies the shipped migrations as the owner role and reports them, then reports nothing pending", async () => {
     const db = await emptyDatabase(env);
     try {
