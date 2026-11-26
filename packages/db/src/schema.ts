@@ -302,6 +302,7 @@ export const outbox = app.table(
     dispatchedAt: stamp("dispatched_at"),
     claimedUntil: stamp("claimed_until"),
     attempts: integer("attempts").notNull().default(0),
+    deadAt: stamp("dead_at"),
   },
   (table) => [primaryKey({ columns: [table.createdAt, table.id] })],
 );
@@ -590,6 +591,7 @@ export const postVariants = app.table("post_variants", {
   localDue: localStamp("local_due"),
   dueTz: text("due_tz"),
   dueAt: stamp("due_at"),
+  admitSkipUntil: stamp("admit_skip_until"),
   frozenVersionId: uuid("frozen_version_id"),
   presence: text("presence").notNull().default("present"),
   externalId: text("external_id"),

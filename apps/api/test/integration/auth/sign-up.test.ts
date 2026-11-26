@@ -138,6 +138,23 @@ describe("the instance owner's claim", () => {
   });
 });
 
+describe("a password in another Unicode form", () => {
+  const COMPOSED = "café-password-1";
+  const DECOMPOSED = "café-password-1";
+  // [case, the password at sign-up, the password at sign-in, the answer]
+  const FORMS: [string, string, string, number][] = [
+    ["composed then decomposed", COMPOSED, DECOMPOSED, 200],
+    ["decomposed then composed", DECOMPOSED, COMPOSED, 200],
+    ["composed then without the accent", COMPOSED, "cafe-password-1", 401],
+  ];
+  it.each(FORMS)("password: %s signs in with answer %i", async (name, first, second, status) => {
+    const email = `forms-${name.replaceAll(" ", "-")}@example.test`;
+    expect((await signUp(email, first)).status).toBe(200);
+    await fx.request("/api/auth/verify-email", { body: { token: tokenOf((await fx.mails(email))[0]) } });
+    expect((await signIn(email, second)).status).toBe(status);
+  });
+});
+
 // After the owner rows: this user verifies, so it must not be the first verified user of the shared fixture.
 describe("a long password", () => {
   it("the policy's longest password, 128 astral characters of 256 UTF-16 units, can sign in", async () => {

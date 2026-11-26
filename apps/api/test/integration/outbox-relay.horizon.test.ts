@@ -58,16 +58,52 @@ describe("the outbox relay (at least once)", () => {
     expect([...delivered.values()].every((count) => count === 1)).toBe(true);
     expect((await row(ids[0] as string)).dispatched_at).not.toBeNull();
   });
+});
 
-  it("leaves an event with no handler unmarked and logs its type but never its payload", async () => {
-    const id = await plant("test.unhandled", { secret: CANARY });
-    expect(await relay({}).tick()).toBe(0);
-    const after = await row(id);
-    expect(after.dispatched_at).toBeNull();
-    expect(after.claimed_until).not.toBeNull();
-    expect(lines.some((line) => line.includes("test.unhandled"))).toBe(true);
-    expect(lines.some((line) => line.includes(CANARY))).toBe(false);
-  });
+const throwing: OutboxHandlers = {
+  "test.poison": async () => {
+    throw new Error(`failed for ${CANARY}`);
+  },
+};
+const deadAt = async (id: string) =>
+  (
+    await admin((a) =>
+      a.query("SELECT to_jsonb(o) ->> 'dead_at' AS dead FROM app.outbox o WHERE id = $1", [id]),
+    )
+  ).rows[0]?.dead as string | null;
+
+describe("the outbox relay's dead events", () => {
+  // [case, the handlers, the claims that end it, the warnings that name it: a failing handler logs errors instead]
+  it.each<[string, OutboxHandlers, number, number]>([
+    ["has no handler", {}, 1, 1],
+    ["has a handler that always throws", throwing, 5, 0],
+  ])(
+    "an event that %s ends dead at the cap, is counted by type and not by id, is not claimed again, and leaves outbox_lag",
+    async (_name, handlers, claims, warnings) => {
+      await admin((a) => a.query("DELETE FROM app.outbox"));
+      const id = await plant("test.poison", { secret: CANARY });
+      const before = lines.length;
+      for (let claim = 1; claim <= claims; claim++) {
+        expect(await deadAt(id)).toBeNull();
+        await relay(handlers).tick();
+        await setLease(id, "claimed_until = now() - interval '1 second'");
+      }
+      expect(await deadAt(id)).not.toBeNull();
+      expect((await row(id)).dispatched_at).toBeNull();
+      expect(await relay(handlers).tick()).toBe(0);
+      expect((await row(id)).attempts).toBe(claims);
+      const logged = lines.slice(before);
+      const ended = logged.map((line) => JSON.parse(line)).filter((line) => line.level === "warn");
+      expect(ended).toEqual(
+        Array.from({ length: warnings }, () => expect.objectContaining({ type: "test.poison", count: 1 })),
+      );
+      expect(JSON.stringify(ended).includes(id)).toBe(false);
+      expect(logged.some((line) => line.includes(CANARY))).toBe(false);
+      await setLease(id, "created_at = created_at - interval '10 minutes'");
+      const [lag] = (await admin((a) => a.query("SELECT app.outbox_lag() AS lag"))).rows;
+      expect(lag?.lag).toBe(0);
+    },
+  );
 });
 
 describe("the outbox relay's failures", () => {

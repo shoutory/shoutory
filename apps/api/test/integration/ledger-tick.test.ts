@@ -3,12 +3,14 @@ import { join } from "node:path";
 import { SealedSecret } from "@shoutory/core/crypto";
 import { EnvKeyProvider } from "@shoutory/core/keys";
 import { withSystem } from "@shoutory/db/context/system";
+import { createAppPool } from "@shoutory/db/pool";
 import { cloneTemplate, readTestEnv, type TestDatabase, withAdminClient } from "@shoutory/db/testing";
 import { createRegistry } from "@shoutory/provider-sdk/registry";
 import { createFixtureAdapter } from "@shoutory/testkit/fixture-provider/adapter";
 import { fixtureManifest } from "@shoutory/testkit/fixture-provider/manifest";
 import { startFixtureSimulator } from "@shoutory/testkit/fixture-provider/simulator";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
+import { assertJobsHealthy } from "../../src/health/jobs.js";
 import { createBoss } from "../../src/jobs/boss.js";
 import { admitAndWake, createLedgerTick } from "../../src/jobs/ledger/tick.js";
 import { runTurn } from "../../src/jobs/ledger/turn.js";
@@ -65,7 +67,7 @@ describe("admission and its wake-up", () => {
       });
       await expect(rolledBack).rejects.toThrow("roll back");
       expect(await jobs()).toBe(0);
-      const admitted = await withSystem(db.pool("worker"), "ledger", (tx) =>
+      const { admitted } = await withSystem(db.pool("worker"), "ledger", (tx) =>
         admitAndWake(tx, queue, registry),
       );
       expect(admitted.length).toBe(2);
@@ -73,6 +75,37 @@ describe("admission and its wake-up", () => {
       await admin((a) => seedDueTarget(a, ws));
       await withSystem(db.pool("worker"), "ledger", (tx) => admitAndWake(tx, queue, registry));
       expect(await jobs()).toBe(1);
+    } finally {
+      await queue.stop({ graceful: true });
+    }
+  });
+
+  it("names a refused target once with its reason and wakes no queue for it", async () => {
+    await admin(async (a) => void (await a.query("DELETE FROM pgboss.job WHERE name = 'publish.fixture'")));
+    const queue = boss();
+    await queue.start();
+    try {
+      const variant = await admin((a) => seedDueTarget(a, ws));
+      const tick = createLedgerTick({
+        pool: db.pool("worker"),
+        boss: queue,
+        registry,
+        logger,
+        credentials: credentials(),
+      });
+      await tick.tick();
+      await admin(async (a) => {
+        await a.query("DELETE FROM pgboss.job WHERE name = 'publish.fixture'");
+        await a.query("UPDATE app.post_variants SET schedule_state = 'scheduled' WHERE id = $1", [variant]);
+      });
+      lines.length = 0;
+      await tick.tick();
+      await tick.tick();
+      const named = lines.filter((line) => line.includes(variant));
+      expect(named.length).toBe(1);
+      expect(named[0]).toContain("target_in_flight");
+      expect(named[0]).not.toContain("operations_target_key");
+      expect(await jobs()).toBe(0);
     } finally {
       await queue.stop({ graceful: true });
     }
@@ -385,4 +418,54 @@ describe("one failing step of the tick", () => {
     );
     expect(made.rows[0].n).toBe(1);
   });
+});
+
+describe("the outbox after a ledger move", () => {
+  it("a worker run that moves one operation keeps /readyz ready after 60 s", async () => {
+    const target = await admin((a) => seedDueTarget(a, ws));
+    const worker = await startWorker({
+      connectionString: db.url("worker"),
+      pool: db.pool("worker"),
+      logger,
+      role: "worker",
+      media,
+      mail: {
+        keys,
+        pepper: new SealedSecret("ledger-tick-pepper-for-tests-0123456789"),
+        smtpUrl: new SealedSecret("smtp://127.0.0.1:9"),
+        from: "noreply@mail.example.test",
+      },
+      registry,
+      ledgerIntervalMs: 50,
+    });
+    try {
+      for (let tries = 0; tries < 100 && (await operationsOf(target)) === 0; tries++) await sleep(50);
+      // The worker closes only after the relay has ended every event of the moves: a closing relay leaves the rest claimed.
+      const open = () =>
+        admin(async (a) =>
+          Number(
+            (
+              await a.query(
+                "SELECT count(*) AS n FROM app.outbox o WHERE type LIKE 'operation.%' AND to_jsonb(o) ->> 'dead_at' IS NULL",
+              )
+            ).rows[0].n,
+          ),
+        );
+      for (let tries = 0; tries < 100 && (await open()) > 0; tries++) await sleep(50);
+      expect(await open()).toBe(0);
+    } finally {
+      await worker.close();
+    }
+    await admin((a) =>
+      a.query(
+        "UPDATE app.outbox SET created_at = created_at - interval '2 minutes' WHERE type LIKE 'operation.%'",
+      ),
+    );
+    const appPool = createAppPool(db.url("app"), () => undefined);
+    try {
+      await expect(assertJobsHealthy(appPool)).resolves.toBeUndefined();
+    } finally {
+      await appPool.end();
+    }
+  }, 30_000);
 });

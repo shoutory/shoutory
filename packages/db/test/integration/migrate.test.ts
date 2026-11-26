@@ -79,6 +79,44 @@ describe("migration runner: history", () => {
   });
 });
 
+// The table has rows and forced row security with no policy, so the owner who runs a file sees none of them.
+const FORCED_WIDGETS = `
+  CREATE TABLE public.widgets (id int, label text);
+  CREATE TABLE public.results (step text, changed int);
+  INSERT INTO public.widgets VALUES (1, 'old'), (2, 'old'), (3, 'old');
+  ALTER TABLE public.widgets ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE public.widgets FORCE ROW LEVEL SECURITY;`;
+const BACKFILL = (step: string, policy: boolean) => `
+  DO $$
+  DECLARE changed integer;
+  BEGIN
+    ${policy ? "CREATE POLICY backfill_probe ON public.widgets FOR ALL TO CURRENT_USER USING (true) WITH CHECK (true);" : ""}
+    UPDATE public.widgets SET label = 'new';
+    GET DIAGNOSTICS changed = ROW_COUNT;
+    INSERT INTO public.results VALUES ('${step}', changed);
+    ${policy ? "DROP POLICY backfill_probe ON public.widgets;" : ""}
+  END
+  $$;`;
+
+describe("migration runner: backfill under forced row security", () => {
+  const box = sandbox();
+
+  it("a backfill under FORCE RLS as the owner updates the expected count, 0 without its temporary policy, and none remains", async () => {
+    await box.write("0001_widgets.sql", FORCED_WIDGETS);
+    await box.write("0002_blind.sql", BACKFILL("blind", false));
+    await box.write("0003_seen.sql", BACKFILL("seen", true));
+    await box.migrate();
+    const results = await box.query("SELECT step, changed FROM public.results ORDER BY step");
+    expect(results.rows).toEqual([
+      { step: "blind", changed: 0 },
+      { step: "seen", changed: 3 },
+    ]);
+    expect(
+      (await box.query("SELECT count(*)::int AS n FROM pg_policies WHERE tablename = 'widgets'")).rows,
+    ).toEqual([{ n: 0 }]);
+  });
+});
+
 describe("migration runner: accepted revisions", () => {
   const box = sandbox();
   const sum = (text: string) => createHash("sha256").update(text).digest("hex");

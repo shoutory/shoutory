@@ -16,6 +16,28 @@ import { emailLinkAad } from "../../../src/mail/enqueue.js";
 export const env = readTestEnv();
 export const ORIGIN = "https://app.example.test";
 export const PASSWORD = "password-test-1234";
+
+// One valid-looking body per non-GET path of the authentication mount, so a refusal is the guard's and not the schema's.
+export const SAMPLE: Record<string, unknown> = {
+  "/api/auth/sign-up/email": { name: "Test", email: "table-1@example.test", password: PASSWORD },
+  "/api/auth/sign-in/email": { email: "table-1@example.test", password: PASSWORD },
+  "/api/auth/sign-out": {},
+  "/api/auth/send-verification-email": { email: "table-1@example.test" },
+  "/api/auth/verify-email": { token: "token-sample-1" },
+  "/api/auth/sessions/revoke": { id: "00000000-0000-7000-8000-000000000001" },
+  "/api/auth/sessions/revoke-others": {},
+  "/api/auth/profile": { name: "Test" },
+  "/api/auth/verify-password": { password: PASSWORD },
+  "/api/auth/change-password": { currentPassword: PASSWORD, newPassword: "another-password-5678" },
+  "/api/auth/request-password-reset": { email: "table-1@example.test" },
+  "/api/auth/reset-password": { token: "token-sample-1", newPassword: "another-password-5678" },
+  "/api/auth/two-factor/enable": { password: PASSWORD },
+  "/api/auth/two-factor/disable": { password: PASSWORD },
+  "/api/auth/two-factor/get-totp-uri": { password: PASSWORD },
+  "/api/auth/two-factor/generate-backup-codes": { password: PASSWORD },
+  "/api/auth/two-factor/verify-totp": { code: "123456" },
+  "/api/auth/two-factor/verify-backup-code": { code: "backup-sample-1" },
+};
 export const SECRET = "session-secret-for-tests-0123456789abcdef";
 export const PEPPER = "auth-pepper-for-tests-0123456789abcdef";
 

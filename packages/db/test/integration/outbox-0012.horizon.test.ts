@@ -295,6 +295,88 @@ async function horizonPast(xid: string): Promise<void> {
   throw new Error("an older transaction still holds the visibility horizon");
 }
 
+// The cap of attempts lives in SQL only: a row that fails at it, or is claimed past it, ends dead.
+const plantAttempts = (n: number, attempts: number) =>
+  rows(
+    `INSERT INTO app.outbox (id, created_at, xid, type, payload, attempts, claimed_until)
+     VALUES ($1, now() - interval '30 seconds', '1'::xid8, 'test.poison', '{}', $2, now() + interval '5 minutes')
+     RETURNING created_at::text AS created_at`,
+    [id(n), attempts],
+  );
+const deadOf = async (n: number) =>
+  (await rows("SELECT to_jsonb(o) ->> 'dead_at' AS dead FROM app.outbox o WHERE id = $1", [id(n)]))[0]?.dead;
+
+describe("a poison outbox event", () => {
+  // [attempts the row holds, the attempt the caller names, final, the answer, whether the row ends dead]
+  const FAILS: [number, number, boolean, boolean, boolean][] = [
+    [2, 2, false, true, false],
+    [2, 2, true, true, true],
+    [5, 5, false, true, true],
+    [3, 2, true, false, false],
+  ];
+  it.each(FAILS)(
+    "outbox_fail on attempt %i named %i, final %s answers %s and ends the row dead: %s (a stale attempt cannot)",
+    async (held, named, final, answer, dead) => {
+      await rows("DELETE FROM app.outbox");
+      const [planted] = await plantAttempts(1, held);
+      const done = await pool("worker").query("SELECT app.outbox_fail($1, $2, $3, $4) AS ok", [
+        id(1),
+        planted?.created_at,
+        named,
+        final,
+      ]);
+      expect(done.rows[0]).toEqual({ ok: answer });
+      expect(Boolean(await deadOf(1))).toBe(dead);
+    },
+  );
+
+  it("outbox_claim ends a row already claimed five times and flags it; a row one claim below is still delivered", async () => {
+    await rows("DELETE FROM app.outbox");
+    await plantAttempts(1, 4);
+    await plantAttempts(2, 5);
+    await rows("UPDATE app.outbox SET claimed_until = now() - interval '1 second'");
+    const claimed = (await pool("worker").query("SELECT * FROM app.outbox_claim(10)")).rows;
+    expect(claimed.map((row) => [row.id, row.attempts, row.dead])).toEqual([
+      [id(1), 5, false],
+      [id(2), 5, true],
+    ]);
+    expect(Boolean(await deadOf(2))).toBe(true);
+    expect(Boolean(await deadOf(1))).toBe(false);
+    await rows("UPDATE app.outbox SET claimed_until = now() - interval '1 second'");
+    expect(
+      (await pool("worker").query("SELECT * FROM app.outbox_claim(10)")).rows.map((row) => row.id),
+    ).toEqual([id(1)]);
+  });
+});
+
+describe("a dead outbox event", () => {
+  it("purge_expired drops an old leaf whose only open event is dead and keeps one with a live open event", async () => {
+    await rows("DELETE FROM app.outbox");
+    const day = (ago: number) => new Date((Math.floor(Date.now() / 864e5) - ago) * 864e5).toISOString();
+    await admin(async (a) => {
+      await a.query("SET ROLE shoutory_definer");
+      for (const [name, from, to] of [
+        ["outbox_dead_old", 13, 12],
+        ["outbox_live_old", 15, 14],
+      ] as const)
+        await a.query(
+          `CREATE TABLE app.${name} PARTITION OF app.outbox FOR VALUES FROM ('${day(from)}') TO ('${day(to)}')`,
+        );
+      await a.query("RESET ROLE");
+      await a.query(
+        `INSERT INTO app.outbox (id, created_at, type, payload) VALUES ($1, '${day(13)}', 'test.old', '{}'), ($2, '${day(15)}', 'test.old', '{}')`,
+        [id(1), id(2)],
+      );
+      await a.query("UPDATE app.outbox SET dead_at = now() WHERE id = $1", [id(1)]);
+    });
+    await pool("worker").query("SELECT app.purge_expired('outbox')");
+    expect(await rows("SELECT to_regclass('app.outbox_dead_old') AS leaf")).toEqual([{ leaf: null }]);
+    expect(await rows("SELECT to_regclass('app.outbox_live_old')::text AS leaf")).toEqual([
+      { leaf: "app.outbox_live_old" },
+    ]);
+  });
+});
+
 describe("email_outbox lifecycle", () => {
   const state = () =>
     rows("SELECT state, attempts, link_ciphertext IS NOT NULL AS sealed, link_digest FROM app.email_outbox");

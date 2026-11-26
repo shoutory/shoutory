@@ -88,6 +88,76 @@ const RETAINED = [
   ["auth.user", "auth.user_unverified"],
 ] as const;
 
+describe("a row dated past the last leaf", () => {
+  it("an audit insert dated past the last leaf is refused and no leaf catches it", async () => {
+    const insert = admin((a) =>
+      a.query(
+        `INSERT INTO app.audit_logs (at, actor_kind, actor_ref, action, resource_kind, resource_id, prev_hash, hash)
+         VALUES (now() + interval '20 years', 'system', 'probe', 'probe.done', 'probe', 'beyond', $1, $1)`,
+        [Buffer.alloc(32)],
+      ),
+    );
+    await expect(insert).rejects.toMatchObject({ code: "23514" });
+    expect(
+      await rows(
+        "SELECT partdefid::int AS d FROM pg_partitioned_table WHERE partrelid = 'app.audit_logs'::regclass",
+      ),
+    ).toEqual([{ d: 0 }]);
+    expect(await rows("SELECT count(*)::int AS n FROM app.audit_logs WHERE resource_id = 'beyond'")).toEqual([
+      { n: 0 },
+    ]);
+  });
+});
+
+describe("audit chain heads and their leaf", () => {
+  it("purge_expired drops an old audit leaf and deletes exactly the heads of its days, workspace and instance chains, keeping newer heads", async () => {
+    const year = new Date().getUTCFullYear() - 3;
+    const workspace = randomUUID();
+    await admin(async (a) => {
+      await a.query("SET ROLE shoutory_definer");
+      await a.query(
+        `CREATE TABLE app.audit_logs_old_month PARTITION OF app.audit_logs
+           FOR VALUES FROM ('${year}-03-01T00:00:00Z') TO ('${year}-04-01T00:00:00Z')`,
+      );
+      await a.query("RESET ROLE");
+      for (const day of [
+        `${year}-02-28`,
+        `${year}-03-01`,
+        `${year}-03-15`,
+        `${year}-03-31`,
+        `${year}-04-01`,
+      ]) {
+        await a.query(
+          "INSERT INTO app.audit_heads (workspace_id, day, head_hash) VALUES ($1, $2, $4), (NULL, $2, $4), ($3, $2, $4)",
+          [workspace, day, randomUUID(), Buffer.alloc(32)],
+        );
+      }
+    });
+    // A session zone west of UTC would read the leaf's bounds a day early if the function used it.
+    const session = await pool("worker").connect();
+    try {
+      await session.query("SET timezone = 'America/Los_Angeles'");
+      await session.query("SELECT app.purge_expired('audit_logs')");
+    } finally {
+      await session.query("RESET timezone");
+      session.release();
+    }
+    expect(await rows("SELECT to_regclass('app.audit_logs_old_month') AS leaf")).toEqual([{ leaf: null }]);
+    const left = await rows(
+      "SELECT workspace_id IS NULL AS instance, day::text AS day FROM app.audit_heads WHERE day < '2999-01-01' ORDER BY instance, day",
+    );
+    const days = left.filter((row) => row.day.startsWith(String(year)));
+    expect(days.map((row) => `${row.instance ? "instance" : "workspace"} ${row.day}`)).toEqual([
+      `workspace ${year}-02-28`,
+      `workspace ${year}-02-28`,
+      `workspace ${year}-04-01`,
+      `workspace ${year}-04-01`,
+      `instance ${year}-02-28`,
+      `instance ${year}-04-01`,
+    ]);
+  });
+});
+
 describe("retention classes", () => {
   it.each(RETAINED)("%s has the class %s", async (table, klass) => {
     const found = await rows(

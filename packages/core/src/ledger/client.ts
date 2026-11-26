@@ -263,7 +263,7 @@ export type AttemptStep = "prepare" | "commit" | "poll" | "read_back";
 export type AttemptStart =
   | { outcome: "started"; attemptId: string; attemptNo: number }
   | { outcome: "lost_lease" }
-  | { outcome: "quota_denied" };
+  | { outcome: "quota_denied"; retryAfterSeconds: number };
 
 // A `commit` start is the effect marker: its transaction must commit before the provider is called.
 export async function startAttempt(
@@ -289,7 +289,8 @@ export async function startAttempt(
   if (row?.outcome === "started")
     return { outcome: "started", attemptId: String(row.attempt_id), attemptNo: Number(row.attempt_no) };
   if (row?.outcome === "lost_lease") return { outcome: "lost_lease" };
-  if (row?.outcome === "quota_denied") return { outcome: "quota_denied" };
+  if (row?.outcome === "quota_denied")
+    return { outcome: "quota_denied", retryAfterSeconds: Number(row.retry_after_seconds) };
   throw new Error("operation_attempt_start answered an unknown outcome");
 }
 

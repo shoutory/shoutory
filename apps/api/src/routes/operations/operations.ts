@@ -1,3 +1,5 @@
+import { resolveLocal } from "@shoutory/core/time";
+import type { TenantTx } from "@shoutory/db/context";
 import { z } from "zod";
 import { Refusal } from "../../errors/refusal.js";
 import { type App, defineRoute } from "../define-route.js";
@@ -30,6 +32,9 @@ const detail = {
     .refine((link) => URL.canParse(link), "a link that parses")
     .optional(),
   absence_evidence_id: z.uuid().optional(),
+  // Only a reschedule takes a new local time; a fold in it needs the person's choice.
+  local_due: z.string().max(32).optional(),
+  fold: z.enum(["earlier", "later"]).optional(),
 };
 const bodyOf = <K extends readonly [string, ...string[]]>(kinds: K) =>
   z
@@ -51,6 +56,33 @@ function unknownEvidence(error: unknown): Refusal | undefined {
     : undefined;
 }
 
+const refusedTime = (reason: string) =>
+  new Refusal("unprocessable_content", `reschedule refused: ${reason}`, { details: { reason } });
+
+// A reschedule names its new wall time and the workspace's zone gives the instant; the database refuses an instant
+// that is not ahead. Any other kind takes no time.
+async function newTime(
+  tx: TenantTx,
+  workspaceId: string,
+  kind: string,
+  localDue: string | undefined,
+  fold: "earlier" | "later" | undefined,
+): Promise<Record<string, string>> {
+  if (kind !== "reschedule") {
+    if (localDue !== undefined || fold !== undefined) throw refusedTime("local_due_not_allowed");
+    return {};
+  }
+  if (localDue === undefined) throw refusedTime("local_due_required");
+  const { rows } = await tx.query<{ default_tz: string }>(
+    "SELECT default_tz FROM app.workspaces WHERE id = $1",
+    [workspaceId],
+  );
+  const zone = rows[0]?.default_tz ?? "UTC";
+  const resolved = resolveLocal(localDue, zone, { user: fold ?? null });
+  if (!resolved.ok) throw refusedTime(resolved.code);
+  return { local_due: localDue, due_tz: zone, due_at: resolved.instant };
+}
+
 function registerResolve<K extends readonly [string, ...string[]]>(
   app: App,
   ipHmac: IpHmac,
@@ -64,7 +96,8 @@ function registerResolve<K extends readonly [string, ...string[]]>(
     params,
     body: bodyOf(route.kinds),
     handler: async ({ c, tx, scope, params: ids, body, clientAddress }) => {
-      const { kind, ...args } = body;
+      const { kind, local_due: localDue, fold, ...rest } = body;
+      const args = { ...rest, ...(await newTime(tx, scope.workspaceId, kind, localDue, fold)) };
       try {
         const done = await tx.query("SELECT * FROM app.resolve_operation($1, $2, $3, $4::jsonb)", [
           scope.workspaceId,

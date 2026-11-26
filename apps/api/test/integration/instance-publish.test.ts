@@ -72,8 +72,8 @@ const turn = () =>
     owner: "owner-instance",
     closing: new AbortController().signal,
   });
-const tick = () =>
-  createLedgerTick({
+const tick = async () => {
+  const loop = createLedgerTick({
     pool: workerPool(),
     boss: queueOf(),
     registry,
@@ -81,7 +81,10 @@ const tick = () =>
     fetchFor,
     credentials: credentials(),
     logger,
-  }).tick();
+  });
+  await loop.tick();
+  await loop.reconcile();
+};
 const reset = () => {
   sim.reset();
   lines.length = 0;

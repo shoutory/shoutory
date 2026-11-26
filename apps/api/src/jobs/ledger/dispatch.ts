@@ -2,6 +2,7 @@ import {
   type AttemptResult,
   bucketKey,
   callTimeoutMs,
+  denialMove,
   finishAttempt,
   recordProgress,
   startAttempt,
@@ -26,6 +27,7 @@ import {
   inJob,
   move,
   movedOrLost,
+  preflightMove,
   sqlOf,
   type TurnResult,
 } from "./held.js";
@@ -39,6 +41,7 @@ export interface Caller {
   readonly account: AccountAccess;
   readonly credentials: CredentialService;
   readonly now: () => number;
+  readonly clock: () => Date;
 }
 export interface Dispatcher extends Caller {
   readonly reconcileQueue: string;
@@ -73,7 +76,7 @@ export function contextFor(deps: Caller, held: Held, timeoutMs: number): Adapter
   return {
     fetch: (input, init) =>
       deps.fetch(input, { ...init, signal: init?.signal ? AbortSignal.any([init.signal, own]) : own }),
-    now: () => new Date(),
+    now: deps.clock,
   };
 }
 
@@ -247,7 +250,15 @@ async function commit(
   );
   if (started.outcome === "lost_lease") return lostTurn(held);
   if (started.outcome === "quota_denied")
-    return movedOrLost(held, "retry_wait", await move(deps.pool, held, "retry_wait", { waitSeconds: 60 }));
+    return preflightMove(
+      deps.pool,
+      held,
+      denialMove({
+        retryAfterSeconds: started.retryAfterSeconds,
+        retryAfterMaxSeconds: held.manifest.retryAfterMaxSeconds,
+        latenessLeftSeconds: held.operation.lateness_left_seconds,
+      }),
+    );
   const result = await deps.adapter.commit(contextFor(deps, held, timeout), {
     idempotencyKey: held.operation.idempotency_marker,
     text,

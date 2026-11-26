@@ -37,6 +37,13 @@ test("the app starts only after migrate completed, and migrate runs once with th
   assert.deepEqual(urls, ["SHOUTORY_DATABASE_URL_OWNER"]);
 });
 
+test("compose: migrate and shoutory drop ALL capabilities and set no-new-privileges", () => {
+  for (const name of ["migrate", "shoutory"]) {
+    assert.deepEqual(services[name].cap_drop, ["ALL"], name);
+    assert.deepEqual(services[name].security_opt, ["no-new-privileges:true"], name);
+  }
+});
+
 test("migrate and the app are one image, which compose can also build", () => {
   for (const name of ["migrate", "shoutory"]) {
     assert.equal(services[name].image, IMAGE, name);

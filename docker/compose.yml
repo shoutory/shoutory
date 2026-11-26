@@ -35,6 +35,8 @@ services:
       dockerfile: docker/Dockerfile
     command: ["migrate"]
     restart: "no"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
     read_only: true
     tmpfs:
       - /tmp
@@ -49,6 +51,8 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
     read_only: true
     tmpfs:
       - /tmp

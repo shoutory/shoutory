@@ -92,6 +92,7 @@ interface Scenario {
   state?: string;
   queue?: string;
   account?: string;
+  host?: string;
   workspace?: string;
   extra?: Record<string, unknown>;
 }
@@ -105,7 +106,12 @@ async function plant(o: Scenario = {}): Promise<Planted> {
   const home = o.workspace ?? ws;
   const queue = o.queue ?? `publish.lw-${randomUUID().slice(0, 8)}`;
   const channel = {
-    id: await connectChannel(db.pool("worker"), { workspace: home, provider: "fixture", account }),
+    id: await connectChannel(db.pool("worker"), {
+      workspace: home,
+      provider: "fixture",
+      account,
+      ...(o.host === undefined ? {} : { host: o.host }),
+    }),
   };
   if (o.channelState !== undefined && o.channelState !== "connected") {
     await rows("UPDATE app.channels SET connection_state = $2 WHERE id = $1", [channel.id, o.channelState]);
@@ -536,4 +542,50 @@ describe("the bucket gate", () => {
     expect(Number(await tokensOf(planted.account, "bursts"))).toBeLessThan(300);
     expect(await tokensOf(planted.account, "comments")).toBeUndefined();
   });
+});
+
+const scoped = (scope: string, key: string) =>
+  createRegistry([
+    { ...fixtureManifest, rateLimits: [{ name: "posts", scope, key, max: 300, windowSeconds: 10800 }] },
+  ]);
+const keyOf = (scope: string, value: string) =>
+  createHash("sha256").update(["fixture", "posts", scope, value].join("\0")).digest("hex");
+
+describe("bucket keys by scope", () => {
+  // [limit scope, key name, whether the key value is the account or the instance host]
+  const SCOPES: [string, string, "account" | "host"][] = [
+    ["chat", "chat", "account"],
+    ["webhook", "webhook", "account"],
+    ["account", "account", "account"],
+    ["instance", "instance", "host"],
+  ];
+  it.each(SCOPES)(
+    "bucket keys: the %s scope shares one bucket per key value and separates every other value and scope",
+    async (scope, key, by) => {
+      const value = `shared-${randomUUID().slice(0, 8)}`;
+      const spots = async () =>
+        by === "account"
+          ? { account: value, workspace: await admin((a) => seedWorkspace(a)) }
+          : { account: `lw-${randomUUID().slice(0, 8)}`, host: value };
+      const [first, second, third] = [
+        await plant(await spots()),
+        await plant(await spots()),
+        await plant(await spots()),
+      ];
+      const apart = await plant(by === "account" ? {} : { host: `apart-${randomUUID().slice(0, 8)}` });
+      await rows(
+        `INSERT INTO app.rate_buckets (scope, key, tokens) VALUES ($1, $2, 1)
+         ON CONFLICT (scope, key) DO UPDATE SET tokens = 1, refilled_at = clock_timestamp()`,
+        [scope, keyOf(scope, value)],
+      );
+      const using = scoped(scope, key);
+      expect(await gate(first, using)).toMatchObject({ kind: "dispatched" });
+      expect(await gate(second, using)).toMatchObject({ kind: "moved", to: "retry_wait" });
+      expect(await gate(apart, using)).toMatchObject({ kind: "dispatched" });
+      expect(await gate(third, scoped(scope === "chat" ? "webhook" : "chat", key))).toMatchObject({
+        kind: "dispatched",
+      });
+    },
+    30_000,
+  );
 });

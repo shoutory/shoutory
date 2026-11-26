@@ -829,6 +829,7 @@ const WRITERS = [
   "heartbeat",
   "ledger_add_evidence",
   "ledger_due_move",
+  "ledger_skip",
   "operation_attempt_finish",
   "operation_attempt_start",
   "operation_cancel",
@@ -890,6 +891,7 @@ describe("the ledger tables are written only by ledger definers", () => {
         "state",
         "step_cursor",
         "superseded_by_operation_id",
+        "sweep_skip_until",
         "unverified_until",
       ].sort(),
     );

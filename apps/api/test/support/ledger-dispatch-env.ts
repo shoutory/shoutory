@@ -91,6 +91,11 @@ interface Options {
   before?: (route: string) => void | Promise<void>;
   clock?: () => Date;
 }
+// The tick and the read-back pass, in the order the worker's two loops would reach them.
+async function bothPasses(loop: ReturnType<typeof createLedgerTick>): Promise<void> {
+  await loop.tick();
+  await loop.reconcile();
+}
 export async function makeEnv(o: Options = {}) {
   const lease = o.lease ?? 12;
   const commits = { count: 0 };
@@ -124,14 +129,14 @@ export async function makeEnv(o: Options = {}) {
     credentials: ledgerCredentials(workerPool(), { registry, adapters, fetchFor }),
     ...(o.clock === undefined ? {} : { clock: o.clock }),
   };
+  const tickOf = (over: object = {}) =>
+    bothPasses(createLedgerTick({ ...common, boss: state.queue, ...over }));
   return {
     tickWith: (extra: Record<string, unknown>, at?: Date) =>
-      createLedgerTick({
-        ...common,
+      tickOf({
         registry: createRegistry([manifestWith(extra)]),
         ...(at === undefined ? {} : { clock: () => at }),
-        boss: state.queue,
-      }).tick(),
+      }),
     sim,
     commits,
     registry,
@@ -145,7 +150,7 @@ export async function makeEnv(o: Options = {}) {
     sweepNow: { [providerId]: { first_backoff_seconds: 0, unverified_horizon_days: 30 } },
     turn: () =>
       runTurn({ ...common, queue: queueName, owner: "owner-w", closing: new AbortController().signal }),
-    tick: () => createLedgerTick({ ...common, boss: state.queue }).tick(),
+    tick: () => tickOf(),
     close: () => sim.close(),
   };
 }

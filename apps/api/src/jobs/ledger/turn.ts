@@ -24,9 +24,8 @@ import {
   type Held,
   handBack,
   inJob,
-  move,
-  movedOrLost,
   type Operation,
+  preflightMove,
   readOperation,
   sqlOf,
   type TurnResult,
@@ -108,15 +107,6 @@ async function readTarget(pool: AppPool, operation: Operation) {
   });
 }
 
-async function preflightMove(pool: AppPool, held: Held, outcome: PreflightMove): Promise<TurnResult> {
-  const changes: { reasonCode?: string; waitSeconds?: number } = {};
-  if (outcome.to === "paused") changes.reasonCode = outcome.reasonCode;
-  if ("waitSeconds" in outcome && outcome.waitSeconds !== undefined)
-    changes.waitSeconds = outcome.waitSeconds;
-  const moved = await move(pool, held, outcome.to, changes);
-  return movedOrLost(held, outcome.to, moved, outcome.to === "paused" ? outcome.reasonCode : undefined);
-}
-
 // Stops at the first denial; the tokens already taken stay spent, so a turn never sends more than the limits allow.
 async function takeLimits(
   pool: AppPool,
@@ -186,7 +176,8 @@ async function preflight(options: TurnOptions, held: Held): Promise<TurnResult> 
   const outcome = rereadOutcome({ channelState: channel.connection_state, targetLive: target.targetLive });
   if (outcome !== null) return preflightMove(pool, held, outcome);
   // A retired API sends nothing and spends no token: the row waits, visibly, until a live version is named.
-  if (pastSunset(manifest, (options.clock ?? (() => new Date()))()))
+  const clock = options.clock ?? (() => new Date());
+  if (pastSunset(manifest, clock()))
     return preflightMove(pool, held, { to: "paused", reasonCode: "api_sunset" });
   if (closing.aborted) return handBack(pool, held, "closed");
   const denied = await takeLimits(pool, held, channel, () => signal.aborted || closing.aborted);
@@ -210,6 +201,7 @@ async function preflight(options: TurnOptions, held: Held): Promise<TurnResult> 
     credentials: options.credentials,
     fetch: options.fetchFor(manifest, channel.instance_host ?? undefined),
     now,
+    clock,
     reconcileQueue: options.registry.queueNames(manifest.id).reconcile,
     closing,
   };

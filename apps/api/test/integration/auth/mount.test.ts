@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AUTH_PATHS } from "../../../src/auth/paths.js";
-import { cookieOf, type Fixture, PASSWORD, startFixture } from "./harness.js";
+import { cookieOf, type Fixture, PASSWORD, SAMPLE, startFixture } from "./harness.js";
 
 let fx: Fixture;
 beforeAll(async () => {
@@ -17,27 +17,6 @@ const errorOf = async (answer: Response) =>
   ((await answer.json()) as { error: { code: string; requestId: string } }).error;
 const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
 
-// One valid-looking body per non-GET path, so a refusal is the guard's and not the schema's.
-const SAMPLE: Record<string, unknown> = {
-  "/api/auth/sign-up/email": { name: "Test", email: "table-1@example.test", password: PASSWORD },
-  "/api/auth/sign-in/email": { email: "table-1@example.test", password: PASSWORD },
-  "/api/auth/sign-out": {},
-  "/api/auth/send-verification-email": { email: "table-1@example.test" },
-  "/api/auth/verify-email": { token: "token-sample-1" },
-  "/api/auth/sessions/revoke": { id: "00000000-0000-7000-8000-000000000001" },
-  "/api/auth/sessions/revoke-others": {},
-  "/api/auth/profile": { name: "Test" },
-  "/api/auth/verify-password": { password: PASSWORD },
-  "/api/auth/change-password": { currentPassword: PASSWORD, newPassword: "another-password-5678" },
-  "/api/auth/request-password-reset": { email: "table-1@example.test" },
-  "/api/auth/reset-password": { token: "token-sample-1", newPassword: "another-password-5678" },
-  "/api/auth/two-factor/enable": { password: PASSWORD },
-  "/api/auth/two-factor/disable": { password: PASSWORD },
-  "/api/auth/two-factor/get-totp-uri": { password: PASSWORD },
-  "/api/auth/two-factor/generate-backup-codes": { password: PASSWORD },
-  "/api/auth/two-factor/verify-totp": { code: "123456" },
-  "/api/auth/two-factor/verify-backup-code": { code: "backup-sample-1" },
-};
 const nonGet = AUTH_PATHS.filter((row) => row.method !== "GET");
 
 describe("the Better-Auth mount guards", () => {

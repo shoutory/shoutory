@@ -39,6 +39,7 @@ export interface ReconcileOptions {
   readonly owner: string;
   readonly closing: AbortSignal;
   readonly now?: () => number;
+  readonly clock?: () => Date;
 }
 
 const factsOf = (manifest: Manifest): ReconcileFacts => ({
@@ -50,36 +51,62 @@ const factsOf = (manifest: Manifest): ReconcileFacts => ({
   absentAnswers: manifest.absentAnswers,
 });
 
+// Providers run side by side, so a read-back that hangs in one never delays another; a failure that is not a row's own
+// (the database) is thrown once every provider has finished.
 export async function reconcileStep(options: ReconcileOptions): Promise<void> {
-  const { pool, registry, adapters, owner } = options;
-  for (const manifest of registry.manifests) {
-    const adapter = adapters[manifest.id];
-    const human = manifest.readBackMode === "E";
-    if (adapter === undefined && !human) continue;
-    const queue = registry.queueNames(manifest.id).reconcile;
-    const claim = (limit: number) =>
-      withSystem(pool, "ledger", (tx) =>
-        claimReconciles(sqlOf(tx), {
-          queue,
-          limit,
-          owner,
-          leaseSeconds: manifest.leaseSeconds.readBack,
-          classEKinds: human ? ALL_KINDS : [],
-        }),
-      );
-    // A provider that cannot read back hands every due row to a person at once: no lease is taken.
-    if (human || adapter === undefined) {
-      await claim(BATCH);
-      continue;
-    }
-    // One row at a time, so a row's lease starts when its turn does and a closing worker claims nothing more.
-    for (let turns = 0; turns < BATCH && !options.closing.aborted; turns++) {
-      // The clock starts before the claim, so the heartbeat never counts the lease as ending later than the database does.
-      const began = (options.now ?? (() => performance.now()))();
-      const [next] = await claim(1);
-      if (next === undefined) break;
-      await reconcileClaim(options, manifest, adapter, next, began);
-    }
+  const runs = options.registry.manifests.flatMap((manifest) => {
+    const adapter = options.adapters[manifest.id];
+    if (adapter === undefined && manifest.readBackMode !== "E") return [];
+    return [readBackProvider(options, manifest, adapter)];
+  });
+  const failed = (await Promise.allSettled(runs)).find((run) => run.status === "rejected");
+  if (failed !== undefined) throw failed.reason;
+}
+
+async function readBackProvider(
+  options: ReconcileOptions,
+  manifest: Manifest,
+  adapter: ProviderAdapter | undefined,
+): Promise<void> {
+  const human = manifest.readBackMode === "E";
+  const claim = (limit: number) =>
+    withSystem(options.pool, "ledger", (tx) =>
+      claimReconciles(sqlOf(tx), {
+        queue: options.registry.queueNames(manifest.id).reconcile,
+        limit,
+        owner: options.owner,
+        leaseSeconds: manifest.leaseSeconds.readBack,
+        classEKinds: human ? ALL_KINDS : [],
+      }),
+    );
+  // A provider that cannot read back hands every due row to a person at once: no lease is taken.
+  if (human || adapter === undefined) {
+    await claim(BATCH);
+    return;
+  }
+  // One row at a time, so a row's lease starts when its turn does and a closing worker claims nothing more.
+  for (let turns = 0; turns < BATCH && !options.closing.aborted; turns++) {
+    // The clock starts before the claim, so the heartbeat never counts the lease as ending later than the database does.
+    const began = (options.now ?? (() => performance.now()))();
+    const [next] = await claim(1);
+    if (next === undefined) return;
+    await isolated(options, manifest, next, () => reconcileClaim(options, manifest, adapter, next, began));
+  }
+}
+
+// Ids only: the error text may carry what the provider answered. The row keeps its lease and the lease sweep takes it
+// back, so it is never failed or resent here.
+async function isolated(
+  options: ReconcileOptions,
+  manifest: Manifest,
+  claim: Claim,
+  run: () => Promise<void>,
+): Promise<void> {
+  try {
+    await run();
+  } catch (error) {
+    const kind = error instanceof Error ? error.name : "NonError";
+    options.logger.error({ provider: manifest.id, operation: claim.id, error: kind }, "read-back failed");
   }
 }
 
@@ -118,6 +145,7 @@ async function reconcileClaim(
       account: access.account,
       credentials: options.credentials,
       now,
+      clock: options.clock ?? (() => new Date()),
     };
     await reconcileHeld(deps, holding.held);
   } finally {

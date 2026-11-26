@@ -80,6 +80,7 @@ const REASONS: ReadonlySet<string> = new Set([
   "workspace_archived",
   "deletion_requested",
   "idempotency_key_reused",
+  "in_the_past",
 ]);
 
 // A definer that explains its refusal in a sentence instead of a code; the sentence becomes the code a client reads.

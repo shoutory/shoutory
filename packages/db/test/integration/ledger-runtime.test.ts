@@ -188,7 +188,14 @@ describe("admission", () => {
     const answer = await admit(p);
     expect(answer.error).toBeUndefined();
     expect(answer.rows?.map((row) => row.state)).toEqual(["pending", "pending"]);
-    expect(Object.keys(answer.rows?.[0] ?? {})).toEqual(["operation_id", "workspace_id", "queue", "state"]);
+    expect(Object.keys(answer.rows?.[0] ?? {})).toEqual([
+      "operation_id",
+      "workspace_id",
+      "queue",
+      "state",
+      "variant_id",
+      "reason",
+    ]);
     expect((await opsOf(soon))[0]).toMatchObject({
       queue: `publish.${p.provider}`,
       kind: "publish",
@@ -231,7 +238,7 @@ describe("admission faults", () => {
     const fine = await newTarget(p, { dueIn: -5 });
     const answer = await admit(p);
     expect(answer.error).toBeUndefined();
-    expect(answer.rows?.length).toBe(1);
+    expect(answer.rows?.filter((row) => row.state !== "refused").length).toBe(1);
     expect((await opsOf(fine)).length).toBe(1);
     expect((await opsOf(held)).filter((row) => row.queue === `publish.${p.provider}`).length).toBe(1);
   });

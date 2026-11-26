@@ -15,6 +15,8 @@ const planted = {
   "a slice id": ["built in ", "M", "3-", "07"].join(""),
   "a plan label": ["label ", "OD", "-M", "4"].join(""),
   "a ruling id": ["checked in ", "R", "123"].join(""),
+  "a one-digit ruling id": ["refused by ", "R", "1"].join(""),
+  "a two-digit ruling id": ["decided by ", "R", "42"].join(""),
   "a rule number": ["as in ", "AGENTS", " 3.7"].join(""),
   "a ledger spec row": ["see ", "O", "L 4.4"].join(""),
   "a verification id": ["covered by ", "V", "-48"].join(""),

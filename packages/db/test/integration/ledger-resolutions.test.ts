@@ -60,6 +60,7 @@ interface Plant {
   channel?: string;
   token?: number;
   lease?: boolean;
+  of?: Planted;
 }
 interface Planted {
   id: string;
@@ -68,15 +69,19 @@ interface Planted {
 }
 async function plant(o: Plant = {}): Promise<Planted> {
   const ws = o.ws ?? WA;
-  const [post] = await rows(
-    "INSERT INTO app.posts (workspace_id, author_kind, author_id) VALUES ($1, 'user', $2) RETURNING id",
-    [ws, U.editor],
-  );
+  const [post] = o.of
+    ? [{ id: o.of.post }]
+    : await rows(
+        "INSERT INTO app.posts (workspace_id, author_kind, author_id) VALUES ($1, 'user', $2) RETURNING id",
+        [ws, U.editor],
+      );
   const channel = channelsOf[ws]?.[o.channel ?? "connected"];
-  const [variant] = await rows(
-    "INSERT INTO app.post_variants (workspace_id, post_id, channel_id, schedule_state) VALUES ($1, $2, $3, 'in_progress') RETURNING id",
-    [ws, post?.id, channel],
-  );
+  const [variant] = o.of
+    ? [{ id: o.of.variant }]
+    : await rows(
+        "INSERT INTO app.post_variants (workspace_id, post_id, channel_id, schedule_state) VALUES ($1, $2, $3, 'in_progress') RETURNING id",
+        [ws, post?.id, channel],
+      );
   const state = o.state ?? "claimed";
   const given: Record<string, unknown> = {
     workspace_id: ws,
@@ -154,8 +159,9 @@ const EVIDENCE = "SELECT * FROM app.record_evidence($1::uuid, $2::uuid, $3, $4, 
 const RESOLVE = "SELECT * FROM app.resolve_operation($1::uuid, $2::uuid, $3, $4::jsonb)";
 const start = (id: string, token = 1, owner = "worker-a", ctx = LEDGER, ws = WA, step = "commit") =>
   exec(ctx, START, [ws, id, token, owner, step, "{}"]);
+const LATER = { local_due: "2099-01-01T10:00", due_tz: "UTC", due_at: "2099-01-01T10:00:00Z" };
 const resolve = (id: string, kind: string, args: Record<string, unknown> = {}, ctx = OWNER) =>
-  exec(ctx, RESOLVE, [WA, id, kind, JSON.stringify(args)]);
+  exec(ctx, RESOLVE, [WA, id, kind, JSON.stringify(kind === "reschedule" ? { ...LATER, ...args } : args)]);
 
 describe("the effect marker and the fence of an attempt", () => {
   it("the effect marker is committed and visible from a second session when attempt_start returns", async () => {
@@ -563,6 +569,40 @@ describe("resolve_operation", () => {
       expect(answer.error).toBeUndefined();
       expect(await opOf(planted.id)).toMatchObject({ resolutions: 1 });
     }
+  });
+});
+
+describe("the time of a reschedule", () => {
+  // [kind, the arguments, the error state]
+  const BAD_TIME: [string, Record<string, unknown>, string][] = [
+    ["reschedule", { due_at: "2020-01-01T10:00:00Z" }, "SH422"],
+    ["drop", LATER, "22023"],
+    ["reschedule", { due_at: null }, "22023"],
+    ["reschedule", { local_due: null }, "22023"],
+    ["reschedule", { due_tz: null }, "22023"],
+    ["reschedule", { due_at: 42 }, "22023"],
+  ];
+  it.each(BAD_TIME)("a %s with the time %j changes nothing", async (kind, args, code) => {
+    const planted = await plant({ state: "needs_human", effect: "none" });
+    const answer = await exec(OWNER, RESOLVE, [
+      WA,
+      planted.id,
+      kind,
+      JSON.stringify(kind === "reschedule" ? { ...LATER, ...args } : args),
+    ]);
+    expect(answer.error?.code).toBe(code);
+    expect(await opOf(planted.id)).toMatchObject({ state: "needs_human", resolutions: 0 });
+  });
+
+  it("a second reschedule of a missed operation is refused once a newer operation exists for its target", async () => {
+    const old = await plant({ state: "missed", effect: "none" });
+    await rows("UPDATE app.post_variants SET schedule_state = 'in_progress' WHERE id = $1", [old.variant]);
+    await plant({ state: "pending", of: old });
+    const answer = await resolve(old.id, "reschedule");
+    expect(answer.error?.code).toBe("SH409");
+    expect(await opOf(old.id)).toMatchObject({ state: "missed", resolutions: 0 });
+    const [variant] = await rows("SELECT schedule_state FROM app.post_variants WHERE id = $1", [old.variant]);
+    expect(variant?.schedule_state).toBe("in_progress");
   });
 });
 

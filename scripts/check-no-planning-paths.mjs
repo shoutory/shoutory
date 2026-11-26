@@ -37,7 +37,7 @@ export const PATTERNS = [
 // Citations of planning documents and their ids: ruling ids, rule numbers, verification ids, requirement ids, open
 // questions and the architecture and UX documents. Product words stay free: `flows` only counts with a section number.
 export const CITATION_PATTERNS = [
-  { name: "ruling id", regex: new RegExp(["\\bR", "\\d{3}\\b"].join("")) },
+  { name: "ruling id", regex: new RegExp(["\\bR", "\\d{1,3}\\b"].join("")) },
   { name: "rule number", regex: new RegExp(["\\bAGENTS", " \\d"].join("")) },
   { name: "ledger spec row", regex: new RegExp(["\\bO", "L \\d"].join("")) },
   { name: "verification id", regex: new RegExp(["\\bV", "-\\d+\\b"].join("")) },

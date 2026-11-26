@@ -40,7 +40,7 @@ export type ReadBackOutcome =
         kind: "verified";
         level: "read_back";
         outcome_kind: "post";
-        refs: { source: "adapter"; external_id: string };
+        refs: { source: "adapter"; external_id: string; permalink?: string };
       };
     }
   | { kind: "inconclusive" | "absent_once" | "absent_proven" | "needs_human" };
@@ -64,7 +64,11 @@ export function readBackOutcome(
         kind: "verified",
         level: "read_back",
         outcome_kind: "post",
-        refs: { source: "adapter", external_id: result.externalId },
+        refs: {
+          source: "adapter",
+          external_id: result.externalId,
+          ...(result.permalink === undefined ? {} : { permalink: result.permalink }),
+        },
       },
     };
   if (!isAbsent(result, facts) || state.lastEffectAgoSeconds < facts.maxInFlightSeconds)

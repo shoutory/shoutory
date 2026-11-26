@@ -42,6 +42,7 @@ interface Claimed {
   workspace_id: string | null;
   payload: unknown;
   attempts: number;
+  dead: boolean;
 }
 
 const DEFAULT_INTERVAL_MS = 1_000;
@@ -163,16 +164,37 @@ export function intervalLoop(
   };
 }
 
+// The database counts the attempts and ends the row dead at its cap, or at once when `final`; a claimer whose lease
+// lapsed changes nothing.
+const fail = (options: OutboxRelayOptions, row: Claimed, final: boolean) =>
+  withSystem(options.pool, "outbox_relay", (tx) =>
+    tx.query<{ ok: boolean }>("SELECT app.outbox_fail($1, $2, $3, $4) AS ok", [
+      row.id,
+      row.created_at,
+      row.attempts,
+      final,
+    ]),
+  );
+
+type DeadTally = Map<string, number>;
+const bump = (tally: DeadTally, type: string) => tally.set(type, (tally.get(type) ?? 0) + 1);
+// A known condition, so a warning: one line per type with a count, never the payload or an id.
+const reportDead = (logger: Logger, tally: DeadTally, message: string) => {
+  for (const [type, count] of tally) logger.warn({ type, count }, message);
+};
+
 // A failure is logged by type and error class only: an error message may carry the payload.
 async function deliver(
   options: OutboxRelayOptions,
   row: Claimed,
   controller: AbortController,
+  unhandled: DeadTally,
 ): Promise<boolean> {
   const { pool, handlers, logger, handlerTimeoutMs = DEFAULT_HANDLER_TIMEOUT_MS } = options;
   const handler = handlers[row.type];
   if (!handler) {
-    logger.error({ type: row.type, id: row.id }, "outbox event has no handler");
+    // No handler will ever appear for this claim, so waiting for the cap would only repeat the log line.
+    if ((await fail(options, row, true)).rows[0]?.ok === true) bump(unhandled, row.type);
     return false;
   }
   const stopBeats = keepClaim(options, row, controller);
@@ -187,6 +209,7 @@ async function deliver(
     await runWithin(handler, event, handlerTimeoutMs, controller);
   } catch (error) {
     logger.error({ type: row.type, id: row.id, error: errorKind(error) }, "outbox handler failed");
+    await fail(options, row, false);
     return false;
   } finally {
     await stopBeats();
@@ -205,7 +228,7 @@ async function deliver(
 
 // Delivery is at least once. The handler runs after the claim transaction ended (no external call inside a
 // transaction); the mark names the claim's attempt, so a claimer whose lease lapsed cannot end a row another one holds.
-// A failed, timed-out or unhandled event stays unmarked: its lease lapses and the lag shows it, never a simulated success.
+// A failed or timed-out event stays unmarked until its cap, an unhandled one ends dead at once: never a simulated success.
 export function createOutboxRelay(options: OutboxRelayOptions): OutboxRelay {
   const {
     pool,
@@ -224,15 +247,26 @@ export function createOutboxRelay(options: OutboxRelayOptions): OutboxRelay {
       tx.query<Claimed>("SELECT * FROM app.outbox_claim($1, $2, $3)", [batch, types, excludeTypes]),
     );
     let marked = 0;
-    for (const row of claimed.rows) {
-      if (stopping) break;
-      const controller = new AbortController();
-      running.add(controller);
-      try {
-        if (await deliver(options, row, controller)) marked += 1;
-      } finally {
-        running.delete(controller);
+    const capped: DeadTally = new Map();
+    const unhandled: DeadTally = new Map();
+    try {
+      for (const row of claimed.rows) {
+        if (stopping) break;
+        if (row.dead) {
+          bump(capped, row.type);
+          continue;
+        }
+        const controller = new AbortController();
+        running.add(controller);
+        try {
+          if (await deliver(options, row, controller, unhandled)) marked += 1;
+        } finally {
+          running.delete(controller);
+        }
       }
+    } finally {
+      reportDead(logger, capped, "outbox events ended dead after their last attempt");
+      reportDead(logger, unhandled, "outbox events have no handler and ended dead");
     }
     return marked;
   }

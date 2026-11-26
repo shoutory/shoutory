@@ -275,6 +275,11 @@ const DEFINERS: Definer[] = [
     callers: ["shoutory_worker"],
   },
   {
+    name: "outbox_fail",
+    args: "id uuid, created_at text, attempt integer, final boolean",
+    callers: ["shoutory_worker"],
+  },
+  {
     name: "outbox_heartbeat",
     args: "id uuid, created_at text, attempt integer",
     callers: ["shoutory_worker"],
@@ -459,6 +464,12 @@ const DEFINERS: Definer[] = [
   { name: "sweep_blocked_moves", args: "", callers: ["shoutory_worker"] },
   { name: "ledger_due_move", args: "p_ws uuid, p_id uuid", callers: [], helper: true },
   { name: "ledger_prelock", args: "p_ws uuid, p_op uuid", callers: [], helper: true },
+  {
+    name: "ledger_skip",
+    args: "p_ws uuid, p_op uuid, p_state text, p_token bigint",
+    callers: [],
+    helper: true,
+  },
   {
     name: "ledger_lock_target",
     args: "p_ws uuid, p_op uuid, p_state text, p_token bigint",

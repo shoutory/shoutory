@@ -378,7 +378,7 @@ describe("columns and reasons that belong to a state", () => {
 const NON_TERMINAL = LEDGER_STATES.filter((state) => !TERMINAL.has(state));
 
 describe("one operation per target", () => {
-  it("two non-terminal operations for one target: the second insert is refused by R1; a terminal one frees the slot; an operation with no target is refused", async () => {
+  it("two non-terminal operations for one target: the second insert is refused by the target index; a terminal one frees the slot; an operation with no target is refused", async () => {
     for (const state of NON_TERMINAL) {
       const variant = await newVariant();
       await plant({ variant, state });

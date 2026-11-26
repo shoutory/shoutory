@@ -1,4 +1,9 @@
-import { type Claim, type TransitionResult, transition } from "@shoutory/core/ledger/client";
+import {
+  type Claim,
+  type PreflightMove,
+  type TransitionResult,
+  transition,
+} from "@shoutory/core/ledger/client";
 import { type TenantTx, withTenant } from "@shoutory/db/context";
 import type { AppPool } from "@shoutory/db/pool";
 import type { Manifest } from "@shoutory/provider-sdk/manifest";
@@ -115,6 +120,15 @@ export async function move(
     fencedMove(tx, held, "claimed", to, changes),
   );
   return result.outcome === "moved";
+}
+
+export async function preflightMove(pool: AppPool, held: Held, outcome: PreflightMove): Promise<TurnResult> {
+  const changes: { reasonCode?: string; waitSeconds?: number } = {};
+  if (outcome.to === "paused") changes.reasonCode = outcome.reasonCode;
+  if ("waitSeconds" in outcome && outcome.waitSeconds !== undefined)
+    changes.waitSeconds = outcome.waitSeconds;
+  const moved = await move(pool, held, outcome.to, changes);
+  return movedOrLost(held, outcome.to, moved, outcome.to === "paused" ? outcome.reasonCode : undefined);
 }
 
 export async function handBack(

@@ -13,7 +13,7 @@ import {
   workspacePath,
   workspaceRow,
 } from "../support/tenancy.js";
-import { type Fixture, PEPPER, startFixture } from "./auth/harness.js";
+import { type Fixture, PEPPER, SAMPLE, startFixture } from "./auth/harness.js";
 
 let fx: Fixture;
 let orgId: string;
@@ -255,11 +255,70 @@ describe("route table", () => {
     expect(spy.mock.calls.length).toBeGreaterThan(0);
     spy.mockRestore();
   });
+});
 
-  it("a session path of the authentication mount answers 401 with no cookie", async () => {
-    for (const row of AUTH_PATHS.filter((r) => r.method === "GET" && r.policy !== "public")) {
-      expect((await fx.request(row.path)).status, row.path).toBe(401);
-    }
+const bodyOf = (row: (typeof AUTH_PATHS)[number]) => (row.method === "GET" ? undefined : SAMPLE[row.path]);
+const GUARDED = AUTH_PATHS.filter((row) => row.policy !== "public");
+// The public rows are the ones a person reaches before any session exists.
+const PUBLIC = [
+  "/api/auth/send-verification-email",
+  "/api/auth/sign-in/email",
+  "/api/auth/sign-up/email",
+  "/api/auth/request-password-reset",
+  "/api/auth/reset-password",
+  "/api/auth/two-factor/verify-backup-code",
+  "/api/auth/two-factor/verify-totp",
+  "/api/auth/verify-email",
+];
+
+const STEP_UP = [
+  "/api/auth/change-password",
+  "/api/auth/two-factor/disable",
+  "/api/auth/two-factor/enable",
+  "/api/auth/two-factor/generate-backup-codes",
+  "/api/auth/two-factor/get-totp-uri",
+];
+
+describe("every authentication path is checked by its policy", () => {
+  it.each(GUARDED.map((row) => [row.method, row.path, row.policy]))(
+    "%s %s (%s) answers 401 with no cookie",
+    async (method, path) => {
+      const row = AUTH_PATHS.find((candidate) => candidate.path === path && candidate.method === method);
+      const body = row === undefined ? undefined : bodyOf(row);
+      expect(row?.method === "GET" || body !== undefined, `add a sample body for ${path}`).toBe(true);
+      const answer = await fx.request(String(path), { method: String(method), ...(body ? { body } : {}) });
+      expect(answer.status).toBe(401);
+    },
+  );
+
+  it.each(GUARDED.filter((row) => row.policy === "step_up").map((row) => [row.method, row.path]))(
+    "%s %s answers 403 step_up_required once the step-up is stale",
+    async (method, path) => {
+      const email = `stale-${String(path).replaceAll("/", "-")}@example.test`.replace("--", "-");
+      const cookie = await fx.signedIn(email);
+      await fx.admin((client) =>
+        client.query(
+          `UPDATE app.session_step_ups SET at = at - interval '11 minutes'
+            WHERE user_id = (SELECT id FROM auth."user" WHERE email = $1)`,
+          [email],
+        ),
+      );
+      const answer = await fx.request(String(path), {
+        method: String(method),
+        headers: { cookie },
+        body: SAMPLE[String(path)],
+      });
+      expect([answer.status, (await errorOf(answer)).code]).toEqual([403, "step_up_required"]);
+    },
+  );
+
+  it("the public rows and the step-up rows are exactly the explicit lists", () => {
+    const pathsOf = (policy: string) =>
+      AUTH_PATHS.filter((row) => row.policy === policy)
+        .map((row) => row.path)
+        .sort();
+    expect(pathsOf("public")).toEqual([...PUBLIC].sort());
+    expect(pathsOf("step_up")).toEqual([...STEP_UP].sort());
   });
 });
 

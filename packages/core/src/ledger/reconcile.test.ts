@@ -117,3 +117,20 @@ describe("readBackOutcome", () => {
     });
   });
 });
+
+describe("read-back evidence", () => {
+  it("read-back evidence carries the permalink when the answer has one", () => {
+    const linked: CallResult = {
+      ok: true,
+      effect: "confirmed",
+      externalId: "p-1",
+      permalink: "https://example.test/p-1",
+    };
+    expect(
+      readBackOutcome(linked, A, { lastEffectAgoSeconds: 10, absentReads: 0, secondsSinceAbsentRead: 0 }),
+    ).toMatchObject({
+      kind: "published",
+      evidence: { refs: { source: "adapter", external_id: "p-1", permalink: "https://example.test/p-1" } },
+    });
+  });
+});

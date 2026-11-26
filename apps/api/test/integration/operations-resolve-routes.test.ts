@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { resolveLocal } from "@shoutory/core/time";
+import { withSystem } from "@shoutory/db/context/system";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { seedFrozenVersion } from "../support/ledger-seed.js";
 import {
@@ -188,7 +190,7 @@ const STEPPED: [string, Partial<Plant>, Record<string, unknown>][] = [
 ];
 const FREE: [string, Partial<Plant>, Record<string, unknown>][] = [
   ["publish_late", { effect: "none" }, {}],
-  ["reschedule", { effect: "none" }, {}],
+  ["reschedule", { effect: "none" }, { local_due: "2099-01-01T09:00" }],
   ["drop", { effect: "none" }, {}],
   ["dismiss", {}, {}],
 ];
@@ -350,7 +352,7 @@ const KINDS: ["A" | "B", string, Partial<Plant>, Record<string, unknown>, string
   ["A", "supersede", {}, { ack_text: "again" }, "superseded_after_unknown_outcome"],
   ["A", "confirm_removed", { kind: "delete" }, {}, "published"],
   ["B", "publish_late", { effect: "none" }, {}, "retry_wait"],
-  ["B", "reschedule", { effect: "none" }, {}, "cancelled"],
+  ["B", "reschedule", { effect: "none" }, { local_due: "2099-01-01T09:00" }, "cancelled"],
   ["B", "drop", { effect: "none" }, {}, "cancelled"],
   ["B", "dismiss", {}, {}, "unverified"],
 ];
@@ -392,5 +394,150 @@ describe("the answers of a refused resolution", () => {
     const path = body.kind === "dismiss" ? routeB(ws, op) : routeA(ws, op);
     expect((await post(user("admin"), path, body)).status).toBe(400);
     await untouched(op);
+  });
+});
+
+const zoneOf = async (): Promise<string> =>
+  (await fx.admin((client) => client.query("SELECT default_tz FROM app.workspaces WHERE id = $1", [ws])))
+    .rows[0].default_tz;
+// The wall time in the workspace zone `ms` from now, to the minute.
+const localIn = (zone: string, ms: number): string =>
+  new Date(Date.now() + ms).toLocaleString("sv-SE", { timeZone: zone }).replace(" ", "T").slice(0, 16);
+const variantOf = async (op: string) =>
+  (
+    await fx.admin((client) =>
+      client.query(
+        `SELECT v.schedule_state, v.due_tz, v.due_at, to_char(v.local_due, 'YYYY-MM-DD"T"HH24:MI') AS local_due
+           FROM app.post_variants v JOIN app.operations o ON o.variant_id = v.id WHERE o.id = $1`,
+        [op],
+      ),
+    )
+  ).rows[0];
+async function pastDue(op: string): Promise<void> {
+  await fx.admin((client) =>
+    client.query(
+      `UPDATE app.post_variants SET due_at = now() - interval '3 hours'
+         WHERE id = (SELECT variant_id FROM app.operations WHERE id = $1)`,
+      [op],
+    ),
+  );
+}
+const admitNow = () =>
+  withSystem(fx.db.pool("worker"), "ledger", (tx) =>
+    tx.query("SELECT * FROM app.admit_due_targets(100, $1::jsonb)", [
+      JSON.stringify({
+        fixture: { margin_seconds: 300, lease_seconds: { publish: 60, edit: 60, delete: 60 } },
+      }),
+    ]),
+  );
+const operationsOfVariant = async (op: string) =>
+  (
+    await fx.admin((client) =>
+      client.query(
+        `SELECT state FROM app.operations WHERE variant_id = (SELECT variant_id FROM app.operations WHERE id = $1)
+           ORDER BY created_at`,
+        [op],
+      ),
+    )
+  ).rows.map((row) => row.state as string);
+
+describe("reschedule takes a new time", () => {
+  it.each([
+    ["missed", "missed"],
+    ["needs_human", "cancelled"],
+  ])(
+    "reschedule of a %s target writes local_due, due_tz, due_at; the next admission inserts pending, not missed",
+    async (from, after) => {
+      const op = await plantOp({ author: user("writer").id, state: from, effect: "none" });
+      await pastDue(op);
+      const zone = await zoneOf();
+      const local = localIn(zone, 120_000);
+      const done = await answer(
+        await post(user("owner"), routeB(ws, op), { kind: "reschedule", local_due: local }),
+      );
+      expect([done.status, await stateOf(op)]).toEqual([200, after]);
+      const resolved = resolveLocal(local, zone, { user: null });
+      const written = await variantOf(op);
+      expect(written).toMatchObject({ schedule_state: "scheduled", due_tz: zone, local_due: local });
+      expect(resolved.ok && new Date(written.due_at).toISOString()).toBe(
+        resolved.ok && new Date(resolved.instant).toISOString(),
+      );
+      await admitNow();
+      const states = await operationsOfVariant(op);
+      expect(states).toContain("pending");
+      expect(states.filter((state) => state === "missed")).toEqual(from === "missed" ? ["missed"] : []);
+    },
+    30_000,
+  );
+});
+
+const setZone = (zone: string) =>
+  fx.admin((client) => client.query("UPDATE app.workspaces SET default_tz = $2 WHERE id = $1", [ws, zone]));
+// [case, the body, the zone the workspace has, the kind, the answer]
+const TIMES: [string, Record<string, unknown>, string | null, string, number][] = [
+  ["a time in the past", { local_due: "2020-01-01T09:00" }, null, "reschedule", 422],
+  [
+    "a wall time that does not exist in the zone",
+    { local_due: "2031-03-30T02:30" },
+    "Europe/Berlin",
+    "reschedule",
+    422,
+  ],
+  [
+    "a wall time that happens twice and no choice",
+    { local_due: "2031-10-26T02:30" },
+    "Europe/Berlin",
+    "reschedule",
+    422,
+  ],
+  [
+    "a wall time that happens twice and a choice",
+    { local_due: "2031-10-26T02:30", fold: "later" },
+    "Europe/Berlin",
+    "reschedule",
+    200,
+  ],
+  ["no time at all", {}, null, "reschedule", 422],
+  ["a time on another kind", { local_due: "2031-01-01T09:00" }, null, "drop", 422],
+];
+describe("the time of a reschedule", () => {
+  it.each(TIMES)(
+    "a reschedule with %s answers %i and writes the time only on 200",
+    async (_name, body, zone, kind, status) => {
+      const op = await plantOp({ author: user("writer").id, state: "needs_human", effect: "none" });
+      await pastDue(op);
+      const before = await variantOf(op);
+      const home = await zoneOf();
+      if (zone !== null) await setZone(zone);
+      try {
+        expect((await answer(await post(user("owner"), routeB(ws, op), { kind, ...body }))).status).toBe(
+          status,
+        );
+      } finally {
+        await setZone(home);
+      }
+      if (status === 200) {
+        expect(await variantOf(op)).toMatchObject({ local_due: body.local_due, due_tz: zone });
+        return;
+      }
+      await untouched(op);
+      expect(await variantOf(op)).toEqual(before);
+    },
+  );
+
+  // [who, the answer]
+  const NOT_ALLOWED: [string, number][] = [
+    ["viewer", 403],
+    ["editor", 404],
+    ["foreign", 404],
+  ];
+  it.each(NOT_ALLOWED)("a reschedule by the %s answers %i and changes nothing", async (who, status) => {
+    const op = await plantOp({ author: user("writer").id, state: "needs_human", effect: "none" });
+    await pastDue(op);
+    const before = await variantOf(op);
+    const body = { kind: "reschedule", local_due: localIn(await zoneOf(), 120_000) };
+    expect((await answer(await post(user(who), routeB(ws, op), body))).status).toBe(status);
+    await untouched(op);
+    expect(await variantOf(op)).toEqual(before);
   });
 });

@@ -28,6 +28,17 @@ export interface Admitted {
   readonly state: string;
 }
 
+// A target admission could not take: it is marked in the database and skipped for a while.
+export interface Refused {
+  readonly variant_id: string;
+  readonly reason: string;
+}
+
+interface AdmissionRow extends Partial<Admitted> {
+  readonly variant_id: string;
+  readonly reason: string | null;
+}
+
 const bossDb = (tx: TenantTx) => ({
   executeSql: (text: string, values?: unknown[]) => tx.query(text, values),
 });
@@ -38,12 +49,16 @@ export async function admitAndWake(
   tx: TenantTx,
   boss: Pick<PgBoss, "send">,
   registry: Registry,
-): Promise<readonly Admitted[]> {
-  if (registry.manifests.length === 0) return [];
-  const { rows } = await tx.query<Admitted>("SELECT * FROM app.admit_due_targets($1, $2::jsonb)", [
+): Promise<{ admitted: readonly Admitted[]; refused: readonly Refused[] }> {
+  if (registry.manifests.length === 0) return { admitted: [], refused: [] };
+  const { rows: all } = await tx.query<AdmissionRow>("SELECT * FROM app.admit_due_targets($1, $2::jsonb)", [
     ADMIT_BATCH,
     JSON.stringify(providersArgument(registry.manifests)),
   ]);
+  const rows = all.filter((row): row is AdmissionRow & Admitted => row.state !== "refused");
+  const refused = all
+    .filter((row) => row.state === "refused")
+    .map((row) => ({ variant_id: row.variant_id, reason: String(row.reason) }));
   for (const queue of new Set(rows.map((row) => row.queue))) {
     await boss.send(
       queue,
@@ -55,7 +70,7 @@ export async function admitAndWake(
       },
     );
   }
-  return rows;
+  return { admitted: rows, refused };
 }
 
 export interface LedgerTickOptions {
@@ -71,6 +86,7 @@ export interface LedgerTickOptions {
 }
 export interface LedgerTick extends IntervalLoop {
   tick(): Promise<void>;
+  reconcile(): Promise<void>;
 }
 
 // Worked out at each tick: a provider whose API retires between two ticks leaves the live list at the next one.
@@ -109,6 +125,38 @@ async function wakePublish(
   }
 }
 
+async function admission(pool: AppPool, boss: PgBoss, registry: Registry, logger: Logger): Promise<void> {
+  for (let batch = 0; batch < MAX_ADMIT_BATCHES; batch++) {
+    const { admitted, refused } = await withSystem(pool, "ledger", (tx) => admitAndWake(tx, boss, registry));
+    // Ids and the reason only: a refused target is marked, so it is named here once for each marker period.
+    for (const row of refused)
+      logger.warn({ variant: row.variant_id, reason: row.reason }, "scheduled post refused by admission");
+    if (admitted.length + refused.length < ADMIT_BATCH) return;
+  }
+}
+
+interface SweepAnswer {
+  readonly moved: number;
+  readonly refused: readonly { readonly id: string; readonly reason: string }[];
+}
+
+// A sweep that put rows back in play wakes the publish queues at once: a shortcut for latency, since the wake at the
+// end of the tick sends them anyway. The sweep of due moves also names the rows whose move the database refused.
+const sweeper =
+  (pool: AppPool, logger: Logger, wake: () => Promise<void>) =>
+  (sql: string, argument?: Record<string, unknown>) =>
+  async () => {
+    const params = argument === undefined ? [] : [JSON.stringify(argument)];
+    const answer = await withSystem(pool, "ledger", async (tx) => {
+      const { rows } = await tx.query<{ n: number | SweepAnswer }>(sql, params);
+      const n = rows[0]?.n;
+      return typeof n === "object" ? n : { moved: Number(n ?? 0), refused: [] };
+    });
+    for (const row of answer.refused)
+      logger.warn({ operation: row.id, reason: row.reason }, "ledger row refused by a sweep");
+    if (answer.moved > 0) await wake();
+  };
+
 export function createLedgerTick({
   pool,
   boss,
@@ -124,21 +172,8 @@ export function createLedgerTick({
   const closing = new AbortController();
   const step = stepper(logger);
   const wake = () => wakePublish(step, boss, registry, adapters);
-  // A sweep that put rows back in play wakes the publish queues at once: a shortcut for latency, since the wake at the
-  // end of the tick sends them anyway.
-  const sweep = (sql: string, argument?: Record<string, unknown>) => async () => {
-    const params = argument === undefined ? [] : [JSON.stringify(argument)];
-    const moved = await withSystem(pool, "ledger", async (tx) =>
-      Number((await tx.query<{ n: number }>(sql, params)).rows[0]?.n ?? 0),
-    );
-    if (moved > 0) await wake();
-  };
-  async function admitBacklog(): Promise<void> {
-    for (let batch = 0; batch < MAX_ADMIT_BATCHES; batch++) {
-      const admitted = await withSystem(pool, "ledger", (tx) => admitAndWake(tx, boss, registry));
-      if (admitted.length < ADMIT_BATCH) return;
-    }
-  }
+  const sweep = sweeper(pool, logger, wake);
+  const admitBacklog = () => admission(pool, boss, registry, logger);
   async function tick(): Promise<void> {
     // One reading of the clock for the whole tick: both sweeps see the same live list.
     const sweeps = sweepsAt(registry, clock());
@@ -146,6 +181,12 @@ export function createLedgerTick({
     await step("due moves", sweep("SELECT app.sweep_due_moves($1::jsonb) AS n", sweeps.due));
     await step("reconnect holds", sweep("SELECT app.sweep_blocked_moves() AS n"));
     await step("admission", admitBacklog);
+    // A post is admitted before it is due, so the wake-up of admission can come early: waking the queues at the end of
+    // every tick sends it when it falls due, and covers a wake-up that was lost.
+    await wake();
+  }
+  // Read-backs run on a loop of their own: a provider that answers slowly never delays admission or the sweeps.
+  async function reconcile(): Promise<void> {
     await step("reconcile", () =>
       reconcileStep({
         pool,
@@ -156,20 +197,28 @@ export function createLedgerTick({
         credentials,
         owner,
         closing: closing.signal,
+        clock,
       }),
     );
-    // A post is admitted before it is due, so the wake-up of admission can come early: waking the queues at the end of
-    // every tick sends it when it falls due, and covers a wake-up that was lost.
+    // A resend must reach the publish queue at once.
     await wake();
   }
-  const loop = intervalLoop("ledger tick", tick, logger, intervalMs, STOP_MS);
+  const loops = [
+    intervalLoop("ledger tick", tick, logger, intervalMs, STOP_MS),
+    intervalLoop("ledger reconcile", reconcile, logger, intervalMs, STOP_MS),
+  ];
+  return { tick, reconcile, ...together(loops, closing) };
+}
+
+function together(loops: readonly IntervalLoop[], closing: AbortController): IntervalLoop {
   return {
-    tick,
-    start: loop.start,
+    start: () => {
+      for (const loop of loops) loop.start();
+    },
     // A reconcile in flight hands its row back instead of finishing a call the worker is closing on.
-    stop: () => {
+    stop: async () => {
       closing.abort();
-      return loop.stop();
+      await Promise.all(loops.map((loop) => loop.stop()));
     },
   };
 }
