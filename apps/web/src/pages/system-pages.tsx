@@ -44,7 +44,7 @@ export function NotFoundPage() {
 export function ForbiddenPage() {
   return (
     <Page title={<Trans id="system.forbidden.title">You do not have access to this page</Trans>}>
-      <p>
+      <p data-testid="forbidden">
         <Trans id="system.forbidden.body">
           Nothing was changed. Ask an owner or admin of the workspace to give you access.
         </Trans>

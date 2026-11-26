@@ -168,6 +168,7 @@ export const SCREENS: readonly Screen[] = [
       await visit((c) => `/w/${c.workspace}/channels`)(page, context);
     },
   },
+  founder("media", "/w/:ws/media", (c) => `/w/${c.workspace}/media`),
   // The outcome that needs no channel read, so the screen is the same on every run.
   founder("connect-result", "/connect/result", () => "/connect/result?reason=rate_limited"),
   founder("clients", "/o/:org/clients", (c) => `/o/${c.organization}/clients`, ["clients-scroll"]),

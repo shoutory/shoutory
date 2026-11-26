@@ -49,5 +49,10 @@ test("keyboard only: sign-in, MFA, workspace switch", async ({ page, browser }) 
   await keys.press("Enter");
   await expect(seen.getByTestId("workspace-name")).toHaveText(target.name);
   expect(seen.url()).toContain(`/w/${target.id}`);
+
+  await seen.goto(`/w/${target.id}/media`);
+  await tabTo(seen, "media-search");
+  await tabTo(seen, "media-tag-filter");
+  await tabTo(seen, "media-type");
   await guest.close();
 });

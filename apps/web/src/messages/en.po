@@ -2048,3 +2048,171 @@ msgstr "Type an address like social.example."
 #. js-lingui-explicit-id
 msgid "connect.wizard.host.back"
 msgstr "Back"
+
+#. js-lingui-explicit-id
+msgid "shell.nav.media"
+msgstr "Media"
+
+#. js-lingui-explicit-id
+msgid "media.title"
+msgstr "Media"
+
+#. js-lingui-explicit-id
+msgid "media.state.pending_upload"
+msgstr "Waiting for upload"
+
+#. js-lingui-explicit-id
+msgid "media.state.uploaded"
+msgstr "Uploaded"
+
+#. js-lingui-explicit-id
+msgid "media.state.scanning"
+msgstr "Checking"
+
+#. js-lingui-explicit-id
+msgid "media.state.processing"
+msgstr "Processing"
+
+#. js-lingui-explicit-id
+msgid "media.state.ready"
+msgstr "Ready"
+
+#. js-lingui-explicit-id
+msgid "media.state.rejected"
+msgstr "Rejected"
+
+#. js-lingui-explicit-id
+msgid "media.state.unknown"
+msgstr "Unknown state"
+
+#. js-lingui-explicit-id
+msgid "media.reason.type_mismatch"
+msgstr "The content does not match the type."
+
+#. js-lingui-explicit-id
+msgid "media.reason.unsupported_type"
+msgstr "This file type is not supported."
+
+#. js-lingui-explicit-id
+msgid "media.reason.pixel_limit"
+msgstr "The image has more pixels than allowed."
+
+#. js-lingui-explicit-id
+msgid "media.reason.too_long"
+msgstr "The video is longer than allowed."
+
+#. js-lingui-explicit-id
+msgid "media.reason.corrupt"
+msgstr "The file is damaged and cannot be read."
+
+#. js-lingui-explicit-id
+msgid "media.reason.timeout"
+msgstr "Processing the file took too long."
+
+#. js-lingui-explicit-id
+msgid "media.reason.processing_failed"
+msgstr "Processing the file failed."
+
+#. js-lingui-explicit-id
+msgid "media.reason.too_large"
+msgstr "The file is bigger than allowed."
+
+#. js-lingui-explicit-id
+msgid "media.reason.too_many"
+msgstr "There are more files than allowed."
+
+#. js-lingui-explicit-id
+msgid "media.reason.infected"
+msgstr "The safety check found a threat in this file."
+
+#. js-lingui-explicit-id
+msgid "media.reason.unknown"
+msgstr "This file cannot be used."
+
+#. js-lingui-explicit-id
+msgid "media.filter.all"
+msgstr "All"
+
+#. js-lingui-explicit-id
+msgid "media.filter.type.image"
+msgstr "Images"
+
+#. js-lingui-explicit-id
+msgid "media.filter.type.video"
+msgstr "Videos"
+
+#. js-lingui-explicit-id
+msgid "media.filter.type"
+msgstr "Type"
+
+#. js-lingui-explicit-id
+msgid "media.filter.state"
+msgstr "State"
+
+#. js-lingui-explicit-id
+msgid "media.filter.tag_active"
+msgstr "Remove the tag filter <0>{tag}</0>"
+
+#. js-lingui-explicit-id
+msgid "media.filter.by_tag"
+msgstr "Show only files tagged {tag}"
+
+#. js-lingui-explicit-id
+msgid "media.filter.tag"
+msgstr "Tag"
+
+#. js-lingui-explicit-id
+msgid "media.filter.tag_clear"
+msgstr "Clear the tag"
+
+#. js-lingui-explicit-id
+msgid "media.search.label"
+msgstr "Search by file name"
+
+#. js-lingui-explicit-id
+msgid "media.search.clear"
+msgstr "Clear the search"
+
+#. js-lingui-explicit-id
+msgid "media.more_failed"
+msgstr "We could not load more media. The files above are still current. Try again."
+
+#. js-lingui-explicit-id
+msgid "media.more"
+msgstr "Show more"
+
+#. js-lingui-explicit-id
+msgid "media.updating"
+msgstr "Updating"
+
+#. js-lingui-explicit-id
+msgid "media.list_label"
+msgstr "Media files"
+
+#. js-lingui-explicit-id
+msgid "media.empty.filtered"
+msgstr "No media matches these filters"
+
+#. js-lingui-explicit-id
+msgid "media.empty.title"
+msgstr "No media yet"
+
+#. js-lingui-explicit-id
+msgid "media.empty.meaning"
+msgstr "Images and videos you add to posts will appear here."
+
+#. js-lingui-explicit-id
+msgid "media.failed.what"
+msgstr "We could not load your media"
+
+#. js-lingui-explicit-id
+msgid "media.failed.meaning"
+msgstr "Nothing was changed. Try again."
+
+#. js-lingui-explicit-id
+msgid "media.retry"
+msgstr "Try again"
+
+#. js-lingui-explicit-id
+msgid "media.loading"
+msgstr "Loading your media"

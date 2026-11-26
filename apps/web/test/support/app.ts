@@ -107,7 +107,30 @@ export interface Api {
   providers?: Answer;
   check?: Answer;
   connectStart?: Answer;
+  mediaList?: (query: URLSearchParams, workspace: string) => Response | Promise<Response>;
 }
+
+export const mediaRow = (change: Record<string, unknown> = {}) => ({
+  id: "0190a000-0000-7000-8000-0000000000f1",
+  file_name: "photo.png",
+  mime: "image/png",
+  byte_size: 2048,
+  width: 640,
+  height: 480,
+  duration_ms: null,
+  sha256: "a".repeat(64),
+  state: "ready",
+  reject_reason: null,
+  in_library: true,
+  tags: [],
+  source: "upload",
+  created_at: "2026-11-22T10:00:00.000Z",
+  derivatives: { thumb: "ready", stripped: "ready" },
+  ...change,
+});
+
+export const mediaPage = (rows: unknown[], nextCursor: string | null = null) =>
+  json({ data: rows, meta: { next_cursor: nextCursor } });
 
 export const START_URL = "https://provider.example.test/authorize?state=flow-state-1";
 
@@ -184,6 +207,9 @@ function hubAnswers(api: Api, url: URL, method: string): Answer | undefined {
   if (workspace === "") return undefined;
   if (method === "GET" && rest === "channels") {
     return () => (api.channelList ?? (() => channelPage([channelRow()])))(url.searchParams, workspace);
+  }
+  if (method === "GET" && rest === "media") {
+    return () => (api.mediaList ?? (() => mediaPage([])))(url.searchParams, workspace);
   }
   if (method === "GET" && rest === "providers") return api.providers ?? (() => json({ data: PROVIDERS }));
   if (method === "POST" && /^channels\/[^/]+\/check$/.test(rest)) {

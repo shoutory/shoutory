@@ -24,6 +24,7 @@ import { VerifyPage } from "./auth/verify";
 import { BillingPage } from "./billing/billing";
 import { ChannelsHubPage } from "./features/channels/channels-hub";
 import { ConnectResultPage } from "./features/channels/connect-result";
+import { MediaLibraryPage } from "./features/media/media-library";
 import { ApiError } from "./http/client";
 import { ClientsPage } from "./org/clients";
 import { type PageHandle, usePageTitleAndFocus } from "./page-title";
@@ -62,6 +63,7 @@ const TITLES = {
   notFound: msg({ id: "system.not_found.title", message: "Page not found" }),
   workspace: msg({ id: "shell.workspace.title", message: "Workspace" }),
   channels: msg({ id: "channels.hub.title", message: "Channels" }),
+  media: msg({ id: "media.title", message: "Media" }),
   connectResult: msg({ id: "connect.result.title", message: "Connection result" }),
   clients: msg({ id: "org.clients.title", message: "Clients" }),
   general: msg({ id: "settings.general.title", message: "General" }),
@@ -211,6 +213,11 @@ export const routes: RouteObject[] = [
                 path: "w/:ws/channels",
                 handle: titled(TITLES.channels, (shell, params) => isUnknownWorkspace(shell, params.ws)),
                 element: <ChannelsHubPage />,
+              },
+              {
+                path: "w/:ws/media",
+                handle: titled(TITLES.media, (shell, params) => isUnknownWorkspace(shell, params.ws)),
+                element: <MediaLibraryPage />,
               },
               {
                 path: "connect/result",

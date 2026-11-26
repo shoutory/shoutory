@@ -2046,3 +2046,171 @@ msgstr "اكتب عنوان الخادم بهذا الشكل: social.example."
 #. js-lingui-explicit-id
 msgid "connect.wizard.host.back"
 msgstr "رجوع"
+
+#. js-lingui-explicit-id
+msgid "shell.nav.media"
+msgstr "الوسائط"
+
+#. js-lingui-explicit-id
+msgid "media.title"
+msgstr "الوسائط"
+
+#. js-lingui-explicit-id
+msgid "media.state.pending_upload"
+msgstr "بانتظار الرفع"
+
+#. js-lingui-explicit-id
+msgid "media.state.uploaded"
+msgstr "تم الرفع"
+
+#. js-lingui-explicit-id
+msgid "media.state.scanning"
+msgstr "جارٍ الفحص"
+
+#. js-lingui-explicit-id
+msgid "media.state.processing"
+msgstr "جارٍ المعالجة"
+
+#. js-lingui-explicit-id
+msgid "media.state.ready"
+msgstr "جاهز"
+
+#. js-lingui-explicit-id
+msgid "media.state.rejected"
+msgstr "مرفوض"
+
+#. js-lingui-explicit-id
+msgid "media.state.unknown"
+msgstr "حالة غير معروفة"
+
+#. js-lingui-explicit-id
+msgid "media.reason.type_mismatch"
+msgstr "محتوى الملف لا يطابق نوعه."
+
+#. js-lingui-explicit-id
+msgid "media.reason.unsupported_type"
+msgstr "نوع هذا الملف غير مدعوم."
+
+#. js-lingui-explicit-id
+msgid "media.reason.pixel_limit"
+msgstr "أبعاد الصورة أكبر من المسموح."
+
+#. js-lingui-explicit-id
+msgid "media.reason.too_long"
+msgstr "الفيديو أطول من المسموح."
+
+#. js-lingui-explicit-id
+msgid "media.reason.corrupt"
+msgstr "الملف تالف ولا يمكن قراءته."
+
+#. js-lingui-explicit-id
+msgid "media.reason.timeout"
+msgstr "استغرقت معالجة الملف وقتاً أطول من المسموح."
+
+#. js-lingui-explicit-id
+msgid "media.reason.processing_failed"
+msgstr "تعذّرت معالجة الملف."
+
+#. js-lingui-explicit-id
+msgid "media.reason.too_large"
+msgstr "حجم الملف أكبر من المسموح."
+
+#. js-lingui-explicit-id
+msgid "media.reason.too_many"
+msgstr "عدد الملفات أكبر من المسموح."
+
+#. js-lingui-explicit-id
+msgid "media.reason.infected"
+msgstr "وجد الفحص الأمني تهديداً في هذا الملف."
+
+#. js-lingui-explicit-id
+msgid "media.reason.unknown"
+msgstr "لا يمكن استخدام هذا الملف."
+
+#. js-lingui-explicit-id
+msgid "media.filter.all"
+msgstr "الكل"
+
+#. js-lingui-explicit-id
+msgid "media.filter.type.image"
+msgstr "الصور"
+
+#. js-lingui-explicit-id
+msgid "media.filter.type.video"
+msgstr "الفيديو"
+
+#. js-lingui-explicit-id
+msgid "media.filter.type"
+msgstr "النوع"
+
+#. js-lingui-explicit-id
+msgid "media.filter.state"
+msgstr "الحالة"
+
+#. js-lingui-explicit-id
+msgid "media.filter.tag_active"
+msgstr "إزالة التصفية بالوسم <0>{tag}</0>"
+
+#. js-lingui-explicit-id
+msgid "media.filter.by_tag"
+msgstr "عرض الملفات ذات الوسم {tag} فقط"
+
+#. js-lingui-explicit-id
+msgid "media.filter.tag"
+msgstr "الوسم"
+
+#. js-lingui-explicit-id
+msgid "media.filter.tag_clear"
+msgstr "مسح الوسم"
+
+#. js-lingui-explicit-id
+msgid "media.search.label"
+msgstr "البحث باسم الملف"
+
+#. js-lingui-explicit-id
+msgid "media.search.clear"
+msgstr "مسح البحث"
+
+#. js-lingui-explicit-id
+msgid "media.more_failed"
+msgstr "تعذّر تحميل المزيد من الوسائط. الملفات الظاهرة أعلاه لم تتغيّر. حاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "media.more"
+msgstr "عرض المزيد"
+
+#. js-lingui-explicit-id
+msgid "media.updating"
+msgstr "جارٍ التحديث"
+
+#. js-lingui-explicit-id
+msgid "media.list_label"
+msgstr "ملفات الوسائط"
+
+#. js-lingui-explicit-id
+msgid "media.empty.filtered"
+msgstr "لا توجد وسائط تطابق هذه التصفية"
+
+#. js-lingui-explicit-id
+msgid "media.empty.title"
+msgstr "لا توجد وسائط بعد"
+
+#. js-lingui-explicit-id
+msgid "media.empty.meaning"
+msgstr "ستظهر هنا الصور ومقاطع الفيديو التي تضيفها إلى المنشورات."
+
+#. js-lingui-explicit-id
+msgid "media.failed.what"
+msgstr "تعذّر تحميل الوسائط"
+
+#. js-lingui-explicit-id
+msgid "media.failed.meaning"
+msgstr "لم يتغيّر شيء. حاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "media.retry"
+msgstr "حاول مرة أخرى"
+
+#. js-lingui-explicit-id
+msgid "media.loading"
+msgstr "جارٍ تحميل الوسائط"
