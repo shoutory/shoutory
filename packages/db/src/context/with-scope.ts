@@ -13,7 +13,7 @@ export interface ScopeRequest {
   readonly write: boolean;
 }
 
-export type ScopeDenial = "not_found" | "forbidden" | "invalid" | "limit_reached";
+export type ScopeDenial = "not_found" | "forbidden" | "invalid" | "limit_reached" | "archived";
 export type ScopeResult<T> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false; readonly denial: ScopeDenial };
@@ -51,6 +51,11 @@ async function narrow(tx: TenantTx, scope: AuthorizedScope, write: boolean): Pro
             set_config('app.write_workspace_id', $3, true)`,
     [scope.organizationId, `{${scope.workspaceId}}`, write ? scope.workspaceId : ""],
   );
+  if (!write) return;
+  const found = await tx.query("SELECT 1 FROM app.workspaces WHERE id = $1 AND archived_at IS NOT NULL", [
+    scope.workspaceId,
+  ]);
+  if (found.rowCount) throw new Denied("archived");
 }
 
 export function withUser<T>(pool: Pool, principalId: string, run: (tx: TenantTx) => Promise<T>): Promise<T> {

@@ -8,6 +8,11 @@ const DEFINERS = [
   "my_organizations",
   "organization_create",
   "workspace_create",
+  "workspace_archive",
+  "workspace_unarchive",
+  "workspace_avatar_set",
+  // The trigger that keeps an archived workspace read-only.
+  "workspace_guard",
   "invitation_create",
   "invitation_revoke",
   "invitation_accept",
@@ -72,6 +77,9 @@ const REASONS: ReadonlySet<string> = new Set([
   "in_use",
   "not_deletable",
   "not_ready",
+  "workspace_archived",
+  "deletion_requested",
+  "idempotency_key_reused",
 ]);
 
 // A definer that explains its refusal in a sentence instead of a code; the sentence becomes the code a client reads.
@@ -100,10 +108,10 @@ function detailsOf(state: string, message: string, detail: unknown): Record<stri
   return expires === undefined ? { reason } : { reason, expires_at: expires };
 }
 
-// Only the invitation, member, channel, resolution and creation definers raise the SH states, and the post writes for
+// Only the invitation, member, channel, resolution, creation and archive definers raise the SH states, and the post writes for
 // their named reasons; the same state under another definer's name is a defect.
 const SH_DEFINERS =
-  /^(invitation|member|channel)_|^resolve_operation:|^(workspace|organization)_create:|^media_(register|mark_uploaded|set_multipart|delete|set_metadata):|^post: (media_unavailable|post_in_flight|use_edit|variant_has_history|post_archived)$/;
+  /^(invitation|member|channel)_|^resolve_operation:|^(workspace|organization)_create:|^workspace_(archive|unarchive|avatar_set|guard):|^media_(register|mark_uploaded|set_multipart|delete|set_metadata):|^post: (media_unavailable|post_in_flight|use_edit|variant_has_history|post_archived)$/;
 const LIMIT_DEFINERS = /^(workspace|organization)_create:/;
 
 // A creation definer's SH429 puts "retry after N seconds" in DETAIL; anything else gives the default Retry-After.

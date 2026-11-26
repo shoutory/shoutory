@@ -142,7 +142,9 @@ export async function seedFilledWorkspace(fx: Fixture, editorId: string, bytes: 
 
 export async function workspaceRow(fx: Fixture, id: string): Promise<Record<string, unknown>> {
   const found = await fx.admin((client) =>
-    client.query("SELECT name, slug, colour, default_tz FROM app.workspaces WHERE id = $1", [id]),
+    client.query("SELECT name, slug, colour, default_tz, archived_at FROM app.workspaces WHERE id = $1", [
+      id,
+    ]),
   );
   return found.rows[0];
 }

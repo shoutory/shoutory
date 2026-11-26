@@ -104,6 +104,7 @@ interface Refusal {
   provider?: string;
   host?: string | null;
   forged?: true;
+  archived?: true;
 }
 const REFUSALS: Refusal[] = [
   { name: "a forged state", kind: "unknown_state", forged: true },
@@ -123,6 +124,7 @@ const REFUSALS: Refusal[] = [
     plant: { user: U.editor },
     caller: U.editor,
   },
+  { name: "a workspace archived since the connect started", kind: "workspace_archived", archived: true },
 ];
 
 describe("oauth_flow_take", () => {
@@ -173,7 +175,14 @@ describe("oauth_flow_take refusals", () => {
       if (!c.forged) await plantFlow({ state, ...c.plant });
       const caller = c.caller ?? c.plant?.user ?? U.admin;
       const host = c.host ?? c.plant?.host ?? null;
-      const [row] = await commitAs(db.pool("app"), caller, ...takeCall(state, c.provider, host, request));
+      const archive = (on: boolean) =>
+        rows(`UPDATE app.workspaces SET archived_at = ${on ? "now()" : "NULL"} WHERE id = $1`, [WA]);
+      if (c.archived) await archive(true);
+      const [row] = await commitAs(
+        db.pool("app"),
+        caller,
+        ...takeCall(state, c.provider, host, request),
+      ).finally(() => c.archived && archive(false));
       expect(row).toMatchObject({ outcome: c.kind });
       expect(row?.ciphertext ?? null).toBeNull();
       expect(await auditOf(request)).toMatchObject([

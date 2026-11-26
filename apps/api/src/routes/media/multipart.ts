@@ -293,7 +293,8 @@ export function registerParts(app: App, partsStorage: PartsStorage): void {
     params: mediaParams,
     body: partsBody,
     handler: async ({ scoped, params, body }) => {
-      const { workspaceId, asset, upload } = await scoped(false, async (tx, scope) => ({
+      // A write scope, so an archived workspace is given no upload URLs.
+      const { workspaceId, asset, upload } = await scoped(true, async (tx, scope) => ({
         workspaceId: scope.workspaceId,
         asset: await assetOf(tx, scope.workspaceId, params.media_id),
         upload: await uploadOf(tx, scope.workspaceId, params.media_id),

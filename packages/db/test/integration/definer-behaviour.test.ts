@@ -123,10 +123,14 @@ const accessCalls = (organization: string, workspace: string): [string, string, 
   ["member_directory", "SELECT * FROM app.member_directory($1::uuid, 10, NULL)", [workspace]],
   [
     "workspace_create",
-    `SELECT app.workspace_create($1::uuid, 'n', $2::text, 'UTC', NULL, NULL, ${FRESH_KEY})`,
+    `SELECT id FROM app.workspace_create($1::uuid, 'n', $2::text, 'UTC', NULL, NULL, ${FRESH_KEY}, NULL, NULL, true)`,
     [organization, "b-slug"],
   ],
-  ["organization_create", `SELECT app.organization_create('n', 'team', NULL, NULL, ${FRESH_KEY})`, []],
+  [
+    "organization_create",
+    `SELECT id FROM app.organization_create('n', 'team', NULL, NULL, ${FRESH_KEY}, NULL)`,
+    [],
+  ],
 ];
 
 // member_directory and my_workspaces call resolve_workspace_access inside, so their rows also prove that a nested

@@ -324,7 +324,8 @@ function registerPut(app: App, storage: StorageDriver, now: () => Date): void {
     params: mediaParams,
     rawBody: { maxBytes: MAX_UPLOAD_BYTES },
     handler: async ({ c, scoped, params }) => {
-      const { workspaceId, asset, upload } = await scoped(false, async (tx, scope) => ({
+      // A write scope, so an archived workspace takes no bytes.
+      const { workspaceId, asset, upload } = await scoped(true, async (tx, scope) => ({
         workspaceId: scope.workspaceId,
         asset: await assetOf(tx, scope.workspaceId, params.media_id),
         upload: await uploadOf(tx, scope.workspaceId, params.media_id),

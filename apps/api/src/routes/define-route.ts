@@ -247,6 +247,7 @@ const DENIALS: Readonly<Record<ScopeDenial, ErrorCode>> = {
   forbidden: "forbidden",
   invalid: "validation_failed",
   limit_reached: "limit_reached",
+  archived: "conflict",
 };
 
 const userTx =
@@ -290,7 +291,10 @@ async function runScoped(
     run: (tx: TenantTx, scope: AuthorizedScope) => Promise<T>,
   ): Promise<T> => {
     const outcome = await withScope(state.pool, session.userId, scopeRequest(access, params, method), run);
-    if (!outcome.ok) throw new Refusal(DENIALS[outcome.denial], `scope denied: ${outcome.denial}`);
+    if (!outcome.ok)
+      throw new Refusal(DENIALS[outcome.denial], `scope denied: ${outcome.denial}`, {
+        ...(outcome.denial === "archived" ? { details: { reason: "workspace_archived" } } : {}),
+      });
     return outcome.value;
   };
   if (access.split) {

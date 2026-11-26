@@ -179,8 +179,9 @@ export function registerImport(
     body: importBody,
     status: 201,
     handler: async ({ c, scoped, body }) => {
-      // The first scoped call is the authorization: nothing is fetched for a caller who may not import.
-      const workspaceId = await scoped(false, async (_tx, scope) => scope.workspaceId);
+      // The first scoped call is the authorization: nothing is fetched for a caller who may not import or for an
+      // archived workspace.
+      const workspaceId = await scoped(true, async (_tx, scope) => scope.workspaceId);
       const release = takeSlot();
       try {
         const on = { storage, getFile, logger, cap, scoped, workspaceId, signal: c.req.raw.signal };

@@ -59,7 +59,16 @@ describe("the list routes answer the caller's own role", () => {
     });
     expect(rows.some((row) => row.id === foreign)).toBe(false);
     for (const row of rows) {
-      expect(Object.keys(row).sort()).toEqual(["id", "name", "organization_id", "role", "slug"]);
+      expect(Object.keys(row).sort()).toEqual([
+        "archived_at",
+        "avatar",
+        "id",
+        "name",
+        "organization_id",
+        "organization_type",
+        "role",
+        "slug",
+      ]);
     }
   });
 });

@@ -153,10 +153,14 @@ const CALLS: [string, string, unknown[]][] = [
   ["my_organizations", "SELECT * FROM app.my_organizations(10, NULL)", []],
   [
     "workspace_create",
-    `SELECT app.workspace_create($1::uuid, 'n', 'slug-x', 'UTC', NULL, NULL, ${FRESH_KEY})`,
+    `SELECT id FROM app.workspace_create($1::uuid, 'n', 'slug-x', 'UTC', NULL, NULL, ${FRESH_KEY}, NULL, NULL, true)`,
     [OA],
   ],
-  ["organization_create", `SELECT app.organization_create('n', 'team', NULL, NULL, ${FRESH_KEY})`, []],
+  [
+    "organization_create",
+    `SELECT id FROM app.organization_create('n', 'team', NULL, NULL, ${FRESH_KEY}, NULL)`,
+    [],
+  ],
   ["member_directory", "SELECT * FROM app.member_directory($1::uuid, 10, NULL)", [WA1]],
 ];
 const NOT_A_USER: [string, TenantCtx][] = [
@@ -240,7 +244,11 @@ describe("my_workspaces and my_organizations", () => {
   const WORKSPACES = "SELECT * FROM app.my_workspaces(1, $1::uuid)";
 
   it("my_workspaces gives the caller's rows with name, slug and role, and never B's", async () => {
-    const all = await run(t, asUser(U1), "SELECT * FROM app.my_workspaces(100, NULL)");
+    const all = await run(
+      t,
+      asUser(U1),
+      "SELECT workspace_id, organization_id, name, slug, role_key FROM app.my_workspaces(100, NULL)",
+    );
     expect(all.sort(byId("workspace_id"))).toEqual(
       [
         { workspace_id: WA1, organization_id: OA, name: "ws-a1", slug: "ws-a1", role_key: "viewer" },
@@ -396,8 +404,8 @@ const seedOwned = (user: string, tag: string, n: number) => (admin: Client) =>
     )
     .then(() => undefined);
 
-const CREATE_ORGANIZATION = `SELECT app.organization_create('new-org', 'team', 'req-1', NULL, ${FRESH_KEY}) AS id`;
-const CREATE_WORKSPACE = `SELECT app.workspace_create($1::uuid, 'new-ws', $2::text, 'Europe/Paris', 'req-2', NULL, ${FRESH_KEY}) AS id`;
+const CREATE_ORGANIZATION = `SELECT id FROM app.organization_create('new-org', 'team', 'req-1', NULL, ${FRESH_KEY}, NULL)`;
+const CREATE_WORKSPACE = `SELECT id FROM app.workspace_create($1::uuid, 'new-ws', $2::text, 'Europe/Paris', 'req-2', NULL, ${FRESH_KEY}, NULL, NULL, true)`;
 
 describe("organization_create", () => {
   const UC = randomUUID();

@@ -14,8 +14,9 @@ const env = readTestEnv();
 let db: TestDatabase;
 const key = (): string => randomUUID().replaceAll("-", "").repeat(2);
 const slug = () => `tc-${randomUUID().slice(0, 8)}`;
-const WORKSPACE = "SELECT app.workspace_create($1::uuid, 'tc', $2, 'UTC', NULL, NULL, $3)";
-const ORGANIZATION = "SELECT app.organization_create('tc-org', 'team', NULL, NULL, $1)";
+const WORKSPACE =
+  "SELECT id FROM app.workspace_create($1::uuid, 'tc', $2, 'UTC', NULL, NULL, $3, NULL, NULL, true)";
+const ORGANIZATION = "SELECT id FROM app.organization_create('tc-org', 'team', NULL, NULL, $1, NULL)";
 const makeWorkspace = (bucket: string) =>
   commitAs(db.pool("app"), U.orgOwner, WORKSPACE, [OA, slug(), bucket]);
 

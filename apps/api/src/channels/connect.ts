@@ -247,6 +247,8 @@ export class ConnectService {
     const provider = this.#providerOf(typed.providerId);
     const connect = provider?.adapter.connect;
     if (!provider || !connect) throw new Refusal("not_found", "no connect for the provider");
+    // An archived workspace refuses here, before any call to the provider.
+    await scoped(true, async () => undefined);
     const input = { ...typed, instanceHost: await reconnectHostOf(scoped, typed, connect) };
     const app = await this.#startApp(scoped, input, provider, connect);
     const { state, digest } = newState();

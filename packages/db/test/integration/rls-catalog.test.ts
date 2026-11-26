@@ -200,14 +200,26 @@ const DEFINERS: Definer[] = [
   { name: "my_organizations", args: "lim integer, after uuid", callers: ["shoutory_app"] },
   {
     name: "workspace_create",
-    args: "organization_id uuid, name text, slug text, tz text, request_id text, ip_hmac bytea, bucket_key text",
+    args: "organization_id uuid, name text, requested_slug text, tz text, request_id text, ip_hmac bytea, bucket_key text, key uuid, template uuid, slug_fixed boolean",
     callers: ["shoutory_app"],
   },
   {
     name: "organization_create",
-    args: "name text, type text, request_id text, ip_hmac bytea, bucket_key text",
+    args: "name text, type text, request_id text, ip_hmac bytea, bucket_key text, key uuid",
     callers: ["shoutory_app"],
   },
+  {
+    name: "workspace_archive",
+    args: "workspace_id uuid, request_id text, ip_hmac bytea",
+    callers: ["shoutory_app"],
+  },
+  {
+    name: "workspace_unarchive",
+    args: "workspace_id uuid, request_id text, ip_hmac bytea",
+    callers: ["shoutory_app"],
+  },
+  { name: "workspace_avatar_set", args: "workspace_id uuid, media_id uuid", callers: ["shoutory_app"] },
+  { name: "workspace_guard", args: "", callers: [], helper: true },
   { name: "member_directory", args: "workspace_id uuid, lim integer, after uuid", callers: ["shoutory_app"] },
   { name: "role_weight", args: "key text", callers: [], helper: true },
   { name: "tenancy_rank", args: "ws uuid, who uuid", callers: [], helper: true },

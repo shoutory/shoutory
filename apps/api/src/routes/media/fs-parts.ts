@@ -43,7 +43,8 @@ export function registerFsParts(app: App, storage: StorageDriver): void {
     rawBody: { maxBytes: PART_SIZE },
     handler: async ({ c, scoped, params }) => {
       const number = Number(params.number);
-      const { workspaceId, asset, upload } = await scoped(false, async (tx, scope) => ({
+      // A write scope, so an archived workspace takes no bytes.
+      const { workspaceId, asset, upload } = await scoped(true, async (tx, scope) => ({
         workspaceId: scope.workspaceId,
         asset: await assetOf(tx, scope.workspaceId, params.media_id),
         upload: await uploadOf(tx, scope.workspaceId, params.media_id),
