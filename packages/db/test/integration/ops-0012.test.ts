@@ -132,6 +132,17 @@ describe("worker liveness and lag", () => {
     const lag = async () =>
       (await pool("app").query("SELECT app.outbox_lag() AS lag")).rows[0]?.lag as number;
     await rows("DELETE FROM app.outbox");
+    // Leaves start at today, so in the first minutes after midnight UTC a back-dated row needs yesterday's leaf.
+    await rows(`DO $$
+      DECLARE
+        day timestamp := date_trunc('day', now() AT TIME ZONE 'UTC') - interval '1 day';
+        leaf text := 'outbox_' || to_char(day, 'YYYYMMDD');
+      BEGIN
+        IF to_regclass('app.' || leaf) IS NULL THEN
+          EXECUTE format('CREATE TABLE app.%I PARTITION OF app.outbox FOR VALUES FROM (%L) TO (%L)', leaf,
+            (day AT TIME ZONE 'UTC')::text, ((day + interval '1 day') AT TIME ZONE 'UTC')::text);
+        END IF;
+      END $$`);
     await rows(
       `INSERT INTO app.outbox (id, created_at, type)
        VALUES (gen_random_uuid(), now() - interval '900 seconds', 'media.uploaded')`,
