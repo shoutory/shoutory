@@ -446,6 +446,9 @@ describe("a change of workspace", () => {
       name,
       slug: name,
       role: "owner",
+      archived_at: null,
+      avatar: null,
+      organization_type: "agency",
     });
     const { host, router } = await visit({
       ...listWith(["connect"]),

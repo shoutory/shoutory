@@ -3,7 +3,7 @@ import { useState } from "react";
 import { z } from "zod";
 import { readZone } from "../account/prefs";
 import { useLoad } from "../account/use-load";
-import { ApiError, request } from "../http/client";
+import { ApiError, request, requestPages } from "../http/client";
 import type { Workspace } from "../shell/shell-data";
 import { Button } from "../ui/button";
 import { DirText } from "../ui/dir-text";
@@ -110,6 +110,7 @@ export function Invitations({ workspace, stamp }: { workspace: Workspace; stamp:
     invitationsSchema,
     `/api/v1/workspaces/${workspace.id}/invitations?limit=100`,
     stamp,
+    requestPages,
   );
   // Held here, not in a row, so reloading the list never closes the question.
   const [revoking, setRevoking] = useState<Invitation | null>(null);

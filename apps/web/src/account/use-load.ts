@@ -8,7 +8,12 @@ export type Loaded<T> =
   | { readonly status: "done"; readonly data: T }
   | { readonly status: "failed"; readonly error: ApiError };
 
-export function useLoad<T>(schema: ZodType<T>, path: string, stamp = 0) {
+export function useLoad<T>(
+  schema: ZodType<T>,
+  path: string,
+  stamp = 0,
+  read: (schema: ZodType<T>, path: string) => Promise<T> = request,
+) {
   const [state, setState] = useState<Loaded<T>>({ status: "loading" });
   const [version, setVersion] = useState(0);
   const navigate = useNavigate();
@@ -17,7 +22,7 @@ export function useLoad<T>(schema: ZodType<T>, path: string, stamp = 0) {
     let current = true;
     void version;
     void stamp;
-    request(schema, path).then(
+    read(schema, path).then(
       (data) => current && setState({ status: "done", data }),
       (error: unknown) => {
         if (!(error instanceof ApiError)) throw error;
@@ -32,7 +37,7 @@ export function useLoad<T>(schema: ZodType<T>, path: string, stamp = 0) {
     return () => {
       current = false;
     };
-  }, [schema, path, version, stamp, navigate, pathname, search]);
+  }, [schema, path, version, stamp, read, navigate, pathname, search]);
   return {
     state,
     replace: (data: T) => setState({ status: "done", data }),

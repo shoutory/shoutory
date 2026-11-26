@@ -2558,3 +2558,23 @@ msgstr "تعذّر حذف هذا الملف"
 #. js-lingui-explicit-id
 msgid "media.delete.failed.meaning"
 msgstr "لم يُحذف شيء. حاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "auth.copy.key_reused.what"
+msgstr "تعذّر حفظ هذا"
+
+#. js-lingui-explicit-id
+msgid "auth.copy.key_reused.meaning"
+msgstr "أُرسلت محاولة سابقة ببيانات أخرى. لم يتغيّر شيء. راجع النموذج وحاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "members.make_owner"
+msgstr "جعله مالكًا"
+
+#. js-lingui-explicit-id
+msgid "members.make_owner_title"
+msgstr "جعل <0>{name}</0> مالكًا لمساحة العمل؟"
+
+#. js-lingui-explicit-id
+msgid "members.make_owner_body"
+msgstr "سيصبح <0>{name}</0> مالك مساحة العمل هذه وتصبح أنت مديرًا. لا يتراجع عن ذلك إلا المالك الجديد."

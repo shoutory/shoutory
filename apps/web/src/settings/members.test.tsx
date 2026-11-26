@@ -5,11 +5,14 @@ import {
   callsTo,
   click,
   closeApp,
+  confirmPassword,
   json,
   membersFor,
+  needsPassword,
   openMembers,
   optionTexts,
   pageOf,
+  pagesOf,
   pick,
   refusal,
   roleOf,
@@ -107,10 +110,91 @@ describe("the members page", () => {
   );
 });
 
+describe("a list longer than one page", () => {
+  it("shows every member and invitation", async () => {
+    const people = Array.from({ length: 120 }, (_, n) => ({
+      user_id: `p${n}`,
+      name: `Paged Person ${n}`,
+      image: null,
+      // Peers of the admin viewing: plain rows, so the test weighs the paging and not 120 role menus.
+      role: "admin",
+      status: "active",
+    }));
+    const invited = Array.from({ length: 120 }, (_, n) => ({
+      id: `inv${n}`,
+      email: `paged${n}@example.test`,
+      role_key: "viewer",
+      expires_at: "2099-11-21T10:00:00.000Z",
+    }));
+    const [self, ...others] = membersFor("admin");
+    const { host } = await openMembers("admin", {
+      members: pagesOf([self, ...people.slice(0, 99)], [...people.slice(99), ...others]),
+      invitations: pagesOf(invited.slice(0, 100), invited.slice(100)),
+    });
+    expect(host.textContent).toContain("Paged Person 119");
+    expect(host.textContent).toContain("paged119@example.test");
+  });
+});
+
 describe("the Owner row", () => {
   it("says a workspace needs one Owner", async () => {
     const { host } = await openMembers("admin");
     expect(rowOf(host, "Owner Zero").textContent).toMatch(/needs one owner/i);
+  });
+});
+
+describe("making another member the Owner", () => {
+  const offered = (host: HTMLElement, name: string) =>
+    [...rowOf(host, name).querySelectorAll("button")].some((b) => b.textContent === "Make Owner");
+  const start = async (host: HTMLElement) => {
+    click(byText(rowOf(host, "Editor Three"), "button", "Make Owner"));
+    await settle();
+  };
+
+  it.each([
+    ["the stored Owner, for an active member", "owner", "Editor Three", true],
+    ["the stored Owner, for a suspended member", "owner", "Suspended Five", false],
+    ["the stored Owner, for themself", "owner", "Person Sample", false],
+    ["an Admin, stored or through the organization", "admin", "Editor Three", false],
+  ])("%s", async (_name, caller, target, shown) => {
+    const { host } = await openMembers(caller);
+    expect(offered(host, target)).toBe(shown);
+  });
+
+  it("says the caller becomes an Admin, asks the password, then reads the shell and the list again", async () => {
+    const { stub, host } = await openMembers(
+      "owner",
+      needsPassword("changeRole", () => json({ data: { user_id: "u3", role: "owner" } })),
+    );
+    await start(host);
+    expect(document.querySelector('[role="dialog"]')?.textContent).toMatch(
+      /you become an admin.*only the new owner/i,
+    );
+    const shellReads = callsTo(stub, "GET", "/api/v1/workspaces?").length;
+    const listReads = callsTo(stub, "GET", "/members?").length;
+    confirm("Make Owner");
+    await settle();
+    await confirmPassword();
+    await settle();
+    const sent = callsTo(stub, "PATCH", "/members/u3").map(([, init]) => JSON.parse(String(init?.body)));
+    expect(sent).toEqual([{ role_key: "owner" }, { role_key: "owner" }]);
+    expect(callsTo(stub, "GET", "/api/v1/workspaces?").length).toBeGreaterThan(shellReads);
+    expect(callsTo(stub, "GET", "/members?").length).toBeGreaterThan(listReads);
+  });
+
+  it.each([
+    ["a refusal of the caller's rank", refusal("forbidden", 403), /cannot make that change/i],
+    [
+      "a member who already is the Owner",
+      refusal("conflict", 409, { reason: "already_owner" }),
+      /already the owner/i,
+    ],
+  ])("%s has its own words", async (_name, answer, words) => {
+    const { host } = await openMembers("owner", { changeRole: () => answer.clone() });
+    await start(host);
+    confirm("Make Owner");
+    await settle();
+    expect(document.body.textContent).toMatch(words);
   });
 });
 

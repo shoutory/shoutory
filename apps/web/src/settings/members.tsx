@@ -1,11 +1,11 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import { ROLE_PERMISSIONS } from "@shoutory/core/authz";
-import { useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { useNavigate, useParams, useRevalidator, useRouteLoaderData } from "react-router";
 import { z } from "zod";
 import { useLoad } from "../account/use-load";
 import { useStepUp } from "../auth/step-up";
-import { type ApiError, request } from "../http/client";
+import { type ApiError, request, requestPages } from "../http/client";
 import { NotFoundPage } from "../pages/system-pages";
 import { SESSION_ROUTE_ID, type Session } from "../session/session";
 import { useShellData, type Workspace } from "../shell/shell-data";
@@ -78,35 +78,38 @@ function RoleCell({ member, actor }: { member: Member; actor: Actor }) {
 
 const nothing = z.null();
 
-function RemoveCell({ member, actor }: { member: Member; actor: Actor }) {
-  const stepUp = useStepUp();
+function RowAction({
+  actor,
+  testId,
+  label,
+  title,
+  body,
+  run,
+}: {
+  actor: Actor;
+  testId: string;
+  label: ReactNode;
+  title: ReactNode;
+  body: ReactNode;
+  run: () => Promise<void>;
+}) {
   const [open, setOpen] = useState(false);
   const [declined, setDeclined] = useState<ApiError | null>(null);
-  const { name } = member;
-  const run = async () => {
-    const path = `/api/v1/workspaces/${actor.workspace.id}/members/${member.user_id}`;
-    await stepUp(() => request(nothing, path, { method: "DELETE" }));
-    actor.refresh();
-  };
   return (
     <>
       <Button
-        data-testid="member-remove"
+        data-testid={testId}
         onPress={() => {
           setDeclined(null);
           setOpen(true);
         }}
       >
-        <Trans id="members.remove">Remove</Trans>
+        {label}
       </Button>
       {declined ? <ErrorPanel focusOnMount error={declined} {...changeCopy(declined)} /> : null}
       <ConfirmChange
-        title={
-          <Trans id="members.remove_title">
-            Remove <DirText>{name}</DirText>?
-          </Trans>
-        }
-        label={<Trans id="members.remove">Remove</Trans>}
+        title={title}
+        label={label}
         isOpen={open}
         onClose={() => setOpen(false)}
         run={run}
@@ -114,11 +117,69 @@ function RemoveCell({ member, actor }: { member: Member; actor: Actor }) {
         onFailure={whenForbidden(actor)}
         onDeclined={setDeclined}
       >
+        {body}
+      </ConfirmChange>
+    </>
+  );
+}
+
+function RemoveCell({ member, actor }: { member: Member; actor: Actor }) {
+  const stepUp = useStepUp();
+  const { name } = member;
+  const run = async () => {
+    const path = `/api/v1/workspaces/${actor.workspace.id}/members/${member.user_id}`;
+    await stepUp(() => request(nothing, path, { method: "DELETE" }));
+    actor.refresh();
+  };
+  return (
+    <RowAction
+      actor={actor}
+      testId="member-remove"
+      label={<Trans id="members.remove">Remove</Trans>}
+      title={
+        <Trans id="members.remove_title">
+          Remove <DirText>{name}</DirText>?
+        </Trans>
+      }
+      body={
         <Trans id="members.remove_body">
           They lose access to this workspace now. You can invite them again.
         </Trans>
-      </ConfirmChange>
-    </>
+      }
+      run={run}
+    />
+  );
+}
+
+function MakeOwnerCell({ member, actor }: { member: Member; actor: Actor }) {
+  const stepUp = useStepUp();
+  const revalidator = useRevalidator();
+  const { name } = member;
+  const run = async () => {
+    const path = `/api/v1/workspaces/${actor.workspace.id}/members/${member.user_id}`;
+    await stepUp(() => request(changed, path, { method: "PATCH", body: { role_key: "owner" } }));
+    actor.refresh();
+    // The caller is an Admin now: the shell's role decides what this page offers.
+    void revalidator.revalidate();
+  };
+  return (
+    <RowAction
+      actor={actor}
+      testId="member-make-owner"
+      label={<Trans id="members.make_owner">Make Owner</Trans>}
+      title={
+        <Trans id="members.make_owner_title">
+          Make <DirText>{name}</DirText> the Owner?
+        </Trans>
+      }
+      body={
+        <Trans id="members.make_owner_body">
+          <DirText>{name}</DirText> becomes the Owner of this workspace and you become an Admin. Only the new
+          Owner can undo this.
+        </Trans>
+      }
+      run={run}
+    />
   );
 }
 
@@ -161,6 +222,8 @@ function MemberRow({ member, actor }: { member: Member; actor: Actor }) {
   const role = ROLES[member.role as keyof typeof ROLES];
   const self = member.user_id === actor.me;
   const below = !self && rankOf(member.role) < actor.rank && actor.rank >= ADMIN_RANK;
+  // Only the stored Owner may hand the workspace on; an organization admin is never one here.
+  const transferable = actor.workspace.role === "owner" && !self && member.status === "active";
   return (
     <tr>
       <td className="py-2 pe-5 wrap-anywhere">
@@ -192,8 +255,11 @@ function MemberRow({ member, actor }: { member: Member; actor: Actor }) {
         )}
       </td>
       <td className="py-2">
-        {below ? <RemoveCell member={member} actor={actor} /> : null}
-        {self && member.role !== "owner" ? <LeaveWorkspace workspace={actor.workspace} /> : null}
+        <div className="flex flex-wrap gap-2">
+          {transferable ? <MakeOwnerCell member={member} actor={actor} /> : null}
+          {below ? <RemoveCell member={member} actor={actor} /> : null}
+          {self && member.role !== "owner" ? <LeaveWorkspace workspace={actor.workspace} /> : null}
+        </div>
       </td>
     </tr>
   );
@@ -232,10 +298,11 @@ function MemberTable({ members, actor }: { members: Member[]; actor: Actor }) {
 
 function ManageMembers({ workspace, focusHeading }: { workspace: Workspace; focusHeading: () => void }) {
   const session = useRouteLoaderData<Session>(SESSION_ROUTE_ID);
-  // The largest page: the server's default of 20 would hide the rest.
   const { state, reload, refresh } = useLoad(
     membersSchema,
     `/api/v1/workspaces/${workspace.id}/members?limit=100`,
+    0,
+    requestPages,
   );
   const [stamp, setStamp] = useState(0);
   const refreshAll = () => {
@@ -300,7 +367,6 @@ export function MembersPage() {
       </h1>
     );
   const workspace = data.workspaces.find((candidate) => candidate.id === ws);
-  const org = data.organizations.find((candidate) => candidate.id === workspace?.organization_id);
-  if (!workspace || !org || org.type === "personal") return <NotFoundPage />;
+  if (!workspace || workspace.organization_type === "personal") return <NotFoundPage />;
   return <Members workspace={workspace} />;
 }

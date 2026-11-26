@@ -51,6 +51,7 @@ export interface RequestInit {
   body?: unknown;
   /** `false`: the answer has no `{data}` envelope (a library-forwarded one). */
   envelope?: boolean;
+  idempotencyKey?: string;
 }
 
 // Only these failures are treated as maintenance; anything else is a bug and is not hidden.
@@ -64,7 +65,11 @@ async function send(path: string, init: RequestInit): Promise<Response> {
   return await fetch(path, {
     method: init.method ?? "GET",
     // The server refuses an unsafe call without this header (CSRF); it is sent on every call.
-    headers: { "X-Shoutory-Client": "web", ...(hasBody ? { "Content-Type": "application/json" } : {}) },
+    headers: {
+      "X-Shoutory-Client": "web",
+      ...(hasBody ? { "Content-Type": "application/json" } : {}),
+      ...(init.idempotencyKey ? { "Idempotency-Key": init.idempotencyKey } : {}),
+    },
     body: hasBody ? JSON.stringify(init.body) : null,
     // The same signal also ends a stalled body read, so the limit covers the whole call.
     signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -103,4 +108,58 @@ export async function request<T>(schema: ZodType<T>, path: string, init: Request
   const parsed = answer.safeParse(body);
   if (!parsed.success) throw new ApiError("invalid_response", response.status);
   return parsed.data;
+}
+
+// 50 pages of 100 is far past any list a person reads; a list that does not end there is shown as an error, never cut.
+const MAX_PAGES = 50;
+
+/** Reads every page of a cursor-paged list by following `next_cursor`. */
+export async function requestPages<T>(schema: ZodType<T[]>, path: string): Promise<T[]> {
+  const page = z.object({ data: schema, meta: z.object({ next_cursor: z.string().nullable() }) });
+  const rows: T[] = [];
+  const seen = new Set<string>();
+  let cursor: string | null = null;
+  for (let read = 0; read < MAX_PAGES; read++) {
+    const at: string =
+      cursor === null ? path : `${path}${path.includes("?") ? "&" : "?"}cursor=${encodeURIComponent(cursor)}`;
+    const answer = await request(page, at, { envelope: false });
+    rows.push(...answer.data);
+    cursor = answer.meta.next_cursor;
+    if (cursor === null) return rows;
+    if (seen.has(cursor)) break;
+    seen.add(cursor);
+  }
+  throw new ApiError("invalid_response", 200);
+}
+
+/** A UUIDv7 (RFC 9562 section 5.7): 48 bits of milliseconds, then random bits. */
+export function uuidv7(now = Date.now()): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  const view = new DataView(bytes.buffer);
+  view.setUint16(0, Math.floor(now / 2 ** 32));
+  view.setUint32(2, now % 2 ** 32);
+  view.setUint8(6, (view.getUint8(6) & 0x0f) | 0x70);
+  view.setUint8(8, (view.getUint8(8) & 0x3f) | 0x80);
+  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+/**
+ * A create that is safe to retry: the same body keeps its key, so a retry after a lost answer finds the row the
+ * first try made instead of making a second one. A changed body, a success or a refused key starts a new key.
+ */
+export function keyedPost() {
+  let last: { body: string; key: string } | null = null;
+  return async <T>(schema: ZodType<T>, path: string, body: unknown): Promise<T> => {
+    const text = JSON.stringify(body);
+    if (last?.body !== text) last = { body: text, key: uuidv7() };
+    try {
+      const answer = await request(schema, path, { method: "POST", body, idempotencyKey: last.key });
+      last = null;
+      return answer;
+    } catch (error) {
+      if (error instanceof ApiError && error.details?.reason === "idempotency_key_reused") last = null;
+      throw error;
+    }
+  };
 }

@@ -43,6 +43,8 @@ const posts = (stub: ReturnType<typeof stubApi>, path: string) =>
   stub.mock.calls.filter(([url, init]) => url === path && init?.method === "POST");
 const bodyOf = (call: readonly [string, (RequestInit | undefined)?] | undefined) =>
   JSON.parse(String(call?.[1]?.body));
+const keyOf = (call: readonly [string, (RequestInit | undefined)?] | undefined) =>
+  new Headers(call?.[1]?.headers).get("Idempotency-Key");
 const ORGS_PATH = "/api/v1/organizations";
 const WORKSPACES_PATH = "/api/v1/workspaces";
 
@@ -161,6 +163,8 @@ describe("creating the organization and its first workspace", () => {
   it("a failed first-workspace call keeps the organization: the retry sends only the workspace", async () => {
     let calls = 0;
     const { stub, host } = await submit({
+      createOrganization: () =>
+        json({ data: { id: NEW_ORG, name: "Acme", slug: "acme", type: "agency" } }, 201),
       createWorkspace: () =>
         ++calls === 1
           ? refusal("service_unavailable", 503)
@@ -174,6 +178,10 @@ describe("creating the organization and its first workspace", () => {
     expect(posts(stub, ORGS_PATH)).toHaveLength(1);
     const orgs = posts(stub, WORKSPACES_PATH).map((call) => bodyOf(call).organization_id);
     expect(orgs).toEqual([NEW_ORG, NEW_ORG]);
+    const [first, retry] = posts(stub, WORKSPACES_PATH).map(keyOf);
+    expect(first).toMatch(/^[0-9a-f-]{36}$/);
+    expect(retry).toBe(first);
+    expect(keyOf(posts(stub, ORGS_PATH)[0])).not.toBe(first);
   });
 });
 

@@ -9,6 +9,7 @@ import {
   ORGS,
   type Organization,
   openApp,
+  pagesOf,
   press,
   stubApi,
   WORKSPACES,
@@ -29,6 +30,22 @@ const has = (host: Element, name: string) =>
       .some((id) => document.getElementById(id)?.textContent?.includes(name)),
   );
 
+describe("a workspace list longer than one page", () => {
+  it("a workspace past the first 100 opens and is listed", async () => {
+    const many = Array.from({ length: 150 }, (_, n) => ({
+      ...WORKSPACES[0],
+      id: `wp${n}`,
+      name: `Paged ${n}`,
+      slug: `paged-${n}`,
+    }));
+    stubApi({ workspaces: pagesOf(many.slice(0, 100), many.slice(100)) });
+    const { host } = await openApp("/w/wp149");
+    openList(combobox(host, "Workspace"));
+    expect(options()).toHaveLength(150);
+    expect(options()).toContain("Paged 149");
+  });
+});
+
 describe("the switchers", () => {
   it.each<[string, Organization[], Workspace[], boolean, boolean]>([
     ["an agency with two workspaces", ORGS, WORKSPACES.slice(0, 2), true, true],
@@ -36,7 +53,11 @@ describe("the switchers", () => {
     [
       "a personal organization with two workspaces",
       [PERSONAL],
-      WORKSPACES.slice(0, 2).map((w) => ({ ...w, organization_id: "o1" })),
+      WORKSPACES.slice(0, 2).map((w) => ({
+        ...w,
+        organization_id: "o1",
+        organization_type: "personal" as const,
+      })),
       false,
       true,
     ],

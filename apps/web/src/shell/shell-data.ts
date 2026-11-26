@@ -1,6 +1,6 @@
 import { useRouteLoaderData } from "react-router";
 import { z } from "zod";
-import { ApiError, request } from "../http/client";
+import { ApiError, request, requestPages } from "../http/client";
 
 const organization = z.object({
   id: z.string(),
@@ -15,6 +15,10 @@ const workspace = z.object({
   name: z.string(),
   slug: z.string(),
   role: z.string(),
+  archived_at: z.string().nullable(),
+  avatar: z.string().nullable(),
+  // Carried on the workspace because a member of only this workspace never sees its organization.
+  organization_type: z.enum(["agency", "team", "personal"]),
 });
 
 export type Organization = z.infer<typeof organization>;
@@ -33,7 +37,6 @@ export const isUnknownOrganization = (data: ShellData, id: string | undefined): 
 
 export const SHELL_ROUTE_ID = "shell";
 
-// Only the first page is read; a `next_cursor` beyond it is not followed.
 const LIMIT = "?limit=100";
 
 const adminAnswer = z.object({ admin: z.boolean() });
@@ -52,8 +55,8 @@ async function readAdmin(): Promise<boolean | ApiError> {
 export async function shellLoader(): Promise<ShellData> {
   try {
     const [organizations, workspaces, admin] = await Promise.all([
-      request(z.array(organization), `/api/v1/organizations${LIMIT}`),
-      request(z.array(workspace), `/api/v1/workspaces${LIMIT}`),
+      requestPages(z.array(organization), `/api/v1/organizations${LIMIT}`),
+      requestPages(z.array(workspace), `/api/v1/workspaces${LIMIT}`),
       readAdmin(),
     ]);
     return { organizations, workspaces, admin };

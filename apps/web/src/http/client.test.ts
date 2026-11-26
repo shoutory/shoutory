@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { ApiError, request } from "./client";
+import { ApiError, keyedPost, request, requestPages, uuidv7 } from "./client";
 
 const answer = z.object({ open: z.boolean() });
 
@@ -11,6 +11,8 @@ function stubFetch(response: Response) {
 }
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+
+const refusal503 = () => json({ error: { code: "service_unavailable" } }, 503);
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -159,5 +161,76 @@ describe("a call without an answer envelope", () => {
   ])("still maps %s to the state %s", async (_name, response, state) => {
     stubFetch(response);
     await expect(bareCall()).rejects.toMatchObject({ state });
+  });
+});
+
+describe("a create that is safe to retry", () => {
+  const V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  const keyOf = (call: [string, (RequestInit | undefined)?]) =>
+    new Headers(call[1]?.headers).get("Idempotency-Key");
+
+  it("a key is a UUIDv7 that sorts by its time", () => {
+    const keys = [0, 1, 2 ** 40].map((at) => uuidv7(1_800_000_000_000 + at));
+    expect(keys.every((key) => V7.test(key))).toBe(true);
+    expect([...keys].sort()).toEqual(keys);
+  });
+
+  it.each([
+    ["a retry of the same body after a failure keeps the key", refusal503(), { name: "a" }, true],
+    ["a changed body gets a new key", refusal503(), { name: "b" }, false],
+    ["a create after a success gets a new key", json({ data: { open: true } }), { name: "a" }, false],
+    [
+      "a key the server refused is not sent again",
+      json({ error: { code: "unprocessable_content", details: { reason: "idempotency_key_reused" } } }, 422),
+      { name: "a" },
+      false,
+    ],
+  ])("%s", async (_name, first, second, same) => {
+    const fetchStub = vi.fn((_path: string, _init?: RequestInit) => Promise.resolve(first.clone()));
+    vi.stubGlobal("fetch", fetchStub);
+    const post = keyedPost();
+    await post(answer, "/api/v1/x", { name: "a" }).catch(() => undefined);
+    fetchStub.mockResolvedValue(json({ data: { open: true } }));
+    await post(answer, "/api/v1/x", second);
+    const [one, two] = fetchStub.mock.calls.map(keyOf);
+    expect(one).toMatch(V7);
+    expect(one === two).toBe(same);
+  });
+});
+
+describe("a list read across pages", () => {
+  const rows = z.array(z.object({ id: z.string() }));
+  const page = (ids: string[], next: string | null) =>
+    json({ data: ids.map((id) => ({ id })), meta: { next_cursor: next } });
+  const stubPages = (pages: (n: number) => Response) => {
+    let n = 0;
+    const fetchStub = vi.fn((_path: string, _init?: RequestInit) => Promise.resolve(pages(n++)));
+    vi.stubGlobal("fetch", fetchStub);
+    return fetchStub;
+  };
+
+  it("follows next_cursor until it is null and keeps every row in order", async () => {
+    const answers = [page(["a", "b"], "b"), page(["c", "d"], "d"), page(["e"], null)];
+    const fetchStub = stubPages((n) => answers[n] as Response);
+    await expect(requestPages(rows, "/api/v1/workspaces?limit=100")).resolves.toEqual(
+      ["a", "b", "c", "d", "e"].map((id) => ({ id })),
+    );
+    expect(fetchStub.mock.calls.map(([path]) => path)).toEqual([
+      "/api/v1/workspaces?limit=100",
+      "/api/v1/workspaces?limit=100&cursor=b",
+      "/api/v1/workspaces?limit=100&cursor=d",
+    ]);
+  });
+
+  it.each([
+    ["a cursor that repeats", (n: number) => page([`r${n}`], "same")],
+    ["a list that never ends", (n: number) => page([`r${n}`], `c${n}`)],
+  ])("%s is an error, never a list cut short", async (_name, pages) => {
+    const fetchStub = stubPages(pages);
+    await expect(requestPages(rows, "/api/v1/x")).rejects.toMatchObject({
+      code: "invalid_response",
+      state: "error",
+    });
+    expect(fetchStub.mock.calls.length).toBeLessThanOrEqual(50);
   });
 });

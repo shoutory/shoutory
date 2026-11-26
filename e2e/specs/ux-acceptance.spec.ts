@@ -137,9 +137,9 @@ test("a retry of the members list keeps the invite dialog, its typed address and
   });
 });
 
-// A person who is only a member of one workspace has no organization in the app's lists, so the members route does not
-// exist for them: it answers as an unknown workspace does.
-test("a workspace-only member and a stranger to the workspace both get the not-found page on its members route", async ({
+// A person who is only a member of one workspace has no organization in the app's lists, yet the workspace's own type
+// opens its members page for them; a workspace the person cannot see answers as unknown.
+test("a workspace-only member opens its members page and a stranger gets the not-found page", async ({
   browser,
   page,
 }) => {
@@ -152,7 +152,8 @@ test("a workspace-only member and a stranger to the workspace both get the not-f
     await viewer.goto(`/w/${workspace.id}/settings/members`);
     await viewer.waitForLoadState("networkidle");
     await expectNoPolicyViolation(viewer);
-    await expect(viewer.getByTestId("not-found")).toBeVisible();
+    await expect(viewer.locator("main h1")).toBeVisible();
+    await expect(viewer.getByTestId("not-found")).toHaveCount(0);
   });
 });
 

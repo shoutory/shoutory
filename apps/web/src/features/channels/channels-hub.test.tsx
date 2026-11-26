@@ -437,6 +437,9 @@ describe("a change of workspace", () => {
     name,
     slug: name,
     role: "owner",
+    archived_at: null,
+    avatar: null,
+    organization_type: "agency",
   });
 
   it("starts from loading, and neither a row nor a late page of the old workspace shows under the new one", async () => {

@@ -6,7 +6,7 @@ import { z } from "zod";
 import { readZone } from "../account/prefs";
 import { authCopy } from "../auth/auth-copy";
 import { SubmitButton, useAction } from "../auth/auth-frame";
-import { type ApiError, request } from "../http/client";
+import { type ApiError, keyedPost } from "../http/client";
 import { NotFoundPage } from "../pages/system-pages";
 import { ROLES } from "../settings/roles";
 import { type Organization, useShellData, type Workspace } from "../shell/shell-data";
@@ -41,10 +41,14 @@ function AddClient({ orgId, onDone }: { orgId: string; onDone: () => void }) {
   const [name, setName] = useState("");
   const [zone, setZone] = useState(readZone);
   const [invalid, setInvalid] = useState(false);
+  const [post] = useState(keyedPost);
   const add = useAction(
     async () => {
-      const body = { organization_id: orgId, name: name.trim(), default_tz: zone };
-      await request(created, "/api/v1/workspaces", { method: "POST", body });
+      await post(created, "/api/v1/workspaces", {
+        organization_id: orgId,
+        name: name.trim(),
+        default_tz: zone,
+      });
       await revalidator.revalidate();
       onDone();
     },

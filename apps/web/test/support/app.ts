@@ -23,16 +23,45 @@ export interface Workspace {
   name: string;
   slug: string;
   role: "owner" | "admin" | "editor" | "approver" | "viewer";
+  archived_at: string | null;
+  avatar: string | null;
+  organization_type: "agency" | "team" | "personal";
 }
+
+const ACTIVE = { archived_at: null, avatar: null } as const;
 
 export const ORGS: Organization[] = [
   { id: "o1", name: "Acme Agency", slug: "acme", type: "agency", org_role: "owner" },
   { id: "o2", name: "Beta Team", slug: "beta", type: "team", org_role: "owner" },
 ];
 export const WORKSPACES: Workspace[] = [
-  { id: "w1", organization_id: "o1", name: "Acme One", slug: "acme-one", role: "owner" },
-  { id: "w2", organization_id: "o1", name: "Acme Two", slug: "acme-two", role: "owner" },
-  { id: "w3", organization_id: "o2", name: "Beta Main", slug: "beta-main", role: "owner" },
+  {
+    id: "w1",
+    organization_id: "o1",
+    name: "Acme One",
+    slug: "acme-one",
+    role: "owner",
+    ...ACTIVE,
+    organization_type: "agency",
+  },
+  {
+    id: "w2",
+    organization_id: "o1",
+    name: "Acme Two",
+    slug: "acme-two",
+    role: "owner",
+    ...ACTIVE,
+    organization_type: "agency",
+  },
+  {
+    id: "w3",
+    organization_id: "o2",
+    name: "Beta Main",
+    slug: "beta-main",
+    role: "owner",
+    ...ACTIVE,
+    organization_type: "team",
+  },
 ];
 
 export const json = (body: unknown, status = 200) =>
@@ -52,6 +81,15 @@ export const refusal = (code: string, status: number, details?: Record<string, s
 const page = (rows: unknown[]) => json({ data: rows, meta: { next_cursor: null } });
 
 export const pageOf = (rows: unknown[]) => () => page(rows);
+/** A list answered over several pages, one per call, each but the last pointing at the next. */
+export const pagesOf = (...pages: unknown[][]) => {
+  let read = 0;
+  return () => {
+    const rows = pages[read] ?? [];
+    read += 1;
+    return json({ data: rows, meta: { next_cursor: read < pages.length ? `cursor-${read}` : null } });
+  };
+};
 export const settle = () => act(async () => undefined);
 
 type Answer = () => Response | Promise<Response>;
@@ -145,7 +183,15 @@ export const CONNECT_WS = "0190a000-0000-7000-8000-0000000000c1";
 export const CONNECT_CHANNEL = "0190a000-0000-7000-8000-0000000000d1";
 export const uuidWorkspaces = () =>
   pageOf([
-    { id: CONNECT_WS, organization_id: "o1", name: "Acme Connect", slug: "acme-connect", role: "owner" },
+    {
+      id: CONNECT_WS,
+      organization_id: "o1",
+      name: "Acme Connect",
+      slug: "acme-connect",
+      role: "owner",
+      ...ACTIVE,
+      organization_type: "agency",
+    },
   ]);
 
 export const channelRow = (change: Record<string, unknown> = {}) => ({

@@ -250,4 +250,30 @@ describe("GET /api/v1/workspaces", () => {
       organization_type: "team",
     });
   });
+
+  it("pages past 100 workspaces by next_cursor, every workspace once", async () => {
+    const reader = await signedUser(fx, "workspace-pager");
+    const orgs = [await seedOrganization(fx, reader.id), await seedOrganization(fx, reader.id)];
+    await fx.admin((client) =>
+      client.query(
+        `INSERT INTO app.workspaces (organization_id, name, slug)
+           SELECT o, 'paged-' || g, 'paged-' || g FROM unnest($1::uuid[]) o, generate_series(1, 55) g`,
+        [orgs],
+      ),
+    );
+    const page = async (cursor?: string) => {
+      const query = cursor ? `&cursor=${cursor}` : "";
+      const answer = await fx.request(`/api/v1/workspaces?limit=100${query}`, {
+        headers: { cookie: reader.cookie },
+      });
+      return (await answer.json()) as { data: { id: string }[]; meta: { next_cursor: string | null } };
+    };
+    const first = await page();
+    expect(first.data).toHaveLength(100);
+    expect(first.meta.next_cursor).toBe(first.data[99]?.id);
+    const second = await page(first.meta.next_cursor ?? undefined);
+    expect(second.data).toHaveLength(10);
+    expect(second.meta.next_cursor).toBeNull();
+    expect(new Set([...first.data, ...second.data].map((row) => row.id)).size).toBe(110);
+  });
 });

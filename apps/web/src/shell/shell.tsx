@@ -66,7 +66,8 @@ function Rail() {
   const { t } = useLingui();
   const data = useShellData();
   const lists = "error" in data ? undefined : data;
-  const orgId = org ?? lists?.workspaces.find((workspace) => workspace.id === ws)?.organization_id;
+  const current = lists?.workspaces.find((workspace) => workspace.id === ws);
+  const orgId = org ?? current?.organization_id;
   const shared = lists?.organizations.some(
     (candidate) => candidate.id === orgId && candidate.type !== "personal",
   );
@@ -100,7 +101,7 @@ function Rail() {
           <Trans id="shell.nav.billing">Billing</Trans>
         </NavLink>
       ) : null}
-      {ws && shared ? (
+      {current && current.organization_type !== "personal" ? (
         <NavLink to={`/w/${ws}/settings/members`} className={NAV_LINK}>
           <Trans id="shell.nav.members">Members</Trans>
         </NavLink>

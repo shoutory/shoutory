@@ -6,7 +6,7 @@ import { z } from "zod";
 import { readZone } from "../account/prefs";
 import { authCopy } from "../auth/auth-copy";
 import { SubmitButton, useAction } from "../auth/auth-frame";
-import { request } from "../http/client";
+import { keyedPost } from "../http/client";
 import type { Organization } from "../shell/shell-data";
 import { Choice, Choices } from "../ui/choices";
 import { DirText } from "../ui/dir-text";
@@ -34,19 +34,20 @@ function useOnboarding(resume: Organization | undefined) {
   const [type, setType] = useState<OrgType>("agency");
   const [typed, setTyped] = useState<string | null>(null);
   const [zone, setZone] = useState(readZone);
+  const [postOrganization] = useState(keyedPost);
+  const [postWorkspace] = useState(keyedPost);
   const workspaceName = typed ?? target?.name ?? orgName;
   const submit = async () => {
     let org = target;
     if (!org) {
-      const body = { name: orgName.trim(), type };
-      const row = await request(made, "/api/v1/organizations", { method: "POST", body });
+      const row = await postOrganization(made, "/api/v1/organizations", { name: orgName.trim(), type });
       org = { id: row.id, name: row.name, type: row.type };
       setTarget(org);
       // So a reload from here resumes this organization instead of starting another.
       await revalidator.revalidate();
     }
     const body = { organization_id: org.id, name: workspaceName.trim(), default_tz: zone };
-    const workspace = await request(workspaceMade, "/api/v1/workspaces", { method: "POST", body });
+    const workspace = await postWorkspace(workspaceMade, "/api/v1/workspaces", body);
     await revalidator.revalidate();
     await navigate(`/w/${workspace.id}`);
   };

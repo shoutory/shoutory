@@ -121,7 +121,17 @@ const GENERIC: Record<Screen, Words> = {
   },
 };
 
+const KEY_REUSED: Words = {
+  what: <Trans id="auth.copy.key_reused.what">We could not save this</Trans>,
+  meaning: (
+    <Trans id="auth.copy.key_reused.meaning">
+      An earlier try was sent with other details. Nothing was changed. Check the form and try again.
+    </Trans>
+  ),
+};
+
 export function authCopy(screen: Screen, error: ApiError): Words {
+  if (error.details?.reason === "idempotency_key_reused") return KEY_REUSED;
   const own = BY_CODE[screen][error.code];
   if (own) return own;
   if (error.code === "too_many_requests") return TOO_MANY;

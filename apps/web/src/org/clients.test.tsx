@@ -85,6 +85,8 @@ describe("adding a client", () => {
     const body = JSON.parse(String(calls(stub, true)[0]?.[1]?.body));
     expect(Object.keys(body).sort()).toEqual(["default_tz", "name", "organization_id"]);
     expect([body.organization_id, body.name]).toEqual(["o1", "New Client"]);
+    const key = new Headers(calls(stub, true)[0]?.[1]?.headers).get("Idempotency-Key");
+    expect(key).toMatch(/^[0-9a-f-]{36}$/);
     expect(calls(stub, false)).toHaveLength(2);
     expect(host.querySelector('[role="dialog"]')).toBeNull();
     expect(document.activeElement).toBe(host.querySelector("h1"));
@@ -106,6 +108,11 @@ describe("adding a client", () => {
   it.each([
     ["the 100 client limit", refusal("limit_reached", 409), /100 clients/i],
     ["a server failure", refusal("service_unavailable", 503), /not reachable/i],
+    [
+      "a key sent before with other details",
+      refusal("unprocessable_content", 422, { reason: "idempotency_key_reused" }),
+      /other details/i,
+    ],
   ])("%s has its own words and keeps what was typed", async (_name, answer, words) => {
     await open({ createWorkspace: () => answer.clone() });
     expect(document.body.querySelector('[role="alert"]')?.textContent).toMatch(words);
