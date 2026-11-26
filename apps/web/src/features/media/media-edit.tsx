@@ -1,4 +1,5 @@
 import { plural } from "@lingui/core/macro";
+import { Trans as Said } from "@lingui/react";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Button as PlainButton } from "react-aria-components";
@@ -13,7 +14,22 @@ import { useFormatPrefs } from "../../ui/localized";
 import { TextField } from "../../ui/text-field";
 import { toasts } from "../../ui/toast";
 import { useSignIn } from "../channels/channels-hub";
-import { asApiError, type Detail, detailSchema } from "./media";
+import {
+  asApiError,
+  CONTROL,
+  DELETE_WHAT,
+  type Detail,
+  deleteRefusal,
+  detailSchema,
+  NAME_MAX,
+  NOT_READY,
+  SAVE_WHAT,
+  saveRefusal,
+  TAG_INVALID,
+  TAG_MAX,
+  TAGS_FULL,
+  TAGS_MAX,
+} from "./media";
 
 type Words = { what: ReactNode; meaning: ReactNode };
 
@@ -29,12 +45,6 @@ interface FormProps {
   close: () => void;
   handlers: EditHandlers;
 }
-
-// The server's bounds, checked first so a long name or tag is named on its field.
-const NAME_MAX = 255;
-const TAG_MAX = 64;
-const TAGS_MAX = 32;
-const CONTROL = /\p{Cc}/u;
 
 // Closing a dialog returns focus to the button that opened it.
 function useOpener() {
@@ -90,52 +100,37 @@ function useSend<A, T>({ send, done, settle, lost }: Send<A, T>) {
   return { busy, failure, run };
 }
 
+const SAVE_MEANING: Record<keyof typeof SAVE_WHAT, ReactNode> = {
+  refused: <Trans id="media.edit.refused.meaning">Check them and save again. Nothing was changed.</Trans>,
+  forbidden: (
+    <Trans id="media.edit.forbidden.meaning">Your role may have changed. Nothing was changed.</Trans>
+  ),
+  failed: <Trans id="media.failed.meaning">Nothing was changed. Try again.</Trans>,
+};
+
+const DELETE_MEANING: Record<keyof typeof DELETE_WHAT, ReactNode> = {
+  in_use: (
+    <Trans id="media.delete.in_use.meaning">
+      A post, a pending send or the workspace picture still uses this file.
+    </Trans>
+  ),
+  not_deletable: (
+    <Trans id="media.delete.not_deletable.meaning">Its state changed. Nothing was deleted.</Trans>
+  ),
+  forbidden: (
+    <Trans id="media.delete.forbidden.meaning">Your role may have changed. Nothing was deleted.</Trans>
+  ),
+  failed: <Trans id="media.delete.failed.meaning">Nothing was deleted. Try again.</Trans>,
+};
+
 function saveCopy(error: ApiError): Words {
-  if (error.code === "validation_failed")
-    return {
-      what: <Trans id="media.edit.refused.what">The name or a tag was not accepted</Trans>,
-      meaning: <Trans id="media.edit.refused.meaning">Check them and save again. Nothing was changed.</Trans>,
-    };
-  if (error.state === "forbidden")
-    return {
-      what: <Trans id="media.edit.forbidden.what">You cannot change this file</Trans>,
-      meaning: (
-        <Trans id="media.edit.forbidden.meaning">Your role may have changed. Nothing was changed.</Trans>
-      ),
-    };
-  return {
-    what: <Trans id="media.edit.failed.what">We could not save your changes</Trans>,
-    meaning: <Trans id="media.failed.meaning">Nothing was changed. Try again.</Trans>,
-  };
+  const code = saveRefusal(error);
+  return { what: <Said id={SAVE_WHAT[code].id} />, meaning: SAVE_MEANING[code] };
 }
 
 function deleteCopy(error: ApiError): Words {
-  const reason = error.status === 409 ? error.details?.reason : undefined;
-  if (reason === "in_use")
-    return {
-      what: <Trans id="media.delete.in_use.what">This file is in use</Trans>,
-      meaning: (
-        <Trans id="media.delete.in_use.meaning">
-          A post, a pending send or the workspace picture still uses this file.
-        </Trans>
-      ),
-    };
-  if (reason === "not_deletable")
-    return {
-      what: <Trans id="media.delete.not_deletable.what">This file cannot be deleted now</Trans>,
-      meaning: <Trans id="media.delete.not_deletable.meaning">Its state changed. Nothing was deleted.</Trans>,
-    };
-  if (error.state === "forbidden")
-    return {
-      what: <Trans id="media.delete.forbidden.what">You cannot delete this file</Trans>,
-      meaning: (
-        <Trans id="media.delete.forbidden.meaning">Your role may have changed. Nothing was deleted.</Trans>
-      ),
-    };
-  return {
-    what: <Trans id="media.delete.failed.what">We could not delete this file</Trans>,
-    meaning: <Trans id="media.delete.failed.meaning">Nothing was deleted. Try again.</Trans>,
-  };
+  const code = deleteRefusal(error);
+  return { what: <Said id={DELETE_WHAT[code].id} />, meaning: DELETE_MEANING[code] };
 }
 
 function useTags(initial: string[]) {
@@ -147,11 +142,11 @@ function useTags(initial: string[]) {
   const add = (): string[] | undefined => {
     const tag = draft.trim();
     if (tag.length > TAG_MAX || CONTROL.test(tag)) {
-      setProblem(t({ id: "media.edit.tag_invalid", message: "Use at most 64 characters, on one line." }));
+      setProblem(t(TAG_INVALID));
       return undefined;
     }
     if (tags.length >= TAGS_MAX && !tags.includes(tag)) {
-      setProblem(t({ id: "media.edit.tags_full", message: "A file can have at most 32 tags." }));
+      setProblem(t(TAGS_FULL));
       return undefined;
     }
     const next = tag !== "" && !tags.includes(tag) ? [...tags, tag] : tags;
@@ -205,7 +200,7 @@ function EditForm({ medium, base, close, handlers }: FormProps) {
       if (error.status === 404) handlers.onGone();
       return error.status === 404;
     },
-    lost: t({ id: "media.edit.failed.what", message: "We could not save your changes" }),
+    lost: t(SAVE_WHAT.failed),
   });
   const submit = () => {
     setTried(true);
@@ -278,7 +273,7 @@ function DeleteForm({ medium, base, close, handlers }: FormProps) {
       if (error.details?.reason === "not_deletable") handlers.readAgain();
       return false;
     },
-    lost: t({ id: "media.delete.failed.what", message: "We could not delete this file" }),
+    lost: t(DELETE_WHAT.failed),
   });
   return (
     <div data-testid="delete-dialog" className="flex flex-col gap-5">
@@ -322,8 +317,7 @@ function useDeleteReason(medium: Detail): string | undefined {
         other: `In use by ${shown} posts: cannot delete`,
       }),
     });
-  if (!medium.actions.includes("delete"))
-    return t({ id: "media.delete.not_now", message: "This file can be deleted once it is ready." });
+  if (!medium.actions.includes("delete")) return t(NOT_READY);
   return undefined;
 }
 

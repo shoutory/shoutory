@@ -142,9 +142,25 @@ async function fulfilHub(page: Page, workspace: string): Promise<void> {
 // the page asks for no image, and the picture is the same on every run.
 const MEDIUM_ID = "0190a000-0000-7000-8000-0000000002b1";
 
+const reply = (body: unknown) => ({ contentType: "application/json", body: JSON.stringify(body) });
+const medium = (id: string, fileName: string) => ({
+  id,
+  file_name: fileName,
+  mime: "image/png",
+  state: "ready",
+  reject_reason: null,
+  tags: ["launch"],
+  derivatives: { thumb: "pending", stripped: "ready" },
+  byte_size: 482_133,
+  width: 1200,
+  height: 630,
+  duration_ms: null,
+  created_at: "2026-11-22T10:00:00.000Z",
+  actions: ["edit", "delete"],
+});
+
 async function fulfilMedium(page: Page, workspace: string): Promise<void> {
   const base = `**/api/v1/workspaces/${workspace}`;
-  const reply = (body: unknown) => ({ contentType: "application/json", body: JSON.stringify(body) });
   const [fits, misfit] = CHANNEL_CARDS;
   await page.addInitScript(() => localStorage.setItem("shoutory.zone", "UTC"));
   await page.route(`${base}/media/${MEDIUM_ID}`, (route) => {
@@ -152,25 +168,7 @@ async function fulfilMedium(page: Page, workspace: string): Promise<void> {
     if (method === "DELETE") return route.fulfill({ status: 204 });
     const change = method === "PATCH" ? (route.request().postDataJSON() as object) : {};
     return route.fulfill(
-      reply({
-        data: {
-          id: MEDIUM_ID,
-          file_name: "launch-banner.png",
-          mime: "image/png",
-          state: "ready",
-          reject_reason: null,
-          tags: ["launch"],
-          derivatives: { thumb: "pending", stripped: "ready" },
-          byte_size: 482_133,
-          width: 1200,
-          height: 630,
-          duration_ms: null,
-          created_at: "2026-11-22T10:00:00.000Z",
-          post_count: 0,
-          actions: ["edit", "delete"],
-          ...change,
-        },
-      }),
+      reply({ data: { ...medium(MEDIUM_ID, "launch-banner.png"), post_count: 0, ...change } }),
     );
   });
   await page.route(`${base}/media/${MEDIUM_ID}/fit*`, (route) =>
@@ -186,6 +184,22 @@ async function fulfilMedium(page: Page, workspace: string): Promise<void> {
   );
   await page.route(`${base}/channels?*`, (route) =>
     route.fulfill(reply({ data: CHANNEL_CARDS, meta: { next_cursor: null, actions: [] } })),
+  );
+}
+
+// Three files the founder may change, so the selection boxes and the bulk dialogs can be shown.
+const LIBRARY = ["launch-banner.png", "team-photo.png", "price-sheet.png"].map((name, n) =>
+  medium(`0190a000-0000-7000-8000-0000000002c${n + 1}`, name),
+);
+
+async function fulfilLibrary(page: Page, workspace: string): Promise<void> {
+  await page.addInitScript(() => localStorage.setItem("shoutory.zone", "UTC"));
+  await page.route(
+    (url) => url.pathname.endsWith(`/workspaces/${workspace}/media`),
+    (route) => route.fulfill(reply({ data: LIBRARY, meta: { next_cursor: null } })),
+  );
+  await page.route(`**/api/v1/workspaces/${workspace}/media/*`, (route) =>
+    route.request().method() === "DELETE" ? route.fulfill({ status: 204 }) : route.fallback(),
   );
 }
 
@@ -219,7 +233,15 @@ export const SCREENS: readonly Screen[] = [
       await visit((c) => `/w/${c.workspace}/channels`)(page, context);
     },
   },
-  founder("media", "/w/:ws/media", (c) => `/w/${c.workspace}/media`),
+  {
+    id: "media",
+    pattern: "/w/:ws/media",
+    audience: "founder",
+    open: async (page, context) => {
+      await fulfilLibrary(page, context.workspace);
+      await visit((c) => `/w/${c.workspace}/media`)(page, context);
+    },
+  },
   {
     id: "media-detail",
     pattern: "/w/:ws/media/:id",
@@ -270,7 +292,32 @@ export async function openErrorPage(page: Page, error: ErrorPage): Promise<void>
 
 const dialog = async (page: Page) => page.getByRole("dialog").waitFor();
 
+const selectAllFiles = async (page: Page) => {
+  await page.getByTestId("tile-select").first().click();
+  await page.keyboard.press("ControlOrMeta+A");
+};
+
 export const DIALOGS: readonly Dialog[] = [
+  {
+    id: "media-bulk-tag",
+    screen: "media",
+    titleId: "media.bulk.tag_title",
+    open: async (page) => {
+      await selectAllFiles(page);
+      await page.getByTestId("media-bulk-tag").click();
+      await dialog(page);
+    },
+  },
+  {
+    id: "media-bulk-delete",
+    screen: "media",
+    titleId: "media.bulk.delete_title",
+    open: async (page) => {
+      await selectAllFiles(page);
+      await page.getByTestId("media-bulk-delete").click();
+      await dialog(page);
+    },
+  },
   {
     id: "media-edit",
     screen: "media-detail",

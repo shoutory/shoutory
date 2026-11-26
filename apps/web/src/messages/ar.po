@@ -2444,6 +2444,90 @@ msgid "media.delete.not_now"
 msgstr "يمكن حذف هذا الملف بعد أن يصبح جاهزًا."
 
 #. js-lingui-explicit-id
+msgid "media.bulk.hint"
+msgstr "حدّد عدة ملفات لإضافة وسم إليها أو حذفها معًا."
+
+#. js-lingui-explicit-id
+msgid "media.bulk.selected"
+msgstr "{count, plural, zero {لم يُحدَّد أي ملف} one {حُدِّد ملف واحد} two {حُدِّد ملفان} few {حُدِّدت {shown} ملفات} many {حُدِّد {shown} ملفًا} other {حُدِّد {shown} ملف}}"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.too_many"
+msgstr "يمكنك تحديد 100 ملف على الأكثر في المرة الواحدة."
+
+#. js-lingui-explicit-id
+msgid "media.bulk.tag"
+msgstr "إضافة وسم"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.delete"
+msgstr "حذف"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.clear"
+msgstr "إلغاء التحديد"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.offline"
+msgstr "أنت غير متصل بالإنترنت."
+
+#. js-lingui-explicit-id
+msgid "media.bulk.tag_title"
+msgstr "إضافة وسم إلى الملفات المحدّدة"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.tag_label"
+msgstr "الوسم المراد إضافته"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.tag_confirm"
+msgstr "أضف الوسم"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.tag_running"
+msgstr "جارٍ إضافة الوسم…"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.delete_title"
+msgstr "حذف الملفات المحدّدة؟"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.delete_running"
+msgstr "جارٍ حذف الملفات…"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.delete_impact"
+msgstr "{count, plural, zero {لن يُحذف أي ملف.} one {سيخرج ملف واحد من المكتبة ويُحذف. لا يمكن التراجع عن ذلك.} two {سيخرج ملفان من المكتبة ويُحذفان. لا يمكن التراجع عن ذلك.} few {ستخرج {shown} ملفات من المكتبة وتُحذف. لا يمكن التراجع عن ذلك.} many {سيخرج {shown} ملفًا من المكتبة ويُحذف. لا يمكن التراجع عن ذلك.} other {سيخرج {shown} ملف من المكتبة ويُحذف. لا يمكن التراجع عن ذلك.}}"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.progress"
+msgstr "تم {done} من {total}"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.stop"
+msgstr "إيقاف"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.stopping"
+msgstr "يتوقف بعد الملف الحالي."
+
+#. js-lingui-explicit-id
+msgid "media.bulk.network"
+msgstr "لم يُرسل: انقطع الاتصال. حاول مرة أخرى عند عودة الاتصال."
+
+#. js-lingui-explicit-id
+msgid "media.bulk.deleted"
+msgstr "{count, plural, zero {لم يُحذف أي ملف} one {حُذف ملف واحد} two {حُذف ملفان} few {حُذفت {shown} ملفات} many {حُذف {shown} ملفًا} other {حُذف {shown} ملف}}"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.tagged"
+msgstr "{count, plural, zero {لم يُضف الوسم إلى أي ملف} one {أُضيف الوسم إلى ملف واحد} two {أُضيف الوسم إلى ملفين} few {أُضيف الوسم إلى {shown} ملفات} many {أُضيف الوسم إلى {shown} ملفًا} other {أُضيف الوسم إلى {shown} ملف}}"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.kept"
+msgstr "{count, plural, zero {لم يبقَ أي ملف دون تغيير.} one {لم يتغيّر ملف واحد. يبقى محدّدًا ويذكر السبب.} two {لم يتغيّر ملفان. يبقيان محدّدين ويذكران السبب.} few {لم تتغيّر {shown} ملفات. تبقى محدّدة وتذكر السبب.} many {لم يتغيّر {shown} ملفًا. تبقى محدّدة وتذكر السبب.} other {لم يتغيّر {shown} ملف. تبقى محدّدة وتذكر السبب.}}"
+
+#. js-lingui-explicit-id
 msgid "media.delete.in_use.what"
 msgstr "هذا الملف مستخدم"
 

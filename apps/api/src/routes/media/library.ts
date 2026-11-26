@@ -108,7 +108,12 @@ function registerList(app: App): void {
     params: workspaceParams,
     query: listQuery,
     handler: async ({ c, scoped, query }) => {
-      const rows = await scoped(false, (tx, scope) => list(tx, scope.workspaceId, query));
+      const rows = await scoped(false, async (tx, scope) =>
+        (await list(tx, scope.workspaceId, query)).map((row) => ({
+          ...row,
+          actions: actionsOf(scope, row.state),
+        })),
+      );
       return pageAnswer(c, rows, query.limit);
     },
   });

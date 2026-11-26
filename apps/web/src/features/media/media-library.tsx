@@ -1,6 +1,7 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useRef, useState } from "react";
 import {
+  Checkbox,
   GridList,
   GridListItem,
   Input,
@@ -33,6 +34,7 @@ import {
   UNKNOWN_REASON,
   UNKNOWN_STATE,
 } from "./media";
+import { BulkBar, type Kept, KeptWords, type SelectionState, useSelection } from "./media-bulk";
 
 const pageSchema = z.object({
   data: z.array(mediaSchema),
@@ -47,6 +49,7 @@ interface Filters {
   tag: string;
 }
 const NO_FILTERS: Filters = { q: "", type: "all", state: "all", tag: "" };
+const NO_ROWS: Media[] = [];
 const isFiltered = (filters: Filters) =>
   filters.q !== "" || filters.type !== "all" || filters.state !== "all" || filters.tag !== "";
 
@@ -143,7 +146,9 @@ function useMediaList(ws: string, filters: Filters, attempt: number) {
       },
     );
   };
-  return { state, loadMore };
+  const update = (change: (rows: Media[]) => Media[]) =>
+    setState((now) => (now.status === "ready" ? { ...now, rows: change(now.rows) } : now));
+  return { state, loadMore, update };
 }
 
 function useWords() {
@@ -188,13 +193,33 @@ interface TileProps {
   ws: string;
   words: Words;
   onTag: (tag: string) => void;
+  selectable: boolean;
+  kept: Kept | undefined;
 }
 
-function Tile({ media, ws, words, onTag }: TileProps) {
+function SelectBox() {
+  return (
+    <Checkbox
+      slot="selection"
+      data-testid="tile-select"
+      className="group inline-flex size-6 pointer-coarse:size-11 shrink-0 items-center justify-center outline-none"
+    >
+      <span
+        aria-hidden="true"
+        className="flex size-5 items-center justify-center rounded-sm border-2 border-border-control bg-surface text-sm group-data-selected:bg-primary group-data-selected:text-on-primary group-data-focus-visible:outline-2 group-data-focus-visible:outline-offset-2 group-data-focus-visible:outline-focus"
+      >
+        <span className="hidden group-data-selected:inline">✓</span>
+      </span>
+    </Checkbox>
+  );
+}
+
+function Tile({ media, ws, words, onTag, selectable, kept }: TileProps) {
   const { t } = useLingui();
   const reason = media.state === "rejected" ? words.reason(media) : null;
   return (
     <div className="flex gap-3 sm:flex-col">
+      {selectable ? <SelectBox /> : null}
       <div className="size-16 shrink-0 overflow-hidden rounded-md bg-surface-sunken sm:aspect-square sm:size-auto">
         {hasThumb(media) ? (
           <img
@@ -209,11 +234,11 @@ function Tile({ media, ws, words, onTag }: TileProps) {
         )}
       </div>
       <div className="flex min-w-0 flex-col gap-1">
-        <span data-testid="tile-name" className="truncate font-medium">
+        <span data-testid="tile-name" className="font-medium wrap-anywhere">
           <Link
             data-testid="tile-link"
             to={`/w/${ws}/media/${media.id}`}
-            className="pointer-coarse:leading-11 text-link underline"
+            className="inline-block min-h-6 max-w-full pointer-coarse:leading-11 text-link underline"
           >
             <DirText>{media.file_name}</DirText>
           </Link>
@@ -226,6 +251,7 @@ function Tile({ media, ws, words, onTag }: TileProps) {
             {reason.words}
           </span>
         )}
+        <KeptWords kept={kept} />
         <span className="flex flex-wrap gap-1">
           {media.tags.map((tag) => (
             <PlainButton
@@ -376,6 +402,7 @@ interface LoadedProps {
   onChange: (filters: Filters) => void;
   loadMore: () => void;
   retry: () => void;
+  selection: SelectionState | null;
 }
 
 function RefreshFailed({ error, retry }: { error: ApiError; retry: () => void }) {
@@ -393,7 +420,7 @@ function RefreshFailed({ error, retry }: { error: ApiError; retry: () => void })
   );
 }
 
-function Loaded({ state, ws, words, filters, onChange, loadMore, retry }: LoadedProps) {
+function Loaded({ state, ws, words, filters, onChange, loadMore, retry, selection }: LoadedProps) {
   const { t } = useLingui();
   const notice = state.refreshFailed ? <RefreshFailed error={state.refreshFailed} retry={retry} /> : null;
   if (state.rows.length === 0)
@@ -416,6 +443,15 @@ function Loaded({ state, ws, words, filters, onChange, loadMore, retry }: Loaded
         items={state.rows}
         layout="grid"
         className={GRID}
+        // The tiles are cached per row; a file's refusal reason lives outside the row, so it re-renders them.
+        dependencies={[selection?.kept]}
+        {...(selection
+          ? {
+              selectionMode: "multiple",
+              selectedKeys: selection.selected,
+              onSelectionChange: selection.choose,
+            }
+          : {})}
       >
         {(media) => (
           <GridListItem
@@ -423,9 +459,16 @@ function Loaded({ state, ws, words, filters, onChange, loadMore, retry }: Loaded
             textValue={media.file_name}
             data-testid="media-tile"
             data-media-id={media.id}
-            className="rounded-md border border-border p-3 outline-offset-2 focus-visible:outline-2 focus-visible:outline-focus"
+            className="rounded-md border border-border p-3 outline-offset-2 focus-visible:outline-2 focus-visible:outline-focus data-selected:border-primary"
           >
-            <Tile media={media} ws={ws} words={words} onTag={(tag) => onChange({ ...filters, tag })} />
+            <Tile
+              media={media}
+              ws={ws}
+              words={words}
+              onTag={(tag) => onChange({ ...filters, tag })}
+              selectable={selection !== null}
+              kept={selection?.kept.get(media.id)}
+            />
           </GridListItem>
         )}
       </GridList>
@@ -506,15 +549,34 @@ const stateName = (state: ListState, filters: Filters) => {
 function MediaLibrary({ ws }: { ws: string }) {
   const [filters, setFilters] = useState(NO_FILTERS);
   const [attempt, setAttempt] = useState(0);
-  const { state, loadMore } = useMediaList(ws, filters, attempt);
+  const { state, loadMore, update } = useMediaList(ws, filters, attempt);
   const words = useWords();
+  const rows = state.status === "ready" ? state.rows : NO_ROWS;
+  const selection = useSelection(rows);
+  const heading = useRef<HTMLHeadingElement>(null);
+  // Editing is allowed for the whole role, so the first row tells whether this caller may select.
+  const selectable = rows[0]?.actions.includes("edit") === true;
   if (state.status === "failed" && state.error.state === "forbidden") return <ForbiddenPage />;
   return (
     <div data-testid="media-state" data-state={stateName(state, filters)} className="flex flex-col gap-5">
-      <h1 data-testid="media-heading" className="font-heading text-2xl">
+      <h1
+        ref={heading}
+        tabIndex={-1}
+        data-testid="media-heading"
+        className="font-heading text-2xl outline-none"
+      >
         <Trans id="media.title">Media</Trans>
       </h1>
       <Toolbar filters={filters} words={words} onChange={setFilters} />
+      {selectable ? (
+        <BulkBar
+          rows={rows}
+          base={`/api/v1/workspaces/${ws}/media`}
+          selection={selection}
+          update={update}
+          heading={heading}
+        />
+      ) : null}
       {state.status === "loading" ? <Loading /> : null}
       {state.status === "failed" ? (
         <Failed error={state.error} retry={() => setAttempt((now) => now + 1)} />
@@ -528,6 +590,7 @@ function MediaLibrary({ ws }: { ws: string }) {
           onChange={setFilters}
           loadMore={loadMore}
           retry={() => setAttempt((now) => now + 1)}
+          selection={selectable ? selection : null}
         />
       ) : null}
     </div>

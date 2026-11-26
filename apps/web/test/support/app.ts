@@ -110,9 +110,10 @@ export interface Api {
   mediaList?: (query: URLSearchParams, workspace: string) => Response | Promise<Response>;
   medium?: Answer;
   mediaFit?: (query: URLSearchParams) => Response | Promise<Response>;
-  mediaPatch?: Answer;
-  mediaDelete?: Answer;
+  mediaPatch?: MediumAnswer;
+  mediaDelete?: MediumAnswer;
 }
+type MediumAnswer = (id: string, body: unknown) => Response | Promise<Response>;
 
 export const mediaRow = (change: Record<string, unknown> = {}) => ({
   id: "0190a000-0000-7000-8000-0000000000f1",
@@ -130,6 +131,7 @@ export const mediaRow = (change: Record<string, unknown> = {}) => ({
   source: "upload",
   created_at: "2026-11-22T10:00:00.000Z",
   derivatives: { thumb: "ready", stripped: "ready" },
+  actions: ["edit", "delete"],
   ...change,
 });
 
@@ -206,11 +208,12 @@ export const channelPage = (
   actions: string[] = ["connect"],
 ) => json({ data: rows, meta: { next_cursor: nextCursor, actions } });
 
-const oneMedium = () => json({ data: { ...mediaRow(), post_count: 0, actions: ["edit", "delete"] } });
+const oneMedium = () => json({ data: { ...mediaRow(), post_count: 0 } });
+const noContent = () => new Response(null, { status: 204 });
 
-function oneMediumAnswer(api: Api, method: string): Answer | undefined {
-  if (method === "PATCH") return api.mediaPatch ?? oneMedium;
-  if (method === "DELETE") return api.mediaDelete ?? (() => new Response(null, { status: 204 }));
+function oneMediumAnswer(api: Api, method: string, id: string, body: unknown): Answer | undefined {
+  if (method === "PATCH") return () => (api.mediaPatch ?? oneMedium)(id, body);
+  if (method === "DELETE") return () => (api.mediaDelete ?? noContent)(id, body);
   return method === "GET" ? (api.medium ?? oneMedium) : undefined;
 }
 
@@ -219,8 +222,11 @@ function mediaAnswers(
   url: URL,
   method: string,
   [workspace, rest]: [string, string],
+  body?: BodyInit | null,
 ): Answer | undefined {
-  if (/^media\/[^/]+$/.test(rest)) return oneMediumAnswer(api, method);
+  const one = /^media\/([^/]+)$/.exec(rest);
+  const sent: unknown = typeof body === "string" ? JSON.parse(body) : undefined;
+  if (one) return oneMediumAnswer(api, method, one[1] ?? "", sent);
   if (method !== "GET") return undefined;
   if (rest === "media") return () => (api.mediaList ?? (() => mediaPage([])))(url.searchParams, workspace);
   if (/^media\/[^/]+\/fit$/.test(rest))
@@ -228,13 +234,13 @@ function mediaAnswers(
   return undefined;
 }
 
-function hubAnswers(api: Api, url: URL, method: string): Answer | undefined {
+function hubAnswers(api: Api, url: URL, method: string, body?: BodyInit | null): Answer | undefined {
   const [, workspace = "", rest = ""] = /^\/api\/v1\/workspaces\/([^/]+)\/(.*)$/.exec(url.pathname) ?? [];
   if (workspace === "") return undefined;
   if (method === "GET" && rest === "channels") {
     return () => (api.channelList ?? (() => channelPage([channelRow()])))(url.searchParams, workspace);
   }
-  if (rest.startsWith("media")) return mediaAnswers(api, url, method, [workspace, rest]);
+  if (rest.startsWith("media")) return mediaAnswers(api, url, method, [workspace, rest], body);
   if (method === "GET" && rest === "providers") return api.providers ?? (() => json({ data: PROVIDERS }));
   if (method === "POST" && /^channels\/[^/]+\/check$/.test(rest)) {
     return api.check ?? (() => json({ data: channelRow({ health_checked_at: "2026-11-22T11:00:00.000Z" }) }));
@@ -499,7 +505,7 @@ export function stubApi(api: Api = {}) {
       answers[pathname] ??
       membersAnswers(api, pathname, method) ??
       channelAnswers(api, pathname, method) ??
-      hubAnswers(api, url, method) ??
+      hubAnswers(api, url, method, init?.body) ??
       adminAnswers(api, pathname, method);
     return Promise.resolve(answer ? answer() : refusal("not_found", 404));
   });

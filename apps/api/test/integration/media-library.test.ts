@@ -355,11 +355,19 @@ describe("what the caller may do with one medium", () => {
     ["editor", "pending_upload", ["edit"]],
     ["approver", "ready", []],
     ["viewer", "ready", []],
-  ])("the %s on a %s medium is offered %j (floor)", async (who, state, actions) => {
-    const id = await plant({ state });
-    const answer = await send(user(who), "GET", `${base(ws)}/${id}`);
-    expect((await dataOf(answer)).actions).toEqual(actions);
-  });
+  ])(
+    "the %s on a %s medium is offered %j in its detail and its list row (floor)",
+    async (who, state, actions) => {
+      const tag = `actions-${who}-${state}`;
+      const id = await plant({ state, tags: [tag] });
+      const answer = await send(user(who), "GET", `${base(ws)}/${id}`);
+      expect((await dataOf(answer)).actions).toEqual(actions);
+      const listed = (await (await send(user(who), "GET", `${base(ws)}?tag=${tag}`)).json()) as {
+        data: Array<{ id: string; actions: string[] }>;
+      };
+      expect(listed.data.find((row) => row.id === id)?.actions).toEqual(actions);
+    },
+  );
 });
 
 describe("a ready file in the workspace is answered as a duplicate, and deleting it frees its hash", () => {

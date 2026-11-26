@@ -2446,6 +2446,90 @@ msgid "media.delete.not_now"
 msgstr "This file can be deleted once it is ready."
 
 #. js-lingui-explicit-id
+msgid "media.bulk.hint"
+msgstr "Select files to tag or delete several at once."
+
+#. js-lingui-explicit-id
+msgid "media.bulk.selected"
+msgstr "{count, plural, one {{shown} file selected} other {{shown} files selected}}"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.too_many"
+msgstr "You can select at most 100 files at once."
+
+#. js-lingui-explicit-id
+msgid "media.bulk.tag"
+msgstr "Add a tag"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.delete"
+msgstr "Delete"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.clear"
+msgstr "Clear selection"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.offline"
+msgstr "You are offline."
+
+#. js-lingui-explicit-id
+msgid "media.bulk.tag_title"
+msgstr "Add a tag to the selected files"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.tag_label"
+msgstr "Tag to add"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.tag_confirm"
+msgstr "Add tag"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.tag_running"
+msgstr "Adding the tag…"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.delete_title"
+msgstr "Delete the selected files?"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.delete_running"
+msgstr "Deleting the files…"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.delete_impact"
+msgstr "{count, plural, one {{shown} file leaves the library and is deleted. This cannot be undone.} other {{shown} files leave the library and are deleted. This cannot be undone.}}"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.progress"
+msgstr "Done {done} of {total}"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.stop"
+msgstr "Stop"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.stopping"
+msgstr "Stopping after the current file."
+
+#. js-lingui-explicit-id
+msgid "media.bulk.network"
+msgstr "Not sent: the connection dropped. Try again when online."
+
+#. js-lingui-explicit-id
+msgid "media.bulk.deleted"
+msgstr "{count, plural, one {{shown} file deleted} other {{shown} files deleted}}"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.tagged"
+msgstr "{count, plural, one {Tag added to {shown} file} other {Tag added to {shown} files}}"
+
+#. js-lingui-explicit-id
+msgid "media.bulk.kept"
+msgstr "{count, plural, one {{shown} file was not changed. It stays selected and says why.} other {{shown} files were not changed. They stay selected and say why.}}"
+
+#. js-lingui-explicit-id
 msgid "media.delete.in_use.what"
 msgstr "This file is in use"
 

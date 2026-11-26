@@ -27,14 +27,34 @@ test("the palette, a dialog and a route change put focus where the screen says",
   await expect(page.locator("h1")).toBeFocused();
 });
 
-async function tabTo(page: Page, id: string): Promise<void> {
+async function tabTo(page: Page, id: string, key = "Tab"): Promise<void> {
   for (let presses = 0; presses <= 30; presses += 1) {
     const active = await page.evaluate(() => document.activeElement?.getAttribute("data-testid") ?? null);
     if (active === id) return;
-    await page.keyboard.press("Tab");
+    await page.keyboard.press(key);
   }
-  throw new Error(`${id} is not reachable by Tab`);
+  throw new Error(`${id} is not reachable by ${key}`);
 }
+
+test("several media files are selected and deleted with the keyboard alone", async ({ browser }) => {
+  const screen = SCREENS.find((entry) => entry.id === "media");
+  if (!screen) throw new Error("no media screen");
+  await inPage(browser, { audience: "founder", locale: "en", theme: "light" }, async (page) => {
+    await openScreen(page, screen, browser);
+    const keys = page.keyboard;
+    await tabTo(page, "media-tile");
+    await keys.press("Space");
+    await keys.press("ControlOrMeta+A");
+    await expect(page.locator('[data-testid="media-tile"][aria-selected="true"]')).toHaveCount(3);
+    await tabTo(page, "media-bulk-delete", "Shift+Tab");
+    await keys.press("Enter");
+    await expect(page.getByTestId("bulk-delete-cancel")).toBeFocused();
+    await tabTo(page, "bulk-delete-confirm");
+    await keys.press("Enter");
+    await expect(page.getByTestId("media-heading")).toBeFocused();
+    await expect(page.getByTestId("media-tile")).toHaveCount(0);
+  });
+});
 
 test("a media file is renamed and deleted with the keyboard alone", async ({ browser }) => {
   const screen = SCREENS.find((entry) => entry.id === "media-detail");

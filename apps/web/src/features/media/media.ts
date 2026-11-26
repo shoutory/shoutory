@@ -17,6 +17,7 @@ export const mediaSchema = z.object({
   reject_reason: z.string().nullable(),
   tags: z.array(z.string()),
   derivatives: z.record(z.string(), z.string()),
+  actions: z.array(z.string()),
 });
 export type Media = z.infer<typeof mediaSchema>;
 
@@ -27,9 +28,49 @@ export const detailSchema = mediaSchema.extend({
   duration_ms: z.number().nullable(),
   created_at: z.iso.datetime({ offset: true }),
   post_count: z.number().int(),
-  actions: z.array(z.string()),
 });
 export type Detail = z.infer<typeof detailSchema>;
+
+// The server's bounds, checked first so a long name or tag is named before anything is sent.
+export const NAME_MAX = 255;
+export const TAG_MAX = 64;
+export const TAGS_MAX = 32;
+export const CONTROL = /\p{Cc}/u;
+export const TAG_INVALID = msg({
+  id: "media.edit.tag_invalid",
+  message: "Use at most 64 characters, on one line.",
+});
+export const TAGS_FULL = msg({ id: "media.edit.tags_full", message: "A file can have at most 32 tags." });
+export const NOT_READY = msg({
+  id: "media.delete.not_now",
+  message: "This file can be deleted once it is ready.",
+});
+
+type Refusal = "refused" | "in_use" | "not_deletable" | "forbidden" | "failed";
+
+export const DELETE_WHAT: Record<Exclude<Refusal, "refused">, MessageDescriptor> = {
+  in_use: msg({ id: "media.delete.in_use.what", message: "This file is in use" }),
+  not_deletable: msg({ id: "media.delete.not_deletable.what", message: "This file cannot be deleted now" }),
+  forbidden: msg({ id: "media.delete.forbidden.what", message: "You cannot delete this file" }),
+  failed: msg({ id: "media.delete.failed.what", message: "We could not delete this file" }),
+};
+
+export const SAVE_WHAT: Record<"refused" | "forbidden" | "failed", MessageDescriptor> = {
+  refused: msg({ id: "media.edit.refused.what", message: "The name or a tag was not accepted" }),
+  forbidden: msg({ id: "media.edit.forbidden.what", message: "You cannot change this file" }),
+  failed: msg({ id: "media.edit.failed.what", message: "We could not save your changes" }),
+};
+
+export function deleteRefusal(error: ApiError): keyof typeof DELETE_WHAT {
+  const reason = error.status === 409 ? error.details?.reason : undefined;
+  if (reason === "in_use" || reason === "not_deletable") return reason;
+  return error.state === "forbidden" ? "forbidden" : "failed";
+}
+
+export function saveRefusal(error: ApiError): keyof typeof SAVE_WHAT {
+  if (error.code === "validation_failed") return "refused";
+  return error.state === "forbidden" ? "forbidden" : "failed";
+}
 
 export const fitSchema = z.object({
   data: z.array(z.object({ channel_id: z.uuid(), ok: z.boolean(), reason: z.string().optional() })),
