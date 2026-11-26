@@ -134,6 +134,54 @@ msgid "shell.sign_out"
 msgstr "Sign out"
 
 #. js-lingui-explicit-id
+msgid "shell.shortcuts.open"
+msgstr "Keyboard shortcuts"
+
+#. js-lingui-explicit-id
+msgid "shell.shortcuts.title"
+msgstr "Keyboard shortcuts"
+
+#. js-lingui-explicit-id
+msgid "shell.shortcuts.switch"
+msgstr "Switch workspace"
+
+#. js-lingui-explicit-id
+msgid "session.end.title"
+msgstr "Your session is about to end"
+
+#. js-lingui-explicit-id
+msgid "session.end.body"
+msgstr "You will be signed out at {at}. Changes you have not saved are not kept."
+
+#. js-lingui-explicit-id
+msgid "session.end.capped"
+msgstr "You will be signed out at {at}, and this session cannot be extended. Save your work, then sign in again."
+
+#. js-lingui-explicit-id
+msgid "session.end.stay"
+msgstr "Stay signed in"
+
+#. js-lingui-explicit-id
+msgid "session.end.staying"
+msgstr "Keeping you signed in"
+
+#. js-lingui-explicit-id
+msgid "session.end.sign_in"
+msgstr "Sign in again"
+
+#. js-lingui-explicit-id
+msgid "session.end.close"
+msgstr "Close"
+
+#. js-lingui-explicit-id
+msgid "session.end.failed.what"
+msgstr "We could not keep you signed in"
+
+#. js-lingui-explicit-id
+msgid "session.end.failed.meaning"
+msgstr "Your session still ends at the time above."
+
+#. js-lingui-explicit-id
 msgid "shell.signing_out"
 msgstr "Signing out"
 

@@ -38,6 +38,7 @@ import {
   StartupFailurePage,
 } from "./pages/system-pages";
 import { SESSION_ROUTE_ID, sessionGuard } from "./session/session";
+import { SessionEnd } from "./session/session-end";
 import { GeneralPage } from "./settings/general";
 import { MembersPage } from "./settings/members";
 import { Shell, StartPage, WorkspaceHome } from "./shell/shell";
@@ -197,7 +198,12 @@ export const routes: RouteObject[] = [
       {
         id: SESSION_ROUTE_ID,
         loader: sessionGuard,
-        element: <Outlet />,
+        element: (
+          <>
+            <Outlet />
+            <SessionEnd />
+          </>
+        ),
         hydrateFallbackElement: <Pending />,
         children: [
           {

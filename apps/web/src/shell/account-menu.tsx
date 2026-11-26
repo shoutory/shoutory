@@ -1,5 +1,5 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Dialog, DialogTrigger, Popover } from "react-aria-components";
 import { Link, useNavigate, useRouteLoaderData } from "react-router";
 import { z } from "zod";
@@ -10,13 +10,10 @@ import { DirText } from "../ui/dir-text";
 import { ErrorPanel } from "../ui/error-panel";
 import { forgetWorkspace } from "./last-workspace";
 import { useOnline } from "./offline-banner";
+import { ShortcutsDialog } from "./shortcuts";
 
-export function AccountMenu() {
-  const { t } = useLingui();
-  const session = useRouteLoaderData<Session>(SESSION_ROUTE_ID);
-  const online = useOnline();
+function useSignOut() {
   const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [failure, setFailure] = useState<ApiError | null>(null);
 
@@ -44,48 +41,72 @@ export function AccountMenu() {
       await navigate("/sign-in");
     }
   }
+  return { signOut, signingOut, failure };
+}
 
+export function AccountMenu() {
+  const { t } = useLingui();
+  const session = useRouteLoaderData<Session>(SESSION_ROUTE_ID);
+  const online = useOnline();
+  const [open, setOpen] = useState(false);
+  const [shortcuts, setShortcuts] = useState(false);
+  const opener = useRef<HTMLButtonElement>(null);
+  const { signOut, signingOut, failure } = useSignOut();
   const unavailable = signingOut || !online;
   const reason = signingOut
     ? t({ id: "shell.signing_out", message: "Signing out" })
     : t({ id: "shell.sign_out_offline", message: "You are offline. Signing out needs the server." });
   return (
-    <DialogTrigger isOpen={open} onOpenChange={setOpen}>
-      <Button>
-        <Trans id="shell.account">Account</Trans>
-      </Button>
-      <Popover className="rounded-md border border-border bg-surface p-5 shadow-lg">
-        <Dialog
-          aria-label={t({ id: "shell.account", message: "Account" })}
-          className="flex flex-col gap-3 outline-none"
-        >
-          {session ? <DirText dir="ltr">{session.user.email}</DirText> : null}
-          <Link to="/account/profile" onClick={() => setOpen(false)} className="text-link underline">
-            <Trans id="shell.profile">Profile</Trans>
-          </Link>
-          <Link to="/account/security" onClick={() => setOpen(false)} className="text-link underline">
-            <Trans id="shell.security">Security</Trans>
-          </Link>
-          <Link to="/about" onClick={() => setOpen(false)} className="text-link underline">
-            <Trans id="system.about.link">About Shoutory</Trans>
-          </Link>
-          <Button
-            aria-disabled={unavailable}
-            busy={signingOut}
-            {...(unavailable ? { reason } : {})}
-            onPress={signOut}
+    <>
+      <DialogTrigger isOpen={open} onOpenChange={setOpen}>
+        <Button data-testid="account-menu" ref={opener}>
+          <Trans id="shell.account">Account</Trans>
+        </Button>
+        <Popover className="rounded-md border border-border bg-surface p-5 shadow-lg">
+          <Dialog
+            aria-label={t({ id: "shell.account", message: "Account" })}
+            className="flex flex-col gap-3 outline-none"
           >
-            <Trans id="shell.sign_out">Sign out</Trans>
-          </Button>
-          {failure ? (
-            <ErrorPanel
-              what={<Trans id="shell.sign_out_failed.what">We could not sign you out</Trans>}
-              meaning={<Trans id="shell.sign_out_failed.meaning">You are still signed in.</Trans>}
-              error={failure}
-            />
-          ) : null}
-        </Dialog>
-      </Popover>
-    </DialogTrigger>
+            {session ? <DirText dir="ltr">{session.user.email}</DirText> : null}
+            <Link to="/account/profile" onClick={() => setOpen(false)} className="text-link underline">
+              <Trans id="shell.profile">Profile</Trans>
+            </Link>
+            <Link to="/account/security" onClick={() => setOpen(false)} className="text-link underline">
+              <Trans id="shell.security">Security</Trans>
+            </Link>
+            <Link to="/about" onClick={() => setOpen(false)} className="text-link underline">
+              <Trans id="system.about.link">About Shoutory</Trans>
+            </Link>
+            <Button
+              data-testid="shortcuts-open"
+              onPress={() => {
+                setOpen(false);
+                // The list gives focus back to what held it when it opened; the menu button inside goes away.
+                opener.current?.focus();
+                setShortcuts(true);
+              }}
+            >
+              <Trans id="shell.shortcuts.open">Keyboard shortcuts</Trans>
+            </Button>
+            <Button
+              aria-disabled={unavailable}
+              busy={signingOut}
+              {...(unavailable ? { reason } : {})}
+              onPress={signOut}
+            >
+              <Trans id="shell.sign_out">Sign out</Trans>
+            </Button>
+            {failure ? (
+              <ErrorPanel
+                what={<Trans id="shell.sign_out_failed.what">We could not sign you out</Trans>}
+                meaning={<Trans id="shell.sign_out_failed.meaning">You are still signed in.</Trans>}
+                error={failure}
+              />
+            ) : null}
+          </Dialog>
+        </Popover>
+      </DialogTrigger>
+      <ShortcutsDialog isOpen={shortcuts} onOpenChange={setShortcuts} />
+    </>
   );
 }

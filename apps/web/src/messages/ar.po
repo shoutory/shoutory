@@ -132,6 +132,54 @@ msgid "shell.sign_out"
 msgstr "تسجيل الخروج"
 
 #. js-lingui-explicit-id
+msgid "shell.shortcuts.open"
+msgstr "اختصارات لوحة المفاتيح"
+
+#. js-lingui-explicit-id
+msgid "shell.shortcuts.title"
+msgstr "اختصارات لوحة المفاتيح"
+
+#. js-lingui-explicit-id
+msgid "shell.shortcuts.switch"
+msgstr "تبديل مساحة العمل"
+
+#. js-lingui-explicit-id
+msgid "session.end.title"
+msgstr "جلستك على وشك الانتهاء"
+
+#. js-lingui-explicit-id
+msgid "session.end.body"
+msgstr "سيتم تسجيل خروجك في {at}. التغييرات التي لم تحفظها لن تبقى."
+
+#. js-lingui-explicit-id
+msgid "session.end.capped"
+msgstr "سيتم تسجيل خروجك في {at}، ولا يمكن تمديد هذه الجلسة. احفظ عملك، ثم سجّل الدخول من جديد."
+
+#. js-lingui-explicit-id
+msgid "session.end.stay"
+msgstr "البقاء مسجّلًا"
+
+#. js-lingui-explicit-id
+msgid "session.end.staying"
+msgstr "جارٍ إبقاؤك مسجّلًا"
+
+#. js-lingui-explicit-id
+msgid "session.end.sign_in"
+msgstr "تسجيل الدخول من جديد"
+
+#. js-lingui-explicit-id
+msgid "session.end.close"
+msgstr "إغلاق"
+
+#. js-lingui-explicit-id
+msgid "session.end.failed.what"
+msgstr "تعذّر إبقاؤك مسجّلًا"
+
+#. js-lingui-explicit-id
+msgid "session.end.failed.meaning"
+msgstr "ما زالت جلستك تنتهي في الوقت المذكور أعلاه."
+
+#. js-lingui-explicit-id
 msgid "shell.signing_out"
 msgstr "جارٍ تسجيل الخروج"
 

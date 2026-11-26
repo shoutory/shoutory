@@ -65,7 +65,7 @@ for (const locale of LOCALES) {
           await openScreen(page, screen, browser);
           await dialog.open(page, (await qualityRun(browser)).context);
           await expect(
-            page.getByRole("dialog", { name: titled(message(dialog.titleId, locale)) }),
+            page.getByRole(dialog.role ?? "dialog", { name: titled(message(dialog.titleId, locale)) }),
           ).toBeVisible();
           await expectCell(page, locale, theme);
           expect(await violations(page)).toEqual([]);

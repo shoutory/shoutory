@@ -7,6 +7,7 @@ export function Dialog({
   isOpen,
   onOpenChange,
   locked = false,
+  role = "dialog",
 }: {
   title: ReactNode;
   children: ReactNode;
@@ -14,6 +15,8 @@ export function Dialog({
   onOpenChange: (open: boolean) => void;
   /** While work runs inside, neither Escape nor a click outside closes the dialog. */
   locked?: boolean;
+  /** `alertdialog` when the dialog asks for an answer before something ends. */
+  role?: "dialog" | "alertdialog";
 }) {
   return (
     <ModalOverlay
@@ -24,7 +27,7 @@ export function Dialog({
       className="fixed inset-0 z-40 flex items-end justify-center bg-text/40 md:items-center"
     >
       <Modal className="w-full rounded-t-lg bg-surface p-6 shadow-lg outline-none md:max-w-lg md:rounded-lg">
-        <AriaDialog className="flex flex-col gap-5 outline-none">
+        <AriaDialog role={role} className="flex flex-col gap-5 outline-none">
           <Heading slot="title" className="font-heading text-xl">
             {title}
           </Heading>

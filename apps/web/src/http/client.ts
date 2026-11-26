@@ -52,6 +52,7 @@ export interface RequestInit {
   /** `false`: the answer has no `{data}` envelope (a library-forwarded one). */
   envelope?: boolean;
   idempotencyKey?: string;
+  headers?: Readonly<Record<string, string>>;
   /** For a call that sends a file: a large one needs longer than the default on a slow link. */
   timeoutMs?: number;
 }
@@ -75,6 +76,7 @@ async function send(path: string, init: RequestInit): Promise<Response> {
       ...(document.documentElement.lang ? { "Accept-Language": document.documentElement.lang } : {}),
       ...(hasBody ? { "Content-Type": file ? "application/octet-stream" : "application/json" } : {}),
       ...(init.idempotencyKey ? { "Idempotency-Key": init.idempotencyKey } : {}),
+      ...init.headers,
     },
     body: file ?? (hasBody ? JSON.stringify(init.body) : null),
     // The same signal also ends a stalled body read, so the limit covers the whole call.

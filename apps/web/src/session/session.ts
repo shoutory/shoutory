@@ -18,6 +18,10 @@ export type Session = z.infer<typeof sessionSchema>;
 
 export const readSession = () => request(sessionSchema, "/api/auth/get-session");
 
+/** Reads when the session ends without extending it: only the person's own activity may do that. */
+export const peekSession = () =>
+  request(sessionSchema, "/api/auth/get-session", { headers: { "X-Shoutory-Session-Peek": "1" } });
+
 export const SESSION_ROUTE_ID = "session";
 
 export async function sessionGuard({ request: navigation }: LoaderFunctionArgs) {

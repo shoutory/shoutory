@@ -6,7 +6,7 @@ import { SCREENS } from "../support/screens";
 
 // A real browser, because the library may drop an attribute a unit test cannot see. Focus moves after the page has
 // changed, so each check waits for it instead of reading it once.
-test("the palette, a dialog and a route change put focus where the screen says", async ({ page }) => {
+test("the palette, dialogs and a route change put focus where the screen says", async ({ page }) => {
   const { workspace } = await loadFounder();
   await page.goto(`/w/${workspace.id}`);
   await page.getByTestId("workspace-name").waitFor();
@@ -22,6 +22,14 @@ test("the palette, a dialog and a route change put focus where the screen says",
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toBeHidden();
   await expect(page.getByTestId("invite-open")).toBeFocused();
+
+  // The menu that opens the shortcuts list closes as the list opens, so focus goes back to the Account button.
+  await page.getByTestId("account-menu").click();
+  await page.getByTestId("shortcuts-open").press("Enter");
+  await expect(page.locator('[role="dialog"]:focus-within')).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toBeHidden();
+  await expect(page.getByTestId("account-menu")).toBeFocused();
 
   await page.locator(`a[href$="/settings/general"]`).first().click();
   await expect(page.locator("h1")).toBeFocused();

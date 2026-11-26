@@ -118,6 +118,45 @@ describe("an over-cap cookie (security floor)", () => {
   }, 30_000);
 });
 
+describe("a read that is not the person's activity (security floor)", () => {
+  const PEEK = { "x-shoutory-session-peek": "1" };
+  const expiry = async (email: string) => (await sessionRow(email))?.expires_at.getTime() ?? 0;
+
+  it.each([
+    ["a peek leaves the expiry where it was", PEEK, false],
+    ["a plain read rolls it", {}, true],
+  ])(
+    "%s",
+    async (_name, extra, rolled) => {
+      const email = `peek-${rolled ? "plain" : "peek"}-1@example.test`;
+      const cookie = await fx.signedIn(email);
+      await pin(email, new Date(Date.now() - 2 * DAY));
+      await fx.admin((client) =>
+        client.query(
+          `UPDATE auth.session SET expires_at = now() + interval '1 hour'
+         WHERE user_id = (SELECT id FROM auth."user" WHERE email = $1)`,
+          [email],
+        ),
+      );
+      const before = await expiry(email);
+      const answer = await fx.request("/api/auth/get-session", { headers: { cookie, ...extra } });
+      expect(answer.status).toBe(200);
+      expect((await expiry(email)) > before).toBe(rolled);
+    },
+    30_000,
+  );
+
+  it("a peek over the cap is refused and deletes the session", async () => {
+    const email = "peek-cap-1@example.test";
+    const cookie = await fx.signedIn(email);
+    const id = (await sessionRow(email))?.id;
+    await pin(email, new Date(Date.now() - 31 * DAY));
+    const answer = await fx.request("/api/auth/get-session", { headers: { cookie, ...PEEK } });
+    expect(answer.status).toBe(401);
+    expect(await stored(id)).toBe(false);
+  }, 30_000);
+});
+
 describe("what a session near the cap reports (security floor)", () => {
   it("a refreshed session's expiry is clamped to the cap, and the list drops a session over it", async () => {
     const email = "cap-report-1@example.test";

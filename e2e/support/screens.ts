@@ -21,6 +21,7 @@ export interface Dialog {
   readonly screen: string;
   readonly titleId: string;
   readonly open: (page: Page, context: Context) => Promise<void>;
+  readonly role?: "alertdialog";
 }
 
 export interface ErrorPage {
@@ -360,6 +361,33 @@ export const DIALOGS: readonly Dialog[] = [
     open: async (page) => {
       await page.getByTestId("detail-delete").click();
       await dialog(page);
+    },
+  },
+  {
+    id: "shortcuts",
+    screen: "workspace",
+    titleId: "shell.shortcuts.title",
+    open: async (page) => {
+      await page.getByTestId("account-menu").click();
+      await page.getByTestId("shortcuts-open").click();
+      await dialog(page);
+    },
+  },
+  {
+    // The page reads a session that ends inside the warning time, so the warning opens at once after a reload.
+    id: "session-end",
+    screen: "workspace",
+    titleId: "session.end.title",
+    role: "alertdialog",
+    open: async (page) => {
+      await page.route("**/api/auth/get-session", async (route) => {
+        const answer = await route.fetch();
+        const body = (await answer.json()) as { data: { session: { expiresAt: string } } };
+        body.data.session.expiresAt = new Date(Date.now() + 4 * 60_000).toISOString();
+        await route.fulfill({ response: answer, json: body });
+      });
+      await page.reload();
+      await page.getByRole("alertdialog").waitFor();
     },
   },
   {

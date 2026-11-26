@@ -29,9 +29,12 @@ export async function readSession(
   now: () => number,
 ): Promise<ResolvedSession | null> {
   try {
+    // A page checking when its session ends is not the person's activity, so that check must not extend it.
+    const peek = headers.get("x-shoutory-session-peek") === "1";
     const found = await library.api.getSession({
       headers: withoutForgedSession(headers),
       returnHeaders: true,
+      ...(peek ? { query: { disableRefresh: true } } : {}),
     });
     if (!found.response) return null;
     const { session, user } = found.response;
