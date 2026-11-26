@@ -52,6 +52,13 @@ export async function activateLocale(locale: Locale) {
   applyLocale(locale);
 }
 
+// An Arabic or Persian keyboard types its own digits, which neither `\d` nor NFKC turns into ASCII; codes are ASCII.
+export function cleanCode(text: string) {
+  return text
+    .replaceAll(/\s/g, "")
+    .replaceAll(/[٠-٩۰-۹]/g, (digit) => String((digit.codePointAt(0) ?? 0) & 0xf));
+}
+
 // Digits and calendar are always explicit, so a locale's own default (Arabic-Indic, Hijri) never leaks in.
 const tagOf = ({ locale, digits }: FormatPrefs) => `${locale}-u-nu-${digits}-ca-gregory`;
 

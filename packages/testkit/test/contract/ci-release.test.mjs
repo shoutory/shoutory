@@ -229,7 +229,10 @@ test("nightly takes its tags from release-tags.mjs with the run date and pushes 
     /stable|beta|latest|v?\d+\.\d+\.\d+/,
     "a version tag is pushed",
   );
-  assert.match(JSON.stringify(push.with.build_args ?? push.with["build-args"] ?? ""), /nightly/);
+  const args = String(push.with["build-args"] ?? "");
+  assert.match(args, /^SHOUTORY_RELEASE_CHANNEL=nightly$/m);
+  // A nightly image has no release tag, so its About page links the commit it was built from.
+  assert.match(args, /^SHOUTORY_SOURCE_COMMIT=\$\{\{ github\.sha \}\}$/m);
 });
 
 test("no run step in release.yml or nightly.yml holds an expression", () => {

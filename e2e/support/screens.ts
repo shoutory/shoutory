@@ -229,6 +229,7 @@ export const SCREENS: readonly Screen[] = [
   signedOut("reset", "/auth/reset", `/auth/reset#${LINK_PART}`),
   signedOut("invite", "/invite/:token", `/invite/${LINK_PART}`),
   signedOut("session-expired", "/session-expired"),
+  signedOut("about", "/about"),
   signedOut("not-found", "*", "/no-such-screen"),
   founder("start", "/", () => "/"),
   founder("profile", "/account/profile", () => "/account/profile"),

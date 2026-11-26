@@ -192,6 +192,17 @@ describe("the two-factor setup steps", () => {
   });
 });
 
+describe("the first code typed with Arabic digits", () => {
+  it("goes to the server in ASCII digits", async () => {
+    const { host, stub } = await toQr();
+    fill(host, "code", "١٢٣ ٤٥٦");
+    click(byText(host, "button", "Turn on"));
+    await settle();
+    const [, init] = callsTo(stub, "verify-totp")[0] ?? [];
+    expect(JSON.parse(String(init?.body))).toEqual({ code: "123456" });
+  });
+});
+
 describe("the two-factor setup failures", () => {
   const NO_SECRET = "otpauth://totp/Shoutory:x?issuer=Shoutory";
   it.each([

@@ -4,6 +4,7 @@ import { Form } from "react-aria-components";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { z } from "zod";
 import { request } from "../http/client";
+import { cleanCode } from "../i18n/i18n";
 import { safeReturnTo } from "../session/return-to";
 import { Button } from "../ui/button";
 import { ErrorPanel } from "../ui/error-panel";
@@ -23,7 +24,7 @@ export function MfaPage() {
   const verify = useAction(
     async () => {
       const path = recovery ? "/api/auth/two-factor/verify-backup-code" : "/api/auth/two-factor/verify-totp";
-      await request(verified, path, { method: "POST", body: { code: code.trim() }, envelope: false });
+      await request(verified, path, { method: "POST", body: { code: cleanCode(code) }, envelope: false });
       await navigate(safeReturnTo(params.get("return-to")));
     },
     () => setCode(""),

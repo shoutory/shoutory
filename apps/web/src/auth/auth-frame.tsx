@@ -1,5 +1,6 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import { type ReactNode, type Ref, useEffect, useRef, useState } from "react";
+import { Link } from "react-router";
 import { ApiError } from "../http/client";
 import { useOnline } from "../shell/offline-banner";
 import { Button } from "../ui/button";
@@ -30,6 +31,9 @@ export function AuthFrame({
         {title}
       </h1>
       {children}
+      <Link to="/about" className="min-h-6 pointer-coarse:min-h-11 self-start text-link underline">
+        <Trans id="system.about.link">About Shoutory</Trans>
+      </Link>
     </main>
   );
 }

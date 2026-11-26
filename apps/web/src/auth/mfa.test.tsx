@@ -52,6 +52,14 @@ describe("the challenge failures", () => {
   });
 });
 
+describe("a code typed with Arabic digits", () => {
+  it("goes to the server in ASCII digits", async () => {
+    const { stub } = await verify("/mfa", {}, "١٢٣ ۴۵۶");
+    const [, init] = callsTo(stub, "verify-totp")[0] ?? [];
+    expect(JSON.parse(String(init?.body))).toEqual({ code: "123456" });
+  });
+});
+
 describe("the recovery code", () => {
   it("is a toggle: the code goes to the recovery route instead of the TOTP route", async () => {
     const stub = stubApi();

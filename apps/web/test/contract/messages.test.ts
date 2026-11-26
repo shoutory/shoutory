@@ -41,6 +41,9 @@ function catalog(po: string) {
 const missingIn = (ids: Iterable<string>, messages: Map<string, string>) =>
   [...ids].filter((id) => !messages.has(id));
 
+const untranslated = (source: Map<string, string>, target: Map<string, string>) =>
+  [...target].filter(([id, text]) => text === "" || text === source.get(id)).map(([id]) => id);
+
 // A plural message lists its forms as `zero {..} one {..}`; Arabic needs all six.
 function lackingPluralForms(messages: Map<string, string>) {
   return [...messages].flatMap(([id, text]) => {
@@ -113,6 +116,18 @@ describe("catalog contents", () => {
     );
     expect(used).toEqual(["a.present", "a.missing"]);
     expect(missingIn(used, catalog('msgid "a.present"\nmsgstr "x"'))).toEqual(["a.missing"]);
+  });
+
+  it("every ar message is written and differs from its en text", () => {
+    expect(untranslated(en, ar)).toEqual([]);
+  });
+
+  it.each([
+    ["an empty message", 'msgid "a.b"\nmsgstr ""', ["a.b"]],
+    ["a message copied from en", 'msgid "a.b"\nmsgstr "Save"', ["a.b"]],
+    ["a translated message", 'msgid "a.b"\nmsgstr "حفظ"', []],
+  ])("the translation check on %s", (_name, po, expected) => {
+    expect(untranslated(catalog('msgid "a.b"\nmsgstr "Save"'), catalog(po))).toEqual(expected);
   });
 
   it("every plural message in the ar catalog carries zero, one, two, few, many and other", () => {

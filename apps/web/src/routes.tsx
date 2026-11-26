@@ -29,6 +29,7 @@ import { MediaLibraryPage } from "./features/media/media-library";
 import { ApiError } from "./http/client";
 import { ClientsPage } from "./org/clients";
 import { type PageHandle, usePageTitleAndFocus } from "./page-title";
+import { AboutPage } from "./pages/about";
 import {
   ForbiddenPage,
   MaintenancePage,
@@ -51,6 +52,7 @@ import { Button } from "./ui/button";
 
 const TITLES = {
   signIn: msg({ id: "system.sign_in.title", message: "Sign in" }),
+  about: msg({ id: "system.about.title", message: "About Shoutory" }),
   mfa: msg({ id: "auth.mfa.title", message: "Two-step verification" }),
   twoFactorSetup: msg({ id: "auth.setup.title", message: "Set up two-step verification" }),
   profile: msg({ id: "account.profile.title", message: "Profile" }),
@@ -191,6 +193,7 @@ export const routes: RouteObject[] = [
         element: <InvitePage />,
       },
       { path: "session-expired", handle: handle(TITLES.sessionExpired), element: <SessionExpiredPage /> },
+      { path: "about", handle: handle(TITLES.about), element: <AboutPage /> },
       {
         id: SESSION_ROUTE_ID,
         loader: sessionGuard,

@@ -13,6 +13,8 @@ ENV PATH=/opt/pnpm:$PATH
 WORKDIR /app
 COPY . .
 RUN pnpm install --frozen-lockfile
+# A nightly image has no release tag, so its About page links the commit it was built from; a release leaves it empty.
+ARG SHOUTORY_SOURCE_COMMIT=""
 RUN pnpm run build
 # The runtime keeps the repository layout, so only production dependencies are installed again, from the lockfile, for
 # the api and what it depends on; the build output stays where it is.

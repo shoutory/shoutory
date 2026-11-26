@@ -47,7 +47,9 @@ jobs:
         with:
           context: .
           file: docker/Dockerfile
-          build-args: SHOUTORY_RELEASE_CHANNEL=nightly
+          build-args: |
+            SHOUTORY_RELEASE_CHANNEL=nightly
+            SHOUTORY_SOURCE_COMMIT=${{ github.sha }}
           tags: ${{ steps.tags.outputs.tags }}
           push: true
 

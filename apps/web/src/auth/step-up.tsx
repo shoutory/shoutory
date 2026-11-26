@@ -4,6 +4,7 @@ import { Form } from "react-aria-components";
 import { useLocation, useNavigate } from "react-router";
 import { z } from "zod";
 import { ApiError, request } from "../http/client";
+import { cleanCode } from "../i18n/i18n";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { ErrorPanel } from "../ui/error-panel";
@@ -29,7 +30,7 @@ const codeVerified = z.object({ user: z.object({ email: z.string() }) });
 const verifyCode = (code: string, recovery: boolean) =>
   request(codeVerified, `/api/auth/two-factor/${recovery ? "verify-backup-code" : "verify-totp"}`, {
     method: "POST",
-    body: { code: code.trim() },
+    body: { code: cleanCode(code) },
     envelope: false,
   });
 

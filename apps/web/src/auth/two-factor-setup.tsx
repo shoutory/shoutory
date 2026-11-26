@@ -6,6 +6,7 @@ import { encode } from "uqr";
 import { z } from "zod";
 import { CodesStep, CopyButton, StepHeading } from "../account/recovery-codes";
 import { type ApiError, request } from "../http/client";
+import { cleanCode } from "../i18n/i18n";
 import { ErrorPanel } from "../ui/error-panel";
 import { TextField } from "../ui/text-field";
 import { authCopy } from "./auth-copy";
@@ -111,7 +112,7 @@ function QrStep({ qr, onConfirmed }: { qr: Qr; onConfirmed: () => void }) {
   const confirm = useAction(
     async () => {
       // Authenticator apps group the digits with spaces; the server wants none.
-      const body = { code: code.replaceAll(/\s/g, "") };
+      const body = { code: cleanCode(code) };
       await request(confirmed, "/api/auth/two-factor/verify-totp", { method: "POST", body, envelope: false });
       setCode("");
       onConfirmed();

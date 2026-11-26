@@ -218,8 +218,27 @@ describe("the step-up dialog for an account with the second factor on", () => {
   });
 });
 
+describe("Arabic digits in the step-up dialog", () => {
+  it("a code typed in Arabic-Indic digits is accepted", async () => {
+    setupCode();
+    const { host } = await open();
+    click(byText(host, "button", "Run both"));
+    await settle();
+    await submit("١٢٣٤٥٦");
+    expect(host.querySelector("output")?.textContent).toBe("ok,ok");
+  });
+
+  it("a password with Arabic-Indic digits is sent as typed", async () => {
+    const stub = setup();
+    await ask(stub);
+    await confirm("kalima ٣٣");
+    const [, init] = calls(stub, "verify-password")[0] ?? [];
+    expect(JSON.parse(String(init?.body))).toEqual({ password: "kalima ٣٣" });
+  });
+});
+
 describe("the step-up dialog's recovery code", () => {
-  it("posts a recovery code to verify-backup-code and replays each call once", async () => {
+  it("posts a recovery code, typed with Arabic-Indic digits, to verify-backup-code in ASCII and replays each call once", async () => {
     const RECOVERY = "abcd-efgh-1234";
     let verified = false;
     const stub = vi.fn((path: string, init?: RequestInit) => {
@@ -241,7 +260,7 @@ describe("the step-up dialog's recovery code", () => {
     click(byText(document.body, '[role="dialog"] button', "Use a recovery code"));
     await settle();
     expect(codeField()?.maxLength).not.toBe(6);
-    await submit(RECOVERY);
+    await submit("abcd-efgh-١٢٣٤");
     const [, init] = calls(stub, "verify-backup-code")[0] ?? [];
     expect(calls(stub, "verify-backup-code")).toHaveLength(1);
     expect(JSON.parse(String(init?.body))).toEqual({ code: RECOVERY });

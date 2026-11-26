@@ -2744,3 +2744,27 @@ msgstr "You are offline"
 #. js-lingui-explicit-id
 msgid "account.picture.offline.meaning"
 msgstr "Nothing was sent. Choose the picture again when you are back online."
+
+#. js-lingui-explicit-id
+msgid "system.about.title"
+msgstr "About Shoutory"
+
+#. js-lingui-explicit-id
+msgid "system.about.link"
+msgstr "About Shoutory"
+
+#. js-lingui-explicit-id
+msgid "system.about.version"
+msgstr "Version"
+
+#. js-lingui-explicit-id
+msgid "system.about.licence"
+msgstr "Shoutory is free software under the GNU Affero General Public License, version 3. You may get the source code of the version you are using."
+
+#. js-lingui-explicit-id
+msgid "system.about.source"
+msgstr "Source code of this version"
+
+#. js-lingui-explicit-id
+msgid "system.about.source_label"
+msgstr "Source code of this version (opens in a new tab)"

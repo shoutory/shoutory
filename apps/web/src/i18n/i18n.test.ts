@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { applyLocale, detectLocale, formatDate, formatNumber, type Locale } from "./i18n.js";
+import { applyLocale, cleanCode, detectLocale, formatDate, formatNumber, type Locale } from "./i18n.js";
+
+describe("cleanCode", () => {
+  it.each([
+    ["Arabic-Indic digits", "١٢٣٤٥٦", "123456"],
+    ["Persian digits", "۱۲۳۴۵۶", "123456"],
+    ["mixed digits grouped by spaces", "١۲3 ٤ 5٦", "123456"],
+    ["a recovery code", " abcde-12345 ", "abcde-12345"],
+  ])("%s become the code the server reads", (_name, typed, sent) => {
+    expect(cleanCode(typed)).toBe(sent);
+  });
+});
 
 describe("applyLocale", () => {
   it("Arabic locale sets dir=rtl and lang=ar on the document", () => {

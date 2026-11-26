@@ -2742,3 +2742,27 @@ msgstr "أنت غير متصل بالإنترنت"
 #. js-lingui-explicit-id
 msgid "account.picture.offline.meaning"
 msgstr "لم يُرسل شيء. اختر الصورة مرة أخرى عند عودة الاتصال."
+
+#. js-lingui-explicit-id
+msgid "system.about.title"
+msgstr "عن Shoutory"
+
+#. js-lingui-explicit-id
+msgid "system.about.link"
+msgstr "عن Shoutory"
+
+#. js-lingui-explicit-id
+msgid "system.about.version"
+msgstr "الإصدار"
+
+#. js-lingui-explicit-id
+msgid "system.about.licence"
+msgstr "Shoutory برنامج حر مرخّص برخصة جنو أفيرو العمومية (GNU Affero General Public License)، الإصدار 3. يمكنك الحصول على الشيفرة المصدرية للإصدار الذي تستخدمه."
+
+#. js-lingui-explicit-id
+msgid "system.about.source"
+msgstr "الشيفرة المصدرية لهذا الإصدار"
+
+#. js-lingui-explicit-id
+msgid "system.about.source_label"
+msgstr "الشيفرة المصدرية لهذا الإصدار (تُفتح في علامة تبويب جديدة)"
