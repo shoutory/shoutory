@@ -94,6 +94,8 @@ const ROUTES: Route[] = [
   ["stripped", "GET", (w, id) => `${base(w)}/${id}/derivatives/stripped`],
   ["patch", "PATCH", (w, id) => `${base(w)}/${id}`, { tags: ["floor"] }],
   ["delete", "DELETE", (w, id) => `${base(w)}/${id}`],
+  ["fit", "GET", (w, id) => `${base(w)}/${id}/fit`],
+  ["parts", "GET", (w, id) => `${base(w)}/${id}/parts`],
 ];
 
 describe("each route answers 404 for another workspace's medium and the list never holds its rows (floor)", () => {
@@ -122,12 +124,13 @@ describe("each route answers 404 for another workspace's medium and the list nev
 });
 
 describe("who may use each route (floor)", () => {
-  const READS = new Set(["list", "get", "thumb", "stripped"]);
+  const READS = new Set(["list", "get", "thumb", "stripped", "fit"]);
   const ALL: Route[] = [["list", "GET", (w) => base(w)], ...ROUTES];
+  // An editor reaches the parts of a ready medium, which has no upload left to resume.
   const WHO: [string, () => User | null, (route: string) => number][] = [
     ["a viewer", () => user("viewer"), (route) => (READS.has(route) ? 200 : 403)],
     ["an approver", () => user("approver"), (route) => (READS.has(route) ? 200 : 403)],
-    ["an editor", () => user("editor"), () => 200],
+    ["an editor", () => user("editor"), (route) => (route === "parts" ? 409 : 200)],
     ["a signed-in non-member", () => user("outsider"), () => 404],
     ["no session", () => null, () => 401],
   ];
@@ -292,6 +295,18 @@ describe("one medium", () => {
         post_count: 0,
         derivatives: { thumb: "ready" },
       });
+  });
+
+  it.each([
+    ["parts", "deleted", 404, undefined],
+    ["fit", "deleted", 404, undefined],
+    ["fit", "processing", 409, "not_ready"],
+    ["fit", "rejected", 409, "not_ready"],
+  ])("%s of a medium in state %s answers %i", async (route, state, status, reason) => {
+    const id = await plant({ state });
+    const answer = await send(user("editor"), "GET", `${base(ws)}/${id}/${route}`);
+    expect(answer.status).toBe(status);
+    if (reason) expect(await reasonOf(answer)).toBe(reason);
   });
 
   it.each([

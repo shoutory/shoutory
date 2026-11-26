@@ -65,6 +65,9 @@ export const lengthOf = (open: OpenUpload, number: number) =>
   number < partCount(open) ? open.partSize : open.size - (partCount(open) - 1) * open.partSize;
 // The filesystem driver has no storage upload id: its parts are files under the asset.
 const FS_UPLOAD_ID = "fs-parts";
+export const partKey = (workspaceId: string, mediaId: string, number: number | string) =>
+  `ws/${workspaceId}/${mediaId}/parts/${number}`;
+const HEAD_BATCH = 20;
 
 // This API's own route, so one client serves both drivers.
 const fsPartUrl = (workspaceId: string, mediaId: string, number: number) => ({
@@ -224,9 +227,64 @@ async function completeOnce(
   }
 }
 
+interface PartsStorage {
+  presigner: S3Presigner | undefined;
+  multipart: S3Multipart | undefined;
+  storage: StorageDriver;
+}
+
+async function heldParts(
+  { multipart, storage }: PartsStorage,
+  workspaceId: string,
+  mediaId: string,
+  open: OpenUpload,
+): Promise<{ number: number; size: number }[]> {
+  if (multipart) {
+    const listed = await multipart.listParts(originalKey(workspaceId, mediaId), open.uploadId);
+    // Gone from storage: aborted, or finished by a complete whose answer was lost, which a new complete settles.
+    if (listed === null) throw conflict("no_upload");
+    return listed.map(({ number, size }) => ({ number, size }));
+  }
+  const held: { number: number; size: number }[] = [];
+  const numbers = Array.from({ length: partCount(open) }, (_, at) => at + 1);
+  for (let at = 0; at < numbers.length; at += HEAD_BATCH) {
+    const batch = numbers.slice(at, at + HEAD_BATCH);
+    const heads = await Promise.all(
+      batch.map((number) => storage.head(partKey(workspaceId, mediaId, number))),
+    );
+    batch.forEach((number, index) => {
+      const head = heads[index];
+      if (head) held.push({ number, size: head.size });
+    });
+  }
+  return held;
+}
+
+function registerPartsRead(app: App, partsStorage: PartsStorage): void {
+  defineRoute(app, {
+    method: "get",
+    path: `${BASE}/{media_id}/parts`,
+    policy: "session",
+    access: EDIT_SPLIT,
+    params: mediaParams,
+    handler: async ({ scoped, params }) => {
+      const { workspaceId, asset, upload } = await scoped(false, async (tx, scope) => ({
+        workspaceId: scope.workspaceId,
+        asset: await assetOf(tx, scope.workspaceId, params.media_id),
+        upload: await uploadOf(tx, scope.workspaceId, params.media_id),
+      }));
+      if (asset.state === "deleted") throw new Refusal("not_found", "media row not visible");
+      const open = openUpload(asset, upload);
+      const parts = await heldParts(partsStorage, workspaceId, asset.id, open);
+      return { part_size: open.partSize, part_count: partCount(open), parts };
+    },
+  });
+}
+
 // On S3 each URL signs that part's sha256 and the length the server derives; on the filesystem the part route checks
 // the length itself.
-export function registerParts(app: App, presigner: S3Presigner | undefined): void {
+export function registerParts(app: App, partsStorage: PartsStorage): void {
+  const { presigner } = partsStorage;
   defineRoute(app, {
     method: "post",
     path: `${BASE}/{media_id}/parts`,
@@ -257,4 +315,5 @@ export function registerParts(app: App, presigner: S3Presigner | undefined): voi
       return { parts };
     },
   });
+  registerPartsRead(app, partsStorage);
 }

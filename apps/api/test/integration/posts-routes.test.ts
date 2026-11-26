@@ -60,6 +60,7 @@ interface Facts {
   bytes?: number;
   width?: number;
   height?: number;
+  mime?: string;
   /** `false` plants a ready asset whose `stripped` derivative is missing. */
   stripped?: boolean;
   /** A video and its length; its original is larger than any rule, so only its copy's size can pass. */
@@ -70,7 +71,7 @@ async function plantMedia(workspace: string, state: string, facts: Facts = {}): 
   const ready = state === "ready";
   const kind = facts.video
     ? { mime: "video/mp4", bytes: 50_000_000, durationMs: facts.video.durationMs }
-    : { mime: "image/png", bytes: null, durationMs: null };
+    : { mime: facts.mime ?? "image/png", bytes: null, durationMs: null };
   await fx.admin(async (client) => {
     await client.query(
       `INSERT INTO app.media_assets (id, workspace_id, object_key, file_name, mime, width, height, byte_size, duration_ms,
@@ -108,8 +109,11 @@ async function plantStripped(
   );
 }
 
+let storageDir: string;
 beforeAll(async () => {
+  storageDir = await mkdtemp(join(tmpdir(), "shoutory-posts-"));
   fx = await startFixture({
+    storage: createFsDriver(storageDir),
     channels: {
       providers: {
         fixture_oauth: {
@@ -138,7 +142,10 @@ beforeAll(async () => {
   media.pending = await plantMedia(ws, "pending_upload");
   media.foreign = await plantMedia(other, "ready");
 });
-afterAll(() => fx.close());
+afterAll(async () => {
+  await fx.close();
+  await rm(storageDir, { recursive: true, force: true });
+});
 
 const variant = (channel: string, change: object = {}) => ({
   channel_id: channel,
@@ -698,51 +705,91 @@ describe("only ready media is attached, and only media the channel's rule takes"
     expect(await refusedDetails(answer)).toEqual([422, { reason: "media_unavailable" }]);
   });
 
-  // The fixture manifest allows 5 MiB, 25 MP and 4 media: a medium ready and valid at upload but outside the rule of the
-  // channel it is attached to is refused now, not at publish; the reason of the rule is named beside the code.
-  const RULES: [string, () => Promise<string[]>, string][] = [
-    ["over imageMaxBytes", async () => [await plantMedia(ws, "ready", { bytes: 5_242_881 })], "too_large"],
+  // The fixture manifest allows 4 media; the rules a single medium can break are in "the fit of one medium".
+  it("a fifth medium over mediaMaxCount is refused at create with the rule named", async () => {
+    const five = await Promise.all([1, 2, 3, 4, 5].map(() => plantMedia(ws, "ready")));
+    const answer = await call(user("editor"), "POST", base(ws), attach(...five));
+    expect(await refusedDetails(answer)).toEqual([422, { reason: "media_unavailable", rule: "too_many" }]);
+  });
+});
+
+const fitOf = (workspace: string, id: string, query = "") =>
+  call(user("editor"), "GET", `/api/v1/workspaces/${workspace}/media/${id}/fit${query}`);
+const fitRows = async (answer: Response) =>
+  ((await answer.json()) as { data: { channel_id: string; ok: boolean; reason?: string }[] }).data;
+
+// The fixture manifest allows 5 MiB and 25 MP for an image; the channel takes a video within 10 MB and one minute. A
+// medium ready and valid at upload but outside a channel's rule is refused at save, not at publish, and the fit route
+// gives the same verdict before it is attached.
+describe("the fit of one medium matches the verdict of a save", () => {
+  const video = (bytes: number, durationMs: number) =>
+    plantMedia(ws, "ready", { width: 1280, height: 720, bytes, video: { durationMs } });
+  it.each([
+    ["an image over imageMaxBytes", () => plantMedia(ws, "ready", { bytes: 5_242_881 }), "too_large"],
     [
-      "over imageMaxPixels",
-      async () => [await plantMedia(ws, "ready", { width: 5001, height: 5000 })],
+      "an image of a type no channel takes",
+      () => plantMedia(ws, "ready", { mime: "image/tiff" }),
+      "unsupported_type",
+    ],
+    [
+      "an image over imageMaxPixels",
+      () => plantMedia(ws, "ready", { width: 5001, height: 5000 }),
       "pixel_limit",
     ],
-    [
-      "a fifth medium over mediaMaxCount",
-      async () => Promise.all([1, 2, 3, 4, 5].map(() => plantMedia(ws, "ready"))),
-      "too_many",
-    ],
-  ];
-  it.each(RULES)("media %s is refused at create with the rule named", async (_name, plant, rule) => {
-    const answer = await call(user("editor"), "POST", base(ws), attach(...(await plant())));
-    expect(await refusedDetails(answer)).toEqual([422, { reason: "media_unavailable", rule }]);
+    ["a video whose copy is over videoMaxBytes", () => video(10_000_001, 12_000), "too_large"],
+    ["a video over videoMaxDurationMs", () => video(2_000_000, 60_001), "too_long"],
+    ["a video whose copy fits, though its original does not", () => video(2_000_000, 12_000), undefined],
+  ])("%s", async (_name, plant, rule) => {
+    const id = await plant();
+    const saved = await call(user("editor"), "POST", base(ws), attach(id));
+    const fit = (await fitRows(await fitOf(ws, id))).find((row) => row.channel_id === c1);
+    if (rule) {
+      expect(await refusedDetails(saved)).toEqual([422, { reason: "media_unavailable", rule }]);
+      expect(fit).toEqual({ channel_id: c1, ok: false, reason: rule });
+    } else {
+      expect(saved.status).toBe(201);
+      expect(fit).toEqual({ channel_id: c1, ok: true });
+    }
+  });
+});
+
+describe("the fit of one medium on each connected channel", () => {
+  let fitWs: string;
+  const channels: Record<string, string> = {};
+  beforeAll(async () => {
+    fitWs = await seedWorkspace(fx, await seedOrganization(fx, user("editor").id));
+    await addWorkspaceMember(fx, fitWs, user("editor").id, "owner");
+    channels.ok = await seedChannel(fx, fitWs, "connected", "fit-ok", "fixture_oauth");
+    channels.bare = await seedChannel(fx, fitWs, "connected", "fit-bare", "fixture_bare");
+    channels.gone = await seedChannel(fx, fitWs, "connected", "fit-gone", "fixture_gone");
+    await seedChannel(fx, fitWs, "disconnected", "fit-off", "fixture_oauth");
+  });
+
+  it("answers each connected channel only, with the reason a save gives where the medium cannot go", async () => {
+    const answer = await fitOf(fitWs, await plantMedia(fitWs, "ready"));
+    expect(answer.status).toBe(200);
+    const expected = [
+      { channel_id: channels.ok, ok: true },
+      { channel_id: channels.bare, ok: false, reason: "capability_missing" },
+      { channel_id: channels.gone, ok: false, reason: "provider_unavailable" },
+    ].sort((a, b) => String(a.channel_id).localeCompare(String(b.channel_id)));
+    expect(await fitRows(answer)).toEqual(expected);
+  });
+
+  it("pages the channels by id", async () => {
+    const id = await plantMedia(fitWs, "ready");
+    const first = (await (await fitOf(fitWs, id, "?limit=2")).json()) as {
+      data: { channel_id: string }[];
+      meta: { next_cursor: string };
+    };
+    expect(first.data).toHaveLength(2);
+    const rest = await fitRows(await fitOf(fitWs, id, `?limit=2&cursor=${first.meta.next_cursor}`));
+    expect(rest).toHaveLength(1);
+    expect(first.data.map((row) => row.channel_id)).not.toContain(rest[0]?.channel_id);
   });
 });
 
 // A video goes to the provider as its stripped copy, so the copy's size is the one the rule reads.
-describe("a ready video is attached under the channel's video rule", () => {
-  const video = (over: { bytes?: number; durationMs?: number } = {}) =>
-    plantMedia(ws, "ready", {
-      width: 1280,
-      height: 720,
-      bytes: over.bytes ?? 2_000_000,
-      video: { durationMs: over.durationMs ?? 12_000 },
-    });
-
-  it("a ready video is taken at create by the size of its copy, not of its larger original", async () => {
-    const answer = await call(user("editor"), "POST", base(ws), attach(await video()));
-    expect(answer.status).toBe(201);
-  });
-
-  it.each([
-    ["over videoMaxBytes, by the size of its copy", { bytes: 10_000_001 }, "too_large"],
-    ["over videoMaxDurationMs", { durationMs: 60_001 }, "too_long"],
-  ])("a video %s is refused at create with the rule named", async (_name, over, rule) => {
-    const answer = await call(user("editor"), "POST", base(ws), attach(await video(over)));
-    expect(await refusedDetails(answer)).toEqual([422, { reason: "media_unavailable", rule }]);
-  });
-});
-
 describe("a draft the server refuses", () => {
   it.each(REFUSAL_ROWS)("%s", async (_what, body, status, reason, code) => {
     const answer = await call(user("editor"), "POST", base(ws), body());

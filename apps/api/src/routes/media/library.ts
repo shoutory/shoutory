@@ -5,7 +5,17 @@ import { z } from "zod";
 import { Refusal } from "../../errors/refusal.js";
 import { type App, defineRoute } from "../define-route.js";
 import { pageAnswer, pageQuery } from "../input.js";
-import { BASE, callDefiner, EDIT_SPLIT, mediaParams, VIEW_SPLIT, workspaceParams } from "./shared.js";
+import { channelFit, type Providers, readyMediaOf } from "../posts/resolve.js";
+import {
+  assetOf,
+  BASE,
+  callDefiner,
+  conflict,
+  EDIT_SPLIT,
+  mediaParams,
+  VIEW_SPLIT,
+  workspaceParams,
+} from "./shared.js";
 
 // An allowlist of columns: the storage key, the uploader, the codec facts and the deletion stamp are never answered.
 const ANSWER = `a.id, a.file_name, a.mime, a.byte_size::float8 AS byte_size, a.width, a.height, a.duration_ms,
@@ -189,8 +199,49 @@ function registerChanges(app: App): void {
   });
 }
 
-export function registerLibrary(app: App, storage: StorageDriver): void {
+async function fitOf(
+  tx: TenantTx,
+  workspaceId: string,
+  id: string,
+  providers: Providers,
+  page: z.infer<typeof pageQuery>,
+) {
+  if ((await assetOf(tx, workspaceId, id)).state === "deleted")
+    throw new Refusal("not_found", "media row not visible");
+  const medium = (await readyMediaOf(tx, workspaceId, [id])).get(id);
+  if (!medium) throw conflict("not_ready");
+  const channels = await tx.query<{ id: string; provider_id: string }>(
+    `SELECT id, provider_id FROM app.channels
+     WHERE workspace_id = $1 AND connection_state = 'connected' AND ($2::uuid IS NULL OR id > $2::uuid)
+     ORDER BY id LIMIT $3`,
+    [workspaceId, page.cursor ?? null, page.limit],
+  );
+  return channels.rows.map((channel) => ({
+    channel_id: channel.id,
+    ...channelFit(medium, providers, channel.provider_id),
+  }));
+}
+
+function registerFit(app: App, providers: Providers): void {
+  defineRoute(app, {
+    method: "get",
+    path: `${BASE}/{media_id}/fit`,
+    policy: "session",
+    access: VIEW_SPLIT,
+    params: mediaParams,
+    query: pageQuery,
+    handler: async ({ c, scoped, params, query }) => {
+      const rows = await scoped(false, (tx, scope) =>
+        fitOf(tx, scope.workspaceId, params.media_id, providers, query),
+      );
+      return pageAnswer(c, rows, query.limit, "channel_id");
+    },
+  });
+}
+
+export function registerLibrary(app: App, storage: StorageDriver, providers: Providers): void {
   registerList(app);
   registerDerivative(app, storage);
   registerChanges(app);
+  registerFit(app, providers);
 }

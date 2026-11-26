@@ -148,6 +148,15 @@ function clientContext(trusted: readonly string[]): MiddlewareHandler<AppEnv> {
   };
 }
 
+function registerAdminRoutes(app: App, options: AppOptions): void {
+  registerAdmin(app, options.auth);
+  registerAdminMe(app);
+  registerQueue(app);
+  registerSystem(app, options.pool, options.releaseChannel ?? "stable");
+  registerMailChecks(app, options.auth, options.mail ?? { from: undefined, dkimSelector: undefined });
+  if (options.storage) registerStorageCheck(app, options.auth, options.storage);
+}
+
 export function createApp(options: AppOptions): App {
   // Read once, first: a shell that cannot be hashed refuses the start, and the copy hashed here is the one served.
   const shell = options.webRoot ? readShell(options.webRoot) : undefined;
@@ -183,9 +192,10 @@ export function createApp(options: AppOptions): App {
   registerWorkspaces(app, options.auth);
   const channelRoutes = channelServices(options);
   registerChannels(app, options.auth.ipHmac, channelRoutes?.check);
-  registerPosts(app, channelRoutes?.check.providers ?? {}, options);
+  const providers = channelRoutes?.check.providers ?? {};
+  registerPosts(app, providers, options);
   if (channelRoutes) registerConnect(app, options.auth, channelRoutes.connect);
-  registerProviders(app, channelRoutes?.check.providers ?? {}, options.publicOrigin);
+  registerProviders(app, providers, options.publicOrigin);
   registerEntitlements(app, options.entitlements ?? selfHost);
   registerInvitations(app, options.auth);
   registerMembers(app, options.auth.ipHmac);
@@ -193,14 +203,10 @@ export function createApp(options: AppOptions): App {
   registerAudit(app);
   registerUnsubscribe(app, options.auth, options.pool);
   registerInstance(app, options.pool, options.now ?? Date.now);
-  registerAdmin(app, options.auth);
-  registerAdminMe(app);
-  registerQueue(app);
-  registerSystem(app, options.pool, options.releaseChannel ?? "stable");
-  registerMailChecks(app, options.auth, options.mail ?? { from: undefined, dkimSelector: undefined });
-  if (options.storage) registerStorageCheck(app, options.auth, options.storage);
-  if (options.storage)
-    registerMedia(app, options.storage, options, () => new Date(options.now?.() ?? Date.now()));
+  registerAdminRoutes(app, options);
+  const { storage } = options;
+  if (storage)
+    registerMedia(app, { storage, providers }, options, () => new Date(options.now?.() ?? Date.now()));
   app.notFound((c) => errorResponse(c, new Refusal("not_found", "no such route")));
   // Last, so a route added before it is never shadowed by the shell.
   if (options.webRoot) registerStatic(app, options.webRoot, shell);

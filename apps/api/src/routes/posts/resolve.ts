@@ -6,7 +6,7 @@ import { snapshotOf } from "@shoutory/provider-sdk/snapshot";
 import type { HealthProvider } from "../../channels/health.js";
 import { Refusal } from "../../errors/refusal.js";
 
-type Providers = Readonly<Record<string, HealthProvider>>;
+export type Providers = Readonly<Record<string, HealthProvider>>;
 type Defaults = Readonly<Record<string, string | number | boolean>>;
 
 const MAX_ISSUES = 20;
@@ -15,6 +15,10 @@ const unprocessable = (reason: string, rule?: RejectReason): Refusal =>
   new Refusal("unprocessable_content", `draft refused: ${reason}`, {
     details: { reason, ...(rule ? { rule } : {}) },
   });
+
+// Own keys only: a provider id read from a row is never looked up on the prototype.
+const providerOf = (providers: Providers, providerId: string): HealthProvider | undefined =>
+  Object.hasOwn(providers, providerId) ? providers[providerId] : undefined;
 
 async function providersOfChannels(
   tx: TenantTx,
@@ -30,8 +34,7 @@ async function providersOfChannels(
   if (found.rows.length !== ids.length) throw unprocessable("unknown_channel");
   const byChannel = new Map<string, HealthProvider>();
   for (const { id, provider_id: providerId } of found.rows) {
-    // Own keys only: a provider id read from a row is never looked up on the prototype.
-    const provider = Object.hasOwn(providers, providerId) ? providers[providerId] : undefined;
+    const provider = providerOf(providers, providerId);
     if (!provider) {
       throw new Refusal("conflict", "no adapter for the provider", {
         details: { reason: "provider_unavailable" },
@@ -42,7 +45,7 @@ async function providersOfChannels(
   return byChannel;
 }
 
-interface ReadyMedium {
+export interface ReadyMedium {
   id: string;
   sha256: string;
   mime: string;
@@ -53,13 +56,12 @@ interface ReadyMedium {
   durationMs: number | null;
 }
 
-async function readyMedia(
+/** The ready media among `ids`, each with the facts of the copy a provider receives. */
+export async function readyMediaOf(
   tx: TenantTx,
   workspaceId: string,
-  draft: Draft,
+  ids: readonly string[],
 ): Promise<Map<string, ReadyMedium>> {
-  const ids = [...new Set(draft.variants.flatMap((v) => v.media.map((m) => m.media_id.toLowerCase())))];
-  if (ids.length === 0) return new Map();
   const found = await tx.query<ReadyMedium>(
     `SELECT a.id, encode(a.sha256, 'hex') AS sha256, a.mime, a.width, a.height,
        d.byte_size::float8 AS bytes, a.duration_ms AS "durationMs"
@@ -69,8 +71,30 @@ async function readyMedia(
      WHERE a.workspace_id = $1 AND a.id = ANY ($2::uuid[]) AND a.state = 'ready'`,
     [workspaceId, ids],
   );
-  if (found.rows.length !== ids.length) throw unprocessable("media_unavailable");
   return new Map(found.rows.map((row) => [row.id, row]));
+}
+
+async function readyMedia(
+  tx: TenantTx,
+  workspaceId: string,
+  draft: Draft,
+): Promise<Map<string, ReadyMedium>> {
+  const ids = [...new Set(draft.variants.flatMap((v) => v.media.map((m) => m.media_id.toLowerCase())))];
+  if (ids.length === 0) return new Map();
+  const found = await readyMediaOf(tx, workspaceId, ids);
+  if (found.size !== ids.length) throw unprocessable("media_unavailable");
+  return found;
+}
+
+export type ChannelFit = { ok: true } | { ok: false; reason: string };
+
+/** Whether one medium can go to a channel of this provider, refused for the reason a save would give. */
+export function channelFit(medium: ReadyMedium, providers: Providers, providerId: string): ChannelFit {
+  const provider = providerOf(providers, providerId);
+  if (!provider) return { ok: false, reason: "provider_unavailable" };
+  if (provider.manifest.capabilities.length === 0) return { ok: false, reason: "capability_missing" };
+  const fit = mediaFits({ ...medium, count: 1 }, provider.manifest);
+  return fit.ok ? { ok: true } : { ok: false, reason: fit.reason };
 }
 
 // A medium the channel's rules refuse is refused here, not at publish.

@@ -62,12 +62,13 @@ describe("media route registration", () => {
         );
     const read = "GET session library.view";
     const edit = "session library.edit";
-    // The library: list, one medium, a derivative, metadata and delete.
-    const library = [read, read, read, `PATCH ${edit}`, `DELETE ${edit}`];
+    // The library: list, one medium, a derivative, metadata, delete and the fit per channel.
+    const library = [read, read, read, `PATCH ${edit}`, `DELETE ${edit}`, read];
     expect(mediaOf(buildApp({ storage }))).toEqual([
       `POST ${edit}`,
       `POST ${edit}`,
       `POST ${edit}`,
+      `GET ${edit}`,
       `PUT ${edit}`,
       `PUT ${edit}`,
       read,
@@ -85,6 +86,7 @@ describe("media route registration", () => {
       `POST ${edit}`,
       `POST ${edit}`,
       `POST ${edit}`,
+      `GET ${edit}`,
       read,
       ...library,
     ]);

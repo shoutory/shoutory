@@ -8,6 +8,7 @@ import { Refusal } from "../../errors/refusal.js";
 import type { Logger } from "../../logging/logger.js";
 import type { S3Multipart, S3Presigner } from "../../storage/s3-driver.js";
 import { type App, defineRoute } from "../define-route.js";
+import type { Providers } from "../posts/resolve.js";
 import { finishFsParts, registerFsParts } from "./fs-parts.js";
 import { type ImportFetch, registerImport } from "./import.js";
 import { registerLibrary } from "./library.js";
@@ -346,7 +347,7 @@ function registerPut(app: App, storage: StorageDriver, now: () => Date): void {
 
 export function registerMedia(
   app: App,
-  storage: StorageDriver,
+  { storage, providers }: { storage: StorageDriver; providers: Providers },
   s3: {
     presigner?: S3Presigner | undefined;
     multipart?: S3Multipart | undefined;
@@ -361,10 +362,11 @@ export function registerMedia(
   const fs = storage.name === "fs" && !presigner;
   registerUpload(app, { presigner, multipart, logger, parts: fs || (!!presigner && !!multipart), cap });
   registerComplete(app, storage, { multipart, logger });
-  if ((presigner && multipart) || fs) registerParts(app, presigner);
+  if ((presigner && multipart) || fs)
+    registerParts(app, { presigner, multipart: presigner ? multipart : undefined, storage });
   if (!presigner) registerPut(app, storage, now);
   if (fs) registerFsParts(app, storage);
   if (s3.mediaImportFetch) registerImport(app, storage, { getFile: s3.mediaImportFetch, logger, cap });
   registerRead(app, storage);
-  registerLibrary(app, storage);
+  registerLibrary(app, storage, providers);
 }

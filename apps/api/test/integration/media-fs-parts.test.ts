@@ -306,10 +306,39 @@ describe("complete assembles the parts only into the declared file (floor)", () 
     const body = bodyOf("missing");
     const id = await startBig({ body });
     await uploadParts(id, body, [1, 5]);
+    const held = await fx.request(`${base(ws)}/${id}/parts`, {
+      method: "GET",
+      headers: { cookie: user("editor").cookie },
+    });
+    expect(await dataOf(held)).toEqual({
+      part_size: PART,
+      part_count: 5,
+      parts: [
+        { number: 1, size: PART },
+        { number: 5, size: LARGE - 4 * PART },
+      ],
+    });
     expect((await complete(id)).status).toBe(409);
     expect(await real.head(originalKey(id))).toBeNull();
     expect((await assetOf(id)).state).toBe("pending_upload");
   }, 180_000);
+});
+
+describe("resuming a large upload on the filesystem", () => {
+  it("names the held parts on both sides of a batch of storage reads", async () => {
+    const id = await startBig({ size: 21 * PART + 1 });
+    for (const number of [1, 20, 21, 22])
+      await real.put(partKey(ws, id, number), new Blob([String(number)]).stream(), 2);
+    const held = await fx.request(`${base(ws)}/${id}/parts`, {
+      method: "GET",
+      headers: { cookie: user("editor").cookie },
+    });
+    expect(await dataOf(held)).toEqual({
+      part_size: PART,
+      part_count: 22,
+      parts: [1, 20, 21, 22].map((number) => ({ number, size: String(number).length })),
+    });
+  });
 });
 
 describe("complete on a full disk (floor)", () => {

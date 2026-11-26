@@ -4,7 +4,7 @@ import { z } from "zod";
 import { Refusal } from "../../errors/refusal.js";
 import type { Logger } from "../../logging/logger.js";
 import { type App, defineRoute } from "../define-route.js";
-import { lengthOf, type OpenUpload, openUpload, PART_SIZE, partCount } from "./multipart.js";
+import { lengthOf, type OpenUpload, openUpload, PART_SIZE, partCount, partKey } from "./multipart.js";
 import {
   type Asset,
   assetOf,
@@ -29,9 +29,6 @@ const partParams = z.strictObject({
   // A plain number, never path text: it becomes the last segment of a storage key.
   number: z.string().regex(/^[1-9][0-9]{0,2}$/),
 });
-
-const partKey = (workspaceId: string, mediaId: string, number: number | string) =>
-  `ws/${workspaceId}/${mediaId}/parts/${number}`;
 
 const unprocessable = (reason: string, message: string) =>
   new Refusal("unprocessable_content", message, { details: { reason } });

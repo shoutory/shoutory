@@ -128,7 +128,8 @@ const call = (who: User, path: string, body?: unknown) => {
   });
 };
 const dataOf = async (answer: Response) => ((await answer.json()) as { data: Record<string, unknown> }).data;
-const errorOf = async (answer: Response) => ((await answer.json()) as { error: { code: string } }).error;
+const errorOf = async (answer: Response) =>
+  ((await answer.json()) as { error: { code: string; details?: { reason?: string } } }).error;
 interface Big {
   who?: User;
   workspace?: string;
@@ -160,6 +161,8 @@ async function startBig(big: Big = {}): Promise<string> {
 const sign = (who: User, id: string, parts: { number: number; sha256: string }[], workspace = ws) =>
   call(who, `${base(workspace)}/${id}/parts`, { parts });
 const complete = (who: User, id: string, workspace = ws) => call(who, `${base(workspace)}/${id}/complete`);
+const partsOf = (who: User, id: string, workspace = ws) =>
+  fx.request(`${base(workspace)}/${id}/parts`, { method: "GET", headers: { cookie: who.cookie } });
 async function signedPart(id: string, number: number, body: Buffer, who = user("editor")): Promise<Signed> {
   const answer = await sign(who, id, [{ number, sha256: sha(body) }]);
   return ((await dataOf(answer)).parts as Signed[])[0] as Signed;
@@ -252,6 +255,7 @@ describe("who may sign a part, and for whose upload", () => {
     expect((await registerBig({ who: user(seat) })).status).toBe(403);
     expect((await sign(user(seat), mine, [{ number: 1, sha256: sha("part") }])).status).toBe(403);
     expect((await complete(user(seat), mine)).status).toBe(403);
+    expect((await partsOf(user(seat), mine)).status).toBe(403);
   });
 
   it("a part URL of another workspace's or another asset's upload is refused, and complete of a foreign upload looks unknown (floor)", async () => {
@@ -268,12 +272,16 @@ describe("who may sign a part, and for whose upload", () => {
       ["B's upload through A's path, sign", () => sign(user("editor"), theirs, [part])],
       ["a foreign member completing", () => complete(user("foreign"), mine)],
       ["B's upload through A's path, complete", () => complete(user("editor"), theirs)],
+      ["a stranger listing parts", () => partsOf(user("outsider"), mine)],
+      ["B's upload through A's path, parts", () => partsOf(user("editor"), theirs)],
     ];
     for (const [label, run] of asked) {
       const answer = await run();
       expect(answer.status, label).toBe(404);
       expect((await errorOf(answer)).code, label).toBe("not_found");
     }
+    // Storage was never asked about either upload.
+    expect(calls.filter((name) => name === "list")).toEqual([]);
     // A URL minted for one upload is useless against the upload id of another.
     const one = Buffer.from("x");
     const minted = await signedPart(mine, 5, one);
@@ -281,6 +289,45 @@ describe("who may sign a part, and for whose upload", () => {
     url.searchParams.set("uploadId", (await assetOf(theirs)).multipart_upload_id);
     expect((await putTo(minted, one, url)).status).toBe(403);
     expect((await putTo(minted, one)).status).toBe(200);
+  });
+});
+
+describe("resuming a large upload after a break", () => {
+  it("answers the parts storage holds, read with no transaction open", async () => {
+    const id = await startBig({ size: 64 * MIB + 1 });
+    const before = await partsOf(user("editor"), id);
+    expect(before.status).toBe(200);
+    expect(await dataOf(before)).toEqual({ part_size: PART, part_count: 5, parts: [] });
+    const one = Buffer.from("x");
+    expect((await putTo(await signedPart(id, 5, one), one)).status).toBe(200);
+    expect(await dataOf(await partsOf(user("editor"), id))).toEqual({
+      part_size: PART,
+      part_count: 5,
+      parts: [{ number: 5, size: 1 }],
+    });
+    expect(idleInTransaction.filter((_, at) => calls[at] === "list")).toEqual([0, 0]);
+  });
+
+  it.each([
+    [
+      "a storage upload that is gone",
+      async () => {
+        faked.parts = null;
+        return startBig();
+      },
+      "no_upload",
+    ],
+    [
+      "an upload of 64 MiB, which is one PUT",
+      async () => (await dataOf(await registerBig({ size: 64 * MIB }))).id as string,
+      "not_multipart",
+    ],
+  ])("%s answers 409 with its reason", async (_what, start, reason) => {
+    const answer = await partsOf(user("editor"), await start());
+    expect(answer.status).toBe(409);
+    expect(((await answer.json()) as { error: { details: { reason: string } } }).error.details.reason).toBe(
+      reason,
+    );
   });
 });
 
@@ -308,12 +355,19 @@ describe("what a part request may name", () => {
     [
       "a session that expired",
       `UPDATE app.media_uploads SET expires_at = now() - interval '1 minute' WHERE media_id = $1`,
+      "expired",
     ],
-    ["an upload that is no longer pending", `UPDATE app.media_assets SET state = 'rejected' WHERE id = $1`],
-  ])("%s has no part to sign (409)", async (_name, change) => {
+    [
+      "an upload that is no longer pending",
+      `UPDATE app.media_assets SET state = 'rejected' WHERE id = $1`,
+      "not_pending",
+    ],
+  ])("%s has no part to sign or resume (409)", async (_name, change, reason) => {
     const id = await startBig();
     await fx.admin((client) => client.query(change, [id]));
     expect((await sign(user("editor"), id, [part(1)])).status).toBe(409);
+    const held = await partsOf(user("editor"), id);
+    expect([held.status, (await errorOf(held)).details?.reason]).toEqual([409, reason]);
   });
 
   it("an upload of 64 MiB, which is one PUT, has no part to sign (409)", async () => {
