@@ -67,6 +67,20 @@ describe("the api client", () => {
   });
 });
 
+describe("the language of a call", () => {
+  it.each(["ar", "en"])(
+    "sends the chosen language %s as Accept-Language, so mail it causes is in it",
+    async (lang) => {
+      const before = document.documentElement.lang;
+      document.documentElement.lang = lang;
+      const fetchStub = stubFetch(json({ data: { open: true } }));
+      await request(answer, "/api/v1/instance/signup");
+      document.documentElement.lang = before;
+      expect(new Headers(fetchStub.mock.calls[0]?.[1]?.headers).get("Accept-Language")).toBe(lang);
+    },
+  );
+});
+
 describe("the details of a refusal", () => {
   it.each([
     ["the reason the server gives", { reason: "expired", expires_at: "2026-11-20T10:00:00.000Z" }],

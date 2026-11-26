@@ -131,11 +131,15 @@ describe("POST /api/v1/admin/mail/test", () => {
     expect(await queued(adminEmail)).toBe(0);
   });
 
-  it("queues exactly one mail_test message to the caller's own address and to nobody else", async () => {
-    const answer = await send("POST", TEST_MAIL, await login());
+  it("queues exactly one mail_test message, in the caller's language, to the caller's own address and to nobody else", async () => {
+    const answer = await fx.request(TEST_MAIL, {
+      method: "POST",
+      headers: { cookie: await login(), "accept-language": "ar" },
+    });
     expect(answer.status).toBe(200);
     expect(((await answer.json()) as { data: unknown }).data).toEqual({ queued: true });
-    expect(await queued(adminEmail)).toBe(1);
+    const tests = (await fx.mails(adminEmail)).filter((mail) => mail.template === "mail_test");
+    expect(tests.map((mail) => mail.locale)).toEqual(["ar"]);
     const others = await fx.admin(
       async (client) =>
         (

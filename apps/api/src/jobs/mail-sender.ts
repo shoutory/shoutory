@@ -5,7 +5,7 @@ import type { AppPool } from "@shoutory/db/pool";
 import { createTransport, type Transporter } from "nodemailer";
 import type { Logger } from "../logging/logger.js";
 import { emailLinkAad } from "../mail/enqueue.js";
-import { type MailTemplate, TEMPLATES } from "../mail/templates.js";
+import { type MailTemplate, mailLocale, TEMPLATES } from "../mail/templates.js";
 import { unsubscribeToken } from "../routes/unsubscribe.js";
 import { intervalLoop } from "./outbox-relay.js";
 
@@ -40,6 +40,7 @@ interface Claimed {
   workspace_id: string | null;
   recipient: string;
   template: string;
+  locale: string;
   vars: unknown;
   link_ciphertext: Buffer | null;
   link_iv: Buffer | null;
@@ -150,7 +151,7 @@ async function send(ctx: Sending, row: Claimed): Promise<void> {
   if (!found) throw new Error("the mail template is not registered");
   // The guard runs before the link is opened: a refused mail never touches the sealed link or the network.
   const envelope = envelopeOf(ctx.options, found, row.recipient);
-  const { subject, text } = found.render(openLink(row, ctx.options.keys), row.vars);
+  const { subject, text } = found.render(mailLocale(row.locale), openLink(row, ctx.options.keys), row.vars);
   await within(
     ctx.transport().sendMail({ ...envelope, to: row.recipient, subject, text }),
     ctx.sendTimeoutMs,

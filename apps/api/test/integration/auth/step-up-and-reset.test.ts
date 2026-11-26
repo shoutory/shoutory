@@ -165,14 +165,17 @@ describe("sessions end when the credentials change", () => {
 });
 
 describe("password reset", () => {
-  it("a reset request answers alike for a known and an unknown email; the link is sealed to the SPA fragment, the row is hashed, the GET changes nothing and the POST consumes it once", async () => {
+  it("a reset request answers alike for a known and an unknown email and mails in the request's language; the link is sealed to the SPA fragment, the row is hashed, the GET changes nothing and the POST consumes it once", async () => {
     const email = "reset-1@example.test";
     await fx.signedIn(email);
-    const known = await post("request-password-reset", { email });
-    const unknown = await post("request-password-reset", { email: "reset-nobody@example.test" });
+    const headers = { "accept-language": "ar" };
+    const askReset = (address: string) =>
+      fx.request("/api/auth/request-password-reset", { body: { email: address }, headers });
+    const known = await askReset(email);
+    const unknown = await askReset("reset-nobody@example.test");
     expect([known.status, await known.text()]).toEqual([unknown.status, await unknown.text()]);
     const [mail] = await fx.mails(email);
-    expect(mail?.template).toBe("reset_password");
+    expect([mail?.template, mail?.locale]).toEqual(["reset_password", "ar"]);
     expect(mail?.link.startsWith(`${ORIGIN}/auth/reset#token=`)).toBe(true);
     const token = tokenOf(mail);
     const rows = () =>

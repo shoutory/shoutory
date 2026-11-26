@@ -76,12 +76,33 @@ const sender = (extra: Partial<MailSenderOptions> = {}) =>
     ...extra,
   });
 let counter = 0;
-const queue = (link: string, template = "verify_email" as (typeof TEMPLATE_NAMES)[number], vars = {}) =>
+const queue = (
+  link: string,
+  template = "verify_email" as (typeof TEMPLATE_NAMES)[number],
+  vars = {},
+  locale: "en" | "ar" = "en",
+) =>
   enqueueMail(
     db.pool("app"),
-    { workspaceId: null, recipient: `sender-${++counter}@example.test`, template, locale: "en", vars, link },
+    { workspaceId: null, recipient: `sender-${++counter}@example.test`, template, locale, vars, link },
     { keys, pepper },
   );
+// The subject of a non-ASCII mail travels as RFC 2047 encoded-words.
+const subjectOf = (message: string) => {
+  const header = /^Subject: (.*)$/m.exec(message)?.[1] ?? "";
+  return header.replace(/=\?UTF-8\?([BQ])\?([^?]*)\?=\s*/gi, (_word, kind: string, body: string) =>
+    kind.toUpperCase() === "B"
+      ? Buffer.from(body, "base64").toString("utf8")
+      : Buffer.from(
+          body
+            .replace(/_/g, " ")
+            .replace(/=([0-9A-F]{2})/gi, (_hex, code: string) =>
+              String.fromCharCode(Number.parseInt(code, 16)),
+            ),
+          "latin1",
+        ).toString("utf8"),
+  );
+};
 const row = (id: string) =>
   withAdminClient(env, db.name, async (admin) => {
     const found = await admin.query("SELECT * FROM app.email_outbox WHERE id = $1", [id]);
@@ -119,6 +140,20 @@ describe("the mail sender", () => {
     );
     expect(await sender().tick()).toBe(1);
     expect(sink.messages[0]).toContain(PLAIN_LINK);
+    expect((await row(id)).state).toBe("sent");
+  });
+
+  it.each([
+    ["ar", "ar"],
+    ["fr", "en"],
+  ])("a row stored in %s is sent with the %s subject", async (stored, sent) => {
+    const id = await queue(PLAIN_LINK, "reset_password", {}, "ar");
+    await withAdminClient(env, db.name, (a) =>
+      a.query("UPDATE app.email_outbox SET locale = $2 WHERE id = $1", [id, stored]),
+    );
+    expect(await sender().tick()).toBe(1);
+    const expected = TEMPLATES.reset_password.render(sent as "en" | "ar", PLAIN_LINK, {}).subject;
+    expect(subjectOf(sink.messages[0] ?? "")).toBe(expected);
     expect((await row(id)).state).toBe("sent");
   });
 });
@@ -203,11 +238,11 @@ describe("the batch loop", () => {
   });
 });
 
-describe("the canary link of a failed send", () => {
+describe.each(["en", "ar"] as const)("the canary link of a failed send in %s", (locale) => {
   let failedId = "";
   let everything = Buffer.alloc(0);
   beforeEach(async () => {
-    failedId = await queue(CANARY_LINK);
+    failedId = await queue(CANARY_LINK, "verify_email", {}, locale);
     // The server echoes the whole message in its refusal: the worst a provider can do.
     sink.reject = true;
     expect(await sender().tick()).toBe(0);

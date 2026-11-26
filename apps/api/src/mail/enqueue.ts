@@ -2,11 +2,10 @@ import { type Aad, FORMAT_VERSION, NIL_SCOPE, type SealedSecret, seal } from "@s
 import { pepperDigest } from "@shoutory/core/crypto/digest";
 import type { KeyProvider } from "@shoutory/core/keys";
 import { z } from "zod";
-import { TEMPLATE_NAMES, TEMPLATES } from "./templates.js";
+import { MAIL_LOCALES, TEMPLATE_NAMES, TEMPLATES } from "./templates.js";
 
 const MAX_LINK_LENGTH = 2048;
 const MAX_RECIPIENT_LENGTH = 320;
-const MAX_LOCALE_LENGTH = 16;
 
 // Ids that enter the AAD are lower-cased, so the AAD always matches the spelling the database stores.
 const lowerUuid = z.uuid().transform((value) => value.toLowerCase());
@@ -16,7 +15,7 @@ const mailSchema = z.strictObject({
   workspaceId: lowerUuid.nullable(),
   recipient: z.email().max(MAX_RECIPIENT_LENGTH),
   template: z.enum(TEMPLATE_NAMES),
-  locale: z.string().min(1).max(MAX_LOCALE_LENGTH),
+  locale: z.enum(MAIL_LOCALES),
   vars: z.record(z.string(), z.unknown()),
   link: z.string().min(1).max(MAX_LINK_LENGTH),
 });

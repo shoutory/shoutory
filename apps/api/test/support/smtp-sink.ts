@@ -14,12 +14,13 @@ export interface SmtpSink {
 }
 
 const END_OF_DATA = "\r\n.\r\n";
-// Folded header lines are joined first (RFC 5322 3.2.2), then the soft breaks and `=3D` of quoted-printable go.
-const decoded = (raw: string): string =>
-  raw
-    .replaceAll(/\r\n(?=[ \t])/g, "")
-    .replaceAll("=\r\n", "")
-    .replaceAll("=3D", "=");
+// Folded header lines are joined (RFC 5322 3.2.2); in the body the soft breaks and `=3D` of quoted-printable go.
+// A header may end in `=` (an encoded-word's `?=`), so the body rules never touch the headers.
+const decoded = (raw: string): string => {
+  const split = raw.indexOf("\r\n\r\n");
+  const [head, body] = split < 0 ? [raw, ""] : [raw.slice(0, split), raw.slice(split)];
+  return head.replaceAll(/\r\n(?=[ \t])/g, "") + body.replaceAll("=\r\n", "").replaceAll("=3D", "=");
+};
 
 const REPLIES: Readonly<Record<string, string>> = { EHLO: "250 sink.test\r\n" };
 

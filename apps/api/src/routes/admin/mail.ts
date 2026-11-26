@@ -1,6 +1,7 @@
 import type { AuthService } from "../../auth/auth.js";
 import { checkMailDns } from "../../mail/dns-check.js";
 import { enqueueMail } from "../../mail/enqueue.js";
+import { requestLocale } from "../../mail/templates.js";
 import { type App, defineRoute } from "../define-route.js";
 import { asAdmin, asAdminWrite } from "./admin.js";
 
@@ -40,7 +41,7 @@ export function registerMailChecks(app: App, auth: AuthService, settings: MailSe
             workspaceId: null,
             recipient: email,
             template: "mail_test",
-            locale: "en",
+            locale: requestLocale(c.req.raw.headers),
             vars: {},
             link: `${auth.publicOrigin}/admin/system`,
           },

@@ -91,6 +91,17 @@ describe("the token", () => {
     for (const form of forms) expect(fx.logged.join("\n")).not.toContain(form);
   });
 
+  it("the invitation mail is in the inviter's language", async () => {
+    const email = newEmail();
+    const answer = await fx.request(`${base(ws)}/invitations`, {
+      method: "POST",
+      headers: { cookie: admin.cookie, "accept-language": "ar" },
+      body: { email, role_key: "editor" },
+    });
+    expect(answer.status).toBe(201);
+    expect((await fx.mails(email)).map((mail) => mail.locale)).toEqual(["ar"]);
+  });
+
   it("a GET and a HEAD on /invite/{token} leave the invitation pending", async () => {
     const email = newEmail();
     await invite(admin, email);

@@ -3,6 +3,7 @@ import type { TenantTx } from "@shoutory/db/context";
 import { z } from "zod";
 import type { AuthService } from "../../auth/auth.js";
 import { enqueueMail } from "../../mail/enqueue.js";
+import { type MailLocale, requestLocale } from "../../mail/templates.js";
 import { type App, defineRoute } from "../define-route.js";
 import { pageAnswer, pageQuery } from "../input.js";
 
@@ -44,6 +45,8 @@ interface Created {
   readonly body: z.infer<typeof create>;
   readonly requestId: string;
   readonly ipHmac: Buffer;
+  // The inviter's language: the invited person has no account, or one whose language this instance cannot know.
+  readonly locale: MailLocale;
 }
 
 // The invitation row and its mail are one transaction: a rollback sends nothing and a commit loses nothing.
@@ -74,7 +77,14 @@ async function createInvitation(
     const vars = { workspaceName: await workspaceName(tx, workspace), role: body.role_key };
     await enqueueMail(
       tx,
-      { workspaceId: workspace, recipient: body.email, template: "invitation", locale: "en", vars, link },
+      {
+        workspaceId: workspace,
+        recipient: body.email,
+        template: "invitation",
+        locale: input.locale,
+        vars,
+        link,
+      },
       auth.mail,
     );
     return newId;
@@ -105,6 +115,7 @@ function registerCreate(app: App, auth: AuthService): void {
         body,
         requestId: c.get("requestId"),
         ipHmac: auth.ipHmac(clientAddress),
+        locale: requestLocale(c.req.raw.headers),
       });
     },
   });

@@ -2,8 +2,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { seedOrganization, seedWorkspace, signedUser } from "../../support/tenancy.js";
 import { type Fixture, PASSWORD, startFixture, tokenOf } from "./harness.js";
 
+// The mail's language comes from the request; the account, if any, never sets it.
+const ARABIC = { "accept-language": "ar-EG,ar;q=0.9,en;q=0.8" };
 const signUp = (fx: Fixture, email: string) =>
-  fx.request("/api/auth/sign-up/email", { body: { name: "Test", email, password: PASSWORD } });
+  fx.request("/api/auth/sign-up/email", {
+    body: { name: "Test", email, password: PASSWORD },
+    headers: ARABIC,
+  });
 const users = (fx: Fixture, email: string) =>
   fx.admin(async (client) =>
     Number((await client.query('SELECT count(*) AS n FROM auth."user" WHERE email = $1', [email])).rows[0].n),
@@ -54,7 +59,7 @@ describe("a closed instance", () => {
       "existing_account_notice",
     ],
   ])(
-    "creates no user for an uninvited address and answers it exactly as an invited one: %s",
+    "creates no user for an uninvited address, answers it exactly as an invited one and mails it in the request's language: %s",
     async (_title, address, userCount, template) => {
       const email = address === "" ? founderEmail : address;
       const mailsBefore = (await fx.mails(email)).length;
@@ -65,7 +70,7 @@ describe("a closed instance", () => {
       expect(await users(fx, email)).toBe(userCount);
       const after = await fx.mails(email);
       expect(after.length - mailsBefore).toBe(1);
-      expect(after[0]?.template).toBe(template);
+      expect([after[0]?.template, after[0]?.locale]).toEqual([template, "ar"]);
     },
   );
 

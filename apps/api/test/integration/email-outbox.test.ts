@@ -20,7 +20,7 @@ const mail = (extra: Record<string, unknown> = {}) => ({
   workspaceId: null,
   recipient: "enqueue-1@example.test",
   template: "verify_email" as const,
-  locale: "en",
+  locale: "en" as const,
   vars: {},
   link: LINK,
   ...extra,

@@ -41,6 +41,7 @@ type AdminClient = Parameters<Parameters<typeof withAdminClient>[2]>[0];
 export interface Mail {
   readonly recipient: string;
   readonly template: string;
+  readonly locale: string;
   readonly link: string;
 }
 
@@ -200,6 +201,7 @@ interface OutboxRow {
   id: string;
   workspace_id: string | null;
   template: string;
+  locale: string;
   link_format_version: number;
   link_key_id: string;
   link_iv: Buffer;
@@ -223,7 +225,7 @@ function openedMail(recipient: string, row: OutboxRow): Mail {
     wrappedDek: row.link_wrapped_dek,
   };
   const aad = emailLinkAad(row.id, row.workspace_id, row.link_generation);
-  return { recipient, template: row.template, link: open(stored, aad, keys).expose() };
+  return { recipient, template: row.template, locale: row.locale, link: open(stored, aad, keys).expose() };
 }
 
 async function verifiedSession(

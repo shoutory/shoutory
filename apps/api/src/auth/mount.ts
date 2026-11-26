@@ -1,4 +1,5 @@
 import { Refusal } from "../errors/refusal.js";
+import { requestLocale } from "../mail/templates.js";
 import { type App, defineRoute } from "../routes/define-route.js";
 import { avatarAtOf } from "../routes/me/avatar.js";
 import type { AuthService } from "./auth.js";
@@ -28,7 +29,7 @@ import { allowSignup } from "./signup-gate.js";
 async function answerClosed(ctx: Ctx, email: string): Promise<Response> {
   const context = await ctx.auth.library.$context;
   await context.password.hash(text(ctx, "password"));
-  await ctx.auth.notifySignupClosed(email);
+  await ctx.auth.notifySignupClosed(email, requestLocale(ctx.c.req.raw.headers));
   return respond(ctx.c, { user: { name: text(ctx, "name"), email, emailVerified: false } }, []);
 }
 

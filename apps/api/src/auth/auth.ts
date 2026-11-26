@@ -12,6 +12,7 @@ import { twoFactor } from "better-auth/plugins/two-factor";
 import { Refusal } from "../errors/refusal.js";
 import type { Logger } from "../logging/logger.js";
 import { enqueueMail, type MailDeps, type MailInput } from "../mail/enqueue.js";
+import { type MailLocale, requestLocale } from "../mail/templates.js";
 import type { RouteAuth } from "../routes/define-route.js";
 import { SESSION_COOKIE, TWO_FACTOR_COOKIE } from "./cookie.js";
 import { createPasswordGuard, type PasswordGuard } from "./hibp.js";
@@ -70,7 +71,7 @@ export interface AuthService extends RouteAuth {
    * The sign-up answer is the same open or closed, so a caller cannot learn which addresses exist; the mail goes
    * to the address owner instead.
    */
-  notifySignupClosed(email: string): Promise<void>;
+  notifySignupClosed(email: string, locale: MailLocale): Promise<void>;
   /** The keyed digest the audit log stores, never the address itself. */
   ipHmac(clientAddress: string): Buffer;
   now(): number;
@@ -87,7 +88,7 @@ export interface AuditEntry {
   readonly clientAddress: string;
 }
 
-type QueuedMail = Omit<MailInput, "workspaceId" | "locale" | "vars">;
+type QueuedMail = Omit<MailInput, "workspaceId" | "vars">;
 const SESSION = {
   expiresIn: SESSION_SECONDS,
   updateAge: SESSION_REFRESH_SECONDS,
@@ -125,7 +126,8 @@ interface Effects {
 const afterCommit = (queue: Effects["queue"], mail: QueuedMail): Promise<void> =>
   queueAfterTransactionHook(() => queue(mail));
 
-// The token rides in the link's fragment, so it never reaches a server log.
+// The token rides in the link's fragment, so it never reaches a server log. The library passes the request
+// when one caused the mail; without one the mail is in English.
 function mailOptions({ queue, claimOwner }: Effects, publicOrigin: string) {
   const pageLink = (path: string, token?: string): string =>
     `${publicOrigin}${path}${token ? `#token=${token}` : ""}`;
@@ -135,21 +137,34 @@ function mailOptions({ queue, claimOwner }: Effects, publicOrigin: string) {
       requireEmailVerification: true,
       revokeSessionsOnPasswordReset: true,
       maxPasswordLength: LIBRARY_MAX_PASSWORD,
-      onExistingUserSignUp: async ({ user }: { user: { email: string } }) =>
+      onExistingUserSignUp: async ({ user }: { user: { email: string } }, request?: Request) =>
         afterCommit(queue, {
           recipient: user.email,
           template: "existing_account_notice",
+          locale: requestLocale(request?.headers),
           link: pageLink("/auth/sign-in"),
         }),
       // No transaction here: the library swallows a failing callback and answers alike for any email.
-      sendResetPassword: async ({ user, token }: { user: { email: string }; token: string }) =>
-        queue({ recipient: user.email, template: "reset_password", link: pageLink("/auth/reset", token) }),
+      sendResetPassword: async (
+        { user, token }: { user: { email: string }; token: string },
+        request?: Request,
+      ) =>
+        queue({
+          recipient: user.email,
+          template: "reset_password",
+          locale: requestLocale(request?.headers),
+          link: pageLink("/auth/reset", token),
+        }),
     },
     emailVerification: {
-      sendVerificationEmail: async ({ user, token }: { user: { email: string }; token: string }) =>
+      sendVerificationEmail: async (
+        { user, token }: { user: { email: string }; token: string },
+        request?: Request,
+      ) =>
         afterCommit(queue, {
           recipient: user.email,
           template: "verify_email",
+          locale: requestLocale(request?.headers),
           link: pageLink("/auth/verify", token),
         }),
       // Runs after the committed update and never on a replay; sign-in claims again if this call fails.
@@ -205,7 +220,7 @@ export function createAuth(options: AuthOptions): AuthService {
   const deps = { keys: options.keys, pepper: options.pepper };
   const effects: Effects = {
     queue: async (mail) => {
-      await enqueueMail(options.pool, { workspaceId: null, locale: "en", vars: {}, ...mail }, deps);
+      await enqueueMail(options.pool, { workspaceId: null, vars: {}, ...mail }, deps);
     },
     claimOwner: async (userId) => {
       await options.pool.query("SELECT app.instance_admin_claim($1)", [userId]);
@@ -231,10 +246,11 @@ export function createAuth(options: AuthOptions): AuthService {
       const answer = await options.pool.query("SELECT app.signup_gate($1) AS open", [email]);
       return answer.rows[0]?.open === true;
     },
-    notifySignupClosed: (email) =>
+    notifySignupClosed: (email, locale) =>
       effects.queue({
         recipient: email,
         template: "signup_closed_notice",
+        locale,
         link: `${options.publicOrigin}/auth/sign-in`,
       }),
     ipHmac,

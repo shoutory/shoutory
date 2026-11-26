@@ -71,6 +71,8 @@ async function send(path: string, init: RequestInit): Promise<Response> {
     // The server refuses an unsafe call without this header (CSRF); it is sent on every call.
     headers: {
       "X-Shoutory-Client": "web",
+      // Mail a call causes is written in the language the person chose here.
+      ...(document.documentElement.lang ? { "Accept-Language": document.documentElement.lang } : {}),
       ...(hasBody ? { "Content-Type": file ? "application/octet-stream" : "application/json" } : {}),
       ...(init.idempotencyKey ? { "Idempotency-Key": init.idempotencyKey } : {}),
     },
