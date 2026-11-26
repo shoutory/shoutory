@@ -1,7 +1,8 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import { loadFounder, loadMember, memberStatePath, signInWithCode } from "../support/journey";
-import { inPage, newRecoveryCodes } from "../support/quality";
+import { inPage, newRecoveryCodes, openScreen } from "../support/quality";
 import { waitForFreshCode } from "../support/restore";
+import { SCREENS } from "../support/screens";
 
 // A real browser, because the library may drop an attribute a unit test cannot see. Focus moves after the page has
 // changed, so each check waits for it instead of reading it once.
@@ -24,6 +25,41 @@ test("the palette, a dialog and a route change put focus where the screen says",
 
   await page.locator(`a[href$="/settings/general"]`).first().click();
   await expect(page.locator("h1")).toBeFocused();
+});
+
+async function tabTo(page: Page, id: string): Promise<void> {
+  for (let presses = 0; presses <= 30; presses += 1) {
+    const active = await page.evaluate(() => document.activeElement?.getAttribute("data-testid") ?? null);
+    if (active === id) return;
+    await page.keyboard.press("Tab");
+  }
+  throw new Error(`${id} is not reachable by Tab`);
+}
+
+test("a media file is renamed and deleted with the keyboard alone", async ({ browser }) => {
+  const screen = SCREENS.find((entry) => entry.id === "media-detail");
+  if (!screen) throw new Error("no media-detail screen");
+  await inPage(browser, { audience: "founder", locale: "en", theme: "light" }, async (page) => {
+    await openScreen(page, screen, browser);
+    const keys = page.keyboard;
+    await tabTo(page, "detail-edit");
+    await keys.press("Enter");
+    await tabTo(page, "edit-name");
+    await keys.press("ControlOrMeta+A");
+    await keys.type("renamed.png");
+    await tabTo(page, "edit-save");
+    await keys.press("Enter");
+    await expect(page.getByTestId("detail-name")).toHaveText("renamed.png");
+    await expect(page.getByTestId("detail-edit")).toBeFocused();
+
+    await tabTo(page, "detail-delete");
+    await keys.press("Enter");
+    await expect(page.getByTestId("delete-cancel")).toBeFocused();
+    await tabTo(page, "delete-confirm");
+    await keys.press("Enter");
+    await expect(page.getByTestId("not-found")).toBeVisible();
+    await expect(page.getByTestId("media-detail-back")).toBeFocused();
+  });
 });
 
 // A member of its own, not the founder: the server takes a code once per person (one per ninety seconds) and ten checks

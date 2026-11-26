@@ -1,3 +1,4 @@
+import type { AuthorizedScope } from "@shoutory/core/authz/scope";
 import { isImageType, isVideoType } from "@shoutory/core/media";
 import type { StorageDriver } from "@shoutory/core/storage";
 import type { TenantTx } from "@shoutory/db/context";
@@ -77,17 +78,25 @@ async function list(tx: TenantTx, workspaceId: string, query: z.infer<typeof lis
   return found.rows;
 }
 
-async function one(tx: TenantTx, workspaceId: string, id: string) {
+// Delete is offered only in the states the delete definer accepts.
+const DELETABLE = new Set(["ready", "rejected"]);
+
+function actionsOf(scope: AuthorizedScope, state: unknown): string[] {
+  if (!scope.permissions.has("library.edit")) return [];
+  return typeof state === "string" && DELETABLE.has(state) ? ["edit", "delete"] : ["edit"];
+}
+
+async function one(tx: TenantTx, scope: AuthorizedScope, id: string) {
   const found = await tx.query(
     `SELECT ${ANSWER}, (SELECT count(DISTINCT v.post_id)::int FROM app.post_media AS m
        JOIN app.post_variants AS v ON v.workspace_id = m.workspace_id AND v.id = m.variant_id
        WHERE m.workspace_id = a.workspace_id AND m.media_id = a.id) AS post_count
      FROM app.media_assets AS a WHERE a.workspace_id = $1 AND a.id = $2 AND a.state <> 'deleted'`,
-    [workspaceId, id],
+    [scope.workspaceId, id],
   );
   const row = found.rows[0];
   if (!row) throw new Refusal("not_found", "media row not visible");
-  return row;
+  return { ...row, actions: actionsOf(scope, row.state) };
 }
 
 function registerList(app: App): void {
@@ -109,8 +118,7 @@ function registerList(app: App): void {
     policy: "session",
     access: VIEW_SPLIT,
     params: mediaParams,
-    handler: ({ scoped, params }) =>
-      scoped(false, (tx, scope) => one(tx, scope.workspaceId, params.media_id)),
+    handler: ({ scoped, params }) => scoped(false, (tx, scope) => one(tx, scope, params.media_id)),
   });
 }
 
@@ -179,7 +187,7 @@ function registerChanges(app: App): void {
           body.tags ?? null,
           body.in_library ?? null,
         ]);
-        return one(tx, scope.workspaceId, params.media_id);
+        return one(tx, scope, params.media_id);
       }),
   });
   // The medium leaves the library and is deleted unless a post, a pending publish or the avatar still holds it; its

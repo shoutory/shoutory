@@ -10,7 +10,7 @@ import {
 } from "react-aria-components";
 import { Link, useParams } from "react-router";
 import { z } from "zod";
-import { ApiError, request } from "../../http/client";
+import { type ApiError, request } from "../../http/client";
 import { ForbiddenPage, NotFoundPage } from "../../pages/system-pages";
 import { isUnknownWorkspace, useShellData } from "../../shell/shell-data";
 import { Button } from "../../ui/button";
@@ -20,6 +20,7 @@ import { ErrorPanel } from "../../ui/error-panel";
 import { Select } from "../../ui/select";
 import { useSignIn } from "../channels/channels-hub";
 import {
+  asApiError,
   hasThumb,
   kindOf,
   LISTED_STATES,
@@ -91,11 +92,6 @@ function appended(now: Ready, page: Page): Ready {
   const fresh = page.data.filter((one) => !known.has(one.id));
   return { ...now, rows: [...now.rows, ...fresh], next: page.meta.next_cursor, more: "idle" };
 }
-
-const asApiError = (error: unknown): ApiError => {
-  if (error instanceof ApiError) return error;
-  throw error;
-};
 
 // A new filter keeps the tiles on screen, marked as updating, until its first page arrives.
 function useMediaList(ws: string, filters: Filters, attempt: number) {
@@ -214,7 +210,11 @@ function Tile({ media, ws, words, onTag }: TileProps) {
       </div>
       <div className="flex min-w-0 flex-col gap-1">
         <span data-testid="tile-name" className="truncate font-medium">
-          <Link data-testid="tile-link" to={`/w/${ws}/media/${media.id}`} className="text-link underline">
+          <Link
+            data-testid="tile-link"
+            to={`/w/${ws}/media/${media.id}`}
+            className="pointer-coarse:leading-11 text-link underline"
+          >
             <DirText>{media.file_name}</DirText>
           </Link>
         </span>
@@ -256,24 +256,24 @@ function Search({ label, clearLabel, submitLabel, testId, onSearch }: SearchProp
   const [text, setText] = useState("");
   // Outside the field: a button inside it takes the field's clear-button behaviour and name.
   return (
-    <div className="flex items-end gap-1">
+    <div className="flex max-w-full items-end gap-1">
       <SearchField
         value={text}
         onChange={setText}
         onSubmit={(value) => onSearch(value.trim())}
         onClear={() => onSearch("")}
-        className="flex flex-col gap-2"
+        className="flex min-w-0 flex-col gap-2"
       >
         <Label className="text-sm font-medium">{label}</Label>
         <div className="flex items-center gap-1 rounded-md border border-border-control bg-surface px-3">
           <Input
             data-testid={testId}
-            className="min-h-10 pointer-coarse:min-h-11 grow bg-transparent text-md outline-none [&::-webkit-search-cancel-button]:hidden"
+            className="min-h-10 pointer-coarse:min-h-11 w-full min-w-0 grow bg-transparent text-md outline-none [&::-webkit-search-cancel-button]:hidden"
           />
           <PlainButton
             data-testid={`${testId}-clear`}
             aria-label={clearLabel}
-            className="size-6 pointer-coarse:size-11 rounded-full outline-offset-2 focus-visible:outline-2 focus-visible:outline-focus"
+            className="size-6 pointer-coarse:size-11 shrink-0 rounded-full outline-offset-2 focus-visible:outline-2 focus-visible:outline-focus"
           >
             ×
           </PlainButton>

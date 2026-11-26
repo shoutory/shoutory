@@ -2,6 +2,12 @@ import type { MessageDescriptor } from "@lingui/core";
 import { msg } from "@lingui/core/macro";
 import { REJECT_REASONS, type RejectReason } from "@shoutory/core/media";
 import { z } from "zod";
+import { ApiError } from "../../http/client";
+
+export const asApiError = (error: unknown): ApiError => {
+  if (error instanceof ApiError) return error;
+  throw error;
+};
 
 export const mediaSchema = z.object({
   id: z.uuid(),
@@ -21,6 +27,7 @@ export const detailSchema = mediaSchema.extend({
   duration_ms: z.number().nullable(),
   created_at: z.iso.datetime({ offset: true }),
   post_count: z.number().int(),
+  actions: z.array(z.string()),
 });
 export type Detail = z.infer<typeof detailSchema>;
 

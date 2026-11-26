@@ -2348,3 +2348,131 @@ msgstr "This channel cannot take this type."
 #. js-lingui-explicit-id
 msgid "media.fit.unknown"
 msgstr "This channel cannot take this file."
+
+#. js-lingui-explicit-id
+msgid "media.edit.open"
+msgstr "Edit"
+
+#. js-lingui-explicit-id
+msgid "media.edit.title"
+msgstr "Edit file"
+
+#. js-lingui-explicit-id
+msgid "media.edit.name"
+msgstr "Name"
+
+#. js-lingui-explicit-id
+msgid "media.edit.name_invalid"
+msgstr "Enter a name of at most 255 characters, on one line."
+
+#. js-lingui-explicit-id
+msgid "media.edit.tag"
+msgstr "Add a tag"
+
+#. js-lingui-explicit-id
+msgid "media.edit.add_tag"
+msgstr "Add"
+
+#. js-lingui-explicit-id
+msgid "media.edit.tag_invalid"
+msgstr "Use at most 64 characters, on one line."
+
+#. js-lingui-explicit-id
+msgid "media.edit.tags_full"
+msgstr "A file can have at most 32 tags."
+
+#. js-lingui-explicit-id
+msgid "media.edit.remove_tag"
+msgstr "Remove tag {tag}"
+
+#. js-lingui-explicit-id
+msgid "media.edit.save"
+msgstr "Save"
+
+#. js-lingui-explicit-id
+msgid "media.cancel"
+msgstr "Cancel"
+
+#. js-lingui-explicit-id
+msgid "media.edit.saved"
+msgstr "Changes saved"
+
+#. js-lingui-explicit-id
+msgid "media.edit.refused.what"
+msgstr "The name or a tag was not accepted"
+
+#. js-lingui-explicit-id
+msgid "media.edit.refused.meaning"
+msgstr "Check them and save again. Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "media.edit.forbidden.what"
+msgstr "You cannot change this file"
+
+#. js-lingui-explicit-id
+msgid "media.edit.forbidden.meaning"
+msgstr "Your role may have changed. Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "media.edit.failed.what"
+msgstr "We could not save your changes"
+
+#. js-lingui-explicit-id
+msgid "media.delete.open"
+msgstr "Delete"
+
+#. js-lingui-explicit-id
+msgid "media.delete.title"
+msgstr "Delete this file?"
+
+#. js-lingui-explicit-id
+msgid "media.delete.impact"
+msgstr "<0>{name}</0> leaves the library and is deleted. This cannot be undone."
+
+#. js-lingui-explicit-id
+msgid "media.delete.confirm"
+msgstr "Delete"
+
+#. js-lingui-explicit-id
+msgid "media.delete.done"
+msgstr "File deleted"
+
+#. js-lingui-explicit-id
+msgid "media.delete.in_use"
+msgstr "{count, plural, one {In use by {shown} post: cannot delete} other {In use by {shown} posts: cannot delete}}"
+
+#. js-lingui-explicit-id
+msgid "media.delete.not_now"
+msgstr "This file can be deleted once it is ready."
+
+#. js-lingui-explicit-id
+msgid "media.delete.in_use.what"
+msgstr "This file is in use"
+
+#. js-lingui-explicit-id
+msgid "media.delete.in_use.meaning"
+msgstr "A post, a pending send or the workspace picture still uses this file."
+
+#. js-lingui-explicit-id
+msgid "media.delete.not_deletable.what"
+msgstr "This file cannot be deleted now"
+
+#. js-lingui-explicit-id
+msgid "media.delete.not_deletable.meaning"
+msgstr "Its state changed. Nothing was deleted."
+
+#. js-lingui-explicit-id
+msgid "media.delete.forbidden.what"
+msgstr "You cannot delete this file"
+
+#. js-lingui-explicit-id
+msgid "media.delete.forbidden.meaning"
+msgstr "Your role may have changed. Nothing was deleted."
+
+#. js-lingui-explicit-id
+msgid "media.delete.failed.what"
+msgstr "We could not delete this file"
+
+#. js-lingui-explicit-id
+msgid "media.delete.failed.meaning"
+msgstr "Nothing was deleted. Try again."

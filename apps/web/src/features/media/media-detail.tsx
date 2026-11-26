@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { z } from "zod";
 import { readZone } from "../../account/prefs";
-import { ApiError, request } from "../../http/client";
+import { type ApiError, request } from "../../http/client";
 import { formatNumber } from "../../i18n/i18n";
 import { ForbiddenPage, NotFoundPage } from "../../pages/system-pages";
 import { isUnknownWorkspace, useShellData } from "../../shell/shell-data";
@@ -14,6 +14,7 @@ import { ErrorPanel } from "../../ui/error-panel";
 import { LocalizedDateTime, useFormatPrefs } from "../../ui/localized";
 import { useSignIn } from "../channels/channels-hub";
 import {
+  asApiError,
   copyStateWords,
   copyWords,
   type Detail,
@@ -30,40 +31,51 @@ import {
   UNKNOWN_REASON,
   UNKNOWN_STATE,
 } from "./media";
+import { type EditHandlers, MediaActions } from "./media-edit";
 import { KindIcon, Late } from "./media-library";
 
 type DetailState =
   | { status: "loading" }
-  | { status: "failed"; error: ApiError }
-  | { status: "ready"; medium: Detail };
+  | { status: "failed"; error: ApiError; busy: boolean }
+  | { status: "ready"; medium: Detail; read: number }
+  | { status: "gone" };
 
-const asApiError = (error: unknown): ApiError => {
-  if (error instanceof ApiError) return error;
-  throw error;
-};
-
-// A read again (Try again, or the file changed state) keeps the page on screen until the answer arrives.
+// A read again (Try again, or the file changed state) keeps the page on screen until the answer arrives; a file
+// deleted meanwhile stays gone.
 function useDetail(base: string) {
   const [state, setState] = useState<DetailState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
   const expired = useSignIn();
+  const unlessGone = (next: DetailState) => setState((now) => (now.status === "gone" ? now : next));
   // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` is the read-again counter.
   useEffect(() => {
     let live = true;
     request(detailSchema, base).then(
-      (medium) => live && setState({ status: "ready", medium }),
+      (medium) => live && unlessGone({ status: "ready", medium, read: attempt }),
       (error: unknown) => {
         const answer = asApiError(error);
         if (!live) return;
         if (answer.state === "session_expired") expired();
-        else setState({ status: "failed", error: answer });
+        else unlessGone({ status: "failed", error: answer, busy: false });
       },
     );
     return () => {
       live = false;
     };
   }, [base, attempt]);
-  return { state, readAgain: () => setAttempt((now) => now + 1) };
+  const readAgain = () => {
+    setState((now) => (now.status === "failed" ? { ...now, busy: true } : now));
+    setAttempt((now) => now + 1);
+  };
+  // A fit refusal reads the file again once; a file that stays ready with no usable copy would loop otherwise.
+  const refits = useRef(0);
+  const notReady = () => {
+    refits.current += 1;
+    if (refits.current === 1) readAgain();
+    return refits.current === 1;
+  };
+  const show = (medium: Detail) => setState((now) => (now.status === "ready" ? { ...now, medium } : now));
+  return { state, readAgain, notReady, show, gone: () => setState({ status: "gone" }) };
 }
 
 const channelsSchema = z.object({
@@ -100,18 +112,19 @@ interface FitReady {
 type FitState = { status: "loading" } | { status: "failed"; error: ApiError } | { status: "gone" } | FitReady;
 
 interface FitHandlers {
-  onNotReady: () => void;
+  onNotReady: () => boolean;
   onExpired: () => void;
 }
 
+// A 409 reads the file again, which reads the fit again while the file is still ready.
 function settleFitError(answer: ApiError, handlers: FitHandlers): FitState {
   if (answer.status === 404) return { status: "gone" };
-  if (answer.status === 409) handlers.onNotReady();
+  if (answer.status === 409 && handlers.onNotReady()) return { status: "loading" };
   if (answer.state === "session_expired") handlers.onExpired();
   return { status: "failed", error: answer };
 }
 
-function useFit(base: string, onNotReady: () => void) {
+function useFit(base: string, onNotReady: () => boolean) {
   const [state, setState] = useState<FitState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
   const generation = useRef(0);
@@ -413,63 +426,90 @@ function StateLine({ medium }: { medium: Detail }) {
   );
 }
 
-function ReadyFit({ base, ws, readAgain }: { base: string; ws: string; readAgain: () => void }) {
-  const fit = useFit(base, readAgain);
+function ReadyFit({ base, ws, notReady }: { base: string; ws: string; notReady: () => boolean }) {
+  const fit = useFit(base, notReady);
   const names = useChannelNames(ws);
   if (fit.state.status === "gone") return <NotFoundPage />;
   return <FitSection fit={fit} names={names} />;
 }
 
-function Body({
-  medium,
-  ws,
-  base,
-  readAgain,
-}: {
+interface BodyProps {
   medium: Detail;
+  read: number;
   ws: string;
   base: string;
-  readAgain: () => void;
-}) {
+  handlers: EditHandlers;
+  notReady: () => boolean;
+}
+
+function Body({ medium, read, ws, base, handlers, notReady }: BodyProps) {
   return (
     <>
       <h1 data-testid="detail-name" className="font-heading text-2xl break-all">
         <DirText>{medium.file_name}</DirText>
       </h1>
       <StateLine medium={medium} />
+      <MediaActions medium={medium} base={base} handlers={handlers} />
       <Preview key={medium.derivatives.thumb ?? "none"} medium={medium} ws={ws} />
       <Facts medium={medium} />
       <Copies medium={medium} />
-      {medium.state === "ready" ? <ReadyFit base={base} ws={ws} readAgain={readAgain} /> : null}
+      {medium.state === "ready" ? <ReadyFit key={read} base={base} ws={ws} notReady={notReady} /> : null}
     </>
   );
 }
 
-function Failed({ error, retry }: { error: ApiError; retry: () => void }) {
+// While Try again runs, the old error is not shown as if it were the answer.
+function Failed({ error, busy, retry }: { error: ApiError; busy: boolean; retry: () => void }) {
   return (
     <div className="flex flex-col items-start gap-3">
-      <ErrorPanel
-        what={<Trans id="media.detail.failed.what">We could not load this file</Trans>}
-        meaning={<Trans id="media.failed.meaning">Nothing was changed. Try again.</Trans>}
-        error={error}
-      />
-      <Button data-testid="media-detail-retry" onPress={retry}>
+      {busy ? null : (
+        <ErrorPanel
+          what={<Trans id="media.detail.failed.what">We could not load this file</Trans>}
+          meaning={<Trans id="media.failed.meaning">Nothing was changed. Try again.</Trans>}
+          error={error}
+        />
+      )}
+      <Button data-testid="media-detail-retry" busy={busy} aria-disabled={busy} onPress={retry}>
         <Trans id="media.retry">Try again</Trans>
       </Button>
     </div>
   );
 }
 
+function BackLink({ ws, ref }: { ws: string; ref?: React.Ref<HTMLAnchorElement> }) {
+  return (
+    <Link
+      ref={ref}
+      data-testid="media-detail-back"
+      to={`/w/${ws}/media`}
+      className="inline-flex min-h-6 pointer-coarse:min-h-11 items-center self-start text-link underline"
+    >
+      <Trans id="media.detail.back">Back to the library</Trans>
+    </Link>
+  );
+}
+
+// A file deleted here or in another tab: focus moves to the way back, since the page it was on is gone.
+function Gone({ ws }: { ws: string }) {
+  const ref = useRef<HTMLAnchorElement>(null);
+  useEffect(() => ref.current?.focus(), []);
+  return (
+    <div className="flex flex-col gap-5">
+      <BackLink ws={ws} ref={ref} />
+      <NotFoundPage />
+    </div>
+  );
+}
+
 function MediaDetail({ ws, id }: { ws: string; id: string }) {
   const base = `/api/v1/workspaces/${ws}/media/${id}`;
-  const { state, readAgain } = useDetail(base);
+  const { state, readAgain, notReady, show, gone } = useDetail(base);
+  if (state.status === "gone") return <Gone ws={ws} />;
   if (state.status === "failed" && state.error.status === 404) return <NotFoundPage />;
   if (state.status === "failed" && state.error.state === "forbidden") return <ForbiddenPage />;
   return (
     <div data-testid="media-detail-state" data-state={state.status} className="flex flex-col gap-5">
-      <Link data-testid="media-detail-back" to={`/w/${ws}/media`} className="text-link underline">
-        <Trans id="media.detail.back">Back to the library</Trans>
-      </Link>
+      <BackLink ws={ws} />
       {state.status === "loading" ? (
         <Late label={<Trans id="media.detail.loading">Loading this file</Trans>}>
           <div
@@ -478,9 +518,16 @@ function MediaDetail({ ws, id }: { ws: string; id: string }) {
           />
         </Late>
       ) : null}
-      {state.status === "failed" ? <Failed error={state.error} retry={readAgain} /> : null}
+      {state.status === "failed" ? <Failed error={state.error} busy={state.busy} retry={readAgain} /> : null}
       {state.status === "ready" ? (
-        <Body medium={state.medium} ws={ws} base={base} readAgain={readAgain} />
+        <Body
+          medium={state.medium}
+          read={state.read}
+          ws={ws}
+          base={base}
+          handlers={{ onSaved: show, onGone: gone, readAgain }}
+          notReady={notReady}
+        />
       ) : null}
     </div>
   );

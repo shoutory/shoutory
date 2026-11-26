@@ -110,6 +110,8 @@ export interface Api {
   mediaList?: (query: URLSearchParams, workspace: string) => Response | Promise<Response>;
   medium?: Answer;
   mediaFit?: (query: URLSearchParams) => Response | Promise<Response>;
+  mediaPatch?: Answer;
+  mediaDelete?: Answer;
 }
 
 export const mediaRow = (change: Record<string, unknown> = {}) => ({
@@ -204,10 +206,23 @@ export const channelPage = (
   actions: string[] = ["connect"],
 ) => json({ data: rows, meta: { next_cursor: nextCursor, actions } });
 
-function mediaAnswers(api: Api, url: URL, workspace: string, rest: string): Answer | undefined {
+const oneMedium = () => json({ data: { ...mediaRow(), post_count: 0, actions: ["edit", "delete"] } });
+
+function oneMediumAnswer(api: Api, method: string): Answer | undefined {
+  if (method === "PATCH") return api.mediaPatch ?? oneMedium;
+  if (method === "DELETE") return api.mediaDelete ?? (() => new Response(null, { status: 204 }));
+  return method === "GET" ? (api.medium ?? oneMedium) : undefined;
+}
+
+function mediaAnswers(
+  api: Api,
+  url: URL,
+  method: string,
+  [workspace, rest]: [string, string],
+): Answer | undefined {
+  if (/^media\/[^/]+$/.test(rest)) return oneMediumAnswer(api, method);
+  if (method !== "GET") return undefined;
   if (rest === "media") return () => (api.mediaList ?? (() => mediaPage([])))(url.searchParams, workspace);
-  if (/^media\/[^/]+$/.test(rest))
-    return api.medium ?? (() => json({ data: { ...mediaRow(), post_count: 0 } }));
   if (/^media\/[^/]+\/fit$/.test(rest))
     return () => (api.mediaFit ?? (() => mediaPage([])))(url.searchParams);
   return undefined;
@@ -219,7 +234,7 @@ function hubAnswers(api: Api, url: URL, method: string): Answer | undefined {
   if (method === "GET" && rest === "channels") {
     return () => (api.channelList ?? (() => channelPage([channelRow()])))(url.searchParams, workspace);
   }
-  if (method === "GET" && rest.startsWith("media")) return mediaAnswers(api, url, workspace, rest);
+  if (rest.startsWith("media")) return mediaAnswers(api, url, method, [workspace, rest]);
   if (method === "GET" && rest === "providers") return api.providers ?? (() => json({ data: PROVIDERS }));
   if (method === "POST" && /^channels\/[^/]+\/check$/.test(rest)) {
     return api.check ?? (() => json({ data: channelRow({ health_checked_at: "2026-11-22T11:00:00.000Z" }) }));

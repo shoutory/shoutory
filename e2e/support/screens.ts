@@ -147,8 +147,11 @@ async function fulfilMedium(page: Page, workspace: string): Promise<void> {
   const reply = (body: unknown) => ({ contentType: "application/json", body: JSON.stringify(body) });
   const [fits, misfit] = CHANNEL_CARDS;
   await page.addInitScript(() => localStorage.setItem("shoutory.zone", "UTC"));
-  await page.route(`${base}/media/${MEDIUM_ID}`, (route) =>
-    route.fulfill(
+  await page.route(`${base}/media/${MEDIUM_ID}`, (route) => {
+    const method = route.request().method();
+    if (method === "DELETE") return route.fulfill({ status: 204 });
+    const change = method === "PATCH" ? (route.request().postDataJSON() as object) : {};
+    return route.fulfill(
       reply({
         data: {
           id: MEDIUM_ID,
@@ -163,11 +166,13 @@ async function fulfilMedium(page: Page, workspace: string): Promise<void> {
           height: 630,
           duration_ms: null,
           created_at: "2026-11-22T10:00:00.000Z",
-          post_count: 2,
+          post_count: 0,
+          actions: ["edit", "delete"],
+          ...change,
         },
       }),
-    ),
-  );
+    );
+  });
   await page.route(`${base}/media/${MEDIUM_ID}/fit*`, (route) =>
     route.fulfill(
       reply({
@@ -266,6 +271,24 @@ export async function openErrorPage(page: Page, error: ErrorPage): Promise<void>
 const dialog = async (page: Page) => page.getByRole("dialog").waitFor();
 
 export const DIALOGS: readonly Dialog[] = [
+  {
+    id: "media-edit",
+    screen: "media-detail",
+    titleId: "media.edit.title",
+    open: async (page) => {
+      await page.getByTestId("detail-edit").click();
+      await dialog(page);
+    },
+  },
+  {
+    id: "media-delete",
+    screen: "media-detail",
+    titleId: "media.delete.title",
+    open: async (page) => {
+      await page.getByTestId("detail-delete").click();
+      await dialog(page);
+    },
+  },
   {
     id: "palette",
     screen: "workspace",

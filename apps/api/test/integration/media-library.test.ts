@@ -308,10 +308,18 @@ describe("one medium", () => {
     expect(answer.status).toBe(status);
     if (reason) expect(await reasonOf(answer)).toBe(reason);
   });
+});
 
+describe("changing one medium", () => {
   it.each([
     ["sets the tags", {}, { tags: ["spring", "launch"] }, 200, { tags: ["spring", "launch"] }],
-    ["renames", {}, { file_name: "renamed.png" }, 200, { file_name: "renamed.png" }],
+    [
+      "renames and answers the fresh row with its actions",
+      {},
+      { file_name: "renamed.png" },
+      200,
+      { file_name: "renamed.png", actions: ["edit", "delete"] },
+    ],
     [
       "keeps a rejected medium out of the library",
       { state: "rejected" },
@@ -335,6 +343,22 @@ describe("one medium", () => {
     expect(answer.status).toBe(status);
     if (status === 200) expect(await dataOf(answer)).toMatchObject(expected as object);
     if (status === 409) expect(await reasonOf(answer)).toBe(expected);
+  });
+});
+
+describe("what the caller may do with one medium", () => {
+  it.each<[string, string, string[]]>([
+    ["owner", "ready", ["edit", "delete"]],
+    ["admin", "rejected", ["edit", "delete"]],
+    ["editor", "ready", ["edit", "delete"]],
+    ["editor", "processing", ["edit"]],
+    ["editor", "pending_upload", ["edit"]],
+    ["approver", "ready", []],
+    ["viewer", "ready", []],
+  ])("the %s on a %s medium is offered %j (floor)", async (who, state, actions) => {
+    const id = await plant({ state });
+    const answer = await send(user(who), "GET", `${base(ws)}/${id}`);
+    expect((await dataOf(answer)).actions).toEqual(actions);
   });
 });
 

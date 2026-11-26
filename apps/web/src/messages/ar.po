@@ -2346,3 +2346,131 @@ msgstr "هذه القناة لا تقبل هذا النوع."
 #. js-lingui-explicit-id
 msgid "media.fit.unknown"
 msgstr "هذه القناة لا تقبل هذا الملف."
+
+#. js-lingui-explicit-id
+msgid "media.edit.open"
+msgstr "تعديل"
+
+#. js-lingui-explicit-id
+msgid "media.edit.title"
+msgstr "تعديل الملف"
+
+#. js-lingui-explicit-id
+msgid "media.edit.name"
+msgstr "الاسم"
+
+#. js-lingui-explicit-id
+msgid "media.edit.name_invalid"
+msgstr "اكتب اسمًا لا يزيد على 255 حرفًا، في سطر واحد."
+
+#. js-lingui-explicit-id
+msgid "media.edit.tag"
+msgstr "إضافة وسم"
+
+#. js-lingui-explicit-id
+msgid "media.edit.add_tag"
+msgstr "إضافة"
+
+#. js-lingui-explicit-id
+msgid "media.edit.tag_invalid"
+msgstr "اكتب وسمًا لا يزيد على 64 حرفًا، في سطر واحد."
+
+#. js-lingui-explicit-id
+msgid "media.edit.tags_full"
+msgstr "لا يمكن أن يحمل الملف أكثر من 32 وسمًا."
+
+#. js-lingui-explicit-id
+msgid "media.edit.remove_tag"
+msgstr "إزالة الوسم {tag}"
+
+#. js-lingui-explicit-id
+msgid "media.edit.save"
+msgstr "حفظ"
+
+#. js-lingui-explicit-id
+msgid "media.cancel"
+msgstr "إلغاء"
+
+#. js-lingui-explicit-id
+msgid "media.edit.saved"
+msgstr "حُفظت التغييرات"
+
+#. js-lingui-explicit-id
+msgid "media.edit.refused.what"
+msgstr "لم يُقبل الاسم أو أحد الوسوم"
+
+#. js-lingui-explicit-id
+msgid "media.edit.refused.meaning"
+msgstr "راجعها واحفظ مرة أخرى. لم يتغير شيء."
+
+#. js-lingui-explicit-id
+msgid "media.edit.forbidden.what"
+msgstr "لا يمكنك تغيير هذا الملف"
+
+#. js-lingui-explicit-id
+msgid "media.edit.forbidden.meaning"
+msgstr "ربما تغيّر دورك. لم يتغير شيء."
+
+#. js-lingui-explicit-id
+msgid "media.edit.failed.what"
+msgstr "تعذّر حفظ تغييراتك"
+
+#. js-lingui-explicit-id
+msgid "media.delete.open"
+msgstr "حذف"
+
+#. js-lingui-explicit-id
+msgid "media.delete.title"
+msgstr "حذف هذا الملف؟"
+
+#. js-lingui-explicit-id
+msgid "media.delete.impact"
+msgstr "سيخرج <0>{name}</0> من المكتبة ويُحذف. لا يمكن التراجع عن ذلك."
+
+#. js-lingui-explicit-id
+msgid "media.delete.confirm"
+msgstr "حذف"
+
+#. js-lingui-explicit-id
+msgid "media.delete.done"
+msgstr "حُذف الملف"
+
+#. js-lingui-explicit-id
+msgid "media.delete.in_use"
+msgstr "{count, plural, zero {يستخدمه {shown} منشور: لا يمكن حذفه} one {يستخدمه منشور واحد: لا يمكن حذفه} two {يستخدمه منشوران: لا يمكن حذفه} few {يستخدمه {shown} منشورات: لا يمكن حذفه} many {يستخدمه {shown} منشورًا: لا يمكن حذفه} other {يستخدمه {shown} منشور: لا يمكن حذفه}}"
+
+#. js-lingui-explicit-id
+msgid "media.delete.not_now"
+msgstr "يمكن حذف هذا الملف بعد أن يصبح جاهزًا."
+
+#. js-lingui-explicit-id
+msgid "media.delete.in_use.what"
+msgstr "هذا الملف مستخدم"
+
+#. js-lingui-explicit-id
+msgid "media.delete.in_use.meaning"
+msgstr "ما زال منشور أو إرسال منتظر أو صورة مساحة العمل يستخدم هذا الملف."
+
+#. js-lingui-explicit-id
+msgid "media.delete.not_deletable.what"
+msgstr "لا يمكن حذف هذا الملف الآن"
+
+#. js-lingui-explicit-id
+msgid "media.delete.not_deletable.meaning"
+msgstr "تغيّرت حالته. لم يُحذف شيء."
+
+#. js-lingui-explicit-id
+msgid "media.delete.forbidden.what"
+msgstr "لا يمكنك حذف هذا الملف"
+
+#. js-lingui-explicit-id
+msgid "media.delete.forbidden.meaning"
+msgstr "ربما تغيّر دورك. لم يُحذف شيء."
+
+#. js-lingui-explicit-id
+msgid "media.delete.failed.what"
+msgstr "تعذّر حذف هذا الملف"
+
+#. js-lingui-explicit-id
+msgid "media.delete.failed.meaning"
+msgstr "لم يُحذف شيء. حاول مرة أخرى."

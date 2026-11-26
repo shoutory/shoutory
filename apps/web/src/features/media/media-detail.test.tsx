@@ -34,7 +34,7 @@ const text = (host: ParentNode, id: string) => byId(host, id)?.textContent ?? ""
 const pageState = (host: ParentNode) => byId(host, "media-detail-state")?.dataset.state;
 
 const medium = (change: Record<string, unknown> = {}) =>
-  json({ data: { ...mediaRow({ id: ID }), post_count: 0, ...change } });
+  json({ data: { ...mediaRow({ id: ID }), post_count: 0, actions: [], ...change } });
 const fitRow = (n: number, change: Record<string, unknown> = {}) => ({
   channel_id: channelId(n),
   ok: true,
@@ -180,14 +180,21 @@ describe("refusals of the detail read", () => {
     expect(router.state.location.pathname).toBe("/sign-in");
   });
 
-  it("a failed read names its request id, never the server's text, and Try again reads again", async () => {
+  it("a failed read names its request id, never the server's text, and Try again is busy until it reads", async () => {
+    const later = deferred();
     let failing = true;
-    const { host } = await visit({ medium: () => (failing ? refusal("internal_error", 500) : medium()) });
+    const { host } = await visit({
+      medium: () => (failing ? refusal("internal_error", 500) : later.answer()),
+    });
     expect(pageState(host)).toBe("failed");
     expect(host.textContent).toContain("req-42");
     expect(host.textContent).not.toContain("words the user must never see");
     failing = false;
     click(byId(host, "media-detail-retry") as HTMLElement);
+    await settle();
+    expect(byId(host, "media-detail-retry")?.getAttribute("aria-busy")).toBe("true");
+    expect(host.textContent).not.toContain("req-42");
+    later.release(medium());
     await settle();
     expect(pageState(host)).toBe("ready");
   });
@@ -294,6 +301,31 @@ describe("refusals and races of the fit read", () => {
     closeApp();
     const gone = await visit({ mediaFit: () => refusal("not_found", 404) });
     expect(byId(gone.host, "not-found")).not.toBeNull();
+  });
+});
+
+describe("reading the file again after a fit refusal", () => {
+  it("while a fit 409 reads the file again no error shows, and a thumbnail that turned ready shows", async () => {
+    const later = deferred();
+    let reads = 0;
+    const { host } = await visit({
+      medium: () => (++reads === 1 ? medium({ derivatives: { thumb: "pending" } }) : later.answer()),
+      mediaFit: () => (reads === 1 ? refusal("conflict", 409, { reason: "not_ready" }) : mediaPage([])),
+    });
+    expect(byId(host, "fit-error")).toBeNull();
+    later.release(medium());
+    await settle();
+    expect(byId(host, "detail-thumb")).not.toBeNull();
+    expect(byId(host, "fit-empty")).not.toBeNull();
+  });
+
+  it("a fit that keeps answering 409 reads the file once more, then shows the error", async () => {
+    const { host, stub } = await visit({
+      mediaFit: () => refusal("conflict", 409, { reason: "not_ready" }),
+    });
+    await settle();
+    expect(calls(stub, `/media/${ID}`)).toHaveLength(2);
+    expect(byId(host, "fit-error")).not.toBeNull();
   });
 
   it.each<[string, () => Response, string]>([
