@@ -13,7 +13,7 @@ export const mastodonManifest = manifestSchema.parse({
   // read:accounts for verify_credentials, read:statuses so a read-back sees private and direct posts, write:statuses to
   // post and delete, write:media for uploads.
   scopes: ["read:accounts", "read:statuses", "write:statuses", "write:media"],
-  capabilities: ["text", "delete"],
+  capabilities: ["text", "image", "video", "delete"],
   readBackMode: "A",
   // The native Idempotency-Key (docs.joinmastodon.org/methods/statuses/, "stored for up to 1 hour"). VERIFY: the window is
   // measured on a live instance before a resend is ever allowed, so a resend after an unknown outcome waits for a
@@ -26,15 +26,20 @@ export const mastodonManifest = manifestSchema.parse({
   // read 2026-11-24).
   rateLimits: [
     { name: "api", scope: "account", key: "account", max: 300, windowSeconds: 300 },
-    { name: "media", scope: "account", key: "account", max: 30, windowSeconds: 1800 },
+    { name: "media", scope: "account", key: "account", max: 30, windowSeconds: 1800, spentBy: "upload" },
     // DELETE /api/v1/statuses/:id: 30 within 30 minutes (docs.joinmastodon.org/api/rate-limits, read 2026-11-24).
-    { name: "delete", scope: "account", key: "account", max: 30, windowSeconds: 1800 },
+    { name: "delete", scope: "account", key: "account", max: 30, windowSeconds: 1800, spentBy: "delete" },
   ],
   actionWindows: {},
   egressHostSource: "channel",
+  // `default` leaves the visibility out of a create, so the account's own default applies.
+  providerDefault: { visibility: "default", sensitive: false, spoiler_text: "" },
   followUpRoles: [],
   leaseSeconds: { prepare: 60, commit: 120, readBack: 60, delete: 60 },
   callTimeoutSeconds: 30,
+  // VERIFY: the media page gives no upload time or processing limit; both are chosen here until a live run measures them.
+  uploadTimeoutSeconds: 300,
+  maxProcessingSeconds: 600,
   retryAfterMaxSeconds: 900,
   dispatchMarginSeconds: 300,
   maxInFlightSeconds: 60,
@@ -58,6 +63,8 @@ export const mastodonManifest = manifestSchema.parse({
     textLength: { value: 500, source: INSTANCE_DOCS, checked: CHECKED },
     urlWeight: { value: 23, source: INSTANCE_DOCS, checked: CHECKED },
     mediaMaxCount: { value: 4, source: INSTANCE_DOCS, checked: CHECKED },
-    imageMaxBytes: { value: 10_485_760, source: INSTANCE_DOCS, checked: CHECKED },
+    // The example answer on the instance page (read 2026-11-27); an instance states its own and that one wins.
+    imageMaxBytes: { value: 16_777_216, source: INSTANCE_DOCS, checked: "2026-11-27" },
+    videoMaxBytes: { value: 103_809_024, source: INSTANCE_DOCS, checked: "2026-11-27" },
   },
 });

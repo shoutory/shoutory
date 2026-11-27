@@ -223,6 +223,34 @@ const BOOKS: [string, Plant, boolean, Move, string[], string[]][] = [
     [],
   ],
 ];
+describe("the commit start of a processing row", () => {
+  it("moves it to dispatching as the poller, marks the effect and leaves no deadline behind", async () => {
+    const made = (
+      await plant({
+        state: "processing",
+        extra: {
+          lease_owner: "worker-a",
+          lease_expires_at: new Date(Date.now() + 60_000),
+          processing_deadline: new Date(Date.now() + 300_000),
+        },
+      })
+    ).id;
+    const started = await exec(LEDGER, START, [WA, made, 1, "commit", "{}"]);
+    expect(started.rows?.[0]).toMatchObject({ outcome: "started" });
+    const [row] = await rows(
+      "SELECT state, effect, attempt_count, last_actor, processing_deadline FROM app.operations WHERE id = $1",
+      [made],
+    );
+    expect(row).toMatchObject({
+      state: "dispatching",
+      effect: "possible",
+      attempt_count: 1,
+      last_actor: "P",
+      processing_deadline: null,
+    });
+  });
+});
+
 describe("usage and quota", () => {
   it.each(BOOKS)("%s", async (_name, planted, quota, move, usage, quotas) => {
     const op = (await plant(planted)).id;
@@ -461,7 +489,44 @@ describe("the progress of a worker and the counts", () => {
       provider_refs: { upload: "u-1" },
     });
   });
+});
 
+describe("the next check a poller sets", () => {
+  // [state, token, outcome]: only the holder of a processing row can set its next check, which also ends its lease
+  it.each([
+    ["processing", 1, "recorded"],
+    ["processing", 99, "lost_lease"],
+    ["claimed", 1, "lost_lease"],
+  ] as const)("a poll delay on a %s row with token %i is %s", async (state, token, outcome) => {
+    const made = (
+      await plant({
+        state,
+        extra:
+          state === "processing"
+            ? { lease_owner: "worker-a", lease_expires_at: new Date(Date.now() + 60_000) }
+            : {},
+      })
+    ).id;
+    const answer = await exec(
+      LEDGER,
+      "SELECT * FROM app.operation_record_progress($1::uuid, $2::uuid, $3::bigint, NULL, NULL, 45)",
+      [WA, made, token],
+    );
+    expect(answer.rows?.[0]).toMatchObject({ outcome });
+    const [now] = await rows(
+      "SELECT lease_owner, extract(epoch FROM next_check_at - clock_timestamp())::float8 AS check_in FROM app.operations WHERE id = $1",
+      [made],
+    );
+    if (outcome === "lost_lease") expect(Number(now?.check_in)).toBeLessThan(0);
+    else {
+      expect(now?.lease_owner).toBeNull();
+      expect(Number(now?.check_in)).toBeGreaterThan(40);
+      expect(Number(now?.check_in)).toBeLessThanOrEqual(45);
+    }
+  });
+});
+
+describe("the counts of the ledger", () => {
   it("counts every state of the ledger, with a zero for an empty one", async () => {
     const count = async () =>
       new Map(

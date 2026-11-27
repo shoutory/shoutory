@@ -1,7 +1,10 @@
 import {
+  bucketKey,
   type Claim,
+  denialMove,
   type PreflightMove,
   type TransitionResult,
+  takeBucket,
   transition,
 } from "@shoutory/core/ledger/client";
 import { type TenantTx, withTenant } from "@shoutory/db/context";
@@ -26,6 +29,9 @@ export interface Operation {
   readonly frozen_version_id: string | null;
   readonly attempt_count: number;
   readonly lateness_left_seconds: number;
+  readonly locale: string | null;
+  readonly step_cursor: string | null;
+  readonly provider_refs: unknown;
 }
 
 export interface ChannelFacts {
@@ -42,6 +48,7 @@ export interface Held {
   readonly leaseSeconds: number;
   readonly started: number;
   readonly signal: AbortSignal;
+  readonly leaseEnd: () => number;
 }
 
 export const sqlOf = (tx: TenantTx) => (text: string, values: unknown[]) => tx.query(text, values);
@@ -57,9 +64,11 @@ export const refuseEgress = (): typeof fetch => () =>
 export async function readOperation(pool: AppPool, claim: Claim): Promise<Operation> {
   const { rows } = await inJob(pool, claim.workspaceId, (tx) =>
     tx.query<Operation>(
-      `SELECT id, workspace_id, channel_id, variant_id, provider_id, idempotency_marker, frozen_version_id, attempt_count,
-              extract(epoch FROM lateness_deadline + blocked_total - clock_timestamp())::float8 AS lateness_left_seconds
-         FROM app.operations WHERE id = $1`,
+      `SELECT o.id, o.workspace_id, o.channel_id, o.variant_id, o.provider_id, o.idempotency_marker, o.frozen_version_id,
+              o.attempt_count, o.step_cursor, o.provider_refs,
+              extract(epoch FROM o.lateness_deadline + o.blocked_total - clock_timestamp())::float8 AS lateness_left_seconds,
+              (SELECT v.locale FROM app.post_variants v WHERE v.workspace_id = o.workspace_id AND v.id = o.variant_id) AS locale
+         FROM app.operations o WHERE o.id = $1`,
       [claim.id],
     ),
   );
@@ -76,6 +85,8 @@ export interface MoveChanges {
   readonly horizonDays?: number;
   readonly evidence?: unknown;
   readonly idempotentResend?: boolean;
+  readonly processingSeconds?: number;
+  readonly stepCursor?: string;
 }
 
 export async function fencedMove(
@@ -84,7 +95,7 @@ export async function fencedMove(
   from: string,
   to: string,
   changes: MoveChanges = {},
-  actor: "W" | "R" = "W",
+  actor: "W" | "P" | "R" = "W",
 ): Promise<TransitionResult> {
   return transition(sqlOf(tx), {
     workspaceId: held.claim.workspaceId,
@@ -95,7 +106,9 @@ export async function fencedMove(
     actor,
     ...(changes.waitSeconds === undefined ? {} : { attemptInSeconds: changes.waitSeconds }),
     ...(changes.checkInSeconds === undefined ? {} : { checkInSeconds: changes.checkInSeconds }),
+    ...(changes.processingSeconds === undefined ? {} : { processingInSeconds: changes.processingSeconds }),
     changes: {
+      ...(changes.stepCursor === undefined ? {} : { step_cursor: changes.stepCursor }),
       ...(changes.reasonCode === undefined ? {} : { reason_code: changes.reasonCode }),
       ...(changes.queue === undefined ? {} : { queue: changes.queue }),
       ...(changes.horizonDays === undefined ? {} : { unverified_horizon_days: changes.horizonDays }),
@@ -110,14 +123,16 @@ export const movedOrLost = (held: Held, to: string, moved: boolean, reason?: str
     ? { kind: "moved", id: held.claim.id, to, ...(reason === undefined ? {} : { reason }) }
     : { kind: "lost", id: held.claim.id };
 
+// The turn moves a claimed row as the worker; a poll moves a processing row as the poller.
 export async function move(
   pool: AppPool,
   held: Held,
   to: string,
   changes: MoveChanges = {},
+  from: "claimed" | "processing" = "claimed",
 ): Promise<boolean> {
   const result = await inJob(pool, held.claim.workspaceId, (tx) =>
-    fencedMove(tx, held, "claimed", to, changes),
+    fencedMove(tx, held, from, to, changes, from === "claimed" ? "W" : "P"),
   );
   return result.outcome === "moved";
 }
@@ -137,4 +152,36 @@ export async function handBack(
   kind: "closed" | "handed_back",
 ): Promise<TurnResult> {
   return (await move(pool, held, "pending")) ? { kind } : { kind: "lost", id: held.claim.id };
+}
+
+// Takes one token from each limit the event spends, stopping at the first denial; the tokens already taken stay spent, so
+// a turn never sends more than the limits allow.
+export async function takeLimits(
+  pool: AppPool,
+  held: Held,
+  channel: ChannelFacts,
+  spender: "turn" | "upload",
+  stopped: () => boolean,
+): Promise<PreflightMove | null> {
+  for (const limit of held.manifest.rateLimits) {
+    if (limit.spentBy !== spender) continue;
+    const key = bucketKey({ limitName: limit.name, scope: limit.scope, keyName: limit.key, channel });
+    const answer = await inJob(pool, held.claim.workspaceId, (tx) =>
+      takeBucket(sqlOf(tx), {
+        key,
+        scope: limit.scope,
+        capacity: limit.max,
+        windowSeconds: limit.windowSeconds,
+      }),
+    );
+    if (stopped()) return null;
+    if (!answer.allowed) {
+      return denialMove({
+        retryAfterSeconds: answer.retryAfterSeconds,
+        retryAfterMaxSeconds: held.manifest.retryAfterMaxSeconds,
+        latenessLeftSeconds: held.operation.lateness_left_seconds,
+      });
+    }
+  }
+  return null;
 }

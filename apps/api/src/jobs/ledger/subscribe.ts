@@ -1,3 +1,4 @@
+import type { StorageDriver } from "@shoutory/core/storage";
 import type { AppPool } from "@shoutory/db/pool";
 import type { AdapterMap } from "@shoutory/provider-sdk/adapter";
 import type { Manifest } from "@shoutory/provider-sdk/manifest";
@@ -23,6 +24,7 @@ export interface PublishSubscription {
   readonly credentials: CredentialService;
   readonly owner: string;
   readonly closing: AbortSignal;
+  readonly storage: StorageDriver;
 }
 
 // A wake-up carries nothing: the ledger row is the truth.
@@ -37,7 +39,7 @@ export async function subscribePublish(options: PublishSubscription): Promise<vo
 }
 
 async function drain(options: PublishSubscription, queue: string): Promise<void> {
-  const { pool, logger, registry, adapters, fetchFor, credentials, owner, closing } = options;
+  const { pool, logger, registry, adapters, fetchFor, credentials, owner, closing, storage } = options;
   for (let turns = 0; turns < MAX_TURNS_PER_JOB; turns++) {
     const result = await runTurn({
       pool,
@@ -49,6 +51,7 @@ async function drain(options: PublishSubscription, queue: string): Promise<void>
       queue,
       owner,
       closing,
+      storage,
     });
     if (result.kind === "idle" || result.kind === "closed") return;
   }

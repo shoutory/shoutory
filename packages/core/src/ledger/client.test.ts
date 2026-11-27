@@ -2,18 +2,19 @@ import { describe, expect, it } from "vitest";
 import { bucketKey, callTimeoutMs, denialMove, rereadOutcome, sweepArguments } from "./client.js";
 
 describe("callTimeoutMs", () => {
-  // [manifest timeout ms, lease seconds, ms since the claim started, the timeout or null for no call]
-  const ROWS: [number, number, number, number | null][] = [
-    [30_000, 120, 0, 30_000],
-    [30_000, 120, 95_000, 15_000],
-    [30_000, 60, 45_000, 5_000],
-    [30_000, 60, 50_000, null],
-    [30_000, 60, 61_000, null],
+  // [the call's own timeout ms, ms until the lease end the heartbeat last renewed, the timeout or null for no call]
+  const ROWS: [number, number, number | null][] = [
+    [30_000, 120_000, 30_000],
+    [300_000, 120_000, 300_000],
+    [300_000, 15_000, 300_000],
+    [30_000, 10_001, 30_000],
+    [30_000, 10_000, null],
+    [30_000, -1_000, null],
   ];
   it.each(ROWS)(
-    "a %i ms call timeout with a %i s lease started %i ms ago gives %s (min of the timeout and what is left minus 10 s)",
-    (timeout, lease, elapsed, expected) => {
-      expect(callTimeoutMs({ manifestTimeoutMs: timeout, leaseSeconds: lease, elapsedMs: elapsed })).toBe(
+    "a %i ms call timeout with %i ms to the renewed lease end gives %s (no call once under 10 s; the timeout itself otherwise)",
+    (timeout, left, expected) => {
+      expect(callTimeoutMs({ callTimeoutMs: timeout, leaseEndMs: 1_000_000 + left, nowMs: 1_000_000 })).toBe(
         expected,
       );
     },

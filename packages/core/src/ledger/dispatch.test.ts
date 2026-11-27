@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { backoffSeconds, type CallResult, type DispatchFacts, resultMove } from "./dispatch.js";
+import { backoffSeconds, type CallResult, type DispatchFacts, pollMove, resultMove } from "./dispatch.js";
 
 const FACTS: DispatchFacts = {
   retryAfterMaxSeconds: 900,
@@ -119,6 +119,26 @@ const MOVES: [string, CallResult, Partial<DispatchFacts>, object][] = [
     { row: 21, to: "paused", reasonCode: "provider_cooldown", waitSeconds: 86_400 },
   ],
 ];
+
+// [what the poll answered, the move]
+const POLLS: [string, CallResult, object][] = [
+  [
+    "a medium still processing waits the hinted time",
+    { ok: true, effect: "none", mediaPoll: { ready: false, checkInSeconds: 45 } },
+    { row: "wait", checkInSeconds: 45 },
+  ],
+  [
+    "a rate limit waits its delay, capped",
+    sent({ errorClass: "rate_limited", retryAfterMs: 2_000_000 }),
+    { row: "wait", checkInSeconds: 900 },
+  ],
+];
+
+describe("pollMove", () => {
+  it.each(POLLS)("%s", (_name, result, move) => {
+    expect(pollMove(result, { gapSeconds: 30, retryAfterMaxSeconds: 900 })).toEqual(move);
+  });
+});
 
 describe("resultMove", () => {
   it.each(MOVES)("%s", (_name, result, facts, move) => {

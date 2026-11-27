@@ -12,6 +12,23 @@ describe("the manifest of the instance provider", () => {
     expect(parsed.retrySafety.delete).toBe("never");
   });
 
+  it("declares the settings a post may carry, with the account's own visibility as the default", () => {
+    expect(parsed.providerDefault).toEqual({ visibility: "default", sensitive: false, spoiler_text: "" });
+  });
+
+  it("spends the media token per upload and the delete token on delete turns only", () => {
+    expect(Object.fromEntries(parsed.rateLimits.map((limit) => [limit.name, limit.spentBy]))).toEqual({
+      api: "turn",
+      media: "upload",
+      delete: "delete",
+    });
+  });
+
+  it("states the upload timeout and the processing wait the worker bounds a call and a wait with", () => {
+    expect([parsed.uploadTimeoutSeconds, parsed.maxProcessingSeconds]).toEqual([300, 600]);
+    expect(parsed.leaseSeconds).toEqual({ prepare: 60, commit: 120, readBack: 60, delete: 60 });
+  });
+
   it.each([
     ["a family emoji is one character", "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}", 1],
     [

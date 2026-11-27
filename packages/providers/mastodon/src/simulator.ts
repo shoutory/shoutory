@@ -28,6 +28,15 @@ interface Limits {
   readonly reservedPerUrl: number;
   readonly maxMedia: number;
   readonly imageSizeLimit: number;
+  readonly videoSizeLimit: number;
+  readonly descriptionLimit: number;
+}
+
+export interface UploadedMedium {
+  readonly id: string;
+  readonly mime: string;
+  readonly description: string | null;
+  readonly bytes: Buffer;
 }
 
 export interface SimulatorSettings {
@@ -35,6 +44,10 @@ export interface SimulatorSettings {
   readonly verify?: "ok" | "revoked" | "forbidden" | "stub" | "not_json";
   /** A null leaves the field out of the instance answer. */
   readonly limits?: { readonly [K in keyof Limits]?: number | null };
+  /** The version the instance answer states; a null leaves it out. */
+  readonly version?: string | null;
+  /** How many reads of a video answer 206 before it is ready (200). */
+  readonly processingPolls?: number;
 }
 
 export interface MastodonSimulatorOptions {
@@ -47,8 +60,9 @@ export interface MastodonSimulator extends Simulator {
   reset(settings?: SimulatorSettings): void;
   revokeApps(): void;
   issueToken(): string;
-  arm(operation: MatrixOperation, fault: MatrixFault): void;
+  arm(operation: MatrixOperation | "upload" | "poll", fault: MatrixFault): void;
   stored(): readonly StoredPost[];
+  media(): readonly UploadedMedium[];
 }
 
 const DEFAULT_LIMITS: Limits = {
@@ -56,7 +70,18 @@ const DEFAULT_LIMITS: Limits = {
   reservedPerUrl: 23,
   maxMedia: 4,
   imageSizeLimit: 10_485_760,
+  videoSizeLimit: 41_943_040,
+  descriptionLimit: 1500,
 };
+// The types the instance page lists in its example answer (docs.joinmastodon.org/methods/instance/, read 2026-11-27).
+const SUPPORTED_MIME_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "video/mp4",
+  "video/webm",
+];
 const ACCOUNT_ID = "109000000000000001";
 const CODE_TTL_MS = 60_000;
 
@@ -86,6 +111,9 @@ interface State {
   settings: SimulatorSettings;
   statuses: Map<string, StoredPost>;
   keys: Map<string, { id: string; at: number }>;
+  uploads: UploadedMedium[];
+  reads: Map<string, number>;
+  ready: Set<string>;
 }
 
 function discovery(state: State, host: string | undefined): SimReply {
@@ -229,14 +257,19 @@ const instance =
       status: 200,
       body: {
         domain: request.headers.host,
-        version: "4.3.0",
+        version: state.settings.version === undefined ? "4.3.0" : (state.settings.version ?? undefined),
         configuration: {
           statuses: {
             max_characters: limits.maxCharacters ?? undefined,
             max_media_attachments: limits.maxMedia ?? undefined,
             characters_reserved_per_url: limits.reservedPerUrl ?? undefined,
           },
-          media_attachments: { image_size_limit: limits.imageSizeLimit ?? undefined },
+          media_attachments: {
+            supported_mime_types: SUPPORTED_MIME_TYPES,
+            image_size_limit: limits.imageSizeLimit ?? undefined,
+            video_size_limit: limits.videoSizeLimit ?? undefined,
+            description_limit: limits.descriptionLimit ?? undefined,
+          },
         },
       },
     };
@@ -291,6 +324,37 @@ function keptFor(state: State, key: string | undefined): StoredPost | undefined 
   return state.statuses.get(kept.id);
 }
 
+// VERIFY: a status that names a medium still being processed is refused (Mixpost issue 146); every video is still
+// processing here until a poll marks it ready.
+function namesProcessingMedium(state: State, mediaIds: unknown): boolean {
+  const named = Array.isArray(mediaIds) ? mediaIds : [];
+  return state.uploads.some(
+    (medium) => medium.mime.startsWith("video/") && !state.ready.has(medium.id) && named.includes(medium.id),
+  );
+}
+
+// GET /api/v1/media/:id (docs.joinmastodon.org/methods/media/, read 2026-11-27): 206 while the medium is still being
+// processed, 200 once it is ready, 404 for a medium the account does not have.
+const readMedium =
+  (state: State): Handler =>
+  (request) => {
+    const refused = refusedToken(state, request);
+    if (refused) return refused;
+    const id = request.params.id ?? "";
+    const medium = state.uploads.find((candidate) => candidate.id === id);
+    if (medium === undefined) return fail(404, NOT_FOUND);
+    const reads = (state.reads.get(id) ?? 0) + 1;
+    state.reads.set(id, reads);
+    const video = medium.mime.startsWith("video/");
+    if (video && reads <= (state.settings.processingPolls ?? 0))
+      return { status: 206, body: { id, type: "video", url: null } };
+    state.ready.add(id);
+    return {
+      status: 200,
+      body: { id, type: video ? "video" : "image", url: `http://${request.headers.host}/media/${id}` },
+    };
+  };
+
 const createStatus =
   (state: State): Handler =>
   (request, { effect }) => {
@@ -299,6 +363,8 @@ const createStatus =
     const fields = jsonOrForm(request.body);
     const text = typeof fields.status === "string" ? fields.status : "";
     if (text === "") return fail(422, "Validation failed: Text can't be blank");
+    if (namesProcessingMedium(state, fields.media_ids))
+      return fail(422, "Cannot attach files that have not finished processing. Try again in a moment!");
     const key = request.headers["idempotency-key"];
     const known = keptFor(state, key);
     if (known) return { status: 200, body: statusBody(known, request.headers.host) };
@@ -324,6 +390,24 @@ const readStatus =
     return post ? { status: 200, body: statusBody(post, request.headers.host) } : fail(404, NOT_FOUND);
   };
 
+// PUT /api/v1/statuses/:id (docs.joinmastodon.org/methods/statuses/, read 2026-11-27): the text of a status the account
+// owns is replaced; a missing status is a 404. The visibility is not an edit parameter and is ignored.
+const editStatus =
+  (state: State): Handler =>
+  (request, { effect }) => {
+    const refused = refusedToken(state, request);
+    if (refused) return refused;
+    const post = state.statuses.get(request.params.id ?? "");
+    if (!post) return fail(404, NOT_FOUND);
+    const { status } = jsonOrForm(request.body);
+    if (typeof status !== "string" || status === "")
+      return fail(422, "Validation failed: Text can't be blank");
+    const edited = { ...post, text: status };
+    state.statuses.set(post.externalId, edited);
+    effect();
+    return { status: 200, body: statusBody(edited, request.headers.host) };
+  };
+
 const deleteStatus =
   (state: State): Handler =>
   (request, { effect }) => {
@@ -336,7 +420,84 @@ const deleteStatus =
     return { status: 200, body: statusBody(post, request.headers.host) };
   };
 
-const ROUTES: Readonly<Record<MatrixOperation, string>> = {
+interface Part {
+  readonly name: string;
+  readonly type: string | undefined;
+  readonly bytes: Buffer;
+}
+
+// A multipart/form-data body (RFC 7578): parts split on the boundary line, each with its headers, a blank line and the content.
+function partsOf(request: { headers: Readonly<Record<string, string>>; body: Buffer }): Part[] {
+  const boundary = /boundary=([^;]+)/.exec(request.headers["content-type"] ?? "")?.[1];
+  if (boundary === undefined) return [];
+  const parts: Part[] = [];
+  const marker = Buffer.from(`--${boundary}`);
+  let at = request.body.indexOf(marker);
+  while (at !== -1) {
+    const start = at + marker.length;
+    const next = request.body.indexOf(marker, start);
+    if (next === -1) break;
+    const part = request.body.subarray(start + 2, next - 2);
+    const split = part.indexOf("\r\n\r\n");
+    const head = part.subarray(0, split).toString("utf8");
+    const name = /name="([^"]*)"/.exec(head)?.[1];
+    if (name !== undefined)
+      parts.push({
+        name,
+        type: /content-type:\s*(\S+)/i.exec(head)?.[1],
+        bytes: Buffer.from(part.subarray(split + 4)),
+      });
+    at = next;
+  }
+  return parts;
+}
+
+// POST /api/v2/media (docs.joinmastodon.org/methods/media/, read 2026-11-27): the file and its description arrive as
+// multipart form fields; an image is ready at once (200) and a video is still being processed (202, no url yet).
+function invalidUpload(
+  state: State,
+  file: Part | undefined,
+  description: string | null,
+): SimReply | undefined {
+  const limits = { ...DEFAULT_LIMITS, ...state.settings.limits };
+  const mime = file?.type ?? "";
+  const cap =
+    (mime.startsWith("video/") ? limits.videoSizeLimit : limits.imageSizeLimit) ?? Number.MAX_SAFE_INTEGER;
+  if (file === undefined || !SUPPORTED_MIME_TYPES.includes(mime) || file.bytes.length > cap)
+    return fail(422, "Validation failed: File is invalid");
+  const longest = limits.descriptionLimit ?? Number.MAX_SAFE_INTEGER;
+  return description !== null && [...description].length > longest
+    ? fail(422, "Validation failed: Description is too long")
+    : undefined;
+}
+
+const uploadMedia =
+  (state: State): Handler =>
+  (request) => {
+    const refused = refusedToken(state, request);
+    if (refused) return refused;
+    const parts = partsOf(request);
+    const file = parts.find((part) => part.name === "file");
+    const description = parts.find((part) => part.name === "description")?.bytes.toString("utf8") ?? null;
+    const invalid = invalidUpload(state, file, description);
+    if (invalid || file === undefined) return invalid ?? fail(422, "Validation failed: File is invalid");
+    const [id, mime] = [`1100000000000${String(state.uploads.length + 1).padStart(5, "0")}`, file.type ?? ""];
+    const video = mime.startsWith("video/");
+    state.uploads.push({ id, mime, description, bytes: file.bytes });
+    return {
+      status: video ? 202 : 200,
+      body: {
+        id,
+        type: video ? "video" : "image",
+        url: video ? null : `http://${request.headers.host}/media/${id}`,
+        description,
+      },
+    };
+  };
+
+const ROUTES: Readonly<Record<MatrixOperation | "upload" | "poll", string>> = {
+  upload: "POST /api/v2/media",
+  poll: "GET /api/v1/media/:id",
   commit: "POST /api/v1/statuses",
   readBack: "GET /api/v1/statuses/:id",
   delete: "DELETE /api/v1/statuses/:id",
@@ -364,17 +525,21 @@ function answerTo(fault: MatrixFault) {
   };
 }
 
+const emptyState = (settings: SimulatorSettings): Omit<State, "now"> => ({
+  apps: [],
+  tokens: [],
+  revoked: new Set(),
+  codes: new Map(),
+  settings,
+  statuses: new Map(),
+  keys: new Map(),
+  uploads: [],
+  reads: new Map(),
+  ready: new Set(),
+});
+
 export async function startMastodonSimulator(options: MastodonSimulatorOptions): Promise<MastodonSimulator> {
-  const state: State = {
-    now: options.now,
-    apps: [],
-    tokens: [],
-    revoked: new Set(),
-    codes: new Map(),
-    settings: {},
-    statuses: new Map(),
-    keys: new Map(),
-  };
+  const state: State = { now: options.now, ...emptyState({}) };
   const simulator = await startSimulator({
     "GET /.well-known/oauth-authorization-server": (request) => discovery(state, request.headers.host),
     "POST /api/v1/apps": registerApp(state),
@@ -382,9 +547,12 @@ export async function startMastodonSimulator(options: MastodonSimulatorOptions):
     "POST /oauth/token": token(state),
     "GET /api/v1/accounts/verify_credentials": verifyCredentials(state),
     "GET /api/v2/instance": instance(state),
+    [ROUTES.upload]: uploadMedia(state),
+    [ROUTES.poll]: readMedium(state),
     [ROUTES.commit]: createStatus(state),
     [ROUTES.readBack]: readStatus(state),
     [ROUTES.delete]: deleteStatus(state),
+    [ROUTES.edit]: editStatus(state),
   });
   return {
     ...simulator,
@@ -395,15 +563,7 @@ export async function startMastodonSimulator(options: MastodonSimulatorOptions):
       return state.tokens;
     },
     reset(settings: SimulatorSettings = {}): void {
-      Object.assign(state, {
-        apps: [],
-        tokens: [],
-        revoked: new Set(),
-        codes: new Map(),
-        settings,
-        statuses: new Map(),
-        keys: new Map(),
-      });
+      Object.assign(state, emptyState(settings));
       (simulator.requests as unknown[]).length = 0;
     },
     revokeApps(): void {
@@ -417,5 +577,6 @@ export async function startMastodonSimulator(options: MastodonSimulatorOptions):
       simulator.faults.failNext(ROUTES[operation], answerTo(fault));
     },
     stored: () => [...state.statuses.values()],
+    media: () => state.uploads,
   };
 }

@@ -269,7 +269,7 @@ export async function startWorker({
     logger,
     providers: channelProvidersOf(registry, adapters),
   });
-  const sends = { pool, boss, registry, logger, adapters, fetchFor, credentials };
+  const sends = { pool, boss, registry, logger, adapters, fetchFor, credentials, storage: media.storage };
   const ledger = createLedgerTick({
     ...sends,
     ...(ledgerIntervalMs === undefined ? {} : { intervalMs: ledgerIntervalMs }),

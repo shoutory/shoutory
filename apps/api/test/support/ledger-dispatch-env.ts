@@ -32,6 +32,7 @@ export function useDispatchEnv(): void {
 }
 
 export const queueOf = () => state.queue;
+export const newWorkspace = () => admin((client) => seedWorkspace(client));
 
 export const logger = createLogger({ secrets: [], stream: { write: () => undefined } });
 export const workerPool = () => state.db.pool("worker");
@@ -194,6 +195,8 @@ export interface Plant {
   host?: string;
   token?: string;
   noCredential?: true;
+  /** A workspace made by `newWorkspace`; the environment's own when absent. */
+  workspace?: string;
 }
 const plantExtras = (o: Plant): Record<string, unknown> => ({
   ...(o.attempts === undefined ? {} : { attempt_count: o.attempts }),
@@ -212,7 +215,12 @@ const plantVersion = async (o: Plant, post: string, channel: string): Promise<st
       await rows(
         `INSERT INTO app.post_versions (workspace_id, post_id, version_no, kind, snapshot, snapshot_hash, created_by)
          VALUES ($1, $2, 1, 'scheduled', $3::jsonb, decode(repeat('ab', 32), 'hex'), $4) RETURNING id`,
-        [state.ws, post, JSON.stringify(o.unreadable ? { version: 1 } : SNAPSHOT(channel)), randomUUID()],
+        [
+          o.workspace ?? state.ws,
+          post,
+          JSON.stringify(o.unreadable ? { version: 1 } : SNAPSHOT(channel)),
+          randomUUID(),
+        ],
       )
     )[0]?.id,
   );
@@ -222,12 +230,12 @@ async function plantChannel(providerId: string, o: Plant): Promise<{ id: string 
     const [channel] = await rows(
       `INSERT INTO app.channels (workspace_id, provider_id, account_kind, provider_account_id, display_name, connection_state)
        VALUES ($1, $3, 'profile', $2, $2, 'connected') RETURNING id`,
-      [state.ws, account, providerId],
+      [o.workspace ?? state.ws, account, providerId],
     );
     return { id: String(channel?.id) };
   }
   const id = await connectChannel(workerPool(), {
-    workspace: state.ws,
+    workspace: o.workspace ?? state.ws,
     provider: providerId,
     account,
     ...(o.host === undefined ? {} : { host: o.host }),
@@ -239,7 +247,7 @@ export async function plant(
   e: Pick<Env, "providerId" | "queueName" | "reconcileQueue" | "lease">,
   o: Plant = {},
 ): Promise<string> {
-  const { ws } = state;
+  const ws = o.workspace ?? state.ws;
   const channel = await plantChannel(e.providerId, o);
   const [post] = await rows(
     "INSERT INTO app.posts (workspace_id, author_kind, author_id, status) VALUES ($1, 'user', $2, 'scheduled') RETURNING id",

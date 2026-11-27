@@ -96,7 +96,9 @@ function providerFetch(config: Config) {
         ? ({ kind: "instance", host: instanceHost } as const)
         : undefined;
     if (request === undefined) return refuseEgress();
-    return fetchOf((req) => egressFetch(req, { request, operator }));
+    // The worker bounds each call by its own deadline; this is the longest the transport may take for one.
+    const timeoutMs = (manifest.uploadTimeoutSeconds ?? manifest.callTimeoutSeconds) * 1000;
+    return fetchOf((req) => egressFetch(req, { request, operator }), { timeoutMs });
   };
 }
 

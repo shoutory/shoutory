@@ -40,6 +40,26 @@ describe("fetchOf", () => {
     });
   });
 
+  it("passes a binary body and the call's own timeout to the egress call", async () => {
+    const seen: EgressRequest[] = [];
+    const send = fetchOf(
+      async (request) => {
+        seen.push(request);
+        return { status: 200, headers: {}, body: new Uint8Array() };
+      },
+      { timeoutMs: 300_000 },
+    );
+    await send("https://social.example/api/v2/media", { method: "POST", body: new Uint8Array([1, 2, 3]) });
+    expect(seen[0]?.body).toEqual(new Uint8Array([1, 2, 3]));
+    expect(seen[0]?.timeoutMs).toBe(300_000);
+  });
+
+  it("refuses a body it cannot carry rather than dropping it", async () => {
+    const send = fetchOf(async () => ({ status: 200, headers: {}, body: new Uint8Array() }));
+    const form = new FormData();
+    await expect(send("https://social.example/x", { method: "POST", body: form })).rejects.toThrow(/body/);
+  });
+
   it.each([204, 304])("answers a %i with no body as a Response without one", async (status) => {
     const send = fetchOf(async () => ({ status, headers: {}, body: new Uint8Array() }));
     expect((await send("https://api.fixture.example/v1/x")).status).toBe(status);

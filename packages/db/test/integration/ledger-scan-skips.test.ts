@@ -40,15 +40,16 @@ async function ledger(sql: string, params: unknown[] = []): Promise<Record<strin
 interface Prov {
   provider: string;
   channel: string;
+  workspace: string;
 }
-async function newProvider(prefix: string): Promise<Prov> {
+async function newProvider(prefix: string, workspace: string = WA): Promise<Prov> {
   const provider = `${prefix}-${randomUUID().slice(0, 8)}`;
   const [made] = await rows(
     `INSERT INTO app.channels (workspace_id, provider_id, account_kind, provider_account_id, display_name, connection_state)
      VALUES ($1, $2, 'profile', $2, $2, 'connected') RETURNING id`,
-    [WA, provider],
+    [workspace, provider],
   );
-  return { provider, channel: made?.id as string };
+  return { provider, channel: made?.id as string, workspace };
 }
 
 interface Bulk {
@@ -77,7 +78,7 @@ async function plantMany(p: Prov, count: number, o: Bulk): Promise<void> {
   const atNames = Object.keys(at);
   const variant = o.variant ?? { state: "in_progress", dueIn: -120 };
   const params = [
-    WA,
+    p.workspace,
     U.editor,
     p.channel,
     variant.state,
@@ -175,6 +176,7 @@ const ARMS: [string, Bulk][] = [
   ],
   ["a reconnected channel", { state: "paused", extra: { reason_code: "channel_disabled" } }],
   ["a lateness deadline", { state: "pending", at: { lateness_deadline: -10 } }],
+  ["a processing deadline", { state: "processing", at: { processing_deadline: -10 } }],
 ];
 const PROBE = `
   CREATE FUNCTION public.refuse_probe() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -224,4 +226,95 @@ describe("a row the guard refuses", () => {
     },
     120_000,
   );
+});
+
+interface Planted {
+  state: string;
+  actor: string;
+  token: number;
+  effect: string;
+  deadline: string | null;
+  lease: string | null;
+  attempts: number;
+  next_attempt_due: boolean | null;
+}
+const factsOf = async (id: string) =>
+  (
+    await rows(
+      `SELECT state, last_actor AS actor, fencing_token::int AS token, effect, processing_deadline AS deadline,
+         lease_owner AS lease, attempt_count AS attempts, next_attempt_at <= clock_timestamp() AS next_attempt_due
+       FROM app.operations WHERE id = $1`,
+      [id],
+    )
+  )[0] as unknown as Planted;
+
+const PASSED = { processing_deadline: -10 };
+const EXPIRED = { extra: { lease_owner: "poller-gone" }, at: { ...PASSED, lease_expires_at: -5 } };
+
+describe("a processing row past its deadline", () => {
+  it.each([
+    [
+      "a poller died holding the lease and attempts remain",
+      { ...EXPIRED, extra: { ...EXPIRED.extra, attempt_count: 1 } },
+      "retry_wait",
+      "X",
+      2,
+    ],
+    ["no poller ran and attempts remain", { at: PASSED, extra: { attempt_count: 0 } }, "retry_wait", "X", 2],
+    ["attempts are exhausted", { at: PASSED, extra: { attempt_count: 3 } }, "failed", "S", 1],
+    ["the timeout is the last attempt left", { at: PASSED, extra: { attempt_count: 2 } }, "failed", "S", 1],
+  ] as [string, Partial<Bulk>, string, string, number][])(
+    "the sweep moves it with effect none when %s, counts a retry as an attempt, and a second sweep changes nothing",
+    async (_arm, plant, state, actor, token) => {
+      const p = await newProvider("sweep-processing");
+      const id = await one(p, { state: "processing", ...plant });
+      const used = Number(plant.extra?.attempt_count);
+      await sweep(live(p));
+      expect(await factsOf(id)).toMatchObject({
+        state,
+        actor,
+        token,
+        effect: "none",
+        deadline: null,
+        lease: null,
+        attempts: state === "retry_wait" ? used + 1 : used,
+      });
+      if (state === "retry_wait") expect((await factsOf(id)).next_attempt_due).toBe(true);
+      const [event] = await rows("SELECT type FROM app.outbox WHERE payload ->> 'operation_id' = $1", [id]);
+      expect(event?.type).toBe(`operation.${state}`);
+      await sweep(live(p));
+      expect((await factsOf(id)).token).toBe(token);
+    },
+  );
+});
+
+describe("a row the processing sweep must not touch", () => {
+  it.each([
+    ["the deadline is ahead", { state: "processing", at: { processing_deadline: 600 } }, true],
+    [
+      "a poller still holds the lease",
+      {
+        state: "processing",
+        extra: { lease_owner: "poller-live" },
+        at: { ...PASSED, lease_expires_at: 60 },
+      },
+      true,
+    ],
+    [
+      "the row is blocked for a reconnect",
+      {
+        state: "blocked_reconnect",
+        extra: { reason_code: "pending" },
+        at: { ...PASSED, blocked_since: -30 },
+      },
+      true,
+    ],
+    ["its provider is not live", { state: "processing", at: PASSED }, false],
+  ] as [string, Bulk, boolean][])("the sweep leaves it alone when %s", async (_arm, plant, providerLive) => {
+    const p = await newProvider("sweep-processing-keep");
+    const id = await one(p, plant);
+    const before = await factsOf(id);
+    await sweep(providerLive ? live(p) : "{}");
+    expect(await factsOf(id)).toEqual(before);
+  });
 });

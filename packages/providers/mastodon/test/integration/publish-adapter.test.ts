@@ -298,13 +298,44 @@ describe("a read-back and a delete name only the id asked", () => {
       account: accountOf(token),
     });
     expect(gone).toMatchObject({ ok: true, effect: "confirmed" });
-    expect(seen.length - before).toBe(1);
+    expect(seen.slice(before).filter((call) => call.method !== "GET")).toHaveLength(1);
     expect(sim.stored().map((post) => post.externalId)).toEqual([b.externalId]);
     const deletes = sim.requests.filter((request) => request.method === "DELETE");
     expect(deletes.map((request) => `${request.path}?${request.query}`)).toEqual([
       `/api/v1/statuses/${a.externalId}?`,
     ]);
     expect(seen.filter((call) => call.method === "DELETE")).toHaveLength(1);
+  });
+});
+
+// docs.joinmastodon.org/methods/statuses (read 2026-11-27): `delete_media` exists from 4.4.0; an instance whose version is
+// not a numeric major.minor.patch gets the plain delete.
+describe("a delete takes the status's media with it only where the instance supports it", () => {
+  it.each([
+    ["4.4.0", true],
+    ["4.5.1-alpha.2", true],
+    ["4.3.9", false],
+    ["4.4", false],
+    ["glitch-fork", false],
+    [null, false],
+  ] as const)("version %s sends delete_media: %s", async (version, sent) => {
+    sim.reset({ version });
+    const { context } = recorder(sim);
+    const account = accountOf(sim.issueToken());
+    const made = await adapter.commit(context, { idempotencyKey: "del-media-1", text: "t", account });
+    const gone = await adapter.delete(context, { externalId: String(made.externalId), account });
+    expect(gone).toMatchObject({ ok: true, effect: "confirmed" });
+    const [removal] = sim.requests.filter((request) => request.method === "DELETE");
+    expect(removal?.query.get("delete_media")).toBe(sent ? "true" : null);
+  });
+
+  it("a 404 on a delete that carries delete_media is still no effect", async () => {
+    sim.reset({ version: "4.4.0" });
+    const { context } = recorder(sim);
+    const answer = await adapter.delete(context, { externalId: "999", account: accountOf(sim.issueToken()) });
+    expect(answer).toMatchObject({ ok: true, effect: "none" });
+    const [removal] = sim.requests.filter((request) => request.method === "DELETE");
+    expect(removal?.query.get("delete_media")).toBe("true");
   });
 });
 

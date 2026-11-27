@@ -10,6 +10,7 @@ export interface CallResult {
   readonly retryAfterMs?: number | undefined;
   readonly httpStatus?: number | undefined;
   readonly absent?: boolean | undefined;
+  readonly mediaPoll?: { readonly ready: boolean; readonly checkInSeconds?: number | undefined } | undefined;
 }
 
 export interface DispatchFacts {
@@ -87,4 +88,28 @@ export function resultMove(result: CallResult, facts: DispatchFacts): ResultMove
   if (result.errorClass === "permanent") return { row: 20, to: "failed" };
   if (result.errorClass === "rate_limited") return rateLimited(result, facts);
   return { row: 19, to: "retry_wait", waitSeconds: backoffSeconds(facts.attemptCount) };
+}
+
+export interface PollFacts {
+  readonly gapSeconds: number;
+  readonly retryAfterMaxSeconds: number;
+}
+
+// Row 14 when every medium is ready, row 16 when the provider rejects one, row 13 when the grant is refused (the caller
+// confirms the revocation first), otherwise the row keeps waiting until its deadline. A 404 never rejects: an attached medium answers 404, so it says nothing of readiness. Whatever a poll
+// answers, it has no effect.
+export type PollMove = { row: 13 } | { row: 14 } | { row: 16 } | { row: "wait"; checkInSeconds: number };
+
+export function pollMove(result: CallResult, facts: PollFacts): PollMove {
+  if (result.ok)
+    return result.mediaPoll?.ready === true
+      ? { row: 14 }
+      : { row: "wait", checkInSeconds: result.mediaPoll?.checkInSeconds ?? facts.gapSeconds };
+  if (result.errorClass === "auth_revoked") return { row: 13 };
+  if (result.errorClass === "permanent" && result.httpStatus !== 404) return { row: 16 };
+  const hinted = result.retryAfterMs === undefined ? undefined : Math.ceil(result.retryAfterMs / 1000);
+  return {
+    row: "wait",
+    checkInSeconds: Math.min(Math.max(hinted ?? facts.gapSeconds, 1), facts.retryAfterMaxSeconds),
+  };
 }

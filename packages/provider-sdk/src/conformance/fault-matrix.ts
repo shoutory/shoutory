@@ -26,10 +26,14 @@ export interface StoredPost {
   readonly replyToExternalId?: string;
 }
 
+export type UploadKind = "image" | "video";
+
 export interface MatrixHarness {
   readonly adapter: ProviderAdapter;
   readonly context: AdapterContext;
-  arm(operation: MatrixOperation, fault: MatrixFault): void;
+  arm(operation: MatrixOperation | "upload", fault: MatrixFault): void;
+  /** Uploads one small medium of the kind through the adapter's prepare; present for a provider that plays upload rows. */
+  upload?(kind: UploadKind, context: AdapterContext): Promise<ProviderResult>;
   effects(): number;
   settle(): Promise<void>;
   stored(): readonly StoredPost[];
@@ -48,6 +52,8 @@ export interface MatrixOptions {
   readonly manifest: MatrixManifest;
   readonly badRequestCodes: readonly string[];
   readonly revokedCode: string;
+  /** The provider's harness plays upload rows for every image and video capability the manifest declares. */
+  readonly uploads?: boolean;
 }
 
 export interface FaultRow {
@@ -94,7 +100,7 @@ const connectFailure = (context: AdapterContext): AdapterContext => ({
 // adapter's.
 async function played(
   harness: MatrixHarness,
-  operation: MatrixOperation,
+  operation: MatrixOperation | "upload",
   fault: MatrixFault | undefined,
   call: () => Promise<ProviderResult>,
 ) {
@@ -363,11 +369,48 @@ function targetRows(manifest: MatrixManifest): FaultRow[] {
   ];
 }
 
-// Capabilities whose faults are not played through a publish call: text and delete are the base rows, refresh is
-// covered by the oauth fake's contract test, and image faults get their rows with the media upload work.
-const PLAYED_ELSEWHERE = new Set(["text", "delete", "image", "refresh"]);
+// An upload leaves no post behind, so every failure of one is no effect and a retry only uploads again.
+const UPLOAD_FAULTS: [string, MatrixFault, ProviderErrorClass][] = [
+  ["a 429 is rate_limited", respond(429), "rate_limited"],
+  ["a 503 is retryable before send", respond(503), "retryable_before_send"],
+  ["a hang is retryable before send", { kind: "hang" }, "retryable_before_send"],
+  ["a 422 is permanent", respond(422), "permanent"],
+];
 
-function capabilityRows(capabilities: readonly string[]): FaultRow[] {
+function uploadRowsFor(kind: UploadKind): FaultRow[] {
+  const need = (harness: MatrixHarness) => {
+    if (harness.upload === undefined) throw new Error("the harness plays no uploads");
+    return harness.upload.bind(harness);
+  };
+  const success: FaultRow = {
+    id: `upload-${kind}`,
+    title: `a ${kind} upload that succeeds is ok with no effect and the remote media id`,
+    run: async (harness) => {
+      const result = await need(harness)(kind, harness.context);
+      if (!result.ok || result.effect !== "none" || !result.upload?.mediaId)
+        throw new Error("an upload that succeeds must be ok, have no effect and carry a media id");
+      if (harness.effects() !== 0) throw new Error("an upload must not count as a post effect");
+    },
+  };
+  const faults = UPLOAD_FAULTS.map(
+    ([title, fault, errorClass]): FaultRow => ({
+      id: `upload-${kind}-${fault.kind === "respond" ? fault.status : fault.kind}`,
+      title: `${title} on a ${kind} upload, with no effect`,
+      run: async (harness) => {
+        const context = fault.kind === "hang" ? withTimeout(harness.context) : harness.context;
+        const call = () => need(harness)(kind, context);
+        expectError(title, await played(harness, "upload", fault, call), [NO_EFFECT(errorClass)]);
+      },
+    }),
+  );
+  return [success, ...faults];
+}
+
+// Capabilities whose faults are not played through a publish call: text and delete are the base rows, refresh is
+// covered by the oauth fake's contract test, and a provider that plays uploads has the image and video rows of its own.
+const PLAYED_ELSEWHERE = new Set(["text", "delete", "refresh"]);
+
+function capabilityRows(capabilities: readonly string[], uploads: boolean): FaultRow[] {
   const rows: [string, FaultRow][] = [
     [
       "edit",
@@ -405,11 +448,19 @@ function capabilityRows(capabilities: readonly string[]): FaultRow[] {
       },
     ],
   ];
+  const media = uploads ? (["image", "video"] as const) : [];
   const missing = capabilities.filter(
-    (capability) => !PLAYED_ELSEWHERE.has(capability) && !rows.some(([name]) => name === capability),
+    (capability) =>
+      !PLAYED_ELSEWHERE.has(capability) &&
+      !(capability === "image" && !uploads) &&
+      !(media as readonly string[]).includes(capability) &&
+      !rows.some(([name]) => name === capability),
   );
   if (missing.length > 0) throw new Error(`the matrix has no row for the capability ${missing.join(", ")}`);
-  return rows.filter(([capability]) => capabilities.includes(capability)).map(([, row]) => row);
+  return [
+    ...rows.filter(([capability]) => capabilities.includes(capability)).map(([, row]) => row),
+    ...media.filter((kind) => capabilities.includes(kind)).flatMap(uploadRowsFor),
+  ];
 }
 
 // The 401, 403 and 409 rows name the situation played and accept only the classes that situation allows; no row maps a
@@ -418,6 +469,7 @@ export function faultMatrixRows({
   manifest,
   badRequestCodes,
   revokedCode,
+  uploads = false,
 }: MatrixOptions): readonly FaultRow[] {
   const noReadBack = manifest.readBackMode === "E";
   const rows = [
@@ -431,7 +483,7 @@ export function faultMatrixRows({
     ...operationRows(manifest),
     ...rateLimitRows(manifest),
     ...uncertainRows(),
-    ...capabilityRows(manifest.capabilities),
+    ...capabilityRows(manifest.capabilities, uploads),
   ];
   return noReadBack ? rows.filter((row) => row.id !== "read-back-absent").map(withoutReadBack) : rows;
 }

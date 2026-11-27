@@ -20,15 +20,26 @@ const headersOf = (reply: EgressResponse): Headers =>
     ),
   );
 
-export function fetchOf(egress: (request: EgressRequest) => Promise<EgressResponse>): typeof fetch {
+function bodyOf(body: RequestInit["body"]): { body?: string | Uint8Array } {
+  if (body === undefined || body === null) return {};
+  if (typeof body === "string" || body instanceof Uint8Array) return { body };
+  throw new TypeError("the request body must be a string or bytes");
+}
+
+export function fetchOf(
+  egress: (request: EgressRequest) => Promise<EgressResponse>,
+  options: { readonly timeoutMs?: number } = {},
+): typeof fetch {
   return async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    const body = bodyOf(init?.body);
     try {
       const reply = await egress({
         url,
         method: init?.method ?? "GET",
         headers: Object.fromEntries(new Headers(init?.headers).entries()),
-        ...(typeof init?.body === "string" ? { body: init.body } : {}),
+        ...body,
+        ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
         ...(init?.signal ? { signal: init.signal } : {}),
       });
       return new Response(NO_BODY.has(reply.status) ? null : reply.body, {

@@ -257,6 +257,34 @@ const REFUSALS: [string, Mutate, string][] = [
     "limits.imageMaxBytes",
   ],
   [
+    "a video capability with no videoMaxBytes limit",
+    (m) => {
+      m.capabilities = ["text", "video"];
+    },
+    "limits.videoMaxBytes",
+  ],
+  [
+    "an upload limit with an unknown spender",
+    (m) => {
+      first(m, "rateLimits").spentBy = "always";
+    },
+    "rateLimits.0.spentBy",
+  ],
+  [
+    "an upload timeout above an hour",
+    (m) => {
+      m.uploadTimeoutSeconds = 3_601;
+    },
+    "uploadTimeoutSeconds",
+  ],
+  [
+    "a processing wait of zero",
+    (m) => {
+      m.maxProcessingSeconds = 0;
+    },
+    "maxProcessingSeconds",
+  ],
+  [
     "an api version that sunsets before it starts",
     (m) => {
       first(m, "apiVersions").sunset = "2025-12-31";

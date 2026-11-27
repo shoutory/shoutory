@@ -491,7 +491,7 @@ const DEFINERS: Definer[] = [
   },
   {
     name: "operation_record_progress",
-    args: "p_ws uuid, p_op uuid, p_token bigint, p_cursor text, p_refs jsonb",
+    args: "p_ws uuid, p_op uuid, p_token bigint, p_cursor text, p_refs jsonb, p_poll_in integer",
     callers: ["shoutory_worker"],
   },
   {

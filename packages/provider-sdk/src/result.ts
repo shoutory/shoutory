@@ -58,6 +58,13 @@ export interface ProviderResult {
   readonly httpStatus?: number;
   /** A read-back whose answer is itself "the post is not there" (no status says so). */
   readonly absent?: boolean;
+  /** The answer of a media poll: every medium is ready, or one is still processing and the next look is due. */
+  readonly mediaPoll?: { readonly ready: boolean; readonly checkInSeconds?: number };
+  /** A medium the provider accepted; `processing` when it is still working on it and says when to look again. */
+  readonly upload?: {
+    readonly mediaId: string;
+    readonly processing?: { readonly checkInSeconds: number };
+  };
 }
 
 // The class is the adapter's call, never read from a body.

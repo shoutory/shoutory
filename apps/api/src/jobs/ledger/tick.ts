@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { providersArgument, sweepArguments } from "@shoutory/core/ledger/client";
+import type { StorageDriver } from "@shoutory/core/storage";
 import type { TenantTx } from "@shoutory/db/context";
 import { withSystem } from "@shoutory/db/context/system";
 import type { AppPool } from "@shoutory/db/pool";
@@ -12,6 +13,7 @@ import type { CredentialService } from "../../channels/credentials.js";
 import type { Logger } from "../../logging/logger.js";
 import { type IntervalLoop, intervalLoop } from "../outbox-relay.js";
 import { refuseEgress } from "./held.js";
+import { pollStep } from "./poll.js";
 import { reconcileStep } from "./reconcile.js";
 
 const TICK_MS = 30_000;
@@ -81,6 +83,7 @@ export interface LedgerTickOptions {
   readonly adapters?: AdapterMap;
   readonly fetchFor?: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
   readonly credentials: CredentialService;
+  readonly storage?: StorageDriver;
   readonly clock?: () => Date;
   readonly intervalMs?: number;
 }
@@ -165,6 +168,7 @@ export function createLedgerTick({
   adapters = {},
   fetchFor = refuseEgress,
   credentials,
+  storage,
   clock = () => new Date(),
   intervalMs = TICK_MS,
 }: LedgerTickOptions): LedgerTick {
@@ -185,20 +189,13 @@ export function createLedgerTick({
     // every tick sends it when it falls due, and covers a wake-up that was lost.
     await wake();
   }
-  // Read-backs run on a loop of their own: a provider that answers slowly never delays admission or the sweeps.
+  // Read-backs and media polls run on a loop of their own: a provider that answers slowly never delays admission or
+  // the sweeps.
   async function reconcile(): Promise<void> {
-    await step("reconcile", () =>
-      reconcileStep({
-        pool,
-        logger,
-        registry,
-        adapters,
-        fetchFor,
-        credentials,
-        owner,
-        closing: closing.signal,
-        clock,
-      }),
+    const shared = { pool, logger, registry, adapters, fetchFor, credentials, owner, clock };
+    await step("reconcile", () => reconcileStep({ ...shared, closing: closing.signal }));
+    await step("media poll", () =>
+      pollStep({ ...shared, closing: closing.signal, ...(storage === undefined ? {} : { storage }) }),
     );
     // A resend must reach the publish queue at once.
     await wake();

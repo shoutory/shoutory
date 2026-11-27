@@ -18,6 +18,8 @@ export interface HeartbeatOptions {
 }
 export interface Heartbeat {
   readonly signal: AbortSignal;
+  /** The lease end the last beat renewed, on the clock the heartbeat runs by. */
+  leaseEnd(): number;
   stop(): Promise<void>;
 }
 
@@ -77,6 +79,7 @@ export function startHeartbeat(options: HeartbeatOptions): Heartbeat {
   schedule();
   return {
     signal: controller.signal,
+    leaseEnd: () => leaseEnd,
     async stop() {
       stopped = true;
       clearTimeout(timer);
@@ -112,7 +115,15 @@ export function hold(options: HoldOptions): { held: Held; stop: () => Promise<vo
     claimStartedMs: started,
   });
   return {
-    held: { claim, operation, manifest, leaseSeconds, started, signal: beating.signal },
+    held: {
+      claim,
+      operation,
+      manifest,
+      leaseSeconds,
+      started,
+      signal: beating.signal,
+      leaseEnd: beating.leaseEnd,
+    },
     stop: () => beating.stop(),
   };
 }

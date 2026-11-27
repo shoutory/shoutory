@@ -18,7 +18,30 @@ const rows = faultMatrixRows({
   manifest: mastodonManifest,
   badRequestCodes: [],
   revokedCode: "The access token is invalid",
+  uploads: true,
 });
+
+// The real manifest declares edit, thread and first comment once the worker can drive them; the adapter's side is proven
+// here against a copy that already does.
+const withFollowUps = manifestSchema.parse({
+  ...mastodonManifest,
+  capabilities: [...mastodonManifest.capabilities, "edit", "thread", "first_comment"],
+  retrySafety: { ...mastodonManifest.retrySafety, edit: "read_back_first" },
+  leaseSeconds: { ...mastodonManifest.leaseSeconds, edit: 60 },
+  followUpRoles: ["thread_reply", "first_comment"],
+});
+const baseIds = new Set(rows.map((row) => row.id));
+const followUpRows = faultMatrixRows({
+  manifest: withFollowUps,
+  badRequestCodes: [],
+  revokedCode: "The access token is invalid",
+  uploads: true,
+}).filter((row) => !baseIds.has(row.id));
+
+const SMALL = {
+  image: { mime: "image/png", bytes: new Uint8Array([137, 80, 78, 71, 1, 2, 3]) },
+  video: { mime: "video/mp4", bytes: new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112]) },
+};
 
 let sim: MastodonSimulator;
 beforeEach(async () => {
@@ -40,8 +63,23 @@ function harness(): MatrixHarness {
       commit: (given, input) => adapter.commit(given, { ...input, account }),
       readBack: (given, post) => adapter.readBack(given, { ...post, account }),
       delete: (given, post) => adapter.delete(given, { ...post, account }),
+      edit: (given, post, input) => {
+        if (!adapter.edit) throw new Error("the adapter has no edit");
+        return adapter.edit(given, { ...post, account }, input);
+      },
     },
     context,
+    upload: (kind, given) => {
+      const one = SMALL[kind];
+      const media = {
+        items: [{ mime: one.mime, size: one.bytes.length, altText: "matrix alt" }],
+        read: async () => ({ bytes: one.bytes, altText: "matrix alt" }),
+      };
+      return adapter.prepare(
+        { ...given, media },
+        { idempotencyKey: "matrix-upload", text: "t", account, mediaIds: [] },
+      );
+    },
     arm: sim.arm,
     effects: () => sim.effects(),
     settle: () => sim.settle(),
@@ -52,11 +90,18 @@ function harness(): MatrixHarness {
 }
 
 describe("the Mastodon provider passes the fault matrix", () => {
-  it("declares a manifest the schema accepts, with text and delete", () => {
-    expect(manifestSchema.parse(mastodonManifest).capabilities).toEqual(["text", "delete"]);
+  it("declares a manifest the schema accepts, with text, image, video and delete", () => {
+    expect(manifestSchema.parse(mastodonManifest).capabilities).toEqual(["text", "image", "video", "delete"]);
   });
 
   it.each(rows.map((row): [string, FaultRow] => [row.id, row]))("row %s", async (_id, row) => {
     await row.run(harness());
   });
+
+  it.each(followUpRows.map((row): [string, FaultRow] => [row.id, row]))(
+    "row %s on a manifest that declares edit, thread and first comment",
+    async (_id, row) => {
+      await row.run(harness());
+    },
+  );
 });

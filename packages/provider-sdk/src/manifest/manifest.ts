@@ -84,6 +84,8 @@ const manifestShape = z.strictObject({
         key: z.enum(BUCKET_KEY_NAMES),
         max: z.int().positive().max(10_000),
         windowSeconds: z.int().positive().max(86_400),
+        // What spends a token: every turn, each media upload, or a delete turn only.
+        spentBy: z.enum(["turn", "upload", "delete"]).default("turn"),
       }),
     )
     .max(32),
@@ -106,6 +108,9 @@ const manifestShape = z.strictObject({
     delete: leaseSeconds.optional(),
   }),
   callTimeoutSeconds: z.int().positive().max(3_600),
+  // A media upload is a larger call than the others; the wait for a provider to finish processing a medium is bounded.
+  uploadTimeoutSeconds: z.int().positive().max(3_600).optional(),
+  maxProcessingSeconds: z.int().positive().max(86_400).optional(),
   retryAfterMaxSeconds: z.int().positive().max(86_400),
   dispatchMarginSeconds: z.int().nonnegative().max(3_600),
   maxInFlightSeconds: z.int().positive().max(86_400),
@@ -222,6 +227,12 @@ function capabilityIssues(manifest: ManifestShape): CrossFieldIssue[] {
     issues.push({
       path: ["limits", "imageMaxBytes"],
       message: "an image capability needs an imageMaxBytes limit",
+    });
+  }
+  if (capabilities.includes("video") && limits.videoMaxBytes === undefined) {
+    issues.push({
+      path: ["limits", "videoMaxBytes"],
+      message: "a video capability needs a videoMaxBytes limit",
     });
   }
   return issues;

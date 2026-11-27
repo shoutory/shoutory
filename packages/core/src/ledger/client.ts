@@ -36,14 +36,15 @@ export function bucketKey(input: {
 }
 
 const SAFETY_MARGIN_MS = 10_000;
-// The elapsed time comes from a monotonic clock the caller started before the claim; 10 seconds of the lease stay unused.
+// A call is not started when the lease end the heartbeat last renewed (on the clock of `nowMs`) is under 10 seconds
+// away. Once started, the call keeps its own timeout: the heartbeat renews the lease through it, and a heartbeat that
+// stops aborts it.
 export function callTimeoutMs(input: {
-  manifestTimeoutMs: number;
-  leaseSeconds: number;
-  elapsedMs: number;
+  callTimeoutMs: number;
+  leaseEndMs: number;
+  nowMs: number;
 }): number | null {
-  const room = input.leaseSeconds * 1000 - input.elapsedMs - SAFETY_MARGIN_MS;
-  return room <= 0 ? null : Math.min(input.manifestTimeoutMs, room);
+  return input.leaseEndMs - input.nowMs <= SAFETY_MARGIN_MS ? null : input.callTimeoutMs;
 }
 
 export const publishLeaseSeconds = (lease: { prepare: number; commit: number }): number =>
@@ -158,6 +159,7 @@ export interface TransitionCall {
   changes?: z.input<typeof transitionChangesSchema>;
   attemptInSeconds?: number;
   checkInSeconds?: number;
+  processingInSeconds?: number;
 }
 export type TransitionResult = { outcome: "moved"; fencingToken: string } | { outcome: "lost_lease" };
 
@@ -168,7 +170,9 @@ export async function transition(run: SqlRun, call: TransitionCall): Promise<Tra
        || CASE WHEN $8::float8 IS NULL THEN '{}'::jsonb
             ELSE jsonb_build_object('next_attempt_at', (clock_timestamp() + make_interval(secs => $8::float8))::text) END
        || CASE WHEN $9::float8 IS NULL THEN '{}'::jsonb
-            ELSE jsonb_build_object('next_check_at', (clock_timestamp() + make_interval(secs => $9::float8))::text) END)`,
+            ELSE jsonb_build_object('next_check_at', (clock_timestamp() + make_interval(secs => $9::float8))::text) END
+       || CASE WHEN $10::float8 IS NULL THEN '{}'::jsonb
+            ELSE jsonb_build_object('processing_deadline', (clock_timestamp() + make_interval(secs => $10::float8))::text) END)`,
     [
       call.workspaceId,
       call.operationId,
@@ -179,6 +183,7 @@ export async function transition(run: SqlRun, call: TransitionCall): Promise<Tra
       JSON.stringify(changes),
       call.attemptInSeconds ?? null,
       call.checkInSeconds ?? null,
+      call.processingInSeconds ?? null,
     ],
   );
   const row = rows[0];
@@ -200,15 +205,16 @@ export type Claim = { id: string; workspaceId: string; fencingToken: string; kin
 export async function claimOperation(run: SqlRun, queue: string, owner: string): Promise<Claim | null> {
   const { rows } = await run("SELECT * FROM app.claim_operations($1, 1, $2)", [queue, owner]);
   if (rows[0] === undefined) return null;
-  const row = claimRow.parse(rows[0]);
-  return {
-    id: row.id,
-    workspaceId: row.workspace_id,
-    fencingToken: row.fencing_token,
-    kind: row.kind,
-    state: row.state,
-  };
+  return claimOf(claimRow.parse(rows[0]));
 }
+
+const claimOf = (row: z.infer<typeof claimRow>): Claim => ({
+  id: row.id,
+  workspaceId: row.workspace_id,
+  fencingToken: row.fencing_token,
+  kind: row.kind,
+  state: row.state,
+});
 
 // A kind in `classEKinds` goes to a person at once because its provider cannot read back.
 export async function claimReconciles(
@@ -226,13 +232,21 @@ export async function claimReconciles(
   return rows
     .filter((row) => row.state === "reconciling")
     .map((row) => claimRow.parse(row))
-    .map((row) => ({
-      id: row.id,
-      workspaceId: row.workspace_id,
-      fencingToken: row.fencing_token,
-      kind: row.kind,
-      state: row.state,
-    }));
+    .map(claimOf);
+}
+
+// The poll claim leaves the state as it is and raises the token; a row that is not `processing` is left to its lease.
+export async function claimPolls(
+  run: SqlRun,
+  call: { queue: string; limit: number; owner: string; leaseSeconds: number },
+): Promise<Claim[]> {
+  const { rows } = await run("SELECT * FROM app.claim_polls($1, $2, $3, $4)", [
+    call.queue,
+    call.limit,
+    call.owner,
+    call.leaseSeconds,
+  ]);
+  return rows.map((row) => claimRow.parse(row)).map(claimOf);
 }
 
 export async function recordAbsent(
@@ -318,13 +332,23 @@ export async function finishAttempt(
 
 export async function recordProgress(
   run: SqlRun,
-  call: { workspaceId: string; operationId: string; token: string; cursor: string },
+  call: {
+    workspaceId: string;
+    operationId: string;
+    token: string;
+    cursor?: string;
+    refs?: Record<string, unknown>;
+    /** On a processing row: the next check is this many seconds ahead and the lease ends. */
+    pollInSeconds?: number;
+  },
 ): Promise<"recorded" | "lost_lease"> {
-  const { rows } = await run("SELECT * FROM app.operation_record_progress($1, $2, $3, $4, NULL)", [
+  const { rows } = await run("SELECT * FROM app.operation_record_progress($1, $2, $3, $4, $5::jsonb, $6)", [
     call.workspaceId,
     call.operationId,
     call.token,
-    call.cursor,
+    call.cursor ?? null,
+    call.refs === undefined ? null : JSON.stringify(call.refs),
+    call.pollInSeconds ?? null,
   ]);
   return rows[0]?.outcome === "recorded" ? "recorded" : "lost_lease";
 }

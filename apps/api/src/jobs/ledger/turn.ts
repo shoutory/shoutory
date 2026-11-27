@@ -1,13 +1,6 @@
-import {
-  bucketKey,
-  claimOperation,
-  denialMove,
-  type PreflightMove,
-  publishLeaseSeconds,
-  rereadOutcome,
-  takeBucket,
-} from "@shoutory/core/ledger/client";
+import { claimOperation, publishLeaseSeconds, rereadOutcome } from "@shoutory/core/ledger/client";
 import { backoffSeconds } from "@shoutory/core/ledger/dispatch";
+import type { StorageDriver } from "@shoutory/core/storage";
 import { withSystem } from "@shoutory/db/context/system";
 import type { AppPool } from "@shoutory/db/pool";
 import type { AdapterMap } from "@shoutory/provider-sdk/adapter";
@@ -29,6 +22,7 @@ import {
   readOperation,
   sqlOf,
   type TurnResult,
+  takeLimits,
 } from "./held.js";
 
 export type { TurnResult } from "./held.js";
@@ -43,6 +37,7 @@ export interface TurnOptions {
   readonly queue: string;
   readonly owner: string;
   readonly closing: AbortSignal;
+  readonly storage?: StorageDriver;
   readonly now?: () => number;
   readonly clock?: () => Date;
 }
@@ -79,7 +74,7 @@ export async function runTurn(options: TurnOptions): Promise<TurnResult> {
   }
 }
 
-async function readTarget(pool: AppPool, operation: Operation) {
+export async function readTarget(pool: AppPool, operation: Operation) {
   return inJob(pool, operation.workspace_id, async (tx) => {
     const channel = await tx.query<ChannelFacts>(
       `SELECT provider_id, provider_account_id, instance_host, connection_state
@@ -105,35 +100,6 @@ async function readTarget(pool: AppPool, operation: Operation) {
         post.rows[0]?.deleted_at === null,
     };
   });
-}
-
-// Stops at the first denial; the tokens already taken stay spent, so a turn never sends more than the limits allow.
-async function takeLimits(
-  pool: AppPool,
-  held: Held,
-  channel: ChannelFacts,
-  stopped: () => boolean,
-): Promise<PreflightMove | null> {
-  for (const limit of held.manifest.rateLimits) {
-    const key = bucketKey({ limitName: limit.name, scope: limit.scope, keyName: limit.key, channel });
-    const answer = await inJob(pool, held.claim.workspaceId, (tx) =>
-      takeBucket(sqlOf(tx), {
-        key,
-        scope: limit.scope,
-        capacity: limit.max,
-        windowSeconds: limit.windowSeconds,
-      }),
-    );
-    if (stopped()) return null;
-    if (!answer.allowed) {
-      return denialMove({
-        retryAfterSeconds: answer.retryAfterSeconds,
-        retryAfterMaxSeconds: held.manifest.retryAfterMaxSeconds,
-        latenessLeftSeconds: held.operation.lateness_left_seconds,
-      });
-    }
-  }
-  return null;
 }
 
 // A revoked grant has moved the channel unless a disable or disconnect moved it first, so the row follows the channel
@@ -180,7 +146,7 @@ async function preflight(options: TurnOptions, held: Held): Promise<TurnResult> 
   if (pastSunset(manifest, clock()))
     return preflightMove(pool, held, { to: "paused", reasonCode: "api_sunset" });
   if (closing.aborted) return handBack(pool, held, "closed");
-  const denied = await takeLimits(pool, held, channel, () => signal.aborted || closing.aborted);
+  const denied = await takeLimits(pool, held, channel, "turn", () => signal.aborted || closing.aborted);
   if (signal.aborted) return lost;
   if (closing.aborted) return handBack(pool, held, "closed");
   if (denied !== null) return preflightMove(pool, held, denied);
@@ -204,6 +170,7 @@ async function preflight(options: TurnOptions, held: Held): Promise<TurnResult> 
     clock,
     reconcileQueue: options.registry.queueNames(manifest.id).reconcile,
     closing,
+    ...(options.storage === undefined ? {} : { storage: options.storage }),
   };
   return dispatch(deps, held, channel);
 }
