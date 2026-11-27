@@ -35,6 +35,7 @@ when a row names a category that is not in the list.
 | `app.session_step_ups` | `account` |
 | `app.instance_admins` | `account` |
 | `app.email_outbox` | `account` |
+| `app.notifications` | `tenancy` |
 | `app.email_suppressions` | `account` |
 | `app.organizations` | `tenancy` |
 | `app.workspaces` | `tenancy` |

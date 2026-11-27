@@ -65,11 +65,13 @@ const withoutText = (body) =>
 // `literals` null means the trigger has no WHEN and fires on every change. A trigger's writes happen inside the statement
 // that fires it.
 const TRIGGER =
-  /CREATE\s+TRIGGER\s+\w+\s+AFTER\s[\s\S]*?\sON\s+(?:\w+\.)?(\w+)\s+(?:FOR\s+EACH\s+ROW\s*)?(?:WHEN\s*\(([\s\S]*?)\)\s*)?EXECUTE\s+(?:FUNCTION|PROCEDURE)\s+(?:\w+\.)?(\w+)\s*\(/gi;
+  /CREATE\s+TRIGGER\s+\w+\s+AFTER\s([\s\S]*?)\sON\s+(?:\w+\.)?(\w+)\s+(?:FOR\s+EACH\s+ROW\s*)?(?:WHEN\s*\(([\s\S]*?)\)\s*)?EXECUTE\s+(?:FUNCTION|PROCEDURE)\s+(?:\w+\.)?(\w+)\s*\(/gi;
+// Only a trigger that watches UPDATE can fire on the UPDATE of a function; one on DELETE or INSERT alone cannot.
 export function triggersOf(files) {
   const found = new Map();
   for (const file of files) {
-    for (const [, table, when, fn] of withoutComments(file).matchAll(TRIGGER)) {
+    for (const [, events, table, when, fn] of withoutComments(file).matchAll(TRIGGER)) {
+      if (!/\bUPDATE\b/i.test(events)) continue;
       const literals = when === undefined ? null : [...when.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
       found.set(table.toLowerCase(), [
         ...(found.get(table.toLowerCase()) ?? []),

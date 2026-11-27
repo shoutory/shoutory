@@ -161,7 +161,7 @@ describe("a reader sees only their own notices in their own workspace", () => {
     exec(
       ctx,
       "app",
-      "SELECT user_id, workspace_id FROM app.notifications WHERE kind = 'reader_check' ORDER BY user_id",
+      "SELECT user_id, workspace_id FROM app.notifications WHERE level = 'reader' ORDER BY user_id",
     );
 
   beforeAll(async () => {
@@ -173,9 +173,6 @@ describe("a reader sees only their own notices in their own workspace", () => {
       const made = await create({ user, workspace, kind: "token_expiry", level: "reader" });
       if (made.error) throw new Error(`could not plant a notice: ${made.error.message}`);
     }
-    await admin((client) =>
-      client.query("UPDATE app.notifications SET kind = 'reader_check' WHERE level = 'reader'"),
-    );
   });
 
   it.each([
@@ -306,6 +303,36 @@ describe("who gets a notice, and in which language", () => {
     const got = await recipients("token_expiry", planted.channel);
     expect(got.find((row) => row.user_id === U.admin)?.locale).toBe("ar");
     expect(got.find((row) => row.user_id === U.owner)?.locale).toBe("en");
+  });
+});
+
+describe("what a notice mail may carry", () => {
+  it("drops a token or any key it does not know, in every form", async () => {
+    const canary = "canary-notice-token-1";
+    const subject = randomUUID();
+    const made = await exec(
+      LEDGER,
+      "worker",
+      "SELECT app.notice_create($1, $2, 'token_expiry', $3, '14d', $4::jsonb) AS made",
+      [
+        WA,
+        U.viewerOrgAdmin,
+        subject,
+        JSON.stringify({ name: "Channel", access_token: canary, link: canary }),
+      ],
+    );
+    expect(made.error).toBeUndefined();
+    const [mail] = await rows("SELECT vars::text AS vars FROM app.email_outbox WHERE recipient = $1", [
+      EMAILS[U.viewerOrgAdmin],
+    ]);
+    const forms = [
+      canary,
+      encodeURIComponent(canary),
+      Buffer.from(canary).toString("hex"),
+      Buffer.from(canary).toString("base64"),
+      JSON.stringify(canary).slice(1, -1),
+    ];
+    for (const form of forms) expect(mail?.vars).not.toContain(form);
   });
 });
 

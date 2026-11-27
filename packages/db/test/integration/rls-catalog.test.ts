@@ -304,6 +304,23 @@ const DEFINERS: Definer[] = [
     args: "workspace_id uuid, channel_id uuid, request_id text, ip_hmac bytea",
     callers: ["shoutory_app"],
   },
+  {
+    name: "channel_disconnect",
+    args: "workspace_id uuid, channel_id uuid, request_id text, ip_hmac bytea",
+    callers: ["shoutory_app"],
+  },
+  { name: "credential_destroy", args: "workspace_id uuid, channel_id uuid", callers: APP_WORKER },
+  { name: "credentials_revoking_stale", args: "p_age interval", callers: ["shoutory_worker"] },
+  {
+    name: "notice_create",
+    args: "workspace_id uuid, user_id uuid, kind text, subject_id uuid, level text, vars jsonb",
+    callers: ["shoutory_worker"],
+  },
+  {
+    name: "notice_recipients",
+    args: "workspace_id uuid, kind text, subject_id uuid",
+    callers: ["shoutory_worker"],
+  },
   { name: "credential_caller", args: "workspace_id uuid", callers: [], helper: true },
   { name: "workspace_salt_ensure", args: "workspace_id uuid, salt bytea", callers: APP_WORKER },
   {

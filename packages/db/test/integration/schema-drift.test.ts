@@ -69,6 +69,7 @@ const MIGRATED_TABLES = [
   "app.media_assets",
   "app.media_derivatives",
   "app.media_uploads",
+  "app.notifications",
   "app.oauth_flows",
   "app.organization_members",
   "app.organizations",

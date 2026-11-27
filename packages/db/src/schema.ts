@@ -120,6 +120,21 @@ export const userProfiles = app.table("user_profiles", {
   lastWorkspaceId: uuid("last_workspace_id"),
   passwordRecheckAt: stamp("password_recheck_at"),
   avatarAt: stamp("avatar_at"),
+  locale: text("locale"),
+});
+
+export const notifications = app.table("notifications", {
+  id: id(),
+  workspaceId: uuid("workspace_id")
+    .notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  userId: userId(),
+  kind: text("kind").notNull(),
+  subjectId: uuid("subject_id").notNull(),
+  level: text("level").notNull(),
+  vars: jsonb("vars").notNull().default({}),
+  createdAt: stamp("created_at").notNull().default(sql`clock_timestamp()`),
+  readAt: stamp("read_at"),
 });
 
 // The sealed fields of a stored secret are raw bytes; Drizzle has no bytea builder at the pin.
@@ -358,7 +373,6 @@ export const channels = app.table("channels", {
   disconnectedAt: stamp("disconnected_at"),
   reconnectDeadline: stamp("reconnect_deadline"),
   tokenExpiresAt: stamp("token_expires_at"),
-  lastReauthNotice: stamp("last_reauth_notice"),
   capabilityEpoch: integer("capability_epoch").notNull().default(0),
 });
 
@@ -460,6 +474,7 @@ export const channelCredentials = app.table("channel_credentials", {
   refreshAttemptOutcome: text("refresh_attempt_outcome"),
   refreshSweptAt: stamp("refresh_swept_at"),
   botDigest: bytea("bot_digest"),
+  revokingSince: stamp("revoking_since"),
 });
 
 export const oauthFlows = app.table("oauth_flows", {

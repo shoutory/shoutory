@@ -1,0 +1,1 @@
+ALTER TABLE app.channel_credentials VALIDATE CONSTRAINT channel_credentials_state_check;
