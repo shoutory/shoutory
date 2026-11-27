@@ -1,0 +1,1 @@
+ALTER TABLE app.workspaces VALIDATE CONSTRAINT workspaces_lateness_tolerance_range;

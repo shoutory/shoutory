@@ -464,8 +464,11 @@ describe("admission of an archived workspace (no duplicate or late publish)", ()
 
   it("after restore past the tolerance takes the missed path and sends nothing", async () => {
     const ws = await freshWorkspace();
-    await rows("UPDATE app.workspaces SET lateness_tolerance = '1 second' WHERE id = $1", [ws]);
+    await rows("UPDATE app.workspaces SET lateness_tolerance = '5 minutes' WHERE id = $1", [ws]);
     const t = await target(ws);
+    await rows("UPDATE app.post_variants SET due_at = now() - interval '10 minutes' WHERE id = $1", [
+      t.variant,
+    ]);
     await commit(asUser(U.owner), ARCHIVE, [ws]);
     expect(await admit(t.map)).toEqual([]);
     await commit(asUser(U.owner), UNARCHIVE, [ws]);

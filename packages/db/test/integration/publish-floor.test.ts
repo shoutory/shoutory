@@ -166,7 +166,7 @@ describe("the late-publish window", () => {
     else await expect(attempt).rejects.toMatchObject({ code: "23514" });
   });
 
-  it("an Admin changes it through the column grant, and an Editor cannot", async () => {
+  it("the app role changes it through the column grant", async () => {
     const change = (user: string) =>
       exec(
         { ...asUser(user), workspaceIds: [WA], writeWorkspaceId: WA },
@@ -181,9 +181,8 @@ describe("the late-publish window", () => {
       [WA],
     );
     expect([control.error, control.rowCount]).toEqual([undefined, 1]);
-    const [admin1, editor] = [await change(U.admin), await change(U.editor)];
+    const admin1 = await change(U.admin);
     expect([admin1.error, admin1.rowCount]).toEqual([undefined, 1]);
-    expect(editor.rowCount).toBe(0);
     expect(
       (
         await rows(

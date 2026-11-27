@@ -65,6 +65,37 @@ describe("PATCH /api/v1/workspaces/{workspace_id}", () => {
     expect((await workspaceRow(fx, workspaceId)).default_tz).toBe(zone);
   });
 
+  it.each([4, 1441])(
+    "refuses a lateness tolerance of %i minutes with 422 and changes nothing",
+    async (minutes) => {
+      const answer = await patch({ lateness_tolerance_minutes: minutes });
+      expect(answer.status).toBe(422);
+      expect((await errorOf(answer)).details?.reason).toBe("lateness_out_of_range");
+    },
+  );
+
+  it.each([5, 120, 1440])(
+    "accepts a lateness tolerance of %i minutes and answers it back",
+    async (minutes) => {
+      const answer = await patch({ lateness_tolerance_minutes: minutes });
+      expect(answer.status).toBe(200);
+      const { data } = (await answer.json()) as { data: { lateness_tolerance_minutes: number } };
+      expect(data.lateness_tolerance_minutes).toBe(minutes);
+    },
+  );
+
+  it("refuses an Editor changing it with 403", async () => {
+    const editor = await signedUser(fx, "profile-editor");
+    await addWorkspaceMember(fx, workspaceId, editor.id, "editor");
+    const answer = await send(
+      "PATCH",
+      workspacePath(workspaceId),
+      { lateness_tolerance_minutes: 30 },
+      editor.cookie,
+    );
+    expect(answer.status).toBe(403);
+  });
+
   it("answers a slug that another workspace of the organization holds with 409 conflict", async () => {
     const taken = await seedWorkspace(fx, orgId, "taken-slug");
     const answer = await patch({ slug: "taken-slug" });
@@ -75,7 +106,7 @@ describe("PATCH /api/v1/workspaces/{workspace_id}", () => {
 });
 
 describe("workspace profile answers", () => {
-  it("answers GET and PATCH with exactly the eight allowlisted fields", async () => {
+  it("answers GET and PATCH with exactly the nine allowlisted fields", async () => {
     const answers = [
       await patch({ name: "Allowlist check", colour: "#112233" }),
       await fx.request(workspacePath(workspaceId), { headers: { cookie } }),
@@ -89,6 +120,7 @@ describe("workspace profile answers", () => {
         "colour",
         "default_tz",
         "id",
+        "lateness_tolerance_minutes",
         "name",
         "organization_id",
         "slug",

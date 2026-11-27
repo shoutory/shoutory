@@ -68,6 +68,7 @@ const COLUMN_GRANTS = [
   "shoutory_app workspaces.slug UPDATE",
   "shoutory_app workspaces.colour UPDATE",
   "shoutory_app workspaces.default_tz UPDATE",
+  "shoutory_app workspaces.lateness_tolerance UPDATE",
   // A channel's nickname is the one column the app role writes; connection_state and state_reason have
   // no runtime UPDATE grant, so a state can only come from a definer that checks the move.
   "shoutory_app channels.nickname UPDATE",

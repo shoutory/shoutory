@@ -612,6 +612,7 @@ export const postVariants = app.table("post_variants", {
   dueTz: text("due_tz"),
   dueAt: stamp("due_at"),
   admitSkipUntil: stamp("admit_skip_until"),
+  publishNow: boolean("publish_now").notNull().default(false),
   frozenVersionId: uuid("frozen_version_id"),
   presence: text("presence").notNull().default("present"),
   externalId: text("external_id"),

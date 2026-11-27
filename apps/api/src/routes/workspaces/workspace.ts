@@ -22,6 +22,7 @@ const profile = z
     colour: z.string().regex(/^#[0-9a-f]{6}$/),
     default_tz: defaultTz,
     avatar: lowerId.nullable(),
+    lateness_tolerance_minutes: z.number().int(),
   })
   .partial()
   .refine((body) => Object.keys(body).length > 0, "at least one field");
@@ -51,7 +52,9 @@ function slugOf(name: string): string {
 }
 
 const COLUMNS = ["name", "slug", "colour", "default_tz"] as const;
-const ANSWER = "id, organization_id, name, slug, colour, default_tz, archived_at, avatar";
+const ANSWER = `id, organization_id, name, slug, colour, default_tz, archived_at, avatar,
+  (extract(epoch FROM lateness_tolerance) / 60)::integer AS lateness_tolerance_minutes`;
+const LATENESS_MINUTES = { min: 5, max: 1440 } as const;
 
 async function read(tx: TenantTx, id: string) {
   const found = await tx.query(`SELECT ${ANSWER} FROM app.workspaces WHERE id = $1`, [id]);
@@ -70,12 +73,23 @@ async function setAvatar(tx: TenantTx, id: string, avatar: string | null) {
 async function update(tx: TenantTx, id: string, body: z.infer<typeof profile>) {
   if (body.avatar !== undefined) await setAvatar(tx, id, body.avatar);
   const changed = COLUMNS.filter((column) => body[column] !== undefined);
-  if (changed.length === 0) return read(tx, id);
-  const sets = changed.map((column, index) => `${column} = $${index + 2}`);
+  const sets: string[] = changed.map((column, index) => `${column} = $${index + 2}`);
+  const values: unknown[] = changed.map((column) => body[column]);
+  const minutes = body.lateness_tolerance_minutes;
+  if (minutes !== undefined) {
+    if (minutes < LATENESS_MINUTES.min || minutes > LATENESS_MINUTES.max) {
+      throw new Refusal("unprocessable_content", "lateness tolerance out of range", {
+        details: { reason: "lateness_out_of_range" },
+      });
+    }
+    sets.push(`lateness_tolerance = make_interval(mins => $${sets.length + 2})`);
+    values.push(minutes);
+  }
+  if (sets.length === 0) return read(tx, id);
   try {
     const found = await tx.query(
       `UPDATE app.workspaces SET ${sets.join(", ")} WHERE id = $1 RETURNING ${ANSWER}`,
-      [id, ...changed.map((column) => body[column])],
+      [id, ...values],
     );
     if (!found.rows[0]) throw new Refusal("not_found", "workspace row not updated");
     return found.rows[0];
