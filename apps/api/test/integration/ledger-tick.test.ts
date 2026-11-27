@@ -422,6 +422,9 @@ describe("one failing step of the tick", () => {
 
 describe("the outbox after a ledger move", () => {
   it("a worker run that moves one operation keeps /readyz ready after 60 s", async () => {
+    // The tests before this one left over a hundred events no worker ever read. Only the events of this run's move are
+    // waited for, so a slow host cannot fail the test by draining that backlog at the relay's rate.
+    await admin((a) => a.query("UPDATE app.outbox SET dead_at = now() WHERE type LIKE 'operation.%'"));
     const target = await admin((a) => seedDueTarget(a, ws));
     const worker = await startWorker({
       connectionString: db.url("worker"),

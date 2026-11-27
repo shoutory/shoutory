@@ -9,7 +9,7 @@ import type { Registry } from "@shoutory/provider-sdk/registry";
 import { pastSunset } from "@shoutory/provider-sdk/snapshot";
 import type { CredentialService } from "../../channels/credentials.js";
 import type { Logger } from "../../logging/logger.js";
-import { accessOf } from "./account.js";
+import { accessOf, factsOf } from "./account.js";
 import { dispatch } from "./dispatch.js";
 import { hold } from "./heartbeat.js";
 import {
@@ -180,7 +180,7 @@ async function preflight(options: TurnOptions, held: Held): Promise<TurnResult> 
     options.logger.error({ provider: manifest.id }, "claimed operation has no adapter");
     return preflightMove(pool, held, { to: "failed" });
   }
-  const access = await accessOf(options.credentials, operation, channel.instance_host);
+  const access = await accessOf(options.credentials, operation, factsOf(channel));
   if (signal.aborted) return lost;
   if (access.kind !== "ok") return withoutAccess(options, held, access.kind);
   const deps = {

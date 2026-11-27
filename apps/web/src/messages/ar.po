@@ -2814,3 +2814,107 @@ msgstr "الشيفرة المصدرية لهذا الإصدار"
 #. js-lingui-explicit-id
 msgid "system.about.source_label"
 msgstr "الشيفرة المصدرية لهذا الإصدار (تُفتح في علامة تبويب جديدة)"
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.tile.secret"
+msgstr "ستلصق سرًّا واحدًا من <0>{provider}</0>. يحتفظ به Shoutory مختومًا ولا يعرضه مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.hint.intro"
+msgstr "اكتب معرّف حساب <0>{provider}</0> الذي تريد ربطه."
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.hint.label"
+msgstr "المعرّف، مثل name.example"
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.hint.invalid"
+msgstr "اكتب معرّف الحساب."
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.origin"
+msgstr "لا يتصل <0>{provider}</0> إلا بنسخة Shoutory يستطيع أي شخص الوصول إليها عبر https، لأنه يجلب تفاصيل هذا التطبيق من هنا. هذه النسخة لا يمكن الوصول إليها بهذه الطريقة. اطلب من الشخص الذي يديرها أن يمنحها عنوان https عامًّا."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.hook.intro"
+msgstr "الصق عنوان الويب هوك للقناة في <0>{provider}</0> التي تريد النشر إليها."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.hook.label"
+msgstr "عنوان الويب هوك"
+
+#. js-lingui-explicit-id
+msgid "connect.secret.bot.intro"
+msgstr "الصق رمز البوت الذي أنشأته في <0>{provider}</0>. يحتفظ به Shoutory مختومًا."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.bot.label"
+msgstr "رمز البوت"
+
+#. js-lingui-explicit-id
+msgid "connect.secret.continue"
+msgstr "تحقق ثم تابع"
+
+#. js-lingui-explicit-id
+msgid "connect.secret.host_not_allowed"
+msgstr "هذا العنوان لا يتبع هذه المنصة. انسخه من المنصة مرة أخرى وحاول من جديد."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.refused"
+msgstr "لم تقبل المنصة هذا. تأكد من أنك نسخته كاملًا وحاول من جديد."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.unreachable"
+msgstr "تعذّر الوصول إلى المنصة. لم يتغيّر شيء. حاول لاحقًا."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.rate_limited"
+msgstr "طلبت المنصة منا الانتظار. لم يتغيّر شيء. حاول بعد بضع دقائق."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.conflict"
+msgstr "تعذّر الربط هنا. قد يكون مستخدمًا في مساحة عمل أخرى، أو انتهت صلاحية كلمته. ابدأ من جديد بكلمة جديدة."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.word.intro"
+msgstr "أضف البوت إلى المحادثة أو القناة التي تريد النشر إليها، ثم أرسل هذه الرسالة فيها:"
+
+#. js-lingui-explicit-id
+msgid "connect.secret.word.waiting"
+msgstr "في انتظار الرسالة"
+
+#. js-lingui-explicit-id
+msgid "connect.secret.word.matched"
+msgstr "تم العثور على <0><1>{0}</1></0>"
+
+#. js-lingui-explicit-id
+msgid "connect.secret.word.expired"
+msgstr "انتهت صلاحية هذه الكلمة."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.word.connect"
+msgstr "ربط هذه المحادثة"
+
+#. js-lingui-explicit-id
+msgid "connect.secret.word.renew"
+msgstr "إنشاء كلمة جديدة"
+
+#. js-lingui-explicit-id
+msgid "connect.secret.word.done"
+msgstr "تم ربط هذه المحادثة. يمكنك النشر إليها الآن."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.word.ended"
+msgstr "حلّت كلمة أحدث محل هذه الكلمة. أغلق هذه النافذة واستخدم الأحدث."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.word.next"
+msgstr "عرض قنواتي"
+
+#. js-lingui-explicit-id
+msgid "connect.secret.word.gone"
+msgstr "لم يعد بالإمكان استخدام هذه الكلمة هنا. أغلق هذه النافذة وابدأ الربط من جديد."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.reconnect.title"
+msgstr "إعادة ربط هذه القناة"

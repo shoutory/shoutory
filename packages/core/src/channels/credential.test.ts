@@ -10,6 +10,8 @@ const CURRENT: ChannelToken = {
 describe("the stored channel token", () => {
   it.each([
     ["an access token alone", { access_token: "a" }, true],
+    ["an issuer", { access_token: "a", issuer: "https://as.example" }, true],
+    ["an issuer that is not https", { access_token: "a", issuer: "http://as.example" }, false],
     ["access, refresh and a DPoP key", CURRENT, true],
     ["an empty access token", { access_token: "" }, false],
     ["no access token", { refresh_token: "r" }, false],

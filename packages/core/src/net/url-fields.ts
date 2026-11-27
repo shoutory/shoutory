@@ -19,6 +19,7 @@ const exception = (id: string, exceptionId: string): UrlField => ({
 export const URL_FIELDS: readonly UrlField[] = [
   egress("server-instance-url", "apps/api/src/main.ts"),
   egress("media-import", "apps/api/src/main.ts"),
+  egress("provider-issuer", "apps/api/src/main.ts"),
   exception("s3-endpoint", "s3-driver"),
   exception("s3-public-endpoint", "s3-driver"),
   exception("clamav-host", "media-scan"),

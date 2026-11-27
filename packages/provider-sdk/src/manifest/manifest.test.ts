@@ -350,10 +350,10 @@ describe("manifestSchema", () => {
 
   // A provider whose accounts live on user-chosen servers names no hosts: its host is the channel's stored instance, one
   // closed alternative to the list (never a wildcard), so exactly one of the two is declared.
-  it("accepts egressHostSource channel in place of the egressHosts list", () => {
+  it.each(["channel", "open"])("accepts egressHostSource %s in place of the egressHosts list", (source) => {
     const manifest = fixtureManifest();
     delete manifest.egressHosts;
-    manifest.egressHostSource = "channel";
+    manifest.egressHostSource = source;
     expect(manifestSchema.safeParse(manifest).success).toBe(true);
   });
 
@@ -387,6 +387,17 @@ describe("manifestSchema", () => {
 
   it("gives a manifest that declares no quota an empty list", () => {
     expect(manifestSchema.parse(fixtureManifest()).quotas).toEqual([]);
+  });
+});
+
+describe("manifestSchema: limits", () => {
+  it("holds a byte limit of text next to the counted one", () => {
+    const manifest = fixtureManifest();
+    manifest.limits = {
+      ...(manifest.limits as object),
+      textBytes: { value: 3000, source: "https://atproto.com/specs/lexicon", checked: "2026-11-27" },
+    };
+    expect(manifestSchema.parse(manifest).limits.textBytes?.value).toBe(3000);
   });
 });
 

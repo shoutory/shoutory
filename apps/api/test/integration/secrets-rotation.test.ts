@@ -67,6 +67,7 @@ afterAll(() => db.drop());
 
 const fresh = () =>
   sql(`DELETE FROM app.channel_credentials; DELETE FROM app.channels; DELETE FROM app.provider_instance_apps;
+       DELETE FROM app.provider_apps;
        DELETE FROM app.oauth_flows; DELETE FROM app.email_outbox`);
 
 const sealedColumns = (s: StoredSecret) => [
@@ -132,6 +133,19 @@ async function plantInstanceApp(): Promise<string> {
   return id;
 }
 
+async function plantProviderApp(): Promise<string> {
+  const id = randomUUID();
+  const sealed = seal(CLIENT_SECRET, aadOf(NIL_SCOPE, id, "provider_instance_app", 1), OLD);
+  await sql(
+    `INSERT INTO app.provider_apps (id, provider_id, environment, client_id, redirect_uri, secret_format_version,
+       secret_key_id, secret_iv, secret_ciphertext, secret_auth_tag, secret_wrap_iv, secret_wrap_tag,
+       secret_wrapped_dek, secret_generation)
+     VALUES ($1, $2, 'production', 'client-rotation-2', 'https://app.example.test/x', $3, $4, $5, $6, $7, $8, $9, $10, 1)`,
+    [id, PROVIDER, ...sealedColumns(sealed)],
+  );
+  return id;
+}
+
 async function plantFlowAndLink(): Promise<void> {
   const flow = randomUUID();
   const verifier = JSON.stringify({ code_verifier: VERIFIER });
@@ -165,10 +179,12 @@ const credentialOf = async (channel: string) =>
 describe("a key rotation", () => {
   let channel = "";
   let appId = "";
+  let providerAppId = "";
   beforeAll(async () => {
     await fresh();
     channel = await plantOne();
     appId = await plantInstanceApp();
+    providerAppId = await plantProviderApp();
     await plantFlowAndLink();
   });
 
@@ -199,6 +215,10 @@ describe("a key rotation", () => {
       appId,
     ]);
     expect(stored?.secret_generation).toBe(2);
+    const [provider] = await sql("SELECT * FROM app.provider_apps WHERE id = $1", [providerAppId]);
+    expect([provider?.secret_key_id, provider?.secret_generation]).toEqual(["k2", 2]);
+    const aad = aadOf(NIL_SCOPE, providerAppId, "provider_instance_app", 2);
+    expect(open(storedOf(provider ?? {}, "secret_"), aad, NEW).expose()).toBe(CLIENT_SECRET);
   });
 });
 

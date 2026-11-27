@@ -14,6 +14,7 @@ const exceptionIds: string[] = (
 const FIELD_IDS = [
   "server-instance-url",
   "media-import",
+  "provider-issuer",
   "s3-endpoint",
   "s3-public-endpoint",
   "clamav-host",
@@ -60,7 +61,9 @@ describe("every URL field names a guard route", () => {
 
   it("routes the user-supplied fields through egress and the operator-configured drivers to exception rows", () => {
     const route = (id: string) => URL_FIELDS.find((field) => field.id === id)?.route;
-    expect(["server-instance-url", "media-import"].map(route)).toEqual(["egress", "egress"]);
+    expect(["server-instance-url", "media-import", "provider-issuer"].map(route)).toEqual(
+      Array(3).fill("egress"),
+    );
     expect(
       ["s3-endpoint", "s3-public-endpoint", "clamav-host", "smtp-url", "otlp-endpoint", "mail-check-dns"].map(
         route,
@@ -107,6 +110,15 @@ const SCHEMA_ALLOWLIST: readonly { path: string; reason: string }[] = [
   {
     path: "packages/testkit/src/oauth-fake/server.ts",
     reason: "The OAuth test server checks a redirect target the test itself chose; it is never fetched.",
+  },
+  {
+    path: "packages/core/src/connect/flow.ts",
+    reason:
+      "The issuer an adapter found through its own egress client; it is fetched again only through that client.",
+  },
+  {
+    path: "packages/core/src/channels/credential.ts",
+    reason: "The issuer stored with a token; an adapter fetches it only through the provider egress client.",
   },
   {
     path: "apps/web/src/auth/two-factor-setup.tsx",

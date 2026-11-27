@@ -3,19 +3,23 @@ import { inspect } from "node:util";
 import { deriveKey, type KeyProvider } from "./keys.js";
 
 export const CREDENTIAL_KINDS = [
+  "bot_token",
   "channel_token",
   "email_link",
   "oauth_flow",
   "provider_instance_app",
+  "webhook_url",
 ] as const;
 export type CredentialKind = (typeof CREDENTIAL_KINDS)[number];
 
 // Deleting the workspace salt shreds every row of a salted kind.
 export const CREDENTIAL_SALT_POLICY: Readonly<Record<CredentialKind, "salted" | "unsalted">> = {
+  bot_token: "salted",
   channel_token: "salted",
   email_link: "unsalted",
   oauth_flow: "salted",
   provider_instance_app: "unsalted",
+  webhook_url: "salted",
 };
 
 // HKDF-SHA256 HashLen, RFC 5869 section 3.1.

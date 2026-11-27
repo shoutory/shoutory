@@ -20,6 +20,7 @@ import { DirText } from "../../ui/dir-text";
 import { EmptyState } from "../../ui/empty-state";
 import { ErrorPanel } from "../../ui/error-panel";
 import { LocalizedDateTime } from "../../ui/localized";
+import { ReconnectSecret } from "./connect-secret";
 import { Reconnect } from "./connect-start";
 import { ConnectWizard } from "./connect-wizard";
 
@@ -171,15 +172,29 @@ function Failed({ error, retry }: { error: ApiError; retry: () => void }) {
   );
 }
 
-const providersSchema = z.array(z.object({ id: z.string(), display_name: z.string() }));
+const providersSchema = z.array(
+  z.object({
+    id: z.string(),
+    display_name: z.string(),
+    secret_kind: z.enum(["bot_token", "webhook_url"]).nullable().default(null),
+  }),
+);
+interface ProviderInfo {
+  readonly name: string;
+  readonly secretKind: "bot_token" | "webhook_url" | null;
+}
 
 // A failed read never fails the hub: the card shows the provider id instead.
-function useProviderNames(ws: string): ReadonlyMap<string, string> {
-  const [names, setNames] = useState<ReadonlyMap<string, string>>(new Map());
+function useProviderNames(ws: string): ReadonlyMap<string, ProviderInfo> {
+  const [names, setNames] = useState<ReadonlyMap<string, ProviderInfo>>(new Map());
   useEffect(() => {
     let live = true;
     request(providersSchema, `/api/v1/workspaces/${ws}/providers`).then(
-      (providers) => live && setNames(new Map(providers.map((one) => [one.id, one.display_name]))),
+      (providers) =>
+        live &&
+        setNames(
+          new Map(providers.map((one) => [one.id, { name: one.display_name, secretKind: one.secret_kind }])),
+        ),
       (error: unknown) => {
         if (!(error instanceof ApiError)) throw error;
       },
@@ -239,12 +254,13 @@ const dateOf = (value: string | null): Date | null => {
 const RECONNECTABLE = new Set(["needs_reconnect", "disconnected", "revoked_by_provider"]);
 
 interface CardContext {
-  names: ReadonlyMap<string, string>;
+  names: ReadonlyMap<string, ProviderInfo>;
   words: Words;
   zone: string;
   ws: string;
   onReplace: (row: Channel) => void;
   onDrop: (id: string) => void;
+  onConnected: () => void;
 }
 
 type CheckFailure = "not_connected" | "provider_unavailable" | "rate_limited" | "forbidden" | "failed";
@@ -378,7 +394,7 @@ function Names({ row, context, nameId }: { row: Channel; context: CardContext; n
         </span>
       )}
       <span data-testid="card-provider" className="text-sm text-text-muted">
-        <DirText>{context.names.get(row.provider_id) ?? row.provider_id}</DirText>
+        <DirText>{context.names.get(row.provider_id)?.name ?? row.provider_id}</DirText>
       </span>
     </>
   );
@@ -418,6 +434,24 @@ function Status({ row, context }: { row: Channel; context: CardContext }) {
   );
 }
 
+// A channel made from a pasted secret is reconnected by pasting it again, never through an authorization.
+function ReconnectOf({ row, context, nameId }: { row: Channel; context: CardContext; nameId: string }) {
+  const info = context.names.get(row.provider_id);
+  if (info?.secretKind) {
+    const platform = { id: row.provider_id, display_name: info.name, secret_kind: info.secretKind };
+    return (
+      <ReconnectSecret
+        ws={context.ws}
+        platform={platform}
+        channelId={row.id}
+        nameId={nameId}
+        onDone={context.onConnected}
+      />
+    );
+  }
+  return <Reconnect ws={context.ws} providerId={row.provider_id} channelId={row.id} nameId={nameId} />;
+}
+
 function Card({ row, context, focus }: { row: Channel; context: CardContext; focus: boolean }) {
   const ref = useRef<HTMLLIElement>(null);
   const nameId = useId();
@@ -444,7 +478,7 @@ function Card({ row, context, focus }: { row: Channel; context: CardContext; foc
         <Status row={row} context={context} />
         <CheckNow row={row} context={context} nameId={nameId} focusCard={() => ref.current?.focus()} />
         {row.actions.includes("reconnect") ? (
-          <Reconnect ws={context.ws} providerId={row.provider_id} channelId={row.id} nameId={nameId} />
+          <ReconnectOf row={row} context={context} nameId={nameId} />
         ) : null}
       </div>
     </li>
@@ -542,10 +576,15 @@ function ChannelsHub({ ws }: { ws: string }) {
       dropRow(id);
       setRemoved(true);
     },
+    onConnected: () => connected(),
   };
   const tryAgain = () => {
     setRemoved(false);
     retry();
+  };
+  const connected = () => {
+    setAdding(false);
+    tryAgain();
   };
   return (
     <div data-testid="hub-state" data-state={stateName(state)} className="flex flex-col gap-5">
@@ -559,7 +598,9 @@ function ChannelsHub({ ws }: { ws: string }) {
           </Button>
         ) : null}
       </div>
-      {canConnect ? <ConnectWizard ws={ws} isOpen={adding} onOpenChange={setAdding} /> : null}
+      {canConnect ? (
+        <ConnectWizard ws={ws} isOpen={adding} onOpenChange={setAdding} onConnected={connected} />
+      ) : null}
       {removed ? (
         <p data-testid="hub-notice" data-reason="not_found" role="status">
           {CHECK_WORDS.not_found}

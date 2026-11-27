@@ -10,6 +10,8 @@ export const JOB_QUEUES = {
   // Scheduled only for the filesystem driver.
   sweep_upload_parts: { payload: z.strictObject({}), cron: "23 3 * * *" },
   credential_refresh: { payload: z.strictObject({}), cron: "* * * * *" },
+  // Each run polls every two seconds for under a minute, so a word typed into a chat is seen within seconds.
+  connect_challenge_poll: { payload: z.strictObject({}), cron: "* * * * *" },
 } as const;
 export type JobQueue = keyof typeof JOB_QUEUES;
 

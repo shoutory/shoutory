@@ -20,7 +20,18 @@ const user = (name: string): User => {
 };
 const SEATS = ["owner", "admin", "editor", "approver", "viewer"] as const;
 const MISSING = "019a0000-0000-7000-8000-000000000000";
-const ALLOWLIST = ["auth_kind", "connectable", "display_name", "id", "lifecycle", "needs_instance_host"];
+const ALLOWLIST = [
+  "auth_kind",
+  "connectable",
+  "display_name",
+  "id",
+  "lifecycle",
+  "needs_instance_host",
+  "needs_login_hint",
+  "needs_public_origin",
+  "secret_kind",
+];
+const NO_STEPS = { needs_login_hint: false, needs_public_origin: false, secret_kind: null };
 const manifestOf = (id: string, displayName: string, lifecycle: "beta" | "ga") =>
   manifestSchema.parse({ ...fixtureOAuthManifest, id, displayName, lifecycle });
 // A provider whose host is the one each channel stores (an instance network) needs the host typed at the start.
@@ -110,6 +121,7 @@ describe("what the providers route answers", () => {
         auth_kind: "oauth2_pkce",
         connectable: true,
         needs_instance_host: false,
+        ...NO_STEPS,
       },
       {
         id: "fixture_beta",
@@ -118,6 +130,7 @@ describe("what the providers route answers", () => {
         auth_kind: "oauth2_pkce",
         connectable: false,
         needs_instance_host: true,
+        ...NO_STEPS,
       },
     ]);
     // Nothing of the manifest's internals or of the adapter reaches the answer: scopes, hosts, capabilities, limits.

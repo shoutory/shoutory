@@ -11,6 +11,10 @@ export const channelTokenSchema = z.strictObject({
     .record(z.string().max(64), z.unknown())
     .refine((key) => JSON.stringify(key).length <= MAX_TOKEN_CHARS)
     .optional(),
+  issuer: z
+    .url({ protocol: /^https$/ })
+    .max(512)
+    .optional(),
 });
 export type ChannelToken = z.infer<typeof channelTokenSchema>;
 

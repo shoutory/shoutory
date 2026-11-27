@@ -28,6 +28,18 @@ describe("the sealed flow object", () => {
     ["a verifier that is too long", { code_verifier: "v".repeat(129) }, false],
     ["a field that is not the verifier", { code_verifier: "v".repeat(43), dpop_private_jwk: "{}" }, false],
     ["no verifier", {}, false],
+    [
+      "a key, an issuer and a login hint",
+      {
+        code_verifier: "v".repeat(43),
+        dpop_private_jwk: { kty: "EC" },
+        issuer: "https://as.example",
+        login_hint: "a.example",
+      },
+      true,
+    ],
+    ["an issuer that is not https", { code_verifier: "v".repeat(43), issuer: "http://as.example" }, false],
+    ["an empty login hint", { code_verifier: "v".repeat(43), login_hint: "" }, false],
   ])("%s", (_name, value, accepted) => {
     expect(flowObjectSchema.safeParse(value).success).toBe(accepted);
   });

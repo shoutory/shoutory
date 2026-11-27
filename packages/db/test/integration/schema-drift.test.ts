@@ -53,6 +53,7 @@ async function primaryKeyDrift(pool: Pool, table: PgTable): Promise<string[]> {
 const MIGRATED_TABLES = [
   "app.audit_heads",
   "app.audit_logs",
+  "app.bot_claims",
   "app.channel_capability_snapshots",
   "app.channel_credentials",
   "app.channels",

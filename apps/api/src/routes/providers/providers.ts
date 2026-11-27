@@ -16,6 +16,22 @@ const sorted = (providers: Providers) => Object.entries(providers).sort(([a], [b
 // A provider whose accounts live on servers people choose needs the host typed before the connect.
 const needsInstanceHost = ({ manifest }: HealthProvider) => manifest.egressHostSource === "channel";
 
+// Accounts on servers a person names are found from the account typed, not from a host.
+const needsLoginHint = ({ manifest }: HealthProvider) => manifest.egressHostSource === "open";
+
+// What a person pastes instead of authorizing, for the providers whose credential is a secret they hold.
+const secretKind = ({ manifest }: HealthProvider) =>
+  manifest.auth.method === "bot_token" || manifest.auth.method === "webhook_url"
+    ? manifest.auth.method
+    : null;
+
+// A provider whose server fetches documents from this app can only connect when the app is reachable over public https.
+function needsPublicOrigin({ adapter }: HealthProvider, publicOrigin: string): boolean {
+  if (adapter.connect?.publicDocuments === undefined) return false;
+  const { protocol, hostname } = new URL(publicOrigin);
+  return protocol !== "https:" || hostname === "localhost" || hostname.endsWith(".localhost");
+}
+
 export function registerProviders(app: App, providers: Providers, publicOrigin: string): void {
   defineRoute(app, {
     method: "get",
@@ -31,6 +47,9 @@ export function registerProviders(app: App, providers: Providers, publicOrigin: 
         auth_kind: provider.manifest.auth.method,
         connectable: provider.adapter.connect !== undefined,
         needs_instance_host: needsInstanceHost(provider),
+        needs_login_hint: needsLoginHint(provider),
+        secret_kind: secretKind(provider),
+        needs_public_origin: needsPublicOrigin(provider, publicOrigin),
       })),
   });
   defineRoute(app, {

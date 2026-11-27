@@ -28,6 +28,7 @@ import type { Registry } from "@shoutory/provider-sdk/registry";
 import type { ProviderResult } from "@shoutory/provider-sdk/result";
 import { z } from "zod";
 import type { Logger } from "../logging/logger.js";
+import { readProviderApp } from "./provider-app.js";
 
 // The provider is called between short transactions with none open, and its timeout stays below the lease.
 const LEASE_SECONDS = 60;
@@ -78,6 +79,8 @@ interface ConnectInput {
   /** Another account on a reconnected channel is refused. */
   readonly reconnectChannelId?: string | undefined;
   readonly tokens: ChannelToken;
+  /** What the value is: an authorized token, a bot token held on a challenge, or a pasted webhook URL. */
+  readonly credential?: { readonly kind: ChannelKind; readonly takenChallengeId?: string | undefined };
   /** Null for a token the provider never expires; it is never due for a refresh. */
   readonly accessExpiresAt: Date | null;
   readonly refreshExpiresAt?: Date | undefined;
@@ -99,8 +102,14 @@ type RefreshOutcome =
   | { readonly kind: "no_refresh_token" }
   | { readonly kind: "needs_reconnect"; readonly reason: string };
 
+const usableOf = (opened: { accessToken: SealedSecret; dpopKey: SealedSecret | undefined }): Usable => ({
+  kind: "ok",
+  accessToken: opened.accessToken,
+  ...(opened.dpopKey === undefined ? {} : { dpopKey: opened.dpopKey }),
+});
+
 export type Usable =
-  | { readonly kind: "ok"; readonly accessToken: SealedSecret }
+  | { readonly kind: "ok"; readonly accessToken: SealedSecret; readonly dpopKey?: SealedSecret }
   | { readonly kind: "retry" }
   | { readonly kind: "revoked" }
   | { readonly kind: "unavailable" };
@@ -111,6 +120,9 @@ export class CredentialError extends Error {
     this.name = "CredentialError";
   }
 }
+
+const CHANNEL_KINDS = ["channel_token", "bot_token", "webhook_url"] as const;
+type ChannelKind = (typeof CHANNEL_KINDS)[number];
 
 const bytes = z.instanceof(Buffer);
 const int = z.number().int();
@@ -129,6 +141,7 @@ const openRowSchema = z.object({
   refresh_token_digest: z.string().nullable(),
   salt: bytes,
   provider_id: z.string(),
+  kind: z.enum(CHANNEL_KINDS),
 });
 type OpenRow = z.infer<typeof openRowSchema>;
 
@@ -147,11 +160,16 @@ const saltSchema = z.object({ salt: bytes });
 const landedSchema = z.object({ landed: z.boolean() });
 const failedSchema = z.object({ credential_refresh_fail: z.enum(["applied", "changed"]) });
 
-const aadOf = (workspaceId: string, channelId: string, generation: number): Aad => ({
+const aadOf = (
+  workspaceId: string,
+  channelId: string,
+  generation: number,
+  credentialKind: ChannelKind = "channel_token",
+): Aad => ({
   formatVersion: FORMAT_VERSION,
   scopeId: workspaceId,
   ownerId: channelId,
-  credentialKind: "channel_token",
+  credentialKind,
   generation,
 });
 
@@ -205,7 +223,7 @@ async function readOpenRow(pool: AppPool, workspaceId: string, channelId: string
 }
 
 function tokenOfRow(keys: KeyProvider, row: OpenRow, workspaceId: string, channelId: string): ChannelToken {
-  const aad = aadOf(workspaceId, channelId, row.generation);
+  const aad = aadOf(workspaceId, channelId, row.generation, row.kind);
   return channelTokenSchema.parse(JSON.parse(open(storedOf(row), aad, keys, row.salt).expose()));
 }
 
@@ -232,17 +250,25 @@ export class CredentialService {
     return withTenant(this.#deps.pool, ctx, fn);
   }
 
-  async instanceHostOf(workspaceId: string, channelId: string): Promise<string | undefined> {
+  // The two facts of a channel a provider call is made with besides its token.
+  async channelFactsOf(
+    workspaceId: string,
+    channelId: string,
+  ): Promise<{ instanceHost?: string; providerAccountId?: string }> {
     const found = await this.#asJob(workspaceId, (tx) =>
-      tx.query("SELECT instance_host FROM app.channels WHERE workspace_id = $1 AND id = $2", [
-        workspaceId,
-        channelId,
-      ]),
+      tx.query(
+        "SELECT instance_host, provider_account_id FROM app.channels WHERE workspace_id = $1 AND id = $2",
+        [workspaceId, channelId],
+      ),
     );
-    return (
-      z.object({ instance_host: z.string().nullable() }).optional().parse(found.rows[0])?.instance_host ??
-      undefined
-    );
+    const row = z
+      .object({ instance_host: z.string().nullable(), provider_account_id: z.string().nullable() })
+      .optional()
+      .parse(found.rows[0]);
+    return {
+      ...(row?.instance_host == null ? {} : { instanceHost: row.instance_host }),
+      ...(row?.provider_account_id == null ? {} : { providerAccountId: row.provider_account_id }),
+    };
   }
 
   // Only a provider whose host is the channel's own reads the host; every other keeps its manifest's hosts.
@@ -253,7 +279,7 @@ export class CredentialService {
   ): Promise<{ fetch: typeof fetch; instanceHost?: string }> {
     const host =
       provider.manifest.egressHostSource === "channel"
-        ? await this.instanceHostOf(workspaceId, channelId)
+        ? (await this.channelFactsOf(workspaceId, channelId)).instanceHost
         : undefined;
     const egress = this.#deps.fetchFor?.(provider.manifest, host) ?? this.#deps.fetch;
     return {
@@ -291,6 +317,7 @@ export class CredentialService {
             input.reconnectChannelId ?? null,
             audit.requestId,
             audit.ipHmac,
+            input.credential?.takenChallengeId ?? null,
           ]),
         );
         const { channel_id: channelId, next_generation: generation } = connectedSchema.parse(made.rows[0]);
@@ -308,7 +335,8 @@ export class CredentialService {
 
   async #put(tx: TenantTx, input: ConnectInput, channelId: string, generation: number, salt: Buffer) {
     const { snapshot, audit } = input;
-    const aad = aadOf(input.workspaceId, channelId, generation);
+    const kind = input.credential?.kind ?? "channel_token";
+    const aad = aadOf(input.workspaceId, channelId, generation, kind);
     const stored = seal(JSON.stringify(input.tokens), aad, this.#deps.keys, salt);
     await tx.query(
       ...callOf("credential_put", [
@@ -326,6 +354,8 @@ export class CredentialService {
         JSON.stringify(snapshot.limits),
         audit.requestId,
         audit.ipHmac,
+        kind,
+        input.credential?.takenChallengeId ?? null,
       ]),
     );
   }
@@ -341,6 +371,11 @@ export class CredentialService {
       generation: row.generation,
       accessToken: new SealedSecret(token.access_token),
       refreshToken: token.refresh_token === undefined ? undefined : new SealedSecret(token.refresh_token),
+      dpopKey:
+        token.dpop_private_jwk === undefined
+          ? undefined
+          : new SealedSecret(JSON.stringify(token.dpop_private_jwk)),
+      issuer: token.issuer,
       refreshDue: left !== undefined && left <= REFRESH_MARGIN_MS,
       // A token with no expiry lives until the provider says otherwise.
       alive: left === undefined || left > 0,
@@ -352,14 +387,14 @@ export class CredentialService {
   async usable(workspaceId: string, channelId: string): Promise<Usable> {
     try {
       const opened = await this.open(workspaceId, channelId);
-      if (!opened.refreshDue) return { kind: "ok", accessToken: opened.accessToken };
+      if (!opened.refreshDue) return usableOf(opened);
       const outcome = await this.refresh(workspaceId, channelId);
       if (outcome.kind === "needs_reconnect") return { kind: "revoked" };
       const current =
         outcome.kind === "refreshed" || outcome.kind === "lost_race"
           ? await this.open(workspaceId, channelId)
           : opened;
-      return current.alive ? { kind: "ok", accessToken: current.accessToken } : { kind: "retry" };
+      return current.alive ? usableOf(current) : { kind: "retry" };
     } catch (error) {
       // A key that is not loaded may come back; a credential that is missing or cannot be opened will not.
       if (error instanceof KeyError) return { kind: "retry" };
@@ -436,7 +471,7 @@ export class CredentialService {
     });
     if (!fresh || !adopted) return undefined;
     const generation = row.generation + 1;
-    const aad = aadOf(workspaceId, channelId, generation);
+    const aad = aadOf(workspaceId, channelId, generation, row.kind);
     const stored = seal(JSON.stringify(adopted), aad, this.#deps.keys, row.salt);
     const expiresAt = expiryOf(this.#deps.now(), fresh.expiresInSeconds);
     const landed = await this.#asJob(workspaceId, (tx) =>
@@ -516,6 +551,12 @@ export class CredentialService {
     );
   }
 
+  // A provider that signs for the whole instance needs its app to refresh a token.
+  async #providerAppOf(workspaceId: string, providerId: string, provider: ChannelProvider) {
+    if (provider.adapter.connect?.appKind !== "provider") return undefined;
+    return this.#asJob(workspaceId, (tx) => readProviderApp(tx, this.#deps.keys, providerId, null));
+  }
+
   async refresh(workspaceId: string, channelId: string): Promise<RefreshOutcome> {
     const first = await this.#openRow(workspaceId, channelId);
     const provider = this.#deps.providers[first.provider_id];
@@ -536,10 +577,19 @@ export class CredentialService {
     }
     const row = first;
     const current = this.#tokenOf(row, workspaceId, channelId);
+    const app = await this.#providerAppOf(workspaceId, first.provider_id, provider);
     const result = await refreshCall.call(
       provider.adapter,
       { fetch: egress.fetch, now: this.#deps.now },
-      { refreshToken: new SealedSecret(current.refresh_token ?? "") },
+      {
+        refreshToken: new SealedSecret(current.refresh_token ?? ""),
+        ...(app === undefined ? {} : { app }),
+        ...(current.dpop_private_jwk === undefined
+          ? {}
+          : { dpopKey: new SealedSecret(JSON.stringify(current.dpop_private_jwk)) }),
+        ...(current.issuer === undefined ? {} : { issuer: current.issuer }),
+        ...(egress.instanceHost === undefined ? {} : { instanceHost: egress.instanceHost }),
+      },
     );
     return (
       (await this.#land(workspaceId, channelId, row, lease, current, result)) ??

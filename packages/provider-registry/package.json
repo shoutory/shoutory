@@ -11,7 +11,10 @@
     }
   },
   "dependencies": {
+    "@shoutory/provider-bluesky": "workspace:*",
+    "@shoutory/provider-discord": "workspace:*",
     "@shoutory/provider-mastodon": "workspace:*",
-    "@shoutory/provider-sdk": "workspace:*"
+    "@shoutory/provider-sdk": "workspace:*",
+    "@shoutory/provider-telegram": "workspace:*"
   }
 }

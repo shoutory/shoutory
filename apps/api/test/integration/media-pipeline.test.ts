@@ -158,10 +158,10 @@ describe("a run stops when its signal aborts", () => {
     [
       "while a derivative is stored",
       (controller) => ({
+        // The abort lands once the object is fully stored, the one moment no stream can notice it.
         put: async (key, body, maxBytes, options) => {
+          await storage.put(key, body, maxBytes, options);
           controller.abort();
-          await new Promise((resolve) => setImmediate(resolve));
-          return storage.put(key, body, maxBytes, options);
         },
       }),
     ],

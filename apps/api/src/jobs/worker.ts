@@ -16,6 +16,7 @@ import {
 import type { Logger } from "../logging/logger.js";
 import { sweepStaleFiles } from "../storage/fs-sweep.js";
 import { createBoss } from "./boss.js";
+import { type ChallengePollDeps, runChallengePoll } from "./connect-challenge.js";
 import { refuseEgress } from "./ledger/held.js";
 import { subscribePublish } from "./ledger/subscribe.js";
 import { createLedgerTick } from "./ledger/tick.js";
@@ -194,6 +195,59 @@ async function scheduleRefresh(
   await boss.schedule("credential_refresh", JOB_QUEUES.credential_refresh.cron, {}, { missed: "once" });
 }
 
+const CHALLENGE_POLL_WINDOW_MS = 55_000;
+const CHALLENGE_POLL_GAP_MS = 2_000;
+
+const pause = (ms: number, signal: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
+  });
+
+type LoopOptions = Pick<ChallengePollDeps, "pool" | "keys" | "fetchFor" | "logger"> & {
+  registry: Registry;
+  adapters: AdapterMap;
+  credentials: CredentialService;
+};
+
+// The jobs that run on a cron and loop inside their run.
+async function scheduleLoops(boss: PgBoss, closing: AbortSignal, options: LoopOptions): Promise<void> {
+  await scheduleRefresh(boss, options.pool, options.logger, options.credentials);
+  await scheduleChallengePoll(boss, closing, options);
+}
+
+async function scheduleChallengePoll(
+  boss: PgBoss,
+  closing: AbortSignal,
+  options: LoopOptions,
+): Promise<void> {
+  const { registry, adapters, credentials: _credentials, ...rest } = options;
+  const deps = { ...rest, providers: channelProvidersOf(registry, adapters), now: () => new Date() };
+  await boss.work("connect_challenge_poll", { pollingIntervalSeconds: POLL_SECONDS }, (jobs) =>
+    logged(deps.logger, "connect_challenge_poll", async () => {
+      for (const job of jobs) parseJobPayload("connect_challenge_poll", job.data);
+      const end = Date.now() + CHALLENGE_POLL_WINDOW_MS;
+      while (!closing.aborted && Date.now() < end) {
+        await runChallengePoll(deps);
+        await pause(CHALLENGE_POLL_GAP_MS, closing);
+      }
+    }),
+  );
+  await boss.schedule(
+    "connect_challenge_poll",
+    JOB_QUEUES.connect_challenge_poll.cron,
+    {},
+    { missed: "once" },
+  );
+}
+
 async function register(
   boss: PgBoss,
   pool: AppPool,
@@ -281,7 +335,7 @@ export async function startWorker({
     // Idempotent: a provider added without `shoutory migrate` must not stall admission on a queue that is missing.
     for (const name of registry.allQueueNames()) await boss.createQueue(name, PROVIDER_QUEUE_OPTIONS);
     await register(boss, pool, logger, media);
-    await scheduleRefresh(boss, pool, logger, credentials);
+    await scheduleLoops(boss, closing.signal, { ...sends, keys: mail.keys });
     await subscribePublish({ ...sends, owner: `worker-${workerId}`, closing: closing.signal });
     await beat();
   } catch (error) {

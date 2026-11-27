@@ -63,7 +63,8 @@ when a row names a category that is not in the list.
 | `app.provider_apps` | `secrets` |
 | `app.provider_instance_apps` | `secrets` |
 | `app.channel_capability_snapshots` | `none` |
-| `app.connect_challenges` | `none` |
+| `app.connect_challenges` | `secrets` |
+| `app.bot_claims` | `none` |
 | `app.feature_flags` | `none` |
 | `app.feature_flag_overrides` | `none` |
 | `app.instance_settings` | `none` |

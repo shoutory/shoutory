@@ -144,8 +144,9 @@ async function reconcileClaim(
     started,
   });
   try {
-    const host = await options.credentials.instanceHostOf(operation.workspace_id, operation.channel_id);
-    const access = await accessOf(options.credentials, operation, host);
+    const facts = await options.credentials.channelFactsOf(operation.workspace_id, operation.channel_id);
+    const host = facts.instanceHost;
+    const access = await accessOf(options.credentials, operation, facts);
     if (holding.held.signal.aborted) return;
     if (access.kind !== "ok") return await withoutAccess(options, holding.held, access.kind);
     const fetchOf = options.fetchFor(manifest, host);

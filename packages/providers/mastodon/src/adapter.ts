@@ -4,6 +4,7 @@ import {
   type AccountAccess,
   type AdapterContext,
   type AuthorizeInput,
+  type AuthorizeResult,
   type CommitInput,
   type ConnectAdapter,
   type ExchangeInput,
@@ -258,11 +259,13 @@ async function discover(context: AdapterContext, host: string): Promise<Provider
 }
 
 async function registerApp(context: AdapterContext, input: RegisterAppInput): Promise<ProviderResult> {
-  const refused = await discover(context, input.instanceHost);
+  const { instanceHost } = input;
+  if (instanceHost === undefined) throw new Error("an app registration needs the instance host");
+  const refused = await discover(context, instanceHost);
   if (refused) return refused;
   const answer = await call(
     context,
-    input.instanceHost,
+    instanceHost,
     "/api/v1/apps",
     form({ client_name: CLIENT_NAME, redirect_uris: input.redirectUri, scopes: SCOPES }),
   );
@@ -276,7 +279,7 @@ async function registerApp(context: AdapterContext, input: RegisterAppInput): Pr
   };
 }
 
-function authorize(input: AuthorizeInput): string {
+async function authorize(_context: AdapterContext, input: AuthorizeInput): Promise<AuthorizeResult> {
   if (input.instanceHost === undefined || input.app === undefined) {
     throw new Error("an authorization needs the instance host and its app");
   }
@@ -289,7 +292,7 @@ function authorize(input: AuthorizeInput): string {
     code_challenge: input.codeChallenge,
     code_challenge_method: "S256",
   });
-  return `https://${input.instanceHost}/oauth/authorize?${query}`;
+  return { url: `https://${input.instanceHost}/oauth/authorize?${query}` };
 }
 
 async function exchangeCode(context: AdapterContext, input: ExchangeInput): Promise<ProviderResult> {

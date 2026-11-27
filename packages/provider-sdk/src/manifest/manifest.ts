@@ -90,10 +90,11 @@ const manifestShape = z.strictObject({
     )
     .max(32),
   actionWindows: z.strictObject({ edit: seconds.optional(), delete: seconds.optional() }),
-  // The hosts a provider's calls may reach: a closed list, or (accounts on user-chosen servers) the channel's own stored
-  // instance host, never a wildcard. Exactly one of the two is declared.
+  // The hosts a provider's calls may reach: a closed list, the channel's own stored instance host (never a wildcard), or
+  // `open` for a provider whose accounts live on servers a person names and that no list can hold (the user URL policy of
+  // the egress client). Exactly one of the two fields is declared.
   egressHosts: z.array(z.string().max(253).refine(isEgressHost, "not a host name")).min(1).max(32).optional(),
-  egressHostSource: z.literal("channel").optional(),
+  egressHostSource: z.enum(["channel", "open"]).optional(),
   sunset: date.optional(),
   // Whole numbers only: a default is merged into the settings a post stores, and those hold safe integers alone.
   providerDefault: z

@@ -2,6 +2,12 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "rootDir": "src", "outDir": "dist", "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo" },
   "include": ["src"],
-  "references": [{ "path": "../provider-sdk" }, { "path": "../providers/mastodon" }],
+  "references": [
+    { "path": "../provider-sdk" },
+    { "path": "../providers/bluesky" },
+    { "path": "../providers/discord" },
+    { "path": "../providers/mastodon" },
+    { "path": "../providers/telegram" }
+  ],
   "exclude": ["src/**/*.test.ts"]
 }

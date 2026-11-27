@@ -159,6 +159,7 @@ async function putDerivative(
     if (!(error instanceof StorageError) || error.kind !== "exists") throw error;
     written = await hashStored(deps.storage, key);
   }
+  signal?.throwIfAborted();
   await sql(job, "SELECT app.media_derivative_put($1, $2, $3, 'ready', decode($4, 'hex'), $5, NULL)", [
     ws,
     id,

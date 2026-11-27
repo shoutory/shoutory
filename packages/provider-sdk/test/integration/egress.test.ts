@@ -102,6 +102,21 @@ describe("egressFetch one lookup per connection", () => {
 });
 
 describe("egressFetch redirects", () => {
+  // A host a person named answers with a redirect to an address the operator never allowed: the hop is refused and
+  // nothing connects there (the user URL policy of a provider whose accounts live on servers a person names).
+  it.each([
+    ["the metadata address", () => `http://169.254.169.254:${port}/`],
+    ["a name that resolves to a private address", () => `http://private.test:${port}/`],
+  ])("a redirect to %s is refused", async (_name, target) => {
+    const dns = stubLookup({ "hop.test": [["127.0.0.1"]], "private.test": [["10.0.0.5"]] });
+    handler = (_req, res) => res.writeHead(302, { location: target() }).end();
+    const error = await refusal(
+      egressFetch({ url: `http://hop.test:${port}/` }, policyOf(["127.0.0.0/8"], dns.lookup)),
+    );
+    expect(["blocked_address", "blocked_url"]).toContain(error.class);
+    expect(connections).toBe(1);
+  });
+
   it.each(["file:///etc/hosts", "gopher://hop.test/x", "ftp://hop.test/x"])(
     "a redirect hop to %s is refused",
     async (location) => {

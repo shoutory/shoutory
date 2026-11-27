@@ -2816,3 +2816,107 @@ msgstr "Source code of this version"
 #. js-lingui-explicit-id
 msgid "system.about.source_label"
 msgstr "Source code of this version (opens in a new tab)"
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.tile.secret"
+msgstr "You will paste one secret from <0>{provider}</0>. Shoutory keeps it sealed and never shows it again."
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.hint.intro"
+msgstr "Type the handle or ID of the <0>{provider}</0> account you want to connect."
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.hint.label"
+msgstr "Handle or ID, like name.example"
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.hint.invalid"
+msgstr "Type the handle or ID of the account."
+
+#. js-lingui-explicit-id
+msgid "connect.wizard.origin"
+msgstr "<0>{provider}</0> connects only to a Shoutory that anyone can reach over https, because it fetches this app's details from here. This install is not reachable that way. Ask the person who runs it to give it a public https address."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.hook.intro"
+msgstr "Paste the webhook address of the channel in <0>{provider}</0> you want to publish to."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.hook.label"
+msgstr "Webhook address"
+
+#. js-lingui-explicit-id
+msgid "connect.secret.bot.intro"
+msgstr "Paste the token of the bot you made in <0>{provider}</0>. Shoutory keeps it sealed."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.bot.label"
+msgstr "Bot token"
+
+#. js-lingui-explicit-id
+msgid "connect.secret.continue"
+msgstr "Check and continue"
+
+#. js-lingui-explicit-id
+msgid "connect.secret.host_not_allowed"
+msgstr "That address does not belong to this platform. Copy it again from the platform and try again."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.refused"
+msgstr "The platform did not accept that. Check that you copied all of it and try again."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.unreachable"
+msgstr "We could not reach the platform. Nothing was changed. Try again later."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.rate_limited"
+msgstr "The platform asked us to wait. Nothing was changed. Try again in a few minutes."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.conflict"
+msgstr "This cannot be connected here. It may be used by another workspace, or its word may have expired. Start again with a new word."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.word.intro"
+msgstr "Add the bot to the chat or channel you want to publish to, then send this message there:"
+
+#. js-lingui-explicit-id
+msgid "connect.secret.word.waiting"
+msgstr "Waiting for the message"
+
+#. js-lingui-explicit-id
+msgid "connect.secret.word.matched"
+msgstr "Found <0><1>{0}</1></0>"
+
+#. js-lingui-explicit-id
+msgid "connect.secret.word.expired"
+msgstr "This word has expired."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.word.connect"
+msgstr "Connect this chat"
+
+#. js-lingui-explicit-id
+msgid "connect.secret.word.renew"
+msgstr "Generate a new word"
+
+#. js-lingui-explicit-id
+msgid "connect.secret.word.done"
+msgstr "This chat is connected. You can publish to it now."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.word.ended"
+msgstr "A newer word replaced this one. Close this and use the newest."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.word.next"
+msgstr "Show my channels"
+
+#. js-lingui-explicit-id
+msgid "connect.secret.word.gone"
+msgstr "This word can no longer be used here. Close this and connect again."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.reconnect.title"
+msgstr "Reconnect this channel"

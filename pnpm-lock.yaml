@@ -401,12 +401,21 @@ importers:
 
   packages/provider-registry:
     dependencies:
+      '@shoutory/provider-bluesky':
+        specifier: workspace:*
+        version: link:../providers/bluesky
+      '@shoutory/provider-discord':
+        specifier: workspace:*
+        version: link:../providers/discord
       '@shoutory/provider-mastodon':
         specifier: workspace:*
         version: link:../providers/mastodon
       '@shoutory/provider-sdk':
         specifier: workspace:*
         version: link:../provider-sdk
+      '@shoutory/provider-telegram':
+        specifier: workspace:*
+        version: link:../providers/telegram
 
   packages/provider-sdk:
     dependencies:
@@ -419,6 +428,18 @@ importers:
       zod:
         specifier: 4.6.7
         version: 4.6.7
+
+  packages/providers/bluesky:
+    dependencies:
+      '@shoutory/provider-sdk':
+        specifier: workspace:*
+        version: link:../../provider-sdk
+
+  packages/providers/discord:
+    dependencies:
+      '@shoutory/provider-sdk':
+        specifier: workspace:*
+        version: link:../../provider-sdk
 
   packages/providers/mastodon:
     dependencies:
@@ -435,6 +456,12 @@ importers:
       '@shoutory/testkit':
         specifier: workspace:*
         version: link:../../testkit
+
+  packages/providers/telegram:
+    dependencies:
+      '@shoutory/provider-sdk':
+        specifier: workspace:*
+        version: link:../../provider-sdk
 
   packages/testkit:
     dependencies:

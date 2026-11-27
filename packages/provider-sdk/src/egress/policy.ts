@@ -67,6 +67,20 @@ export function createOperatorPolicy(options: OperatorPolicyOptions): OperatorPo
   };
 }
 
+// What a manifest allows its calls to reach: its listed hosts, any host a person names (`open`, still held to the
+// operator's address rules) or the channel's own stored host. No policy when a channel's host is not known.
+export function requestPolicyOf(
+  manifest: {
+    readonly egressHosts?: readonly string[] | undefined;
+    readonly egressHostSource?: string | undefined;
+  },
+  instanceHost: string | undefined,
+): RequestPolicy | undefined {
+  if (manifest.egressHosts) return { kind: "provider", egressHosts: manifest.egressHosts };
+  if (manifest.egressHostSource === "open") return { kind: "user_url" };
+  return instanceHost === undefined ? undefined : { kind: "instance", host: instanceHost };
+}
+
 const DEFAULT_PORTS: Readonly<Record<string, number>> = { "https:": 443, "http:": 80 };
 
 export function checkUrl(input: string, request: RequestPolicy, operator: OperatorPolicy): URL {

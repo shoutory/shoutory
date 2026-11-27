@@ -1,5 +1,6 @@
 import {
   digestOfState,
+  type FlowObject,
   flowObjectSchema,
   issuerAccepted,
   newState,
@@ -28,6 +29,7 @@ import { definerRefusal } from "../routes/definer-refusal.js";
 import { type CredentialService, deadlineFetch, ensureSalt, expiryOf, sealedParams } from "./credentials.js";
 import type { HealthChecker, HealthProvider } from "./health.js";
 import { type AppKey, readApp, writeApp } from "./instance-app.js";
+import { ensureProviderApp, readProviderApp } from "./provider-app.js";
 
 export interface ConnectDeps {
   readonly pool: AppPool;
@@ -61,6 +63,7 @@ export interface StartInput {
   readonly providerId: string;
   readonly instanceHost?: string | undefined;
   readonly channelId?: string | undefined;
+  readonly loginHint?: string | undefined;
 }
 
 interface CallbackQuery {
@@ -94,6 +97,7 @@ const flowRowSchema = z.object({
   workspace_id: z.string(),
   channel_id: z.string().nullable(),
   instance_host: z.string().nullable(),
+  request_uri: z.string().nullable(),
   format_version: z.number().int(),
   key_id: z.string(),
   iv: bytes,
@@ -109,6 +113,7 @@ interface Granted {
   readonly credential: RefreshedCredential;
   readonly identity: AccountIdentity;
   readonly limits?: Readonly<Record<string, ReadLimit>> | undefined;
+  readonly object: FlowObject;
 }
 
 interface GrantFailure {
@@ -189,6 +194,18 @@ async function reconnectHostOf(scoped: Scoped, input: StartInput, connect: Conne
   return stored;
 }
 
+// What the flow kept for the exchange: the key the token is bound to, the issuer, the pushed request and the hint.
+function boundTo(object: FlowObject, requestUri: string | null) {
+  return {
+    ...(object.dpop_private_jwk === undefined
+      ? {}
+      : { dpopKey: new SealedSecret(JSON.stringify(object.dpop_private_jwk)) }),
+    ...(object.issuer === undefined ? {} : { issuer: object.issuer }),
+    ...(requestUri === null ? {} : { requestUri }),
+    ...(object.login_hint === undefined ? {} : { loginHint: object.login_hint }),
+  };
+}
+
 const errorClassOf = (error: unknown): string => (error instanceof Error ? error.name : "unknown");
 
 const PUT_FLOW =
@@ -234,8 +251,24 @@ export class ConnectService {
     return winner;
   }
 
+  // The app of the whole instance is made on first use, by whichever connect comes first.
+  async #providerApp(scoped: Scoped, input: StartInput, provider: HealthProvider, connect: ConnectAdapter) {
+    const { keys } = this.#deps;
+    const stored = await scoped(false, (tx) =>
+      readProviderApp(tx, keys, input.providerId, input.workspaceId),
+    );
+    if (stored) return stored;
+    const redirectUri = redirectUriOf(this.#deps.publicOrigin, input.providerId);
+    const context = { fetch: this.#fetchOf(provider.manifest, undefined), now: this.#deps.now };
+    const registered = await connect.registerApp?.(context, { redirectUri });
+    if (!registered?.ok || !registered.app) throw refusalOf(registered);
+    const made = { ...registered.app, redirectUri };
+    return scoped(true, (tx) => ensureProviderApp(tx, keys, input.providerId, input.workspaceId, made));
+  }
+
   async #startApp(scoped: Scoped, input: StartInput, provider: HealthProvider, connect: ConnectAdapter) {
     if (!connect.registerApp) return undefined;
+    if (connect.appKind === "provider") return this.#providerApp(scoped, input, provider, connect);
     if (input.instanceHost === undefined)
       throw new Refusal("validation_failed", "the provider needs an instance host");
     const { workspaceId, providerId, instanceHost } = input;
@@ -253,33 +286,53 @@ export class ConnectService {
     const app = await this.#startApp(scoped, input, provider, connect);
     const { state, digest } = newState();
     const { verifier, challenge } = pkcePair();
+    // The provider may push the request, an outbound call, so it runs before the flow is stored and no transaction is open.
+    const context = { fetch: this.#fetchOf(provider.manifest, input.instanceHost), now: this.#deps.now };
+    const authorized = await connect.authorize(context, {
+      state,
+      codeChallenge: challenge,
+      redirectUri: redirectUriOf(this.#deps.publicOrigin, input.providerId, input.instanceHost),
+      ...(input.instanceHost === undefined ? {} : { instanceHost: input.instanceHost }),
+      ...(input.loginHint === undefined ? {} : { loginHint: input.loginHint }),
+      ...(app === undefined ? {} : { app }),
+    });
+    const object: FlowObject = {
+      code_verifier: verifier,
+      ...(authorized.dpopKey === undefined
+        ? {}
+        : { dpop_private_jwk: JSON.parse(authorized.dpopKey.expose()) }),
+      ...(authorized.issuer === undefined ? {} : { issuer: authorized.issuer }),
+      ...(input.loginHint === undefined ? {} : { login_hint: input.loginHint }),
+    };
+    await this.#putFlow(scoped, input, { digest, object, requestUri: authorized.requestUri });
+    return authorized.url;
+  }
+
+  async #putFlow(
+    scoped: Scoped,
+    input: StartInput,
+    flow: { digest: Buffer; object: FlowObject; requestUri: string | undefined },
+  ): Promise<void> {
     await scoped(true, async (tx) => {
       const salt = await ensureSalt(tx, input.workspaceId);
       // The flow id is read first: the owner the sealed object is bound to is the id the row will carry.
       const flowId = String((await tx.query("SELECT uuidv7() AS id")).rows[0]?.id);
       const aad = flowAadOf(input.workspaceId, flowId);
-      const stored = seal(JSON.stringify({ code_verifier: verifier }), aad, this.#deps.keys, salt);
+      const stored = seal(JSON.stringify(flowObjectSchema.parse(flow.object)), aad, this.#deps.keys, salt);
       try {
         await tx.query(PUT_FLOW, [
           flowId,
           input.workspaceId,
           input.providerId,
-          digest,
+          flow.digest,
           input.channelId ?? null,
           input.instanceHost ?? null,
           ...sealedParams(stored),
-          null,
+          flow.requestUri ?? null,
         ]);
       } catch (error) {
         throw definerRefusal(error) ?? error;
       }
-    });
-    return connect.authorize({
-      state,
-      codeChallenge: challenge,
-      redirectUri: redirectUriOf(this.#deps.publicOrigin, input.providerId, input.instanceHost),
-      ...(input.instanceHost === undefined ? {} : { instanceHost: input.instanceHost }),
-      ...(app === undefined ? {} : { app }),
     });
   }
 
@@ -301,14 +354,21 @@ export class ConnectService {
   ): Promise<Outcome> {
     const { provider, connect, input } = step;
     const { query } = input;
+    const progress = { step: "unseal" };
+    let object: FlowObject;
+    try {
+      object = await this.#flowObjectOf(principal, taken);
+    } catch (error) {
+      return this.#failed(input.providerId, progress.step, errorClassOf(error));
+    }
     // An error answer carries the issuer too (RFC 9207 section 2, https://www.rfc-editor.org/rfc/rfc9207#section-2,
-    // read 2026-11-24), so a forged error from another server is refused before its text is shown.
-    if (!issuerAccepted(connect.issuer, query.iss)) return { kind: "refused" };
+    // read 2026-11-24), so a forged error from another server is refused before its text is shown. A provider that finds
+    // its server at the start has no fixed issuer: the one its flow kept is the one the callback must carry.
+    if (!issuerAccepted(connect.issuer ?? object.issuer, query.iss)) return { kind: "refused" };
     if (query.error !== undefined) {
       return { kind: "provider_error", message: providerErrorText(query.error_description ?? query.error) };
     }
     if (query.code === undefined) return this.#failed(input.providerId, "callback", "none");
-    const progress = { step: "unseal" };
     try {
       const granted = await this.#grant(principal, taken, {
         provider,
@@ -316,6 +376,7 @@ export class ConnectService {
         code: query.code,
         input,
         progress,
+        object,
       });
       if (!("credential" in granted))
         return this.#grantFailed(principal, taken, { provider, connect, input }, granted);
@@ -350,7 +411,7 @@ export class ConnectService {
     return flowRowSchema.parse(answer.rows[0]);
   }
 
-  async #verifierOf(principal: TenantCtx, flow: FlowRow): Promise<string> {
+  async #flowObjectOf(principal: TenantCtx, flow: FlowRow): Promise<FlowObject> {
     const salt = await withTenant(this.#deps.pool, principal, (tx) => ensureSalt(tx, flow.workspace_id));
     const stored = {
       formatVersion: flow.format_version,
@@ -363,7 +424,7 @@ export class ConnectService {
       wrappedDek: flow.wrapped_dek,
     };
     const plain = open(stored, flowAadOf(flow.workspace_id, flow.flow_id), this.#deps.keys, salt).expose();
-    return flowObjectSchema.parse(JSON.parse(plain)).code_verifier;
+    return flowObjectSchema.parse(JSON.parse(plain));
   }
 
   async #storedApp(
@@ -372,6 +433,13 @@ export class ConnectService {
     step: { connect: ConnectAdapter; providerId: string },
   ) {
     if (!step.connect.registerApp) return undefined;
+    if (step.connect.appKind === "provider") {
+      const app = await withTenant(this.#deps.pool, principal, (tx) =>
+        readProviderApp(tx, this.#deps.keys, step.providerId, flow.workspace_id),
+      );
+      if (!app) throw new Error("the provider has no stored app");
+      return app;
+    }
     if (flow.instance_host === null) throw new Error("the flow of an instance provider has no instance host");
     const provider = this.#providerOf(step.providerId);
     if (!provider) throw new Error("the flow names a provider that is not registered");
@@ -396,21 +464,23 @@ export class ConnectService {
       code: string;
       input: FinishInput;
       progress: { step: string };
+      object: FlowObject;
     },
   ): Promise<Granted | GrantFailure> {
-    const { progress, connect, input } = step;
+    const { progress, connect, input, object } = step;
     const host = flow.instance_host ?? undefined;
     const context = { fetch: this.#fetchOf(step.provider.manifest, host), now: this.#deps.now };
     const hostPart = host === undefined ? {} : { instanceHost: host };
     const app = await this.#storedApp(principal, flow, { connect, providerId: input.providerId });
-    const codeVerifier = new SealedSecret(await this.#verifierOf(principal, flow));
+    const bound = boundTo(object, flow.request_uri);
     progress.step = "exchange";
     const exchanged = await connect.exchangeCode(context, {
       code: step.code,
-      codeVerifier,
+      codeVerifier: new SealedSecret(object.code_verifier),
       redirectUri: redirectUriOf(this.#deps.publicOrigin, input.providerId, host),
       ...hostPart,
       ...(app === undefined ? {} : { app }),
+      ...bound,
     });
     if (!exchanged.ok || !exchanged.credential) {
       return {
@@ -422,7 +492,11 @@ export class ConnectService {
     }
     progress.step = "identity";
     const accessToken = exchanged.credential.accessToken;
-    const who = await connect.identity(context, { accessToken, ...hostPart });
+    const who = await connect.identity(context, {
+      accessToken,
+      ...hostPart,
+      ...(bound.dpopKey === undefined ? {} : { dpopKey: bound.dpopKey }),
+    });
     if (!who.ok || !who.identity) return { step: "identity", errorClass: who.errorClass ?? "none" };
     if (who.limitsFromManifest?.length) {
       const fields = who.limitsFromManifest;
@@ -431,7 +505,7 @@ export class ConnectService {
         "the instance left limits to the manifest",
       );
     }
-    return { credential: exchanged.credential, identity: who.identity, limits: who.limits };
+    return { credential: exchanged.credential, identity: who.identity, limits: who.limits, object };
   }
 
   // A grant a provider refused: an instance that no longer knows the app gets a new one in its place (compare-and-set on
@@ -474,7 +548,10 @@ export class ConnectService {
     flow: FlowRow,
     step: { provider: HealthProvider; input: FinishInput; granted: Granted },
   ): Promise<Outcome> {
-    const { accessToken, refreshToken, expiresInSeconds } = step.granted.credential;
+    const { credential, identity, object } = step.granted;
+    const { accessToken, refreshToken, expiresInSeconds } = credential;
+    const dpopKey = credential.dpopPrivateJwk ?? object.dpop_private_jwk;
+    const issuer = credential.issuer ?? object.issuer;
     const now = this.#deps.now();
     try {
       const { channelId } = await this.#deps.credentials.connect({
@@ -482,19 +559,21 @@ export class ConnectService {
         workspaceId: flow.workspace_id,
         identity: {
           providerId: step.input.providerId,
-          ...step.granted.identity,
-          instanceHost: flow.instance_host ?? undefined,
+          ...identity,
+          instanceHost: flow.instance_host ?? identity.instanceHost,
         },
         reconnectChannelId: flow.channel_id ?? undefined,
         tokens: {
           access_token: accessToken.expose(),
           ...(refreshToken === undefined ? {} : { refresh_token: refreshToken.expose() }),
+          ...(dpopKey === undefined ? {} : { dpop_private_jwk: dpopKey }),
+          ...(issuer === undefined ? {} : { issuer }),
         },
         accessExpiresAt: expiryOf(now, expiresInSeconds),
         snapshot: snapshotWithLimits(snapshotOf(step.provider.manifest, now), step.granted.limits),
         audit: { requestId: step.input.requestId, ipHmac: step.input.ipHmac },
       });
-      await this.#recordHealthOnce(principal, flow.workspace_id, channelId, step.provider);
+      await this.recordHealthOnce(principal, flow.workspace_id, channelId, step.provider);
       return { kind: "connected", channelId };
     } catch (error) {
       // The account is not the channel's and nothing was stored: a reconnect names the channel; a first connect has none.
@@ -509,7 +588,7 @@ export class ConnectService {
 
   // The channel is stored by now, so it is connected whatever the health look comes to: a failed look is logged and the
   // next health check records the health.
-  async #recordHealthOnce(
+  async recordHealthOnce(
     principal: TenantCtx,
     workspaceId: string,
     channelId: string,

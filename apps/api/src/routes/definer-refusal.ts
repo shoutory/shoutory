@@ -23,6 +23,9 @@ const DEFINERS = [
   "channel_connect",
   "channel_check_begin",
   "oauth_flow_put",
+  "connect_challenge_put",
+  "connect_challenge_renew",
+  "connect_challenge_status",
   "feature_flag_override_set",
   "instance_setting_set",
   "instance_settings_read",
@@ -112,7 +115,7 @@ function detailsOf(state: string, message: string, detail: unknown): Record<stri
 // Only the invitation, member, channel, resolution, creation and archive definers raise the SH states, and the post writes for
 // their named reasons; the same state under another definer's name is a defect.
 const SH_DEFINERS =
-  /^(invitation|member|channel)_|^resolve_operation:|^(workspace|organization)_create:|^workspace_(archive|unarchive|avatar_set|guard):|^media_(register|mark_uploaded|set_multipart|delete|set_metadata):|^post: (media_unavailable|post_in_flight|use_edit|variant_has_history|post_archived)$/;
+  /^(invitation|member|channel)_|^connect_challenge_(put|renew):|^resolve_operation:|^(workspace|organization)_create:|^workspace_(archive|unarchive|avatar_set|guard):|^media_(register|mark_uploaded|set_multipart|delete|set_metadata):|^post: (media_unavailable|post_in_flight|use_edit|variant_has_history|post_archived)$/;
 const LIMIT_DEFINERS = /^(workspace|organization)_create:/;
 
 // A creation definer's SH429 puts "retry after N seconds" in DETAIL; anything else gives the default Retry-After.

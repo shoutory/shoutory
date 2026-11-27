@@ -97,7 +97,7 @@ function httpsAddress(value: string): string | null {
 
 const isHostReason = (reason: unknown): reason is HostReason => HOST_REASONS.some((one) => one === reason);
 
-function failureOf(error: ApiError): StartFailure {
+export function failureOf(error: ApiError): StartFailure {
   const reason = error.details?.reason;
   if (isHostReason(reason)) return reason;
   if (error.state === "forbidden") return "forbidden";
@@ -123,7 +123,7 @@ export function Reconnect(props: { ws: string; providerId: string; channelId: st
   );
 }
 
-type StartBody = { channel_id?: string; instance_host?: string };
+type StartBody = { channel_id?: string; instance_host?: string; login_hint?: string };
 
 export function useStart(ws: string) {
   const [failure, setFailure] = useState<StartFailure | null>(null);

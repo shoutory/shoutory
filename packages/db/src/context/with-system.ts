@@ -10,6 +10,8 @@ export const SYSTEM_PURPOSES = [
   "heartbeat",
   "ledger",
   "credential_refresh",
+  "connect_challenge_poll",
+  "provider_documents",
 ] as const;
 export type SystemPurpose = (typeof SYSTEM_PURPOSES)[number];
 

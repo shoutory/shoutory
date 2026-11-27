@@ -10,7 +10,11 @@ import { assertMigrationsApplied, sealedKeyIds } from "@shoutory/db/startup";
 import { builtInManifests, createBuiltInAdapters } from "@shoutory/provider-registry";
 import { closeEgress, type EgressRequest, egressFetch } from "@shoutory/provider-sdk/egress";
 import { fetchOf } from "@shoutory/provider-sdk/egress/fetch-adapter";
-import { createOperatorPolicy, type OperatorPolicy } from "@shoutory/provider-sdk/egress/policy";
+import {
+  createOperatorPolicy,
+  type OperatorPolicy,
+  requestPolicyOf,
+} from "@shoutory/provider-sdk/egress/policy";
 import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import { createRegistry } from "@shoutory/provider-sdk/registry";
 import { createApp } from "./app.js";
@@ -90,11 +94,7 @@ function importFetch(config: Config) {
 function providerFetch(config: Config) {
   const operator = operatorOf(config);
   return (manifest: Manifest, instanceHost?: string): typeof fetch => {
-    const request = manifest.egressHosts
-      ? ({ kind: "provider", egressHosts: manifest.egressHosts } as const)
-      : instanceHost !== undefined
-        ? ({ kind: "instance", host: instanceHost } as const)
-        : undefined;
+    const request = requestPolicyOf(manifest, instanceHost);
     if (request === undefined) return refuseEgress();
     // The worker bounds each call by its own deadline; this is the longest the transport may take for one.
     const timeoutMs = (manifest.uploadTimeoutSeconds ?? manifest.callTimeoutSeconds) * 1000;

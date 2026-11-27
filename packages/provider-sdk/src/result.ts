@@ -16,6 +16,15 @@ export interface RefreshedCredential {
   readonly accessToken: SealedSecret;
   readonly refreshToken?: SealedSecret;
   readonly expiresInSeconds?: number;
+  /** The key a token is bound to, kept in the sealed token with it. */
+  readonly dpopPrivateJwk?: Readonly<Record<string, unknown>>;
+  readonly issuer?: string;
+}
+
+/** What a read of a bot's updates found: the offset to ask from next, and the messages that carry text. */
+export interface ChallengePoll {
+  readonly nextOffset: number;
+  readonly messages: readonly { readonly text: string; readonly chatId: string; readonly title: string }[];
 }
 
 export interface AccountIdentity {
@@ -24,6 +33,8 @@ export interface AccountIdentity {
   readonly displayName: string;
   readonly handle?: string;
   readonly avatar?: string;
+  /** The server the account lives on, for a provider that finds it from the account (no host was typed). */
+  readonly instanceHost?: string;
 }
 
 export interface ReadLimit {
@@ -46,6 +57,7 @@ export interface ProviderResult {
   readonly limitsFromManifest?: readonly string[];
   readonly credential?: RefreshedCredential;
   readonly identity?: AccountIdentity;
+  readonly poll?: ChallengePoll;
   /** Present on a successful channel read: what the provider's answer says of the channel (`ok` when absent). */
   readonly health?: "ok" | "degraded";
   readonly effect: Effect;

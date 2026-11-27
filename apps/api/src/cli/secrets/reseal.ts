@@ -47,6 +47,15 @@ const credentialKindOf = (row: Row): CredentialKind => {
   return kind;
 };
 
+// An app of the instance is sealed under its own row id, with the nil scope and no salt.
+const instanceAppAad = (row: Row, generation: number): Aad => ({
+  formatVersion: FORMAT_VERSION,
+  scopeId: NIL_SCOPE,
+  ownerId: row.id as string,
+  credentialKind: "provider_instance_app",
+  generation,
+});
+
 const TABLES: readonly SealedTable[] = [
   {
     batch: "email_outbox_reseal_batch",
@@ -74,13 +83,14 @@ const TABLES: readonly SealedTable[] = [
     write: "instance_apps_reseal_write",
     prefix: "secret_",
     generationOf: (row) => row.secret_generation as number,
-    aadOf: (row, generation) => ({
-      formatVersion: FORMAT_VERSION,
-      scopeId: NIL_SCOPE,
-      ownerId: row.id,
-      credentialKind: "provider_instance_app",
-      generation,
-    }),
+    aadOf: instanceAppAad,
+  },
+  {
+    batch: "provider_apps_reseal_batch",
+    write: "provider_apps_reseal_write",
+    prefix: "secret_",
+    generationOf: (row) => row.secret_generation as number,
+    aadOf: instanceAppAad,
   },
 ];
 

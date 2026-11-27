@@ -147,6 +147,10 @@ export interface Api {
   providers?: Answer;
   check?: Answer;
   connectStart?: Answer;
+  connectSecret?: Answer;
+  challengeStatus?: Answer;
+  challengeRenew?: Answer;
+  challengeComplete?: Answer;
   mediaList?: (query: URLSearchParams, workspace: string) => Response | Promise<Response>;
   medium?: Answer;
   mediaFit?: (query: URLSearchParams) => Response | Promise<Response>;
@@ -229,6 +233,9 @@ export const PROVIDERS = [
     auth_kind: "oauth2_pkce",
     connectable: true,
     needs_instance_host: false,
+    needs_login_hint: false,
+    needs_public_origin: false,
+    secret_kind: null,
   },
 ];
 
@@ -305,6 +312,31 @@ function hubAnswers(api: Api, url: URL, method: string, body?: BodyInit | null):
   }
   if (method === "POST" && /^connect\/[^/]+\/start$/.test(rest)) {
     return api.connectStart ?? (() => json({ data: { authorize_url: START_URL } }));
+  }
+  return secretAnswers(api, method, rest);
+}
+
+export const SECRET_CHANNEL = "0190a000-0000-7000-8000-0000000000d1";
+export const CHALLENGE_ID = "0190a000-0000-7000-8000-0000000000d2";
+export const challengeAnswer = (word: string) =>
+  json({ data: { challenge_id: CHALLENGE_ID, word, expires_at: "2026-11-27T12:10:00.000Z" } });
+
+// The paste step and the challenge it may open: the status read, a new word and the completion.
+function secretAnswers(api: Api, method: string, rest: string): Answer | undefined {
+  if (method === "POST" && /^connect\/[^/]+\/secret$/.test(rest)) {
+    return api.connectSecret ?? (() => json({ data: { channel_id: SECRET_CHANNEL } }));
+  }
+  if (method === "GET" && /^connect\/[^/]+\/challenge\/[^/]+$/.test(rest)) {
+    return api.challengeStatus ?? (() => json({ data: { state: "waiting", chat_title: null } }));
+  }
+  if (method === "POST" && /^connect\/[^/]+\/challenge\/[^/]+\/renew$/.test(rest)) {
+    return (
+      api.challengeRenew ??
+      (() => json({ data: { word: "newword234", expires_at: "2026-11-27T12:20:00.000Z" } }))
+    );
+  }
+  if (method === "POST" && /^connect\/[^/]+\/challenge\/[^/]+\/complete$/.test(rest)) {
+    return api.challengeComplete ?? (() => json({ data: { channel_id: SECRET_CHANNEL } }));
   }
   return undefined;
 }

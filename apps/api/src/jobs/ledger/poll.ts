@@ -4,7 +4,7 @@ import { withSystem } from "@shoutory/db/context/system";
 import type { AppPool } from "@shoutory/db/pool";
 import type { ProviderAdapter } from "@shoutory/provider-sdk/adapter";
 import type { Manifest } from "@shoutory/provider-sdk/manifest";
-import { accessOf } from "./account.js";
+import { accessOf, factsOf } from "./account.js";
 import {
   call,
   contextFor,
@@ -132,7 +132,7 @@ async function pollHeld(
     rereadOutcome({ channelState: channel.connection_state, targetLive: target.targetLive }) !== null
   )
     return later();
-  const access = await accessOf(options.credentials, held.operation, channel.instance_host);
+  const access = await accessOf(options.credentials, held.operation, factsOf(channel));
   if (held.signal.aborted) return;
   if (access.kind !== "ok") {
     options.logger.error(

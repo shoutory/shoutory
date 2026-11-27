@@ -70,6 +70,15 @@ COPY --from=build /app/packages/provider-registry/node_modules /app/packages/pro
 COPY --from=build /app/packages/providers/mastodon/package.json /app/packages/providers/mastodon/package.json
 COPY --from=build /app/packages/providers/mastodon/dist /app/packages/providers/mastodon/dist
 COPY --from=build /app/packages/providers/mastodon/node_modules /app/packages/providers/mastodon/node_modules
+COPY --from=build /app/packages/providers/bluesky/package.json /app/packages/providers/bluesky/package.json
+COPY --from=build /app/packages/providers/bluesky/dist /app/packages/providers/bluesky/dist
+COPY --from=build /app/packages/providers/bluesky/node_modules /app/packages/providers/bluesky/node_modules
+COPY --from=build /app/packages/providers/telegram/package.json /app/packages/providers/telegram/package.json
+COPY --from=build /app/packages/providers/telegram/dist /app/packages/providers/telegram/dist
+COPY --from=build /app/packages/providers/telegram/node_modules /app/packages/providers/telegram/node_modules
+COPY --from=build /app/packages/providers/discord/package.json /app/packages/providers/discord/package.json
+COPY --from=build /app/packages/providers/discord/dist /app/packages/providers/discord/dist
+COPY --from=build /app/packages/providers/discord/node_modules /app/packages/providers/discord/node_modules
 COPY --from=build /data /data
 
 # The debug image, for support only (a release builds it with `--target debug`): the same files on the distroless

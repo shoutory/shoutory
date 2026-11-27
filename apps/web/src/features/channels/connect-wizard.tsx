@@ -10,6 +10,7 @@ import { DirText } from "../../ui/dir-text";
 import { ErrorPanel } from "../../ui/error-panel";
 import { TextField } from "../../ui/text-field";
 import { useSignIn } from "./channels-hub";
+import { SecretStep } from "./connect-secret";
 import { StartError, useStart } from "./connect-start";
 
 const platformSchema = z.object({
@@ -19,9 +20,18 @@ const platformSchema = z.object({
   auth_kind: z.string(),
   connectable: z.boolean(),
   needs_instance_host: z.boolean(),
+  needs_login_hint: z.boolean().default(false),
+  needs_public_origin: z.boolean().default(false),
+  secret_kind: z.enum(["bot_token", "webhook_url"]).nullable().default(null),
 });
 type Platform = z.infer<typeof platformSchema>;
 const OAUTH = new Set(["oauth2", "oauth2_pkce"]);
+// A platform is connected by authorizing, or by pasting the one secret it names.
+const startable = (one: Platform) =>
+  one.connectable && (OAUTH.has(one.auth_kind) || one.secret_kind !== null);
+// Every step that asks for something before the connect starts.
+const asksFirst = (one: Platform) =>
+  one.needs_instance_host || one.needs_login_hint || one.needs_public_origin || one.secret_kind !== null;
 
 type PlatformsState =
   | { status: "loading" }
@@ -74,10 +84,17 @@ function Tile(props: { platform: Platform; busy: boolean; returned: boolean; onS
         ) : null}
       </span>
       <p className="text-sm">
-        <Trans id="connect.wizard.tile">
-          You will go to <DirText>{provider}</DirText> to allow Shoutory to publish and read this account. We
-          never see your password.
-        </Trans>
+        {platform.secret_kind === null ? (
+          <Trans id="connect.wizard.tile">
+            You will go to <DirText>{provider}</DirText> to allow Shoutory to publish and read this account.
+            We never see your password.
+          </Trans>
+        ) : (
+          <Trans id="connect.wizard.tile.secret">
+            You will paste one secret from <DirText>{provider}</DirText>. Shoutory keeps it sealed and never
+            shows it again.
+          </Trans>
+        )}
       </p>
       <Button
         data-testid="tile-start"
@@ -165,7 +182,129 @@ function HostStep(props: {
   );
 }
 
-function Tiles({ ws, platforms }: { ws: string; platforms: Platform[] }) {
+// The account the person types, Latin and read left to right; empty is refused at the field.
+function LoginHintStep(props: {
+  platform: Platform;
+  busy: boolean;
+  onBack: () => void;
+  onSubmit: (hint: string) => void;
+}) {
+  const { t } = useLingui();
+  const provider = props.platform.display_name;
+  const [typed, setTyped] = useState("");
+  const [invalid, setInvalid] = useState(false);
+  const field = useRef<HTMLInputElement>(null);
+  const bad = t({ id: "connect.wizard.hint.invalid", message: "Type the handle or ID of the account." });
+  const submit = () => {
+    const hint = typed.trim();
+    setInvalid(hint === "");
+    if (hint === "") field.current?.focus();
+    else props.onSubmit(hint);
+  };
+  return (
+    <Form
+      className="flex flex-col gap-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit();
+      }}
+    >
+      <p className="text-sm">
+        <Trans id="connect.wizard.hint.intro">
+          Type the handle or ID of the <DirText>{provider}</DirText> account you want to connect.
+        </Trans>
+      </p>
+      <TextField
+        label={t({ id: "connect.wizard.hint.label", message: "Handle or ID, like name.example" })}
+        testId="hint-field"
+        inputRef={field}
+        autoFocus
+        ltr
+        autoComplete="username"
+        value={typed}
+        onChange={(value) => {
+          setTyped(value);
+          setInvalid(false);
+        }}
+        {...(invalid ? { errorMessage: bad } : {})}
+      />
+      <div className="flex flex-wrap gap-3">
+        <Button data-testid="hint-back" aria-disabled={props.busy} onPress={props.onBack}>
+          <Trans id="connect.wizard.host.back">Back</Trans>
+        </Button>
+        <Button data-testid="hint-continue" type="submit" busy={props.busy}>
+          <ProviderAction provider={provider} busy={props.busy} />
+        </Button>
+      </div>
+    </Form>
+  );
+}
+
+// Said instead of the step when the install cannot be reached over public https: the platform's server could not fetch
+// what it needs from here.
+function OriginNote({ platform, onBack }: { platform: Platform; onBack: () => void }) {
+  const provider = platform.display_name;
+  return (
+    <div className="flex flex-col gap-3">
+      <p data-testid="origin-explanation" role="note" className="text-sm">
+        <Trans id="connect.wizard.origin">
+          <DirText>{provider}</DirText> connects only to a Shoutory that anyone can reach over https, because
+          it fetches this app's details from here. This install is not reachable that way. Ask the person who
+          runs it to give it a public https address.
+        </Trans>
+      </p>
+      <div>
+        <Button data-testid="origin-back" onPress={onBack}>
+          <Trans id="connect.wizard.host.back">Back</Trans>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+type Step = {
+  platform: Platform;
+  busy: boolean;
+  onBack: () => void;
+  begin: (extra: StartExtra) => void;
+  ws: string;
+  onDone: () => void;
+};
+type StartExtra = { instance_host?: string; login_hint?: string };
+
+function StepOf({ platform, busy, onBack, begin, ws, onDone }: Step) {
+  if (platform.needs_public_origin) return <OriginNote platform={platform} onBack={onBack} />;
+  if (platform.secret_kind !== null) {
+    return (
+      <SecretStep
+        ws={ws}
+        platform={{ ...platform, secret_kind: platform.secret_kind }}
+        onBack={onBack}
+        onDone={onDone}
+      />
+    );
+  }
+  if (platform.needs_login_hint) {
+    return (
+      <LoginHintStep
+        platform={platform}
+        busy={busy}
+        onBack={onBack}
+        onSubmit={(hint) => begin({ login_hint: hint })}
+      />
+    );
+  }
+  return (
+    <HostStep
+      platform={platform}
+      busy={busy}
+      onBack={onBack}
+      onSubmit={(host) => begin({ instance_host: host })}
+    />
+  );
+}
+
+function Tiles({ ws, platforms, onDone }: { ws: string; platforms: Platform[]; onDone: () => void }) {
   const { start, busy, failure, clear } = useStart(ws);
   const [pressed, setPressed] = useState<string | null>(null);
   const [asking, setAsking] = useState<Platform | null>(null);
@@ -174,8 +313,8 @@ function Tiles({ ws, platforms }: { ws: string; platforms: Platform[] }) {
     setPressed(asking?.id ?? null);
     setAsking(null);
   };
-  const begin = (platform: Platform, host?: string) => {
-    if (start(platform.id, host === undefined ? {} : { instance_host: host })) setPressed(platform.id);
+  const begin = (platform: Platform, extra: StartExtra = {}) => {
+    if (start(platform.id, extra)) setPressed(platform.id);
   };
   return (
     <>
@@ -187,19 +326,26 @@ function Tiles({ ws, platforms }: { ws: string; platforms: Platform[] }) {
               platform={platform}
               busy={busy && pressed === platform.id}
               returned={pressed === platform.id}
-              onStart={() => (platform.needs_instance_host ? setAsking(platform) : begin(platform))}
+              onStart={() => (asksFirst(platform) ? setAsking(platform) : begin(platform))}
             />
           ))}
         </ul>
       ) : (
-        <HostStep platform={asking} busy={busy} onBack={back} onSubmit={(host) => begin(asking, host)} />
+        <StepOf
+          ws={ws}
+          platform={asking}
+          busy={busy}
+          onBack={back}
+          begin={(extra) => begin(asking, extra)}
+          onDone={onDone}
+        />
       )}
       {failure === null ? null : <StartError failure={failure} testId="start-error" />}
     </>
   );
 }
 
-function Body({ ws }: { ws: string }) {
+function Body({ ws, onDone }: { ws: string; onDone: () => void }) {
   const { state, retry } = usePlatforms(ws);
   if (state.status === "loading") {
     return (
@@ -222,8 +368,8 @@ function Body({ ws }: { ws: string }) {
       </div>
     );
   }
-  const startable = state.platforms.filter((one) => one.connectable && OAUTH.has(one.auth_kind));
-  if (startable.length === 0) {
+  const ready = state.platforms.filter(startable);
+  if (ready.length === 0) {
     return (
       <div data-testid="wizard-state" data-state="empty" className="flex flex-col gap-1">
         <p className="text-md font-medium">
@@ -239,7 +385,7 @@ function Body({ ws }: { ws: string }) {
   }
   return (
     <div data-testid="wizard-state" data-state="tiles" className="flex flex-col gap-3">
-      <Tiles ws={ws} platforms={startable} />
+      <Tiles ws={ws} platforms={ready} onDone={onDone} />
     </div>
   );
 }
@@ -248,10 +394,12 @@ export function ConnectWizard({
   ws,
   isOpen,
   onOpenChange,
+  onConnected,
 }: {
   ws: string;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
+  onConnected: () => void;
 }) {
   return (
     <Dialog
@@ -262,7 +410,7 @@ export function ConnectWizard({
       <p>
         <Trans id="connect.wizard.intro">Pick where you publish.</Trans>
       </p>
-      <Body ws={ws} />
+      <Body ws={ws} onDone={onConnected} />
       <div>
         <Button data-testid="wizard-cancel" onPress={() => onOpenChange(false)}>
           <Trans id="auth.step_up.cancel">Cancel</Trans>

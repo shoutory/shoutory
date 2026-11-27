@@ -214,8 +214,8 @@ const account = z.object({ id: z.string().min(1).max(256) });
 function connectOf(options: FixtureAdapterOptions & { readonly clientId: string }): ConnectAdapter {
   return {
     ...(options.issuer === undefined ? {} : { issuer: options.issuer }),
-    authorize: (input) =>
-      `${options.baseUrl}/authorize?${new URLSearchParams({
+    authorize: async (_context, input) => ({
+      url: `${options.baseUrl}/authorize?${new URLSearchParams({
         response_type: "code",
         client_id: options.clientId,
         redirect_uri: input.redirectUri,
@@ -223,6 +223,7 @@ function connectOf(options: FixtureAdapterOptions & { readonly clientId: string 
         code_challenge: input.codeChallenge,
         code_challenge_method: "S256",
       })}`,
+    }),
     exchangeCode: (context, input) =>
       tokenGrant(options, context, {
         grant_type: "authorization_code",

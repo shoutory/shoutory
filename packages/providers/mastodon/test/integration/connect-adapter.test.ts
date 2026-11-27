@@ -96,7 +96,7 @@ describe("authorize asks for the scopes that publishing, read-back and delete ne
     const connect = createMastodonAdapter().connect;
     if (!connect?.authorize || !app)
       throw new Error("the adapter has no authorize or the app was not registered");
-    const url = connect.authorize({
+    const { url } = await connect.authorize(recorder().context, {
       instanceHost: HOST,
       app,
       redirectUri: REDIRECT,

@@ -46,6 +46,7 @@ const EXACT: Record<string, Record<string, string[]>> = {
   workspace_key_salts: {},
   oauth_flows: {},
   connect_challenges: {},
+  bot_claims: {},
   media_assets: { shoutory_app: READ, shoutory_worker: READ },
   media_uploads: { shoutory_app: READ, shoutory_worker: READ },
   media_derivatives: { shoutory_app: READ, shoutory_worker: READ },

@@ -13,6 +13,8 @@ const COUNTERS = [
 ];
 export const RANKS = new Map([
   ...["organizations", "workspaces"].map((table) => [table, 1.5]),
+  // The claim of a bot is taken before anything else of a connect, and a challenge after the credentials it ends with.
+  ["bot_claims", 1.7],
   ["approval_requests", 2],
   ...["post_variants", "reply_targets", "moderation_targets", "posts"].map((table) => [table, 3]),
   ["approval_grants", 4],
@@ -24,6 +26,7 @@ export const RANKS = new Map([
   ]),
   ...["media_assets", "media_derivatives", "media_uploads"].map((table) => [table, 7.5]),
   ["channel_credentials", 8],
+  ["connect_challenges", 8.5],
   ...COUNTERS.map((table, at) => [table, 9 + at / 10]),
   ...["idempotency_keys", "outbox", "webhook_deliveries", "webhook_endpoint_sequences"].map((table) => [
     table,

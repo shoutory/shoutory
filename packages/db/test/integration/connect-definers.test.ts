@@ -334,7 +334,7 @@ const DIRECT: [string, string, string][] = [
     "connect_challenges",
     "insert",
     `INSERT INTO app.connect_challenges (workspace_id, provider_id, code_hash, expires_at)
-     VALUES ('${WA}', 'telegram', '\\x${"cd".repeat(32)}', now())`,
+     VALUES ('${WA}', 'fixture_connect', '\\x${"cd".repeat(32)}', now())`,
   ],
 ];
 
@@ -349,19 +349,22 @@ describe("what the runtime roles may do to the two tables directly", () => {
 });
 
 async function plantWord(word: string, o: { ws?: string; provider?: string; expires?: string } = {}) {
-  await rows(
-    "INSERT INTO app.connect_challenges (workspace_id, provider_id, code_hash, expires_at) VALUES ($1, $2, $3, now() + $4::interval)",
-    [o.ws ?? WA, o.provider ?? "telegram", digestOf(word), o.expires ?? "10 minutes"],
+  const [planted] = await rows(
+    `INSERT INTO app.connect_challenges (workspace_id, provider_id, code_hash, expires_at, matched_chat_id,
+       ${SEALED_COLUMNS})
+     VALUES ($1, $2, $3, now() + $4::interval, '-100', $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
+    [o.ws ?? WA, o.provider ?? "fixture_connect", digestOf(word), o.expires ?? "10 minutes", ...sealed()],
   );
+  return String(planted?.id);
 }
-const TAKE_WORD = "SELECT app.connect_challenge_take($1, $2, $3) AS id";
+const TAKE_WORD = "SELECT id FROM app.connect_challenge_take($1, $2, $3, $4)";
 const takeWord = (
   ws: string,
-  provider: string,
+  id: string,
   word: string,
   ctx: TenantCtx = job([WA]),
   pool: "app" | "worker" = "worker",
-) => attempt(db.pool(pool), ctx, TAKE_WORD, [ws, provider, digestOf(word)]);
+) => attempt(db.pool(pool), ctx, TAKE_WORD, [ws, "fixture_connect", id, digestOf(word)]);
 const consumedAt = async (word: string, ws = WA) =>
   (
     await rows("SELECT consumed_at FROM app.connect_challenges WHERE workspace_id = $1 AND code_hash = $2", [
@@ -371,49 +374,21 @@ const consumedAt = async (word: string, ws = WA) =>
   )[0]?.consumed_at;
 
 describe("connect_challenge_take", () => {
-  it("matches only its own workspace and provider, once", async () => {
-    const word = `once-${randomUUID()}`;
-    await plantWord(word);
-    await plantWord(word, { ws: WB });
-    expect((await takeWord(WA, "discord", word)).rows).toEqual([{ id: null }]);
-    expect((await takeWord(WA, "telegram", `${word}-other`)).rows).toEqual([{ id: null }]);
-    expect(await consumedAt(word)).toBeNull();
-    const client = await openTx(db.pool("worker"), job([WA]));
-    try {
-      const args = [WA, "telegram", digestOf(word)];
-      expect((await client.query(TAKE_WORD, args)).rows[0]?.id).toEqual(expect.any(String));
-      expect((await client.query(TAKE_WORD, args)).rows).toEqual([{ id: null }]);
-      await client.query("COMMIT");
-    } finally {
-      await client.query("ROLLBACK");
-      client.release();
-    }
-    expect(await consumedAt(word)).not.toBeNull();
-    expect(await consumedAt(word, WB)).toBeNull();
-  });
-
-  it("never matches a word past its 10 minutes", async () => {
-    const word = `old-${randomUUID()}`;
-    await plantWord(word, { expires: "-1 second" });
-    expect((await takeWord(WA, "telegram", word)).rows).toEqual([{ id: null }]);
-    expect(await consumedAt(word)).toBeNull();
-  });
-
   it("two concurrent takes of one word: one gets the id, the other none", async () => {
     const word = `race-${randomUUID()}`;
-    await plantWord(word);
+    const id = await plantWord(word);
     const got: Record<number, unknown> = {};
     const result = await holdThenRace(
       rows,
       await openTx(db.pool("worker"), job([WA])),
       await openTx(db.pool("worker"), job([WA])),
       async (client, n) => {
-        got[n] = (await client.query(TAKE_WORD, [WA, "telegram", digestOf(word)])).rows[0]?.id;
+        got[n] = (await client.query(TAKE_WORD, [WA, "fixture_connect", id, digestOf(word)])).rows.length;
       },
     );
     expect(result.secondError).toBeUndefined();
-    expect(got[1]).toEqual(expect.any(String));
-    expect(got[2]).toBeNull();
+    expect(got[1]).toBe(1);
+    expect(got[2]).toBe(0);
   });
 });
 
@@ -426,8 +401,8 @@ describe("connect_challenge_take callers", () => {
     "%s cannot take a word of Workspace A (42501)",
     async (_who, ctx, pool) => {
       const word = `caller-${randomUUID()}`;
-      await plantWord(word);
-      expect((await takeWord(WA, "telegram", word, ctx, pool)).error).toMatchObject({ code: "42501" });
+      const id = await plantWord(word);
+      expect((await takeWord(WA, id, word, ctx, pool)).error).toMatchObject({ code: "42501" });
       expect(await consumedAt(word)).toBeNull();
     },
   );

@@ -65,7 +65,7 @@ const queueClientGone = async (database: TestDatabase) => {
 };
 
 describe("the scheduled upkeep of the worker role", () => {
-  it("registers credential_refresh, ensure_partitions, media_gc and sweep_upload_parts once and purge_expired once per retention class", async () => {
+  it("registers the polls and sweeps once and purge_expired once per retention class", async () => {
     const worker = await startWorker(options(db));
     try {
       const { schedules, classes } = await admin(async (a) => ({
@@ -74,6 +74,7 @@ describe("the scheduled upkeep of the worker role", () => {
       }));
       const wanted = classes.map(({ class: name }) => ({ name: "purge_expired", key: name }));
       expect(schedules).toEqual([
+        { name: "connect_challenge_poll", key: "" },
         { name: "credential_refresh", key: "" },
         { name: "ensure_partitions", key: "" },
         { name: "media_gc", key: "" },

@@ -28,12 +28,18 @@ export function createHealthChecker(deps: HealthCheckerDeps) {
     workspaceId: string,
     channelId: string,
     provider: HealthProvider,
-    accessToken: SealedSecret,
+    token: { accessToken: SealedSecret; dpopKey: SealedSecret | undefined },
   ): Promise<ProviderResult> {
     const egress = await deps.credentials.egressFor(workspaceId, channelId, provider);
+    const { providerAccountId } = await deps.credentials.channelFactsOf(workspaceId, channelId);
     return provider.adapter.inspect(
       { fetch: egress.fetch, now: deps.now },
-      { accessToken, ...(egress.instanceHost === undefined ? {} : { instanceHost: egress.instanceHost }) },
+      {
+        accessToken: token.accessToken,
+        ...(egress.instanceHost === undefined ? {} : { instanceHost: egress.instanceHost }),
+        ...(providerAccountId === undefined ? {} : { providerAccountId }),
+        ...(token.dpopKey === undefined ? {} : { dpopKey: token.dpopKey }),
+      },
     );
   }
 
@@ -46,7 +52,7 @@ export function createHealthChecker(deps: HealthCheckerDeps) {
         if (outcome.kind !== "refreshed" && outcome.kind !== "lost_race") return failing(provider, "failing");
         token = await deps.credentials.open(workspaceId, channelId);
       }
-      const result = await inspect(workspaceId, channelId, provider, token.accessToken);
+      const result = await inspect(workspaceId, channelId, provider, token);
       return { health: healthOf(result), snapshot: snapshotWith(provider, result) };
     } catch (error) {
       // A channel with no usable credential cannot be read: that is a failing channel, not a fault of the request.

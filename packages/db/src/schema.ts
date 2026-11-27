@@ -459,6 +459,7 @@ export const channelCredentials = app.table("channel_credentials", {
   refreshAttemptDigest: text("refresh_attempt_digest"),
   refreshAttemptOutcome: text("refresh_attempt_outcome"),
   refreshSweptAt: stamp("refresh_swept_at"),
+  botDigest: bytea("bot_digest"),
 });
 
 export const oauthFlows = app.table("oauth_flows", {
@@ -489,6 +490,24 @@ export const connectChallenges = app.table("connect_challenges", {
   codeHash: bytea("code_hash").notNull(),
   expiresAt: stamp("expires_at").notNull(),
   consumedAt: stamp("consumed_at"),
+  channelId: uuid("channel_id"),
+  formatVersion: integer("format_version"),
+  keyId: text("key_id"),
+  iv: bytea("iv"),
+  ciphertext: bytea("ciphertext"),
+  authTag: bytea("auth_tag"),
+  wrapIv: bytea("wrap_iv"),
+  wrapTag: bytea("wrap_tag"),
+  wrappedDek: bytea("wrapped_dek"),
+  botDigest: bytea("bot_digest"),
+  matchedChatId: text("matched_chat_id"),
+  matchedTitle: text("matched_title"),
+});
+
+export const botClaims = app.table("bot_claims", {
+  botDigest: bytea("bot_digest").primaryKey(),
+  workspaceId: uuid("workspace_id").notNull(),
+  updateOffset: bigint("update_offset", { mode: "number" }).notNull().default(0),
 });
 
 // Written only by the media definers.

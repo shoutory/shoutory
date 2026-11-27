@@ -13,6 +13,7 @@ import { registerAuthRoutes } from "./auth/mount.js";
 import { type ConnectService, createConnectService } from "./channels/connect.js";
 import { createCredentialService } from "./channels/credentials.js";
 import { createHealthChecker, type HealthProvider } from "./channels/health.js";
+import { SecretConnect } from "./channels/secret-connect.js";
 import { errorResponse, Refusal, toRefusal } from "./errors/refusal.js";
 import { registerHealth } from "./health/health.js";
 import { type Logger, logRequest } from "./logging/logger.js";
@@ -35,6 +36,7 @@ import { registerMembers } from "./routes/members/members.js";
 import { registerOperations } from "./routes/operations/operations.js";
 import { registerOrganizations } from "./routes/organizations/organization.js";
 import { registerPosts } from "./routes/posts/posts.js";
+import { registerProviderMetadata } from "./routes/provider-metadata/provider-metadata.js";
 import { registerProviders } from "./routes/providers/providers.js";
 import { registerUnsubscribe } from "./routes/unsubscribe.js";
 import { registerEntitlements } from "./routes/workspaces/entitlements.js";
@@ -81,7 +83,13 @@ export interface AppOptions {
   };
 }
 
-function channelServices(options: AppOptions): { check: ChannelCheck; connect: ConnectService } | undefined {
+interface ChannelServices {
+  readonly check: ChannelCheck;
+  readonly connect: ConnectService;
+  readonly secrets: SecretConnect;
+}
+
+function channelServices(options: AppOptions): ChannelServices | undefined {
   const { channels } = options;
   if (!channels) return undefined;
   const now = () => new Date();
@@ -109,7 +117,18 @@ function channelServices(options: AppOptions): { check: ChannelCheck; connect: C
     checker,
     logger: options.logger,
   });
-  return { check: { checker, providers }, connect };
+  const secrets = new SecretConnect({
+    pool: options.pool,
+    keys: options.keys,
+    pepper,
+    fetch: channels.fetch,
+    ...(fetchFor === undefined ? {} : { fetchFor }),
+    now,
+    providers,
+    credentials,
+    connect,
+  });
+  return { check: { checker, providers }, connect, secrets };
 }
 
 const SELF = ["'self'"];
@@ -197,8 +216,12 @@ export function createApp(options: AppOptions): App {
   registerChannels(app, options.auth.ipHmac, channelRoutes?.check);
   const providers = channelRoutes?.check.providers ?? {};
   registerPosts(app, providers, options);
-  if (channelRoutes) registerConnect(app, options.auth, channelRoutes.connect);
+  if (channelRoutes) registerConnect(app, options.auth, channelRoutes.connect, channelRoutes.secrets);
   registerProviders(app, providers, options.publicOrigin);
+  registerProviderMetadata(app, providers, options.publicOrigin, {
+    ...options,
+    now: options.now ?? Date.now,
+  });
   registerEntitlements(app, options.entitlements ?? selfHost);
   registerInvitations(app, options.auth);
   registerMembers(app, options.auth.ipHmac);

@@ -35,10 +35,13 @@ export interface MediaReader {
 }
 
 // The token stays sealed until the one call that puts it on the wire. The instance host is for providers whose accounts
-// live on user-chosen servers.
+// live on user-chosen servers; the account id is the provider's own (a repository id, a chat id) for the calls that name
+// it; the DPoP key is for providers that bind a token to one.
 export interface AccountAccess {
   readonly accessToken: SealedSecret;
   readonly instanceHost?: string;
+  readonly providerAccountId?: string;
+  readonly dpopKey?: SealedSecret;
 }
 
 // The post's settings as the manifest's `providerDefault` declares them, and the locale of the variant being sent.
@@ -64,11 +67,17 @@ export interface PollInput {
 
 export interface RefreshInput {
   readonly refreshToken: SealedSecret;
+  readonly dpopKey?: SealedSecret;
+  readonly issuer?: string;
+  readonly instanceHost?: string;
+  readonly app?: AppCredentials;
 }
 
 export interface InspectInput {
   readonly accessToken: SealedSecret;
   readonly instanceHost?: string;
+  readonly providerAccountId?: string;
+  readonly dpopKey?: SealedSecret;
 }
 
 export interface AppCredentials {
@@ -83,6 +92,16 @@ export interface AuthorizeInput {
   readonly redirectUri: string;
   readonly instanceHost?: string;
   readonly app?: AppCredentials;
+  readonly loginHint?: string;
+}
+
+// What a provider that pushes the request and binds a key hands back besides the URL: the pushed request's URI, the
+// key and the authorization server's issuer, which the flow keeps for the callback and the exchange.
+export interface AuthorizeResult {
+  readonly url: string;
+  readonly requestUri?: string;
+  readonly dpopKey?: SealedSecret;
+  readonly issuer?: string;
 }
 
 export interface ExchangeInput {
@@ -91,27 +110,60 @@ export interface ExchangeInput {
   readonly redirectUri: string;
   readonly instanceHost?: string;
   readonly app?: AppCredentials;
+  readonly dpopKey?: SealedSecret;
+  readonly issuer?: string;
+  readonly requestUri?: string;
+  readonly loginHint?: string;
 }
 
+// No host for an app of the whole instance (`appKind: "provider"`).
 export interface RegisterAppInput {
-  readonly instanceHost: string;
+  readonly instanceHost?: string;
   readonly redirectUri: string;
 }
 
 export interface IdentityInput {
   readonly accessToken: SealedSecret;
   readonly instanceHost?: string;
+  readonly dpopKey?: SealedSecret;
 }
 
-// `issuer` is the one a callback must carry (RFC 9207). `authorize` builds the URL only and makes no network call.
+// What a pasted secret is: a webhook URL, or the token of a bot the person made.
+export type SecretKind = "bot_token" | "webhook_url";
+
+export interface VerifySecretInput {
+  readonly kind: SecretKind;
+  readonly secret: SealedSecret;
+}
+
+export interface PollChallengeInput {
+  readonly botToken: SealedSecret;
+  readonly offset: number;
+}
+
+export interface PublicDocumentsInput {
+  readonly publicOrigin: string;
+  readonly app?: AppCredentials;
+}
+
+// `issuer` is the one a callback must carry (RFC 9207); a provider whose server is only known at the start returns it from
+// `authorize` instead. `authorize` may push the request (an outbound call), so the caller holds no transaction.
 export interface ConnectAdapter {
   readonly issuer?: string;
+  // `provider`: one app of the whole instance (its key is made on first use), not one per server or workspace.
+  readonly appKind?: "provider";
   // Only for a provider whose accounts live on user-chosen servers. An instance that cannot take part is a result with
   // the code `instance_unsupported`.
   registerApp?(context: AdapterContext, input: RegisterAppInput): Promise<ProviderResult>;
-  authorize(input: AuthorizeInput): string;
+  authorize(context: AdapterContext, input: AuthorizeInput): Promise<AuthorizeResult>;
   exchangeCode(context: AdapterContext, input: ExchangeInput): Promise<ProviderResult>;
   identity(context: AdapterContext, input: IdentityInput): Promise<ProviderResult>;
+  /** The documents the provider's server fetches from this app (client metadata, key set), by file name. */
+  publicDocuments?(input: PublicDocumentsInput): Promise<Readonly<Record<string, unknown>>>;
+  /** Checks a pasted secret against the provider and answers the account it belongs to. */
+  verifySecret?(context: AdapterContext, input: VerifySecretInput): Promise<ProviderResult>;
+  /** Reads the bot's updates after `offset`; a read, so it never has an effect. */
+  pollChallenge?(context: AdapterContext, input: PollChallengeInput): Promise<ProviderResult>;
 }
 
 export type AdapterMap = Readonly<Record<string, ProviderAdapter>>;

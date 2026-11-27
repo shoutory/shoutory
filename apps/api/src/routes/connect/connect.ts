@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import { z } from "zod";
 import type { AuthService } from "../../auth/auth.js";
 import type { ConnectOutcome, ConnectService } from "../../channels/connect.js";
+import type { SecretConnect } from "../../channels/secret-connect.js";
 import { toRefusal } from "../../errors/refusal.js";
 import { type App, type AppEnv, defineRoute } from "../define-route.js";
 
@@ -46,7 +47,11 @@ function registerStart(app: App, auth: AuthService, connect: ConnectService): vo
     // Split: the registration of an app on an instance is an outbound call, which never runs inside a transaction.
     access: { workspace: "workspace_id", permission: "channels.manage", split: true },
     params: z.strictObject({ workspace_id: uuid, provider_id: providerId }),
-    body: z.strictObject({ instance_host: typedHost.optional(), channel_id: uuid.optional() }),
+    body: z.strictObject({
+      instance_host: typedHost.optional(),
+      channel_id: uuid.optional(),
+      login_hint: z.string().min(1).max(512).optional(),
+    }),
     handler: async ({ c, scoped, params, body }) => {
       await auth.throttle.spend("connect_start", c.get("session").userId);
       const authorizeUrl = await connect.start(scoped, {
@@ -54,6 +59,7 @@ function registerStart(app: App, auth: AuthService, connect: ConnectService): vo
         providerId: params.provider_id,
         instanceHost: body.instance_host,
         channelId: body.channel_id,
+        loginHint: body.login_hint,
       });
       return { authorize_url: authorizeUrl };
     },
@@ -117,7 +123,116 @@ function registerCallback(app: App, auth: AuthService, connect: ConnectService):
   });
 }
 
-export function registerConnect(app: App, auth: AuthService, connect: ConnectService): void {
+const SECRET_BASE = "/api/v1/workspaces/{workspace_id}/connect/{provider_id}";
+const secretAccess = { workspace: "workspace_id", permission: "channels.manage", split: true } as const;
+const workspaceProvider = { workspace_id: uuid, provider_id: providerId };
+const challengeParams = z.strictObject({ ...workspaceProvider, challenge_id: uuid });
+const wordSchema = z
+  .string()
+  .min(4)
+  .max(64)
+  .regex(/^[a-z0-9]+$/);
+
+const callerOf = (
+  auth: AuthService,
+  c: Context<AppEnv>,
+  params: { workspace_id: string; provider_id: string },
+  ip: string,
+) => ({
+  workspaceId: params.workspace_id,
+  providerId: params.provider_id,
+  userId: c.get("session").userId,
+  requestId: c.get("requestId"),
+  ipHmac: auth.ipHmac(ip),
+});
+
+// The paste step: a webhook URL connects at once; a bot token waits on a challenge for the word typed into a chat.
+function registerSecret(app: App, auth: AuthService, secrets: SecretConnect): void {
+  defineRoute(app, {
+    method: "post",
+    path: `${SECRET_BASE}/secret`,
+    policy: "session",
+    access: secretAccess,
+    params: z.strictObject(workspaceProvider),
+    body: z.strictObject({ secret: z.string().min(1).max(2048), channel_id: uuid.optional() }),
+    handler: async ({ c, scoped, params, body, clientAddress }) => {
+      await auth.throttle.spend("connect_start", c.get("session").userId);
+      const outcome = await secrets.paste(scoped, callerOf(auth, c, params, clientAddress), {
+        secret: body.secret,
+        channelId: body.channel_id,
+      });
+      if (outcome.kind === "connected") return { channel_id: outcome.channelId };
+      return {
+        challenge_id: outcome.challengeId,
+        word: outcome.word,
+        expires_at: outcome.expiresAt.toISOString(),
+      };
+    },
+  });
+}
+
+// The wizard reads the challenge every 2 seconds, renews its word and, once a chat answered, completes it.
+function registerChallenge(app: App, auth: AuthService, secrets: SecretConnect): void {
+  defineRoute(app, {
+    method: "get",
+    path: `${SECRET_BASE}/challenge/{challenge_id}`,
+    policy: "session",
+    access: secretAccess,
+    params: challengeParams,
+    handler: async ({ scoped, params }) => {
+      const found = await secrets.status(
+        scoped,
+        { workspaceId: params.workspace_id, providerId: params.provider_id },
+        params.challenge_id,
+      );
+      return { state: found.state, chat_title: found.chatTitle };
+    },
+  });
+  defineRoute(app, {
+    method: "post",
+    path: `${SECRET_BASE}/challenge/{challenge_id}/renew`,
+    policy: "session",
+    access: secretAccess,
+    params: challengeParams,
+    handler: async ({ c, scoped, params }) => {
+      await auth.throttle.spend("connect_start", c.get("session").userId);
+      const renewed = await secrets.renew(
+        scoped,
+        { workspaceId: params.workspace_id, providerId: params.provider_id },
+        params.challenge_id,
+      );
+      return { word: renewed.word, expires_at: renewed.expiresAt.toISOString() };
+    },
+  });
+  defineRoute(app, {
+    method: "post",
+    path: `${SECRET_BASE}/challenge/{challenge_id}/complete`,
+    policy: "session",
+    access: secretAccess,
+    params: challengeParams,
+    body: z.strictObject({ word: wordSchema }),
+    handler: async ({ c, scoped, params, body, clientAddress }) => {
+      // A split access checks the permission when the scope is first opened, and the completion opens none of its own.
+      await scoped(false, async () => undefined);
+      await auth.throttle.spend("connect_callback", c.get("session").userId);
+      const channelId = await secrets.complete(
+        callerOf(auth, c, params, clientAddress),
+        params.challenge_id,
+        body.word,
+      );
+      return { channel_id: channelId };
+    },
+  });
+}
+
+export function registerConnect(
+  app: App,
+  auth: AuthService,
+  connect: ConnectService,
+  secrets: SecretConnect,
+): void {
   registerStart(app, auth, connect);
   registerCallback(app, auth, connect);
+  registerSecret(app, auth, secrets);
+  registerChallenge(app, auth, secrets);
 }

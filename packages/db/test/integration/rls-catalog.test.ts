@@ -308,12 +308,12 @@ const DEFINERS: Definer[] = [
   { name: "workspace_salt_ensure", args: "workspace_id uuid, salt bytea", callers: APP_WORKER },
   {
     name: "channel_connect",
-    args: "workspace_id uuid, provider_id text, account_kind text, provider_account_id text, instance_host text, display_name text, handle text, avatar text, reconnect_channel_id uuid, request_id text, ip_hmac bytea",
+    args: "workspace_id uuid, provider_id text, account_kind text, provider_account_id text, instance_host text, display_name text, handle text, avatar text, reconnect_channel_id uuid, request_id text, ip_hmac bytea, taken_challenge_id uuid",
     callers: APP_WORKER,
   },
   {
     name: "credential_put",
-    args: `workspace_id uuid, channel_id uuid, expected_generation integer, ${SEALED_FIELDS}, access_expires_at timestamp with time zone, refresh_expires_at timestamp with time zone, refresh_token_digest text, manifest_digest text, api_version text, sunset_at timestamp with time zone, capabilities jsonb, limits jsonb, request_id text, ip_hmac bytea`,
+    args: `workspace_id uuid, channel_id uuid, expected_generation integer, ${SEALED_FIELDS}, access_expires_at timestamp with time zone, refresh_expires_at timestamp with time zone, refresh_token_digest text, manifest_digest text, api_version text, sunset_at timestamp with time zone, capabilities jsonb, limits jsonb, request_id text, ip_hmac bytea, secret_kind text, taken_challenge_id uuid`,
     callers: APP_WORKER,
   },
   { name: "credential_open", args: "workspace_id uuid, channel_id uuid", callers: APP_WORKER },
@@ -367,8 +367,47 @@ const DEFINERS: Definer[] = [
   },
   {
     name: "connect_challenge_take",
-    args: "workspace_id uuid, provider_id text, code_hash bytea",
+    args: "workspace_id uuid, provider_id text, challenge_id uuid, code_hash bytea",
     callers: APP_WORKER,
+  },
+  {
+    name: "provider_app_ensure",
+    args: "p_workspace_id uuid, p_id uuid, p_provider text, p_client_id text, p_redirect_uri text, p_format_version integer, p_key_id text, p_iv bytea, p_ciphertext bytea, p_auth_tag bytea, p_wrap_iv bytea, p_wrap_tag bytea, p_wrapped_dek bytea",
+    callers: APP_WORKER,
+  },
+  {
+    name: "provider_apps_reseal_batch",
+    args: "lim integer, active_key_id text, after_id uuid",
+    callers: ["shoutory_worker"],
+  },
+  {
+    name: "provider_apps_reseal_write",
+    args: "p_id uuid, p_generation integer, p_ciphertext bytea, p_iv bytea, p_auth_tag bytea, p_wrap_iv bytea, p_wrap_tag bytea, p_wrapped_dek bytea, p_key_id text, p_format_version integer",
+    callers: ["shoutory_worker"],
+  },
+  { name: "bot_claim", args: "p_bot_digest bytea, p_workspace_id uuid", callers: [] },
+  { name: "bot_claim_live", args: "p_bot_digest bytea", callers: [], helper: true },
+  { name: "bot_claim_release", args: "", callers: [] },
+  {
+    name: "connect_challenge_put",
+    args: `challenge_id uuid, workspace_id uuid, provider_id text, code_hash bytea, bot_digest bytea, channel_id uuid, ${SEALED_FIELDS}`,
+    callers: ["shoutory_app"],
+  },
+  {
+    name: "connect_challenge_renew",
+    args: "workspace_id uuid, provider_id text, challenge_id uuid, code_hash bytea",
+    callers: ["shoutory_app"],
+  },
+  {
+    name: "connect_challenge_status",
+    args: "workspace_id uuid, provider_id text, challenge_id uuid",
+    callers: ["shoutory_app"],
+  },
+  { name: "connect_challenge_open_due", args: "p_limit integer", callers: ["shoutory_worker"] },
+  {
+    name: "connect_challenge_match",
+    args: "p_bot_digest bytea, p_code_hash bytea, p_chat_id text, p_chat_title text, p_next_offset bigint",
+    callers: ["shoutory_worker"],
   },
   {
     name: "media_caller",

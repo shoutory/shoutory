@@ -1,0 +1,7 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": { "rootDir": "src", "outDir": "dist", "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo" },
+  "include": ["src"],
+  "references": [{ "path": "../../core" }, { "path": "../../provider-sdk" }, { "path": "../../testkit" }],
+  "exclude": ["src/**/*.test.ts"]
+}
