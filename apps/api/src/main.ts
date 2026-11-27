@@ -15,6 +15,7 @@ import {
   type OperatorPolicy,
   requestPolicyOf,
 } from "@shoutory/provider-sdk/egress/policy";
+import { egressResolveTxt } from "@shoutory/provider-sdk/egress/txt";
 import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import { createRegistry } from "@shoutory/provider-sdk/registry";
 import { createApp } from "./app.js";
@@ -102,6 +103,11 @@ function providerFetch(config: Config) {
   };
 }
 
+function providerTxt(config: Config) {
+  const operator = operatorOf(config);
+  return (name: string) => egressResolveTxt(name, operator);
+}
+
 function builtInProviders(): Record<string, HealthProvider> {
   const adapters = createBuiltInAdapters();
   return Object.fromEntries(
@@ -124,6 +130,7 @@ function appSettingsOf(config: Config) {
       providers: builtInProviders(),
       fetch: refuseEgress(),
       fetchFor: providerFetch(config),
+      resolveTxt: providerTxt(config),
       pepper: config.hmacPepper,
     },
   };
@@ -248,6 +255,7 @@ async function startWorkerRole(
       },
       adapters: createBuiltInAdapters(),
       fetchFor: providerFetch(config),
+      resolveTxt: providerTxt(config),
     });
     logger.info({ role }, "worker started");
     return {

@@ -115,6 +115,7 @@ describe("identity: the account a connect stores", () => {
     const connect = createMastodonAdapter().connect;
     if (!connect) throw new Error("the adapter has no connect side");
     const accessToken = new SealedSecret(sim.issueToken());
+    if (!connect.identity) throw new Error("the adapter has no identity call");
     return connect.identity(recorder().context, { accessToken, instanceHost: HOST });
   };
 

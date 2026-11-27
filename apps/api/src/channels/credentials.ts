@@ -22,7 +22,7 @@ import { type TenantCtx, type TenantTx, withTenant } from "@shoutory/db/context"
 import { withSystem } from "@shoutory/db/context/system";
 import { withAdvisoryLock } from "@shoutory/db/locks";
 import type { AppPool } from "@shoutory/db/pool";
-import type { AdapterMap, ProviderAdapter } from "@shoutory/provider-sdk/adapter";
+import type { AdapterContext, AdapterMap, ProviderAdapter } from "@shoutory/provider-sdk/adapter";
 import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import type { Registry } from "@shoutory/provider-sdk/registry";
 import type { ProviderResult } from "@shoutory/provider-sdk/result";
@@ -58,6 +58,7 @@ export interface CredentialServiceDeps {
   readonly fetch: typeof fetch;
   /** The egress client bound to a channel's own instance host; absent, every call uses `fetch`. */
   readonly fetchFor?: ((manifest: Manifest, instanceHost: string | undefined) => typeof fetch) | undefined;
+  readonly resolveTxt?: AdapterContext["resolveTxt"];
   readonly now: () => Date;
   readonly logger: Logger;
   readonly providers: Readonly<Record<string, ChannelProvider>>;
@@ -276,7 +277,7 @@ export class CredentialService {
     workspaceId: string,
     channelId: string,
     provider: ChannelProvider,
-  ): Promise<{ fetch: typeof fetch; instanceHost?: string }> {
+  ): Promise<{ fetch: typeof fetch; resolveTxt: AdapterContext["resolveTxt"]; instanceHost?: string }> {
     const host =
       provider.manifest.egressHostSource === "channel"
         ? (await this.channelFactsOf(workspaceId, channelId)).instanceHost
@@ -284,6 +285,7 @@ export class CredentialService {
     const egress = this.#deps.fetchFor?.(provider.manifest, host) ?? this.#deps.fetch;
     return {
       fetch: deadlineFetch(egress, this.#deps.providerTimeoutMs),
+      resolveTxt: this.#deps.resolveTxt,
       ...(host === undefined ? {} : { instanceHost: host }),
     };
   }
@@ -431,7 +433,7 @@ export class CredentialService {
     }
     const egress = await this.egressFor(workspaceId, channelId, provider);
     const result = await provider.adapter.inspect(
-      { fetch: egress.fetch, now: this.#deps.now },
+      { fetch: egress.fetch, now: this.#deps.now, resolveTxt: egress.resolveTxt },
       {
         accessToken: new SealedSecret(token.access_token),
         ...(egress.instanceHost === undefined ? {} : { instanceHost: egress.instanceHost }),
@@ -580,7 +582,7 @@ export class CredentialService {
     const app = await this.#providerAppOf(workspaceId, first.provider_id, provider);
     const result = await refreshCall.call(
       provider.adapter,
-      { fetch: egress.fetch, now: this.#deps.now },
+      { fetch: egress.fetch, now: this.#deps.now, resolveTxt: egress.resolveTxt },
       {
         refreshToken: new SealedSecret(current.refresh_token ?? ""),
         ...(app === undefined ? {} : { app }),

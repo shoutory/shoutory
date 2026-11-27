@@ -246,6 +246,7 @@ export const ADMIN_PROVIDERS = [
     lifecycle: "ga",
     auth_kind: "oauth2_pkce",
     needs_instance_host: false,
+    registration: "redirect_uri",
     redirect_uri: "https://app.example.test/api/v1/connect/fixture_oauth/callback",
   },
   {
@@ -254,6 +255,7 @@ export const ADMIN_PROVIDERS = [
     lifecycle: "beta",
     auth_kind: "oauth2_pkce",
     needs_instance_host: true,
+    registration: "per_server",
     redirect_uri: null,
   },
 ];

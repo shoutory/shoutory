@@ -92,6 +92,15 @@ const status = async (user: string, ws: string, id: unknown, provider = PROVIDER
       id,
     ])
   )[0];
+const HOLD = "SELECT app.connect_challenge_hold($1, $2, $3, $4, $5) AS id";
+const hold = (ws: string, botDigest: Buffer, word: string, reason: string, ctx: TenantCtx = poller) =>
+  commit("worker", ctx, HOLD, [ws, PROVIDER, botDigest, digestOf(word), reason]);
+const reasonOf = async (id: unknown) =>
+  (
+    await rows("SELECT wait_reason, matched_chat_id, consumed_at FROM app.connect_challenges WHERE id = $1", [
+      id,
+    ])
+  )[0];
 const offsetOf = async (botDigest: Buffer) =>
   (await rows("SELECT update_offset::text AS n FROM app.bot_claims WHERE bot_digest = $1", [botDigest]))[0]
     ?.n;
@@ -188,24 +197,32 @@ describe("the claim of a bot that has a channel (floor)", () => {
 
 describe("a claim taken while another session releases it (floor)", () => {
   it("never answers that the claim is held when no row holds it", async () => {
-    const rounds = Array.from({ length: 60 }, (_unused, round) => round);
-    for (const round of rounds) {
-      const digest = bot(`race-${round}`);
-      await rows("INSERT INTO app.bot_claims (bot_digest, workspace_id) VALUES ($1, $2)", [digest, WA]);
-      const claim = withAdminClient(env, db.name, async (client) => {
-        await client.query("BEGIN");
-        const answer = await client.query("SELECT app.bot_claim($1, $2) AS held", [digest, WB]);
-        const holder = await client.query("SELECT workspace_id FROM app.bot_claims WHERE bot_digest = $1", [
-          digest,
-        ]);
-        await client.query("COMMIT");
-        return { held: answer.rows[0]?.held, holder: holder.rows[0]?.workspace_id };
-      });
-      const release = rows("DELETE FROM app.bot_claims WHERE bot_digest = $1", [digest]);
-      const [claimed] = await Promise.all([claim, release]);
-      expect(claimed.held).toBe(true);
-      expect(claimed.holder).toBe(WB);
-    }
+    // Two connections serve every round: opening new ones per round made the test cost depend on the host's load.
+    await withAdminClient(env, db.name, (claimer) =>
+      withAdminClient(env, db.name, async (releaser) => {
+        for (let round = 0; round < 60; round++) {
+          const digest = bot(`race-${round}`);
+          await releaser.query("INSERT INTO app.bot_claims (bot_digest, workspace_id) VALUES ($1, $2)", [
+            digest,
+            WA,
+          ]);
+          const claim = (async () => {
+            await claimer.query("BEGIN");
+            const answer = await claimer.query("SELECT app.bot_claim($1, $2) AS held", [digest, WB]);
+            const holder = await claimer.query(
+              "SELECT workspace_id FROM app.bot_claims WHERE bot_digest = $1",
+              [digest],
+            );
+            await claimer.query("COMMIT");
+            return { held: answer.rows[0]?.held, holder: holder.rows[0]?.workspace_id };
+          })();
+          const release = releaser.query("DELETE FROM app.bot_claims WHERE bot_digest = $1", [digest]);
+          const [claimed] = await Promise.all([claim, release]);
+          expect(claimed.held).toBe(true);
+          expect(claimed.holder).toBe(WB);
+        }
+      }),
+    );
   });
 });
 
@@ -343,5 +360,83 @@ describe("the token of a challenge nobody finished", () => {
       [keptId]: [false, false],
       [endedId]: [true, true],
     });
+  });
+});
+
+describe("a word a chat sent that cannot be used yet (floor)", () => {
+  it("records the reason on the open challenge whose word it is, without matching or consuming it, and the status shows it", async () => {
+    const mine = bot("hold");
+    const word = `hold-${randomUUID()}`;
+    const [{ id }] = (await put(U.admin, WA, word, mine)) as [{ id: string }];
+    expect(await hold(WA, mine, word, "bot_cannot_post")).toEqual([{ id }]);
+    expect(await reasonOf(id)).toEqual({
+      wait_reason: "bot_cannot_post",
+      matched_chat_id: null,
+      consumed_at: null,
+    });
+    expect(await status(U.admin, WA, id)).toMatchObject({ state: "waiting", reason: "bot_cannot_post" });
+    expect(await match(mine, word, 1)).toBe(id);
+    expect(await status(U.admin, WA, id)).toMatchObject({ state: "matched", reason: null });
+  });
+
+  it("never reaches another workspace's challenge that holds the same word, or a word of another bot", async () => {
+    const [mine, theirs] = [bot("hold-a"), bot("hold-b")];
+    const word = `shared-${randomUUID()}`;
+    const [{ id }] = (await put(U.admin, WA, word, mine)) as [{ id: string }];
+    const [{ id: theirId }] = (await put(U.bOwner, WB, word, theirs)) as [{ id: string }];
+    expect(await hold(WB, mine, word, "bot_cannot_post")).toEqual([{ id: null }]);
+    expect(await hold(WA, theirs, word, "bot_cannot_post")).toEqual([{ id: null }]);
+    expect(await hold(WA, mine, `other-${randomUUID()}`, "bot_cannot_post")).toEqual([{ id: null }]);
+    expect([(await reasonOf(id))?.wait_reason, (await reasonOf(theirId))?.wait_reason]).toEqual([null, null]);
+    expect(await hold(WA, mine, word, "bot_cannot_post")).toEqual([{ id }]);
+    expect((await reasonOf(theirId))?.wait_reason).toBeNull();
+    expect(await status(U.bOwner, WB, theirId)).toMatchObject({ state: "waiting", reason: null });
+  });
+});
+
+describe("what a held word does not reach (floor)", () => {
+  it("holds nothing for a challenge a chat already answered or that expired", async () => {
+    const [answered, late] = [bot("hold-answered"), bot("hold-late")];
+    const [wordA, wordB] = [`answered-${randomUUID()}`, `late-${randomUUID()}`];
+    const [{ id: answeredId }] = (await put(U.admin, WA, wordA, answered)) as [{ id: string }];
+    const [{ id: lateId }] = (await put(U.admin, WA, wordB, late)) as [{ id: string }];
+    await match(answered, wordA, 1);
+    await rows("UPDATE app.connect_challenges SET expires_at = now() - interval '1 second' WHERE id = $1", [
+      lateId,
+    ]);
+    expect(await hold(WA, answered, wordA, "bot_cannot_post")).toEqual([{ id: null }]);
+    expect(await hold(WA, late, wordB, "bot_cannot_post")).toEqual([{ id: null }]);
+    expect([(await reasonOf(answeredId))?.wait_reason, (await reasonOf(lateId))?.wait_reason]).toEqual([
+      null,
+      null,
+    ]);
+  });
+
+  it("takes only the closed reason, and only from the poll", async () => {
+    const mine = bot("hold-closed");
+    const word = `closed-${randomUUID()}`;
+    await put(U.admin, WA, word, mine);
+    await expect(hold(WA, mine, word, "anything else")).rejects.toMatchObject({ code: "22023" });
+    await expect(hold(WA, mine, word, "bot_cannot_post", job([WA]))).rejects.toMatchObject({ code: "42501" });
+    await expect(
+      commit("app", asUser(U.admin), HOLD, [WA, PROVIDER, mine, digestOf(word), "bot_cannot_post"]),
+    ).rejects.toMatchObject({ code: "42501" });
+  });
+
+  it("is forgotten when a new word is asked for", async () => {
+    const mine = bot("hold-renew");
+    const word = `renew-${randomUUID()}`;
+    const [{ id }] = (await put(U.admin, WA, word, mine)) as [{ id: string }];
+    await hold(WA, mine, word, "bot_cannot_post");
+    await rows("UPDATE app.connect_challenges SET expires_at = now() - interval '1 second' WHERE id = $1", [
+      id,
+    ]);
+    await commit("app", asUser(U.admin), "SELECT app.connect_challenge_renew($1, $2, $3, $4)", [
+      WA,
+      PROVIDER,
+      id,
+      digestOf(`new-${randomUUID()}`),
+    ]);
+    expect((await reasonOf(id))?.wait_reason).toBeNull();
   });
 });

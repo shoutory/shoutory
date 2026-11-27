@@ -47,6 +47,7 @@ export interface Caller {
   readonly owner: string;
   readonly adapter: ProviderAdapter;
   readonly fetch: typeof fetch;
+  readonly resolveTxt?: AdapterContext["resolveTxt"];
   readonly account: AccountAccess;
   readonly credentials: CredentialService;
   readonly now: () => number;
@@ -137,6 +138,7 @@ export function contextFor(deps: Caller, held: Held, timeoutMs: number, media?: 
     fetch: (input, init) =>
       deps.fetch(input, { ...init, signal: init?.signal ? AbortSignal.any([init.signal, own]) : own }),
     now: deps.clock,
+    resolveTxt: deps.resolveTxt,
     ...(media === undefined ? {} : { media }),
   };
 }

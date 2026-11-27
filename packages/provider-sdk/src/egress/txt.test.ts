@@ -10,6 +10,8 @@ describe("egressResolveTxt (the _atproto lookup)", () => {
   it.each([
     ["an IP literal", "127.0.0.1"],
     ["a bracketed IPv6 literal", "[::1]"],
+    ["a private IPv4 literal", "10.0.0.1"],
+    ["the metadata address", "169.254.169.254"],
     ["a single label", "localhost"],
     ["an empty name", ""],
     ["a name over 253 characters", `${`${"a".repeat(60)}.`.repeat(5)}example.com`],

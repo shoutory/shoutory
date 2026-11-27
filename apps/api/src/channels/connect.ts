@@ -12,7 +12,7 @@ import { type Aad, FORMAT_VERSION, open, SealedSecret, seal } from "@shoutory/co
 import type { KeyProvider } from "@shoutory/core/keys";
 import { type TenantCtx, type TenantTx, withTenant } from "@shoutory/db/context";
 import type { AppPool } from "@shoutory/db/pool";
-import type { AppCredentials, ConnectAdapter } from "@shoutory/provider-sdk/adapter";
+import type { AdapterContext, AppCredentials, ConnectAdapter } from "@shoutory/provider-sdk/adapter";
 import { type Manifest, scopeSetOf } from "@shoutory/provider-sdk/manifest";
 import type {
   AccountIdentity,
@@ -36,6 +36,7 @@ export interface ConnectDeps {
   readonly keys: KeyProvider;
   readonly fetch: typeof fetch;
   readonly fetchFor?: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
+  readonly resolveTxt?: AdapterContext["resolveTxt"];
   readonly now: () => Date;
   readonly publicOrigin: string;
   readonly providers: Readonly<Record<string, HealthProvider>>;
@@ -128,6 +129,11 @@ const snapshotWithLimits = <S extends { readonly limits: Readonly<Record<string,
   snapshot: S,
   limits: Readonly<Record<string, ReadLimit>> | undefined,
 ): S => (limits === undefined ? snapshot : { ...snapshot, limits: { ...snapshot.limits, ...limits } });
+
+// A provider that connects from a pasted secret has no authorization to start or to finish.
+type OAuthConnect = ConnectAdapter & Required<Pick<ConnectAdapter, "authorize" | "exchangeCode">>;
+const isOAuth = (connect: ConnectAdapter | undefined): connect is OAuthConnect =>
+  connect?.authorize !== undefined && connect.exchangeCode !== undefined;
 
 type InTx = <T>(write: boolean, run: (tx: TenantTx) => Promise<T>) => Promise<T>;
 interface AppStep {
@@ -226,8 +232,12 @@ export class ConnectService {
     return Object.hasOwn(this.#deps.providers, providerId) ? this.#deps.providers[providerId] : undefined;
   }
 
-  #fetchOf(manifest: Manifest, host: string | undefined): typeof fetch {
-    return deadlineFetch(this.#deps.fetchFor?.(manifest, host) ?? this.#deps.fetch);
+  #contextOf(manifest: Manifest, host: string | undefined): AdapterContext {
+    return {
+      fetch: deadlineFetch(this.#deps.fetchFor?.(manifest, host) ?? this.#deps.fetch),
+      now: this.#deps.now,
+      resolveTxt: this.#deps.resolveTxt,
+    };
   }
 
   // Registering is an outbound call, so no transaction is open. When another connect stored an app first, this one's
@@ -240,7 +250,7 @@ export class ConnectService {
       if (stored) return stored;
     }
     const redirectUri = redirectUriOf(this.#deps.publicOrigin, key.providerId, key.instanceHost);
-    const context = { fetch: this.#fetchOf(provider.manifest, key.instanceHost), now: this.#deps.now };
+    const context = this.#contextOf(provider.manifest, key.instanceHost);
     const registered = await connect.registerApp?.(context, { instanceHost: key.instanceHost, redirectUri });
     if (!registered?.ok || !registered.app) throw refusalOf(registered);
     const mine = registered.app;
@@ -259,7 +269,7 @@ export class ConnectService {
     );
     if (stored) return stored;
     const redirectUri = redirectUriOf(this.#deps.publicOrigin, input.providerId);
-    const context = { fetch: this.#fetchOf(provider.manifest, undefined), now: this.#deps.now };
+    const context = this.#contextOf(provider.manifest, undefined);
     const registered = await connect.registerApp?.(context, { redirectUri });
     if (!registered?.ok || !registered.app) throw refusalOf(registered);
     const made = { ...registered.app, redirectUri };
@@ -279,7 +289,7 @@ export class ConnectService {
   async start(scoped: Scoped, typed: StartInput): Promise<string> {
     const provider = this.#providerOf(typed.providerId);
     const connect = provider?.adapter.connect;
-    if (!provider || !connect) throw new Refusal("not_found", "no connect for the provider");
+    if (!provider || !isOAuth(connect)) throw new Refusal("not_found", "no connect for the provider");
     // An archived workspace refuses here, before any call to the provider.
     await scoped(true, async () => undefined);
     const input = { ...typed, instanceHost: await reconnectHostOf(scoped, typed, connect) };
@@ -287,7 +297,7 @@ export class ConnectService {
     const { state, digest } = newState();
     const { verifier, challenge } = pkcePair();
     // The provider may push the request, an outbound call, so it runs before the flow is stored and no transaction is open.
-    const context = { fetch: this.#fetchOf(provider.manifest, input.instanceHost), now: this.#deps.now };
+    const context = this.#contextOf(provider.manifest, input.instanceHost);
     const authorized = await connect.authorize(context, {
       state,
       codeChallenge: challenge,
@@ -339,7 +349,7 @@ export class ConnectService {
   async finish(input: FinishInput): Promise<ConnectOutcome> {
     const provider = this.#providerOf(input.providerId);
     const connect = provider?.adapter.connect;
-    if (!provider || !connect) return { kind: "refused" };
+    if (!provider || !isOAuth(connect)) return { kind: "refused" };
     const principal = { principalKind: "user", principalId: input.userId } as const;
     const taken = await this.#take(principal, input);
     if ("kind" in taken) return taken;
@@ -350,7 +360,7 @@ export class ConnectService {
   async #complete(
     principal: TenantCtx,
     taken: FlowRow,
-    step: { provider: HealthProvider; connect: ConnectAdapter; input: FinishInput },
+    step: { provider: HealthProvider; connect: OAuthConnect; input: FinishInput },
   ): Promise<Outcome> {
     const { provider, connect, input } = step;
     const { query } = input;
@@ -460,7 +470,7 @@ export class ConnectService {
     flow: FlowRow,
     step: {
       provider: HealthProvider;
-      connect: ConnectAdapter;
+      connect: OAuthConnect;
       code: string;
       input: FinishInput;
       progress: { step: string };
@@ -469,7 +479,7 @@ export class ConnectService {
   ): Promise<Granted | GrantFailure> {
     const { progress, connect, input, object } = step;
     const host = flow.instance_host ?? undefined;
-    const context = { fetch: this.#fetchOf(step.provider.manifest, host), now: this.#deps.now };
+    const context = this.#contextOf(step.provider.manifest, host);
     const hostPart = host === undefined ? {} : { instanceHost: host };
     const app = await this.#storedApp(principal, flow, { connect, providerId: input.providerId });
     const bound = boundTo(object, flow.request_uri);
@@ -490,13 +500,22 @@ export class ConnectService {
         refusedApp: app?.clientId,
       };
     }
+    // An adapter that had to learn the account during the exchange keeps it: asking again could answer another one.
     progress.step = "identity";
-    const accessToken = exchanged.credential.accessToken;
-    const who = await connect.identity(context, {
-      accessToken,
-      ...hostPart,
-      ...(bound.dpopKey === undefined ? {} : { dpopKey: bound.dpopKey }),
-    });
+    const who = exchanged.identity
+      ? exchanged
+      : await connect.identity?.(context, {
+          accessToken: exchanged.credential.accessToken,
+          ...hostPart,
+          ...(bound.dpopKey === undefined ? {} : { dpopKey: bound.dpopKey }),
+        });
+    if (who === undefined) {
+      this.#deps.logger.warn(
+        { event: "connect_adapter_incomplete", providerId: input.providerId },
+        "the provider names no account at the code exchange and has no account call",
+      );
+      return { step: "identity", errorClass: "permanent" };
+    }
     if (!who.ok || !who.identity) return { step: "identity", errorClass: who.errorClass ?? "none" };
     if (who.limitsFromManifest?.length) {
       const fields = who.limitsFromManifest;
@@ -513,7 +532,7 @@ export class ConnectService {
   async #grantFailed(
     principal: TenantCtx,
     flow: FlowRow,
-    step: { provider: HealthProvider; connect: ConnectAdapter; input: FinishInput },
+    step: { provider: HealthProvider; connect: OAuthConnect; input: FinishInput },
     failure: GrantFailure,
   ): Promise<Outcome> {
     const { input } = step;

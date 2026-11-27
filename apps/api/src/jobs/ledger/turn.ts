@@ -3,7 +3,7 @@ import { backoffSeconds } from "@shoutory/core/ledger/dispatch";
 import type { StorageDriver } from "@shoutory/core/storage";
 import { withSystem } from "@shoutory/db/context/system";
 import type { AppPool } from "@shoutory/db/pool";
-import type { AdapterMap } from "@shoutory/provider-sdk/adapter";
+import type { AdapterContext, AdapterMap } from "@shoutory/provider-sdk/adapter";
 import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import type { Registry } from "@shoutory/provider-sdk/registry";
 import { pastSunset } from "@shoutory/provider-sdk/snapshot";
@@ -33,6 +33,7 @@ export interface TurnOptions {
   readonly registry: Registry;
   readonly adapters: AdapterMap;
   readonly fetchFor: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
+  readonly resolveTxt?: AdapterContext["resolveTxt"];
   readonly credentials: CredentialService;
   readonly queue: string;
   readonly owner: string;
@@ -191,6 +192,7 @@ async function preflight(options: TurnOptions, held: Held): Promise<TurnResult> 
     account: access.account,
     credentials: options.credentials,
     fetch: options.fetchFor(manifest, channel.instance_host ?? undefined),
+    resolveTxt: options.resolveTxt,
     now,
     clock,
     reconcileQueue: options.registry.queueNames(manifest.id).reconcile,

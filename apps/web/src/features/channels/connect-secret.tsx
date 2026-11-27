@@ -34,7 +34,9 @@ const pasteAnswer = z.union([channelAnswer, challengeAnswer]);
 const statusAnswer = z.object({
   state: z.enum(["waiting", "matched", "expired", "done", "ended"]),
   chat_title: z.string().nullable(),
+  reason: z.enum(["bot_cannot_post"]).nullable(),
 });
+type StatusState = z.infer<typeof statusAnswer>["state"];
 const renewAnswer = z.object({ word: z.string().min(1).max(64) });
 
 const OWN_WORDS: Record<OwnReason, ReactNode> = {
@@ -129,6 +131,7 @@ const stopOf = (error: ApiError): "session" | "gone" | null => {
 function useStatusPoll(base: string) {
   const [status, setStatus] = useState<z.infer<typeof statusAnswer>["state"]>("waiting");
   const [chat, setChat] = useState<string | null>(null);
+  const [held, setHeld] = useState(false);
   const [stopped, setStopped] = useState<"session" | "gone" | null>(null);
   const signInNow = useSignIn();
   const signIn = useRef(signInNow);
@@ -148,6 +151,7 @@ function useStatusPoll(base: string) {
         if (!live) return;
         setStatus(answer.state);
         setChat(answer.chat_title);
+        setHeld(answer.state === "waiting" && answer.reason === "bot_cannot_post");
       }, refused);
     }, POLL_MS);
     return () => {
@@ -155,7 +159,33 @@ function useStatusPoll(base: string) {
       clearInterval(timer);
     };
   }, [status, stopped, base]);
-  return { status, setStatus, chat, stopped };
+  return { status, setStatus, chat, held, stopped };
+}
+
+function StatusWords({ status, chat }: { status: StatusState; chat: string | null }) {
+  switch (status) {
+    case "waiting":
+      return <Trans id="connect.secret.word.waiting">Waiting for the message</Trans>;
+    case "matched":
+      return (
+        <Trans id="connect.secret.word.matched">
+          Found{" "}
+          <span data-testid="challenge-chat">
+            <DirText>{chat ?? ""}</DirText>
+          </span>
+        </Trans>
+      );
+    case "expired":
+      return <Trans id="connect.secret.word.expired">This word has expired.</Trans>;
+    case "ended":
+      return (
+        <Trans id="connect.secret.word.ended">
+          A newer word replaced this one. Close this and use the newest.
+        </Trans>
+      );
+    case "done":
+      return <Trans id="connect.secret.word.done">This chat is connected. You can publish to it now.</Trans>;
+  }
 }
 
 function Waiting({
@@ -172,7 +202,8 @@ function Waiting({
   const [word, setWord] = useState(first.word);
   const { call, busy, failure } = useCall();
   const base = `/api/v1/workspaces/${ws}/connect/${platform.id}/challenge/${first.id}`;
-  const { status, setStatus, chat, stopped } = useStatusPoll(base);
+  const { status, setStatus, chat, held, stopped } = useStatusPoll(base);
+  const provider = platform.display_name;
   // Not ours any more, whichever read or call found out: nothing left to renew or connect.
   const gone = stopped === "gone" || failure === "not_found" || failure === "forbidden";
   const renew = () =>
@@ -201,27 +232,16 @@ function Waiting({
         </DirText>
       </p>
       <p data-testid="challenge-status" data-state={status} role="status" className="text-sm">
-        {status === "waiting" ? (
-          <Trans id="connect.secret.word.waiting">Waiting for the message</Trans>
-        ) : null}
-        {status === "matched" ? (
-          <Trans id="connect.secret.word.matched">
-            Found{" "}
-            <span data-testid="challenge-chat">
-              <DirText>{chat ?? ""}</DirText>
-            </span>
-          </Trans>
-        ) : null}
-        {status === "expired" ? <Trans id="connect.secret.word.expired">This word has expired.</Trans> : null}
-        {status === "ended" ? (
-          <Trans id="connect.secret.word.ended">
-            A newer word replaced this one. Close this and use the newest.
-          </Trans>
-        ) : null}
-        {status === "done" ? (
-          <Trans id="connect.secret.word.done">This chat is connected. You can publish to it now.</Trans>
-        ) : null}
+        <StatusWords status={status} chat={chat} />
       </p>
+      {!held ? null : (
+        <p data-testid="challenge-held" role="status" className="text-sm">
+          <Trans id="connect.secret.word.held">
+            <DirText>{provider}</DirText> received the word, but the bot cannot post in that chat yet. Give
+            the bot the right to post messages, then send the same word again.
+          </Trans>
+        </p>
+      )}
       {!gone ? null : (
         <p data-testid="challenge-gone" role="alert" className="text-sm">
           <Trans id="connect.secret.word.gone">

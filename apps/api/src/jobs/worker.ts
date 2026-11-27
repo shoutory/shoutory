@@ -3,7 +3,7 @@ import { withSystem } from "@shoutory/db/context/system";
 import { withAdvisoryLock } from "@shoutory/db/locks";
 import type { AppPool } from "@shoutory/db/pool";
 import { builtInManifests } from "@shoutory/provider-registry";
-import type { AdapterMap } from "@shoutory/provider-sdk/adapter";
+import type { AdapterContext, AdapterMap } from "@shoutory/provider-sdk/adapter";
 import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import { createRegistry, type Registry } from "@shoutory/provider-sdk/registry";
 import type { PgBoss } from "pg-boss";
@@ -51,6 +51,7 @@ export interface WorkerOptions {
   // A provider with no adapter is admitted but never dispatched (its rows fail).
   readonly adapters?: AdapterMap;
   readonly fetchFor?: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
+  readonly resolveTxt?: AdapterContext["resolveTxt"];
   readonly heartbeatMs?: number;
   readonly relayIntervalMs?: number;
   readonly mailIntervalMs?: number;
@@ -211,7 +212,7 @@ const pause = (ms: number, signal: AbortSignal) =>
     );
   });
 
-type LoopOptions = Pick<ChallengePollDeps, "pool" | "keys" | "fetchFor" | "logger"> & {
+type LoopOptions = Pick<ChallengePollDeps, "pool" | "keys" | "fetchFor" | "resolveTxt" | "logger"> & {
   registry: Registry;
   adapters: AdapterMap;
   credentials: CredentialService;
@@ -287,6 +288,15 @@ async function register(
   await scheduleSweep(boss, logger, media.partsRoot);
 }
 
+// The mail sender's key ring is the instance's, and it also opens the credentials of the channels a send is for; no
+// worker call reaches the network except through an adapter's own egress.
+const mailSecrets = (mail: WorkerOptions["mail"]) => ({
+  keys: mail.keys,
+  pepper: mail.pepper,
+  fetch: refuseEgress(),
+  now: () => new Date(),
+});
+
 // The first beat is made before this returns, so a worker that cannot reach the database fails its start instead of
 // looking alive.
 export async function startWorker({
@@ -299,6 +309,7 @@ export async function startWorker({
   registry = createRegistry(builtInManifests),
   adapters = {},
   fetchFor = refuseEgress,
+  resolveTxt,
   heartbeatMs = HEARTBEAT_MS,
   relayIntervalMs = RELAY_INTERVAL_MS,
   mailIntervalMs = RELAY_INTERVAL_MS,
@@ -312,18 +323,10 @@ export async function startWorker({
   const handlers = { "media.uploaded": mediaUploadedHandler({ pool, logger, ...media }) };
   const relays = createRelays({ pool, handlers, logger, intervalMs: relayIntervalMs });
   const sender = createMailSender({ ...mail, pool, logger, intervalMs: mailIntervalMs });
-  // The mail sender's key ring is the instance's, and it also opens the credentials of the channels a send is for.
-  const credentials = createCredentialService({
-    pool,
-    keys: mail.keys,
-    pepper: mail.pepper,
-    fetch: refuseEgress(),
-    fetchFor,
-    now: () => new Date(),
-    logger,
-    providers: channelProvidersOf(registry, adapters),
-  });
-  const sends = { pool, boss, registry, logger, adapters, fetchFor, credentials, storage: media.storage };
+  const egress = { fetchFor, resolveTxt };
+  const providers = channelProvidersOf(registry, adapters);
+  const credentials = createCredentialService({ ...egress, ...mailSecrets(mail), pool, logger, providers });
+  const sends = { pool, boss, registry, logger, adapters, ...egress, credentials, storage: media.storage };
   const ledger = createLedgerTick({
     ...sends,
     ...(ledgerIntervalMs === undefined ? {} : { intervalMs: ledgerIntervalMs }),

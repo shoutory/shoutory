@@ -33,7 +33,7 @@ export function createHealthChecker(deps: HealthCheckerDeps) {
     const egress = await deps.credentials.egressFor(workspaceId, channelId, provider);
     const { providerAccountId } = await deps.credentials.channelFactsOf(workspaceId, channelId);
     return provider.adapter.inspect(
-      { fetch: egress.fetch, now: deps.now },
+      { fetch: egress.fetch, now: deps.now, resolveTxt: egress.resolveTxt },
       {
         accessToken: token.accessToken,
         ...(egress.instanceHost === undefined ? {} : { instanceHost: egress.instanceHost }),

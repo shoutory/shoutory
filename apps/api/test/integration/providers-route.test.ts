@@ -40,6 +40,15 @@ const instanceManifestOf = (id: string, displayName: string) => {
   return manifestSchema.parse({ ...rest, id, displayName, lifecycle: "beta", egressHostSource: "channel" });
 };
 
+// A provider whose server reads this app's own client document: nothing is registered with it.
+function documentsProvider() {
+  const adapter = createFixtureAdapter({ baseUrl: sim.url, clientId: FAKE_CLIENT, issuer: sim.url });
+  return {
+    adapter: { ...adapter, connect: { ...adapter.connect, publicDocuments: async () => ({}) } },
+    manifest: manifestOf("fixture_docs", "Documents Network", "beta"),
+  };
+}
+
 beforeAll(async () => {
   sim = await startFixtureOAuthSimulator({ now: () => new Date() });
   // Declared in reverse id order, so the sorted answer is the route's doing. The second adapter has no client id and
@@ -47,6 +56,16 @@ beforeAll(async () => {
   fx = await startFixture({
     channels: {
       providers: {
+        fixture_secret: {
+          adapter: createFixtureAdapter({ baseUrl: sim.url }),
+          manifest: manifestSchema.parse({
+            ...fixtureOAuthManifest,
+            id: "fixture_secret",
+            displayName: "Secret Network",
+            auth: { method: "bot_token" },
+          }),
+        },
+        fixture_docs: documentsProvider(),
         fixture_beta: {
           adapter: createFixtureAdapter({ baseUrl: sim.url }),
           manifest: instanceManifestOf("fixture_beta", "Beta Network"),
@@ -112,8 +131,8 @@ describe("what the providers route answers", () => {
     const answer = await providers(user("admin"));
     const text = await answer.text();
     const body = JSON.parse(text) as { data: Array<Record<string, unknown>> };
-    expect(body.data.map((row) => Object.keys(row).sort())).toEqual([ALLOWLIST, ALLOWLIST]);
-    expect(body.data).toEqual([
+    expect(body.data.map((row) => Object.keys(row).sort())).toEqual(body.data.map(() => ALLOWLIST));
+    expect(body.data.filter((row) => ["fixture_alpha", "fixture_beta"].includes(String(row.id)))).toEqual([
       {
         id: "fixture_alpha",
         display_name: "Alpha Network",
@@ -149,12 +168,26 @@ describe("the operator's provider list (instance admins only)", () => {
     expect(answer.status).toBe(200);
     const text = await answer.text();
     const body = JSON.parse(text) as { data: Array<Record<string, unknown>> };
-    const fields = ["auth_kind", "display_name", "id", "lifecycle", "needs_instance_host", "redirect_uri"];
-    expect(body.data.map((row) => Object.keys(row).sort())).toEqual([fields, fields]);
+    const fields = [
+      "auth_kind",
+      "display_name",
+      "id",
+      "lifecycle",
+      "needs_instance_host",
+      "redirect_uri",
+      "registration",
+    ];
+    expect(body.data.map((row) => Object.keys(row).sort())).toEqual(body.data.map(() => fields));
+    // Only a provider that registers a redirect address shows one; the others name what they do instead.
     expect(body.data).toMatchObject([
-      { id: "fixture_alpha", redirect_uri: `${ORIGIN}/api/v1/connect/fixture_alpha/callback` },
-      // An instance provider registers itself on each server, so it has no one URI to register.
-      { id: "fixture_beta", redirect_uri: null, needs_instance_host: true },
+      {
+        id: "fixture_alpha",
+        registration: "redirect_uri",
+        redirect_uri: `${ORIGIN}/api/v1/connect/fixture_alpha/callback`,
+      },
+      { id: "fixture_beta", registration: "per_server", redirect_uri: null, needs_instance_host: true },
+      { id: "fixture_docs", registration: "client_document", redirect_uri: null },
+      { id: "fixture_secret", registration: "none", redirect_uri: null },
     ]);
     for (const internal of fixtureOAuthManifest.scopes) expect(text).not.toContain(internal);
     expect(text).not.toContain(new URL(sim.url).host);

@@ -502,6 +502,7 @@ export const connectChallenges = app.table("connect_challenges", {
   botDigest: bytea("bot_digest"),
   matchedChatId: text("matched_chat_id"),
   matchedTitle: text("matched_title"),
+  waitReason: text("wait_reason"),
 });
 
 export const botClaims = app.table("bot_claims", {

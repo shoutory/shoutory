@@ -21,10 +21,17 @@ export interface RefreshedCredential {
   readonly issuer?: string;
 }
 
-/** What a read of a bot's updates found: the offset to ask from next, and the messages that carry text. */
+/** Why a word that reached a chat cannot be used yet. */
+export type HeldReason = "bot_cannot_post";
+
+/**
+ * What a read of a bot's updates found: the offset to ask from next, the messages that carry text, and the words that
+ * reached a chat the bot cannot use yet (the challenge stays open).
+ */
 export interface ChallengePoll {
   readonly nextOffset: number;
   readonly messages: readonly { readonly text: string; readonly chatId: string; readonly title: string }[];
+  readonly held?: readonly { readonly word: string; readonly reason: HeldReason }[];
 }
 
 export interface AccountIdentity {

@@ -410,6 +410,11 @@ const DEFINERS: Definer[] = [
     callers: ["shoutory_worker"],
   },
   {
+    name: "connect_challenge_hold",
+    args: "p_workspace_id uuid, p_provider_id text, p_bot_digest bytea, p_code_hash bytea, p_reason text",
+    callers: ["shoutory_worker"],
+  },
+  {
     name: "media_caller",
     args: "workspace_id uuid, min_rank integer, job_ok boolean",
     callers: [],

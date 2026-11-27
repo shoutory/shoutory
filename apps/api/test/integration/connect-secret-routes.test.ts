@@ -19,9 +19,6 @@ const checked: string[] = [];
 const manifestOf = (id: string, method: "bot_token" | "webhook_url", host: string) =>
   manifestSchema.parse({ ...fixtureManifest, id, displayName: id, auth: { method }, egressHosts: [host] });
 const connect: ConnectAdapter = {
-  authorize: async () => ({ url: "https://issuer.example.test/" }),
-  exchangeCode: async () => permanent,
-  identity: async () => permanent,
   verifySecret: async (_context, input) => {
     checked.push(input.secret.expose());
     return {
@@ -45,6 +42,7 @@ let workspace: string;
 let other: string;
 const cookies: Record<string, string> = {};
 let challenge = "";
+let outbound = 0;
 
 beforeAll(async () => {
   fx = await startFixture({
@@ -53,7 +51,10 @@ beforeAll(async () => {
         [BOT]: { manifest: manifestOf(BOT, "bot_token", "bots.example.test"), adapter },
         [HOOK]: { manifest: manifestOf(HOOK, "webhook_url", HOOK_HOST), adapter },
       },
-      fetch,
+      fetch: (input, init) => {
+        outbound += 1;
+        return fetch(input, init);
+      },
       pepper: new SealedSecret(PEPPER),
     },
   });
@@ -121,12 +122,72 @@ describe("the paste step and the challenge routes (floor)", () => {
       expect(foreign[0]).toBe(404);
     }
   });
+});
 
-  it("refuses a webhook address on a host the manifest does not list, before any request leaves", async () => {
+describe("what the paste step and the start route refuse", () => {
+  it.each([BOT, HOOK])(
+    "%s has no authorization to start: the start answers not_found and stores no flow",
+    async (id) => {
+      const flows = async () =>
+        Number((await fx.admin((c) => c.query("SELECT count(*) AS n FROM app.oauth_flows"))).rows[0]?.n);
+      const before = await flows();
+      const answer = await call("admin", workspace, "POST", `${id}/start`, {});
+      expect([answer.status, ((await answer.json()) as { error: { code: string } }).error.code]).toEqual([
+        404,
+        "not_found",
+      ]);
+      expect(await flows()).toBe(before);
+    },
+  );
+
+  it.each([BOT, HOOK])(
+    "%s has no authorization to finish: the callback is the refused redirect with no flow stored and no outbound call",
+    async (id) => {
+      const flows = async () =>
+        Number((await fx.admin((c) => c.query("SELECT count(*) AS n FROM app.oauth_flows"))).rows[0]?.n);
+      const [before, calls] = [await flows(), outbound];
+      await fx.admin((c) =>
+        c.query("DELETE FROM app.rate_buckets WHERE scope IN ('connect_start', 'connect_callback')"),
+      );
+      const answer = await fx.request(`/api/v1/connect/${id}/callback?state=abc&code=def`, {
+        headers: { cookie: cookies.admin ?? "" },
+      });
+      const location = new URL(answer.headers.get("location") ?? "", "https://app.example.test");
+      expect([answer.status, location.pathname, location.searchParams.get("reason")]).toEqual([
+        302,
+        "/connect/result",
+        "refused",
+      ]);
+      expect([await flows(), outbound]).toEqual([before, calls]);
+    },
+  );
+});
+
+describe("what the paste step refuses of a webhook address", () => {
+  it.each([
+    ["a host the manifest does not list", "https://evil.example.test/api/webhooks/1/token"],
+    ["a subdomain of the listed host", `https://sub.${HOOK_HOST}/api/webhooks/1/token`],
+    ["plain http", `http://${HOOK_HOST}/api/webhooks/1/token`],
+    ["user information", `https://user:pass@${HOOK_HOST}/api/webhooks/1/token`],
+    ["an empty user", `https://@${HOOK_HOST}/api/webhooks/1/token`],
+    ["a user that makes another host", `https://${HOOK_HOST}\\@evil.example.test/api/webhooks/1/token`],
+    ["an empty authority", `https:///${HOOK_HOST}/api/webhooks/1/token`],
+    ["a tab inside the host", `https://hooks.exam\tple.test/api/webhooks/1/token`],
+    ["a newline inside the host", `https://hooks.example\n.test/api/webhooks/1/token`],
+    ["an uppercase host", `https://${HOOK_HOST.toUpperCase()}/api/webhooks/1/token`],
+    ["a trailing dot", `https://${HOOK_HOST}./api/webhooks/1/token`],
+    ["an internationalised look-alike of the host", `https://hоoks.example.test/api/webhooks/1/token`],
+    ["a punycode look-alike of the host", `https://xn--hooks-5ve.example.test/api/webhooks/1/token`],
+    ["an encoded at sign", `https://${HOOK_HOST}%40evil.example.test/api/webhooks/1/token`],
+    ["a backslash", `https://${HOOK_HOST}\\api/webhooks/1/token`],
+    ["a port", `https://${HOOK_HOST}:8443/api/webhooks/1/token`],
+    ["the default port spelled out", `https://${HOOK_HOST}:443/api/webhooks/1/token`],
+    ["a query", `https://${HOOK_HOST}/api/webhooks/1/token?wait=true`],
+    ["an empty query", `https://${HOOK_HOST}/api/webhooks/1/token?`],
+    ["a fragment", `https://${HOOK_HOST}/api/webhooks/1/token#top`],
+  ])("refuses a webhook address with %s, before any request leaves", async (_name, secret) => {
     const before = checked.length;
-    const answer = await call("admin", workspace, "POST", `${HOOK}/secret`, {
-      secret: "https://evil.example.test/api/webhooks/1/token",
-    });
+    const answer = await call("admin", workspace, "POST", `${HOOK}/secret`, { secret });
     expect(await errorOf(answer)).toEqual([422, "unprocessable_content", "host_not_allowed"]);
     expect(checked).toHaveLength(before);
   });

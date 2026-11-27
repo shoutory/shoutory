@@ -32,6 +32,16 @@ function needsPublicOrigin({ adapter }: HealthProvider, publicOrigin: string): b
   return protocol !== "https:" || hostname === "localhost" || hostname.endsWith(".localhost");
 }
 
+// What an operator does to let a provider's accounts connect: a secret provider needs nothing, an instance provider
+// registers itself on each server, one whose server reads this app's client document publishes it, any other has one
+// redirect address to register.
+function registrationOf(provider: HealthProvider) {
+  if (secretKind(provider) !== null) return "none";
+  if (needsInstanceHost(provider)) return "per_server";
+  if (provider.adapter.connect?.publicDocuments !== undefined) return "client_document";
+  return "redirect_uri";
+}
+
 export function registerProviders(app: App, providers: Providers, publicOrigin: string): void {
   defineRoute(app, {
     method: "get",
@@ -59,15 +69,18 @@ export function registerProviders(app: App, providers: Providers, publicOrigin: 
     access: "user",
     handler: ({ inUserTx }) =>
       asAdmin(inUserTx, async () =>
-        sorted(providers).map(([id, provider]) => ({
-          id,
-          display_name: provider.manifest.displayName,
-          lifecycle: provider.manifest.lifecycle,
-          auth_kind: provider.manifest.auth.method,
-          needs_instance_host: needsInstanceHost(provider),
-          // An instance provider registers its app on each server as it connects, so there is no one URI to register.
-          redirect_uri: needsInstanceHost(provider) ? null : redirectUriOf(publicOrigin, id),
-        })),
+        sorted(providers).map(([id, provider]) => {
+          const registration = registrationOf(provider);
+          return {
+            id,
+            display_name: provider.manifest.displayName,
+            lifecycle: provider.manifest.lifecycle,
+            auth_kind: provider.manifest.auth.method,
+            needs_instance_host: needsInstanceHost(provider),
+            registration,
+            redirect_uri: registration === "redirect_uri" ? redirectUriOf(publicOrigin, id) : null,
+          };
+        }),
       ),
   });
 }

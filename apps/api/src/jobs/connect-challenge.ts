@@ -2,6 +2,7 @@ import { type Aad, FORMAT_VERSION, open, SealedSecret } from "@shoutory/core/cry
 import type { KeyProvider } from "@shoutory/core/keys";
 import { withSystem } from "@shoutory/db/context/system";
 import type { AppPool } from "@shoutory/db/pool";
+import type { AdapterContext } from "@shoutory/provider-sdk/adapter";
 import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import type { ChallengePoll } from "@shoutory/provider-sdk/result";
 import { z } from "zod";
@@ -14,6 +15,7 @@ export interface ChallengePollDeps {
   readonly keys: KeyProvider;
   readonly providers: Readonly<Record<string, HealthProvider>>;
   readonly fetchFor: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
+  readonly resolveTxt?: AdapterContext["resolveTxt"];
   readonly now: () => Date;
   readonly logger: Logger;
 }
@@ -50,6 +52,7 @@ const aadOf = (row: Due): Aad => ({
 const CONNECT_WORD = /^\/connect(?:@\w+)?\s+(\S+)/;
 
 const MATCH = "SELECT app.connect_challenge_match($1, $2, $3, $4, $5)";
+const HOLD = "SELECT app.connect_challenge_hold($1, $2, $3, $4, $5)";
 
 // Reads the updates of every bot that has an unspent challenge, once each, and records the chat that sent a word. The
 // offset moves in the same call, so an update is read once however many passes run.
@@ -73,7 +76,7 @@ export async function runChallengePoll(deps: ChallengePollDeps): Promise<number>
     const updates = await readUpdates(deps, provider, poll, { ...row, salt: row.salt });
     if (updates === undefined) continue;
     try {
-      await recordUpdates(deps, row.bot_digest, updates);
+      await recordUpdates(deps, row, updates);
       read += updates.messages.length;
     } catch (error) {
       databaseError ??= error;
@@ -134,18 +137,24 @@ async function askProvider(
   );
   return poll.call(
     provider.adapter.connect,
-    { fetch: deps.fetchFor(provider.manifest, undefined), now: deps.now },
+    { fetch: deps.fetchFor(provider.manifest, undefined), now: deps.now, resolveTxt: deps.resolveTxt },
     { botToken: new SealedSecret(token.expose()), offset: row.update_offset },
   );
 }
 
-async function recordUpdates(
-  deps: ChallengePollDeps,
-  botDigest: Buffer,
-  updates: ChallengePoll,
-): Promise<void> {
-  const { nextOffset, messages } = updates;
+async function recordUpdates(deps: ChallengePollDeps, row: Due, updates: ChallengePoll): Promise<void> {
+  const { nextOffset, messages, held = [] } = updates;
+  const botDigest = row.bot_digest;
   await withSystem(deps.pool, "connect_challenge_poll", async (tx) => {
+    for (const waiting of held) {
+      await tx.query(HOLD, [
+        row.workspace_id,
+        row.provider_id,
+        botDigest,
+        wordDigest(waiting.word),
+        waiting.reason,
+      ]);
+    }
     for (const message of messages) {
       const word = CONNECT_WORD.exec(message.text)?.[1];
       if (word === undefined) continue;

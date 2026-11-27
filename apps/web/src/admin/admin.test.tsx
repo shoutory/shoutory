@@ -87,6 +87,20 @@ describe("the provider apps screen", () => {
     expect(adminCalls(stub).map(([url]) => url)).toEqual(["/api/v1/admin/providers"]);
   });
 
+  it.each([
+    ["client_document", /publishes its own client document/i],
+    ["none", /own bot token or webhook address/i],
+  ])(
+    "says what a provider with %s registration needs, and shows no redirect address",
+    async (registration, words) => {
+      const row = { ...ADMIN_PROVIDERS[1], id: "fixture_other", display_name: "Other Network", registration };
+      const { host } = await openAdmin("/admin/providers", { adminProviders: () => json({ data: [row] }) });
+      const shown = rowOf(host, "Other Network");
+      expect(shown.textContent).toMatch(words);
+      expect(shown.querySelector('[dir="ltr"]')).toBeNull();
+    },
+  );
+
   it("says there are no providers in this build when the list is empty", async () => {
     const { host } = await openAdmin("/admin/providers", { adminProviders: () => json({ data: [] }) });
     expect(host.querySelector('[data-kind="first-use"]')?.textContent).toMatch(/no providers in this build/i);

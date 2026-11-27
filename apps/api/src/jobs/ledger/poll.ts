@@ -152,6 +152,7 @@ async function pollHeld(
     owner: options.owner,
     adapter,
     fetch: options.fetchFor(manifest, channel.instance_host ?? undefined),
+    resolveTxt: options.resolveTxt,
     account: access.account,
     credentials: options.credentials,
     now,

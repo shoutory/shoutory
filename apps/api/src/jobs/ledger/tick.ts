@@ -4,7 +4,7 @@ import type { StorageDriver } from "@shoutory/core/storage";
 import type { TenantTx } from "@shoutory/db/context";
 import { withSystem } from "@shoutory/db/context/system";
 import type { AppPool } from "@shoutory/db/pool";
-import type { AdapterMap } from "@shoutory/provider-sdk/adapter";
+import type { AdapterContext, AdapterMap } from "@shoutory/provider-sdk/adapter";
 import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import type { Registry } from "@shoutory/provider-sdk/registry";
 import { pastSunset } from "@shoutory/provider-sdk/snapshot";
@@ -82,6 +82,7 @@ export interface LedgerTickOptions {
   readonly logger: Logger;
   readonly adapters?: AdapterMap;
   readonly fetchFor?: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
+  readonly resolveTxt?: AdapterContext["resolveTxt"];
   readonly credentials: CredentialService;
   readonly storage?: StorageDriver;
   readonly clock?: () => Date;
@@ -167,6 +168,7 @@ export function createLedgerTick({
   logger,
   adapters = {},
   fetchFor = refuseEgress,
+  resolveTxt,
   credentials,
   storage,
   clock = () => new Date(),
@@ -192,7 +194,7 @@ export function createLedgerTick({
   // Read-backs and media polls run on a loop of their own: a provider that answers slowly never delays admission or
   // the sweeps.
   async function reconcile(): Promise<void> {
-    const shared = { pool, logger, registry, adapters, fetchFor, credentials, owner, clock };
+    const shared = { pool, logger, registry, adapters, fetchFor, resolveTxt, credentials, owner, clock };
     await step("reconcile", () => reconcileStep({ ...shared, closing: closing.signal }));
     await step("media poll", () =>
       pollStep({ ...shared, closing: closing.signal, ...(storage === undefined ? {} : { storage }) }),

@@ -5,6 +5,7 @@ import { type Entitlements, entitlements as selfHost } from "@shoutory/core/enti
 import type { KeyProvider } from "@shoutory/core/keys";
 import type { StorageDriver } from "@shoutory/core/storage";
 import type { AppPool } from "@shoutory/db/pool";
+import type { AdapterContext } from "@shoutory/provider-sdk/adapter";
 import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import type { MiddlewareHandler } from "hono";
 import { secureHeaders } from "hono/secure-headers";
@@ -79,6 +80,8 @@ export interface AppOptions {
      * user-chosen servers; absent, every provider's calls use `fetch`.
      */
     readonly fetchFor?: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
+    /** Reads the TXT records of a name under the operator's egress policy; absent, an adapter cannot resolve names. */
+    readonly resolveTxt?: AdapterContext["resolveTxt"];
     readonly pepper: SealedSecret;
   };
 }
@@ -93,13 +96,14 @@ function channelServices(options: AppOptions): ChannelServices | undefined {
   const { channels } = options;
   if (!channels) return undefined;
   const now = () => new Date();
-  const { providers, pepper, fetchFor } = channels;
+  const { providers, pepper, fetchFor, resolveTxt } = channels;
   const credentials = createCredentialService({
     pool: options.pool,
     keys: options.keys,
     pepper,
     fetch: channels.fetch,
     fetchFor,
+    resolveTxt,
     now,
     logger: options.logger,
     providers,
@@ -110,6 +114,7 @@ function channelServices(options: AppOptions): ChannelServices | undefined {
     keys: options.keys,
     fetch: channels.fetch,
     ...(fetchFor === undefined ? {} : { fetchFor }),
+    resolveTxt,
     now,
     publicOrigin: options.publicOrigin,
     providers,
@@ -123,6 +128,7 @@ function channelServices(options: AppOptions): ChannelServices | undefined {
     pepper,
     fetch: channels.fetch,
     ...(fetchFor === undefined ? {} : { fetchFor }),
+    resolveTxt,
     now,
     providers,
     credentials,

@@ -126,9 +126,9 @@ describe.each(["en", "ar"] as const)("a platform that takes a pasted webhook add
 
 const bot = { auth_kind: "bot_token", secret_kind: "bot_token" };
 const statusOf =
-  (state: string, chat: string | null = null) =>
+  (state: string, chat: string | null = null, reason: string | null = null) =>
   () =>
-    json({ data: { state, chat_title: chat } });
+    json({ data: { state, chat_title: chat, reason } });
 const tick = async () => {
   act(() => void vi.advanceTimersByTime(2000));
   await settle();
@@ -247,6 +247,29 @@ describe.each(["en", "ar"] as const)("a challenge that has ended (%s)", (locale)
     expect(byId("challenge-complete")).toBeNull();
     expect(byId("challenge-renew")).toBeNull();
     expect(byId("challenge-error")).toBeNull();
+  });
+});
+
+describe.each(["en", "ar"] as const)("a word held because the bot cannot post (%s)", (locale) => {
+  it("says so while the word stays shown, and drops the text once a chat is found", async () => {
+    let reason: string | null = "bot_cannot_post";
+    await waitFor(locale, {
+      challengeStatus: () =>
+        statusOf(reason === null ? "matched" : "waiting", reason === null ? "Team chat" : null, reason)(),
+    });
+    await submit("secret-field", "secret-continue", "123456:bot-token-value");
+    await tick();
+    const held = byId("challenge-held");
+    expect(held?.getAttribute("role")).toBe("status");
+    expect(held?.textContent).toMatch(
+      locale === "en" ? /then send the same word again/i : /الكلمة نفسها مرة أخرى/,
+    );
+    expect(byId("challenge-renew")).toBeNull();
+    expect(byId("challenge-word")?.textContent).toBe("abcd234xyz");
+    reason = null;
+    await tick();
+    expect(byId("challenge-held")).toBeNull();
+    expect(byId("challenge-status")?.dataset.state).toBe("matched");
   });
 });
 

@@ -1,6 +1,7 @@
 import { type Aad, EnvelopeError, FORMAT_VERSION, open, SealedSecret } from "@shoutory/core/crypto";
 import { createAppPool } from "@shoutory/db/pool";
 import type {
+  AdapterContext,
   AuthorizeInput,
   ConnectAdapter,
   ExchangeInput,
@@ -37,7 +38,10 @@ const base = {
 } satisfies Omit<ProviderAdapter, "connect">;
 
 const queue: { text: string; chatId: string; title: string }[] = [];
+const heldQueue: { word: string; reason: "bot_cannot_post" }[] = [];
 const pollCalls: number[] = [];
+let pollResolver = undefined as AdapterContext["resolveTxt"];
+const TXT_ANSWER = ["did=did:plc:poll-row-1"];
 const verified: string[] = [];
 const identityOf = (id: string): ProviderResult => ({
   ok: true,
@@ -54,14 +58,19 @@ const botConnect: ConnectAdapter = {
     verified.push(input.secret.expose());
     return identityOf(`bot-of-${input.secret.expose().split(":")[0]}`);
   },
-  pollChallenge: async (_context, input) => {
+  pollChallenge: async (context, input) => {
+    pollResolver = context.resolveTxt;
     pollCalls.push(input.offset);
     if (input.botToken.expose().startsWith("unreadable-")) throw new Error("the bot could not be read");
     if (input.botToken.expose().startsWith("badoffset-")) {
       return { ok: true, effect: "none", poll: { nextOffset: -1, messages: [] } };
     }
     const messages = queue.splice(0);
-    return { ok: true, effect: "none", poll: { nextOffset: input.offset + messages.length + 1, messages } };
+    return {
+      ok: true,
+      effect: "none",
+      poll: { nextOffset: input.offset + messages.length + 1, messages, held: heldQueue.splice(0) },
+    };
   },
 };
 const hookConnect: ConnectAdapter = {
@@ -174,6 +183,7 @@ function runPoll() {
     keys,
     providers,
     fetchFor: () => fetch,
+    resolveTxt: async () => TXT_ANSWER,
     now: () => new Date(),
     logger,
   }).finally(() => pool.end());
@@ -227,6 +237,25 @@ describe("the poll of the bots' updates", () => {
     const logs = fx.logged.join("\n");
     expect(logs).toContain("connect_challenge_poll_failed");
     expect(logs).not.toContain("secret-bad-value");
+  });
+});
+
+describe("a word sent to a chat the bot cannot post in", () => {
+  it("is held with its reason by a poll whose context carries the name resolver, and the status shows it", async () => {
+    const made = await post(`${BOT}/secret`, { secret: "readable-6:secret-held-value" });
+    const { challenge_id: id, word } = await dataOf<{ challenge_id: string; word: string }>(made);
+    const statusOf = async () =>
+      dataOf(
+        await fx.request(`/api/v1/workspaces/${workspace}/connect/${BOT}/challenge/${id}`, {
+          headers: { cookie: admin.cookie },
+        }),
+      );
+    heldQueue.push({ word, reason: "bot_cannot_post" });
+    await runPoll();
+    expect(await statusOf()).toMatchObject({ state: "waiting", reason: "bot_cannot_post" });
+    expect(await pollResolver?.("_atproto.example.com")).toEqual(TXT_ANSWER);
+    // Left open it would read the queue of the tests after this one.
+    await q("UPDATE app.connect_challenges SET consumed_at = now() WHERE id = $1", [id]);
   });
 });
 

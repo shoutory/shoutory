@@ -11,20 +11,35 @@ const providerSchema = z.object({
   lifecycle: z.enum(["beta", "ga"]),
   auth_kind: z.string(),
   needs_instance_host: z.boolean(),
+  registration: z.enum(["redirect_uri", "per_server", "client_document", "none"]),
   redirect_uri: z.string().nullable(),
 });
 const listSchema = z.array(providerSchema);
 type Provider = z.infer<typeof providerSchema>;
 
 function RedirectUri({ provider }: { provider: Provider }) {
-  if (provider.redirect_uri === null) {
-    return (
-      <Trans id="admin.providers.per_server">
-        Nothing to register: Shoutory registers itself on each server as a person connects.
-      </Trans>
-    );
+  switch (provider.registration) {
+    case "per_server":
+      return (
+        <Trans id="admin.providers.per_server">
+          Nothing to register: Shoutory registers itself on each server as a person connects.
+        </Trans>
+      );
+    case "client_document":
+      return (
+        <Trans id="admin.providers.client_document">
+          Nothing to register: Shoutory publishes its own client document at this instance's public address.
+        </Trans>
+      );
+    case "none":
+      return (
+        <Trans id="admin.providers.none">
+          Nothing to register: each workspace connects with its own bot token or webhook address.
+        </Trans>
+      );
+    case "redirect_uri":
+      return <DirText dir="ltr">{provider.redirect_uri}</DirText>;
   }
-  return <DirText dir="ltr">{provider.redirect_uri}</DirText>;
 }
 
 function ProviderTable({ providers }: { providers: Provider[] }) {

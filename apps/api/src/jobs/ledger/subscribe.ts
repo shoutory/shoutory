@@ -1,6 +1,6 @@
 import type { StorageDriver } from "@shoutory/core/storage";
 import type { AppPool } from "@shoutory/db/pool";
-import type { AdapterMap } from "@shoutory/provider-sdk/adapter";
+import type { AdapterContext, AdapterMap } from "@shoutory/provider-sdk/adapter";
 import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import type { Registry } from "@shoutory/provider-sdk/registry";
 import type { PgBoss } from "pg-boss";
@@ -21,6 +21,7 @@ export interface PublishSubscription {
   readonly logger: Logger;
   readonly adapters: AdapterMap;
   readonly fetchFor: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
+  readonly resolveTxt?: AdapterContext["resolveTxt"];
   readonly credentials: CredentialService;
   readonly owner: string;
   readonly closing: AbortSignal;
@@ -39,7 +40,8 @@ export async function subscribePublish(options: PublishSubscription): Promise<vo
 }
 
 async function drain(options: PublishSubscription, queue: string): Promise<void> {
-  const { pool, logger, registry, adapters, fetchFor, credentials, owner, closing, storage } = options;
+  const { pool, logger, registry, adapters, fetchFor, resolveTxt, credentials, owner, closing, storage } =
+    options;
   for (let turns = 0; turns < MAX_TURNS_PER_JOB; turns++) {
     const result = await runTurn({
       pool,
@@ -47,6 +49,7 @@ async function drain(options: PublishSubscription, queue: string): Promise<void>
       registry,
       adapters,
       fetchFor,
+      resolveTxt,
       credentials,
       queue,
       owner,

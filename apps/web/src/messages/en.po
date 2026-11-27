@@ -1434,6 +1434,14 @@ msgid "admin.providers.per_server"
 msgstr "Nothing to register: Shoutory registers itself on each server as a person connects."
 
 #. js-lingui-explicit-id
+msgid "admin.providers.client_document"
+msgstr "Nothing to register: Shoutory publishes its own client document at this instance's public address."
+
+#. js-lingui-explicit-id
+msgid "admin.providers.none"
+msgstr "Nothing to register: each workspace connects with its own bot token or webhook address."
+
+#. js-lingui-explicit-id
 msgid "admin.flags.title"
 msgstr "Feature flags"
 
@@ -2848,6 +2856,10 @@ msgstr "Webhook address"
 #. js-lingui-explicit-id
 msgid "connect.secret.bot.intro"
 msgstr "Paste the token of the bot you made in <0>{provider}</0>. Shoutory keeps it sealed."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.word.held"
+msgstr "<0>{provider}</0> received the word, but the bot cannot post in that chat yet. Give the bot the right to post messages, then send the same word again."
 
 #. js-lingui-explicit-id
 msgid "connect.secret.bot.label"

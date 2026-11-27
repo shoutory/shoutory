@@ -6,6 +6,8 @@ export interface AdapterContext {
   readonly fetch: typeof fetch;
   readonly now: () => Date;
   readonly media?: MediaReader;
+  // The TXT records of a name, read under the operator's egress policy; the only way an adapter reads DNS.
+  readonly resolveTxt?: ((name: string) => Promise<string[]>) | undefined;
 }
 
 // What the worker holds of the operation's pinned media: the facts to check a file with, and the bytes of one position
@@ -155,9 +157,11 @@ export interface ConnectAdapter {
   // Only for a provider whose accounts live on user-chosen servers. An instance that cannot take part is a result with
   // the code `instance_unsupported`.
   registerApp?(context: AdapterContext, input: RegisterAppInput): Promise<ProviderResult>;
-  authorize(context: AdapterContext, input: AuthorizeInput): Promise<AuthorizeResult>;
-  exchangeCode(context: AdapterContext, input: ExchangeInput): Promise<ProviderResult>;
-  identity(context: AdapterContext, input: IdentityInput): Promise<ProviderResult>;
+  // The three of an OAuth provider; a provider that connects from a pasted secret declares none of them. `identity` may
+  // be left out by one whose `exchangeCode` answers the account.
+  authorize?(context: AdapterContext, input: AuthorizeInput): Promise<AuthorizeResult>;
+  exchangeCode?(context: AdapterContext, input: ExchangeInput): Promise<ProviderResult>;
+  identity?(context: AdapterContext, input: IdentityInput): Promise<ProviderResult>;
   /** The documents the provider's server fetches from this app (client metadata, key set), by file name. */
   publicDocuments?(input: PublicDocumentsInput): Promise<Readonly<Record<string, unknown>>>;
   /** Checks a pasted secret against the provider and answers the account it belongs to. */

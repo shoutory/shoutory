@@ -22,6 +22,7 @@ export interface SecretConnectDeps {
   readonly pepper: SealedSecret;
   readonly fetch: typeof fetch;
   readonly fetchFor?: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
+  readonly resolveTxt?: AdapterContext["resolveTxt"];
   readonly now: () => Date;
   readonly providers: Readonly<Record<string, HealthProvider>>;
   readonly credentials: CredentialService;
@@ -81,15 +82,20 @@ const takenSchema = z.object({
 const statusSchema = z.object({
   state: z.enum(["waiting", "matched", "expired", "done", "ended"]),
   matched_title: z.string().nullable(),
+  reason: z.enum(["bot_cannot_post"]).nullable(),
 });
 
 const refused = (reason: string) =>
   new Refusal("unprocessable_content", `secret refused: ${reason}`, { details: { reason } });
 
+// The raw text is checked as well as the parsed address: parsing drops a default port, an empty query or user, tabs and
+// newlines, and lower-cases the host, so the text before the first slash must be the parsed host exactly.
 function hostAllowed(manifest: Manifest, secret: string): boolean {
-  if (!URL.canParse(secret)) return false;
-  const url = new URL(secret);
-  return url.protocol === "https:" && (manifest.egressHosts ?? []).includes(url.hostname);
+  if (!URL.canParse(secret) || /[?#]/.test(secret)) return false;
+  const authority = /^https:\/\/([^/]*)/.exec(secret)?.[1];
+  if (authority === undefined || authority === "") return false;
+  const { hostname } = new URL(secret);
+  return authority === hostname && (manifest.egressHosts ?? []).includes(hostname);
 }
 
 // An answer the provider gave about the secret itself is a refusal of it; any other failure is the provider's.
@@ -130,7 +136,7 @@ export class SecretConnect {
 
   #context(manifest: Manifest): AdapterContext {
     const egress = this.#deps.fetchFor?.(manifest, undefined) ?? this.#deps.fetch;
-    return { fetch: deadlineFetch(egress), now: this.#deps.now };
+    return { fetch: deadlineFetch(egress), now: this.#deps.now, resolveTxt: this.#deps.resolveTxt };
   }
 
   async paste(
@@ -211,7 +217,7 @@ export class SecretConnect {
     );
     if (!found.rows[0]) throw new Refusal("not_found", "no such challenge");
     const row = statusSchema.parse(found.rows[0]);
-    return { state: row.state, chatTitle: row.matched_title };
+    return { state: row.state, chatTitle: row.matched_title, reason: row.reason };
   }
 
   async renew(scoped: Scoped, caller: Pick<Caller, "workspaceId" | "providerId">, challengeId: string) {

@@ -1,5 +1,12 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { open, SealedSecret } from "@shoutory/core/crypto";
+import type {
+  AdapterContext,
+  AuthorizeInput,
+  ConnectAdapter,
+  ExchangeInput,
+  IdentityInput,
+} from "@shoutory/provider-sdk/adapter";
 import { manifestSchema } from "@shoutory/provider-sdk/manifest";
 import { fixtureOAuthManifest } from "@shoutory/testkit/fixture-oauth/manifest";
 import { startFixtureOAuthSimulator } from "@shoutory/testkit/fixture-oauth/simulator";
@@ -24,6 +31,45 @@ let admin2: User;
 let workspace: string;
 let other: string;
 const adapter = () => createFixtureAdapter({ baseUrl: sim.url, clientId: FAKE_CLIENT, issuer: sim.url });
+// A provider that learns the account during the code exchange, as one that must check it there does.
+const EARLY = "fixture_oauth_early";
+let separateIdentityCalls = 0;
+// What each connect call was given to resolve a name with.
+const resolvers: Record<string, AdapterContext["resolveTxt"]> = {};
+const TXT_ANSWER = ["did=did:plc:txt-row-1"];
+function earlyAdapter() {
+  const real = adapter();
+  const connect = real.connect as Required<ConnectAdapter>;
+  return {
+    ...real,
+    connect: {
+      ...connect,
+      authorize(context: AdapterContext, input: AuthorizeInput) {
+        resolvers.authorize = context.resolveTxt;
+        return connect.authorize(context, input);
+      },
+      async exchangeCode(context: AdapterContext, input: ExchangeInput) {
+        resolvers.exchangeCode = context.resolveTxt;
+        const exchanged = await connect.exchangeCode(context, input);
+        if (!exchanged.ok || !exchanged.credential) return exchanged;
+        const who = await connect.identity(context, { accessToken: exchanged.credential.accessToken });
+        return { ...exchanged, ...(who.identity === undefined ? {} : { identity: who.identity }) };
+      },
+      identity(context: AdapterContext, input: IdentityInput) {
+        separateIdentityCalls += 1;
+        return connect.identity(context, input);
+      },
+    },
+  };
+}
+
+// An adapter that never names the account: its exchange answers none and it has no identity call.
+const NO_ACCOUNT = "fixture_oauth_no_account";
+function noAccountAdapter() {
+  const real = adapter();
+  const { identity: _identity, ...connect } = real.connect as Required<ConnectAdapter>;
+  return { ...real, connect };
+}
 
 beforeAll(async () => {
   sim = await startFixtureOAuthSimulator({ now: () => new Date() });
@@ -32,8 +78,11 @@ beforeAll(async () => {
       providers: {
         [FIRST]: { adapter: adapter(), manifest: manifestOf(FIRST) },
         [SECOND]: { adapter: adapter(), manifest: manifestOf(SECOND) },
+        [EARLY]: { adapter: earlyAdapter(), manifest: manifestOf(EARLY) },
+        [NO_ACCOUNT]: { adapter: noAccountAdapter(), manifest: manifestOf(NO_ACCOUNT) },
       },
       fetch,
+      resolveTxt: async () => TXT_ANSWER,
       pepper: new SealedSecret(PEPPER),
     },
   });
@@ -579,7 +628,63 @@ describe("a successful connect", () => {
     expect(row?.health_checked_at).toBeInstanceOf(Date);
     expect(await countOf("channel_credentials", mine)).toBe(1);
   }, 60_000);
+});
 
+describe("an adapter that names the account at the code exchange", () => {
+  it("keeps the account the code exchange answered and makes no separate account call", async () => {
+    const mine = await ownWorkspace();
+    const started = await fx.request(`/api/v1/workspaces/${mine}/connect/${EARLY}/start`, {
+      method: "POST",
+      headers: { cookie: admin.cookie },
+      body: {},
+    });
+    const redirect = await approved(await authorizeUrl(started));
+    const done = outcomeOf(await callbackAs(admin, redirect, EARLY));
+    expect(done).toMatchObject({ status: 302, path: "/connect/result", reason: null });
+    expect(separateIdentityCalls).toBe(0);
+    expect(await countOf("channels", mine)).toBe(1);
+  }, 60_000);
+
+  it("an adapter that names no account ends as a failed connect, logged with the provider id alone, and stores nothing", async () => {
+    const mine = await ownWorkspace();
+    const started = await fx.request(`/api/v1/workspaces/${mine}/connect/${NO_ACCOUNT}/start`, {
+      method: "POST",
+      headers: { cookie: admin.cookie },
+      body: {},
+    });
+    const redirect = await approved(await authorizeUrl(started));
+    const mark = fx.logged.length;
+    const done = outcomeOf(await callbackAs(admin, redirect, NO_ACCOUNT));
+    expect(done).toMatchObject({ reason: "failed", channel: null });
+    expect(await stored(mine)).toEqual([0, 0]);
+    const warned = fx.logged
+      .slice(mark)
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .filter((line) => line.event === "connect_adapter_incomplete");
+    expect(warned).toHaveLength(1);
+    expect(Object.keys(warned[0] ?? {}).sort()).toEqual(
+      ["event", "level", "msg", "providerId", "time"].sort(),
+    );
+    expect(failureLines(mark)).toEqual([
+      { event: "connect_failed", providerId: NO_ACCOUNT, step: "identity", errorClass: "permanent" },
+    ]);
+  }, 60_000);
+
+  it("hands the adapter the instance's name resolver at the start and at the code exchange", async () => {
+    const mine = await ownWorkspace();
+    const started = await fx.request(`/api/v1/workspaces/${mine}/connect/${EARLY}/start`, {
+      method: "POST",
+      headers: { cookie: admin.cookie },
+      body: {},
+    });
+    await callbackAs(admin, await approved(await authorizeUrl(started)), EARLY);
+    for (const call of ["authorize", "exchangeCode"]) {
+      expect(await resolvers[call]?.("_atproto.example.com"), call).toEqual(TXT_ANSWER);
+    }
+  }, 60_000);
+});
+
+describe("two callbacks at once", () => {
   it("two concurrent callbacks on one state end with one channel row and one exchange", async () => {
     const mine = await ownWorkspace();
     const redirect = await approved(await authorizeUrl(await startAs(admin, {}, mine)));

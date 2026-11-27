@@ -185,7 +185,7 @@ function registerChallenge(app: App, auth: AuthService, secrets: SecretConnect):
         { workspaceId: params.workspace_id, providerId: params.provider_id },
         params.challenge_id,
       );
-      return { state: found.state, chat_title: found.chatTitle };
+      return { state: found.state, chat_title: found.chatTitle, reason: found.reason };
     },
   });
   defineRoute(app, {

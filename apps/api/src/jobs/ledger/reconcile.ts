@@ -17,7 +17,7 @@ import {
 import type { TenantTx } from "@shoutory/db/context";
 import { withSystem } from "@shoutory/db/context/system";
 import type { AppPool } from "@shoutory/db/pool";
-import type { AdapterMap, ProviderAdapter } from "@shoutory/provider-sdk/adapter";
+import type { AdapterContext, AdapterMap, ProviderAdapter } from "@shoutory/provider-sdk/adapter";
 import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import type { Registry } from "@shoutory/provider-sdk/registry";
 import type { CredentialService } from "../../channels/credentials.js";
@@ -46,6 +46,7 @@ export interface ReconcileOptions {
   readonly registry: Registry;
   readonly adapters: AdapterMap;
   readonly fetchFor: (manifest: Manifest, instanceHost: string | undefined) => typeof fetch;
+  readonly resolveTxt?: AdapterContext["resolveTxt"];
   readonly credentials: CredentialService;
   readonly owner: string;
   readonly closing: AbortSignal;
@@ -156,6 +157,7 @@ async function reconcileClaim(
       owner: options.owner,
       adapter,
       fetch: fetchOf,
+      resolveTxt: options.resolveTxt,
       account: access.account,
       credentials: options.credentials,
       now,

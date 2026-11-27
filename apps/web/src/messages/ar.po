@@ -1429,7 +1429,15 @@ msgstr "متاح"
 
 #. js-lingui-explicit-id
 msgid "admin.providers.per_server"
-msgstr "لا شيء للتسجيل: يسجّل Shoutory نفسه على كل خادم عند ربط الحساب."
+msgstr "لا شيء للتسجيل: يسجّل Shoutory نفسه على كل خادم عندما يربط شخص حسابه."
+
+#. js-lingui-explicit-id
+msgid "admin.providers.client_document"
+msgstr "لا شيء للتسجيل: ينشر Shoutory وثيقة التطبيق الخاصة به على العنوان العام لهذه النسخة."
+
+#. js-lingui-explicit-id
+msgid "admin.providers.none"
+msgstr "لا شيء للتسجيل: تربط كل مساحة عمل قناتها برمز البوت أو عنوان الويب هوك الخاص بها."
 
 #. js-lingui-explicit-id
 msgid "admin.flags.title"
@@ -2846,6 +2854,10 @@ msgstr "عنوان الويب هوك"
 #. js-lingui-explicit-id
 msgid "connect.secret.bot.intro"
 msgstr "الصق رمز البوت الذي أنشأته في <0>{provider}</0>. يحتفظ به Shoutory مختومًا."
+
+#. js-lingui-explicit-id
+msgid "connect.secret.word.held"
+msgstr "وصلت الكلمة إلى <0>{provider}</0>، لكن البوت لا يستطيع النشر في هذه المحادثة بعد. امنح البوت صلاحية نشر الرسائل، ثم أرسل الكلمة نفسها مرة أخرى."
 
 #. js-lingui-explicit-id
 msgid "connect.secret.bot.label"

@@ -17,6 +17,10 @@
       "source": "./src/egress/errors.ts",
       "default": "./dist/egress/errors.js"
     },
+    "./egress/txt": {
+      "source": "./src/egress/txt.ts",
+      "default": "./dist/egress/txt.js"
+    },
     "./egress/policy": {
       "source": "./src/egress/policy.ts",
       "default": "./dist/egress/policy.js"
