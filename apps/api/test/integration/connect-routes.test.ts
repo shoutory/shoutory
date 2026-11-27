@@ -8,6 +8,7 @@ import type {
   IdentityInput,
 } from "@shoutory/provider-sdk/adapter";
 import { manifestSchema } from "@shoutory/provider-sdk/manifest";
+import { errorResult } from "@shoutory/provider-sdk/result";
 import { fixtureOAuthManifest } from "@shoutory/testkit/fixture-oauth/manifest";
 import { startFixtureOAuthSimulator } from "@shoutory/testkit/fixture-oauth/simulator";
 import { createFixtureAdapter } from "@shoutory/testkit/fixture-provider/adapter";
@@ -63,6 +64,29 @@ function earlyAdapter() {
   };
 }
 
+// Providers whose sign-in cannot start: authorize answers a failed result, as a handle nobody has would, and the route
+// shows the fixed reason that code stands for.
+const REFUSALS = [
+  ["fixture_oauth_refusing", "login_invalid", "account_not_found"],
+  ["fixture_oauth_refusing_handle", "handle_unresolved", "account_not_found"],
+  ["fixture_oauth_refusing_mismatch", "handle_mismatch", "account_not_found"],
+  ["fixture_oauth_refusing_ambiguous", "handle_ambiguous", "account_not_found"],
+  ["fixture_oauth_refusing_server", "auth_server_unsupported", "instance_unsupported"],
+  ["fixture_oauth_refusing_did", "did_unsupported", "instance_unsupported"],
+  ["fixture_oauth_refusing_other", "pds_unusable", "instance_refused"],
+] as const;
+function refusingAdapter(providerCode: string) {
+  const real = adapter();
+  const connect = real.connect as Required<ConnectAdapter>;
+  return {
+    ...real,
+    connect: {
+      ...connect,
+      authorize: async () => errorResult({ effect: "none", errorClass: "permanent", providerCode }),
+    },
+  };
+}
+
 // An adapter that never names the account: its exchange answers none and it has no identity call.
 const NO_ACCOUNT = "fixture_oauth_no_account";
 function noAccountAdapter() {
@@ -80,6 +104,9 @@ beforeAll(async () => {
         [SECOND]: { adapter: adapter(), manifest: manifestOf(SECOND) },
         [EARLY]: { adapter: earlyAdapter(), manifest: manifestOf(EARLY) },
         [NO_ACCOUNT]: { adapter: noAccountAdapter(), manifest: manifestOf(NO_ACCOUNT) },
+        ...Object.fromEntries(
+          REFUSALS.map(([id, code]) => [id, { adapter: refusingAdapter(code), manifest: manifestOf(id) }]),
+        ),
       },
       fetch,
       resolveTxt: async () => TXT_ANSWER,
@@ -267,6 +294,25 @@ describe("start", () => {
   it("refuses a caller who is not signed in", async () => {
     expect((await startAs(undefined)).status).toBe(401);
   });
+
+  it.each(REFUSALS)(
+    "a sign-in refused as %s answers the refusal with its fixed reason, stores no flow and is no 500",
+    async (provider, _code, reason) => {
+      const flows = async () =>
+        (await q("SELECT 1 FROM app.oauth_flows WHERE user_id = $1", [admin.id])).length;
+      const before = await flows();
+      const answer = await fx.request(`/api/v1/workspaces/${workspace}/connect/${provider}/start`, {
+        method: "POST",
+        headers: { cookie: admin.cookie },
+        body: {},
+      });
+      const body = (await answer.json()) as { error: { code: string; details?: { reason?: string } } };
+      expect(answer.status).toBe(422);
+      expect(body.error.details?.reason).toBe(reason);
+      expect(await flows()).toBe(before);
+    },
+    60_000,
+  );
 });
 
 interface Run {

@@ -145,6 +145,17 @@ interface AppStep {
 // The reasons an instance can be refused with, each fixed: an answer names no host, address or class (no port scanner).
 const INSTANCE_REASONS: ReadonlySet<string> = new Set(["instance_unsupported", "address_not_allowed"]);
 
+// A provider's own refusal codes mapped to the fixed reasons the person is shown: a handle that names no account, a
+// server that cannot take part. The reason names nothing of what was typed.
+const CODE_REASONS: Readonly<Record<string, string>> = {
+  login_invalid: "account_not_found",
+  handle_unresolved: "account_not_found",
+  handle_mismatch: "account_not_found",
+  handle_ambiguous: "account_not_found",
+  auth_server_unsupported: "instance_unsupported",
+  did_unsupported: "instance_unsupported",
+};
+
 const instanceRefused = (reason: string) =>
   new Refusal("unprocessable_content", `instance refused: ${reason}`, { details: { reason } });
 
@@ -152,6 +163,9 @@ const instanceRefused = (reason: string) =>
 function refusalOf(result: ProviderResult | undefined): Refusal {
   const reason = result?.providerCode;
   if (reason !== undefined && INSTANCE_REASONS.has(reason)) return instanceRefused(reason);
+  const mapped =
+    reason !== undefined && Object.hasOwn(CODE_REASONS, reason) ? CODE_REASONS[reason] : undefined;
+  if (mapped !== undefined) return instanceRefused(mapped);
   if (result?.errorClass === "rate_limited") {
     const wait = result.retryAfterMs;
     return new Refusal("too_many_requests", "the instance limited the registration of the app", {
@@ -298,7 +312,7 @@ export class ConnectService {
     const { verifier, challenge } = pkcePair();
     // The provider may push the request, an outbound call, so it runs before the flow is stored and no transaction is open.
     const context = this.#contextOf(provider.manifest, input.instanceHost);
-    const authorized = await connect.authorize(context, {
+    const answer = await connect.authorize(context, {
       state,
       codeChallenge: challenge,
       redirectUri: redirectUriOf(this.#deps.publicOrigin, input.providerId, input.instanceHost),
@@ -306,6 +320,8 @@ export class ConnectService {
       ...(input.loginHint === undefined ? {} : { loginHint: input.loginHint }),
       ...(app === undefined ? {} : { app }),
     });
+    if (!("url" in answer)) throw refusalOf(answer);
+    const authorized = answer;
     const object: FlowObject = {
       code_verifier: verifier,
       ...(authorized.dpopKey === undefined
@@ -569,7 +585,10 @@ export class ConnectService {
   ): Promise<Outcome> {
     const { credential, identity, object } = step.granted;
     const { accessToken, refreshToken, expiresInSeconds } = credential;
-    const dpopKey = credential.dpopPrivateJwk ?? object.dpop_private_jwk;
+    const dpopKey =
+      credential.dpopPrivateJwk === undefined
+        ? object.dpop_private_jwk
+        : JSON.parse(credential.dpopPrivateJwk.expose());
     const issuer = credential.issuer ?? object.issuer;
     const now = this.#deps.now();
     try {

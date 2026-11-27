@@ -124,11 +124,7 @@ export class SecretConnect {
       ? this.#deps.providers[providerId]
       : undefined;
     const method = provider?.manifest.auth.method;
-    if (
-      !provider ||
-      !provider.adapter.connect?.verifySecret ||
-      (method !== "bot_token" && method !== "webhook_url")
-    ) {
+    if (!provider?.adapter.connect?.verifySecret || (method !== "bot_token" && method !== "webhook_url")) {
       throw new Refusal("not_found", "no secret connect for the provider");
     }
     return { provider, kind: method };

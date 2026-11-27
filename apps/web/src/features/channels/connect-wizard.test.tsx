@@ -271,6 +271,7 @@ describe("a platform whose accounts live on servers people choose", () => {
 describe("the reasons a server address was refused", () => {
   it.each<[string, () => Response]>([
     ["host_invalid", () => refusal("unprocessable_content", 422, { reason: "host_invalid" })],
+    ["account_not_found", () => refusal("unprocessable_content", 422, { reason: "account_not_found" })],
     ["instance_unsupported", () => refusal("unprocessable_content", 422, { reason: "instance_unsupported" })],
     ["address_not_allowed", () => refusal("unprocessable_content", 422, { reason: "address_not_allowed" })],
     ["instance_refused", () => refusal("unprocessable_content", 422, { reason: "instance_refused" })],

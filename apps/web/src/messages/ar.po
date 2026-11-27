@@ -2068,6 +2068,10 @@ msgid "connect.start.host_invalid"
 msgstr "هذا ليس عنوان خادم. اكتب العنوان وحده، مثل social.example، ثم حاول مرة أخرى."
 
 #. js-lingui-explicit-id
+msgid "connect.start.account_not_found"
+msgstr "لم نجد هذا الحساب. تحقّق من الاسم ثم حاول مرة أخرى. لم يتغيّر شيء."
+
+#. js-lingui-explicit-id
 msgid "connect.start.instance_unsupported"
 msgstr "هذا الخادم لا يشغّل منصة يستطيع Shoutory الربط بها. تحقّق من العنوان وحاول مرة أخرى."
 

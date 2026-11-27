@@ -115,7 +115,11 @@ const oauthConnect: ConnectAdapter = {
     return {
       ok: true,
       effect: "none",
-      credential: { accessToken: new SealedSecret("par-access-1"), dpopPrivateJwk: DPOP_JWK, issuer: ISSUER },
+      credential: {
+        accessToken: new SealedSecret("par-access-1"),
+        dpopPrivateJwk: new SealedSecret(JSON.stringify(DPOP_JWK)),
+        issuer: ISSUER,
+      },
     };
   },
   identity: async () => identityOf("par-account-1"),

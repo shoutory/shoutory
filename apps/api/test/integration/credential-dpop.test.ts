@@ -47,7 +47,7 @@ const adapter: ProviderAdapter = {
       credential: {
         accessToken: new SealedSecret("access-after-refresh"),
         expiresInSeconds: 1800,
-        dpopPrivateJwk: { ...KEY, d: "a-key-a-refresh-must-not-install" },
+        dpopPrivateJwk: new SealedSecret(JSON.stringify({ ...KEY, d: "a-key-a-refresh-must-not-install" })),
       },
     };
   },

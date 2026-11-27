@@ -159,7 +159,8 @@ export interface ConnectAdapter {
   registerApp?(context: AdapterContext, input: RegisterAppInput): Promise<ProviderResult>;
   // The three of an OAuth provider; a provider that connects from a pasted secret declares none of them. `identity` may
   // be left out by one whose `exchangeCode` answers the account.
-  authorize?(context: AdapterContext, input: AuthorizeInput): Promise<AuthorizeResult>;
+  // A sign-in that cannot start (a handle nobody has, a server that cannot take part) is a failed result, like any call.
+  authorize?(context: AdapterContext, input: AuthorizeInput): Promise<AuthorizeResult | ProviderResult>;
   exchangeCode?(context: AdapterContext, input: ExchangeInput): Promise<ProviderResult>;
   identity?(context: AdapterContext, input: IdentityInput): Promise<ProviderResult>;
   /** The documents the provider's server fetches from this app (client metadata, key set), by file name. */

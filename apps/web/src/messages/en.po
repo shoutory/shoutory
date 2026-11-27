@@ -2070,6 +2070,10 @@ msgid "connect.start.host_invalid"
 msgstr "That is not a server address. Type only the address, like social.example, and try again."
 
 #. js-lingui-explicit-id
+msgid "connect.start.account_not_found"
+msgstr "We could not find that account. Check the name and try again. Nothing was changed."
+
+#. js-lingui-explicit-id
 msgid "connect.start.instance_unsupported"
 msgstr "That server does not run a platform Shoutory can connect to. Check the address and try again."
 

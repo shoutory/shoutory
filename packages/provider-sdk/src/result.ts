@@ -17,7 +17,7 @@ export interface RefreshedCredential {
   readonly refreshToken?: SealedSecret;
   readonly expiresInSeconds?: number;
   /** The key a token is bound to, kept in the sealed token with it. */
-  readonly dpopPrivateJwk?: Readonly<Record<string, unknown>>;
+  readonly dpopPrivateJwk?: SealedSecret;
   readonly issuer?: string;
 }
 

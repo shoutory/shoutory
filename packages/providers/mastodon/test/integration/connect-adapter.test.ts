@@ -96,13 +96,15 @@ describe("authorize asks for the scopes that publishing, read-back and delete ne
     const connect = createMastodonAdapter().connect;
     if (!connect?.authorize || !app)
       throw new Error("the adapter has no authorize or the app was not registered");
-    const { url } = await connect.authorize(recorder().context, {
+    const started = await connect.authorize(recorder().context, {
       instanceHost: HOST,
       app,
       redirectUri: REDIRECT,
       state: "state-1",
       codeChallenge: "challenge-1",
     });
+    if (!("url" in started)) throw new Error("authorize refused");
+    const { url } = started;
     const scope = new URL(url).searchParams.get("scope")?.split(" ") ?? [];
     expect(scope).toEqual(expect.arrayContaining(["read:accounts", "read:statuses", "write:statuses"]));
     expect(mastodonManifest.scopes).toEqual(expect.arrayContaining(scope));

@@ -1,9 +1,10 @@
 import { manifestSchema } from "@shoutory/provider-sdk/manifest";
 
 // Docs only until a live run records the answers: every number is what the cited page says and none was measured.
-const POST_LEXICON = "https://github.com/bluesky-social/atproto/blob/main/lexicons/app/bsky/feed/post.json";
+const POST_LEXICON =
+  "https://github.com/bluesky-social/social-app/blob/main/lexicons/app/bsky/feed/post.json";
 const IMAGES_LEXICON =
-  "https://github.com/bluesky-social/atproto/blob/main/lexicons/app/bsky/embed/images.json";
+  "https://github.com/bluesky-social/social-app/blob/main/lexicons/app/bsky/embed/images.json";
 const CHECKED = "2026-11-27";
 
 export const blueskyManifest = manifestSchema.parse({
@@ -33,7 +34,7 @@ export const blueskyManifest = manifestSchema.parse({
   unverifiedHorizonDays: 30,
   clockSkewSeconds: 120,
   concurrency: 4,
-  refreshErrorMap: { invalid_grant: "revoked", invalid_client: "config" },
+  refreshErrorMap: { invalid_grant: "revoked" },
   absentAnswers: [{ status: 404 }],
   counting: { unit: "graphemes" },
   apiAccess: "official",

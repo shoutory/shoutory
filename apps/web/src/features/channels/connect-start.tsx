@@ -8,6 +8,7 @@ import { useSignIn } from "./channels-hub";
 // The reasons the server gives for a server address a person typed, each with its own words.
 const HOST_REASONS = [
   "host_invalid",
+  "account_not_found",
   "instance_unsupported",
   "address_not_allowed",
   "instance_refused",
@@ -47,6 +48,11 @@ const START_WORDS: Record<StartFailure, ReactNode> = {
   host_invalid: (
     <Trans id="connect.start.host_invalid">
       That is not a server address. Type only the address, like social.example, and try again.
+    </Trans>
+  ),
+  account_not_found: (
+    <Trans id="connect.start.account_not_found">
+      We could not find that account. Check the name and try again. Nothing was changed.
     </Trans>
   ),
   instance_unsupported: (
