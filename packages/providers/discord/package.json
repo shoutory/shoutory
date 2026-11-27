@@ -12,9 +12,18 @@
     "./adapter": {
       "source": "./src/adapter.ts",
       "default": "./dist/adapter.js"
+    },
+    "./simulator": {
+      "source": "./src/simulator.ts",
+      "default": "./dist/simulator.js"
     }
   },
   "dependencies": {
-    "@shoutory/provider-sdk": "workspace:*"
+    "@shoutory/core": "workspace:*",
+    "@shoutory/provider-sdk": "workspace:*",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@shoutory/testkit": "workspace:*"
   }
 }
