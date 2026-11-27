@@ -24,6 +24,7 @@ export interface Operation {
   readonly workspace_id: string;
   readonly channel_id: string;
   readonly variant_id: string;
+  readonly part_index: number;
   readonly provider_id: string;
   readonly idempotency_marker: string;
   readonly frozen_version_id: string | null;
@@ -32,6 +33,8 @@ export interface Operation {
   readonly locale: string | null;
   readonly step_cursor: string | null;
   readonly provider_refs: unknown;
+  /** The remote id an edit or delete acts on: the one the publish of its part answered with. */
+  readonly target_external_id: string | null;
 }
 
 export interface ChannelFacts {
@@ -64,10 +67,17 @@ export const refuseEgress = (): typeof fetch => () =>
 export async function readOperation(pool: AppPool, claim: Claim): Promise<Operation> {
   const { rows } = await inJob(pool, claim.workspaceId, (tx) =>
     tx.query<Operation>(
-      `SELECT o.id, o.workspace_id, o.channel_id, o.variant_id, o.provider_id, o.idempotency_marker, o.frozen_version_id,
-              o.attempt_count, o.step_cursor, o.provider_refs,
+      `SELECT o.id, o.workspace_id, o.channel_id, o.variant_id, o.part_index, o.provider_id, o.idempotency_marker,
+              o.frozen_version_id, o.attempt_count, o.step_cursor, o.provider_refs,
               extract(epoch FROM o.lateness_deadline + o.blocked_total - clock_timestamp())::float8 AS lateness_left_seconds,
-              (SELECT v.locale FROM app.post_variants v WHERE v.workspace_id = o.workspace_id AND v.id = o.variant_id) AS locale
+              (SELECT v.locale FROM app.post_variants v WHERE v.workspace_id = o.workspace_id AND v.id = o.variant_id) AS locale,
+              coalesce(
+                (SELECT p.external_id FROM app.operations p WHERE p.workspace_id = o.workspace_id
+                   AND p.variant_id = o.variant_id AND p.kind = 'publish' AND p.state = 'published'
+                   AND p.part_index = o.part_index ORDER BY p.settled_at DESC LIMIT 1),
+                CASE WHEN o.part_index = 0 THEN
+                  (SELECT v.external_id FROM app.post_variants v WHERE v.workspace_id = o.workspace_id AND v.id = o.variant_id)
+                END) AS target_external_id
          FROM app.operations o WHERE o.id = $1`,
       [claim.id],
     ),
@@ -160,7 +170,7 @@ export async function takeLimits(
   pool: AppPool,
   held: Held,
   channel: ChannelFacts,
-  spender: "turn" | "upload",
+  spender: "turn" | "upload" | "delete",
   stopped: () => boolean,
 ): Promise<PreflightMove | null> {
   for (const limit of held.manifest.rateLimits) {

@@ -474,6 +474,28 @@ async function readBack(context: AdapterContext, post: RemotePost): Promise<Prov
   return { ok: true, effect: "confirmed", externalId: target.id };
 }
 
+const sourceAnswer = z.object({ id: z.string().min(1).max(64), text: z.string(), spoiler_text: z.string() });
+
+// https://docs.joinmastodon.org/methods/statuses/#source (read 2026-11-27): the plain text and content warning of a
+// status, which the status read only gives as HTML.
+async function readSource(context: AdapterContext, post: RemotePost): Promise<ProviderResult> {
+  const channel = channelAccessOf(post.account);
+  const target = targetOf(post);
+  if (channel === undefined || target === undefined) return refusedInput();
+  const answer = await call(context, channel.instanceHost, `${target.path}/source`, {
+    headers: bearer(channel.accessToken),
+  });
+  if (!answer.ok) return answer.result;
+  const source = sourceAnswer.safeParse(answer.json);
+  if (!source.success || source.data.id !== target.id) return unusable();
+  return {
+    ok: true,
+    effect: "none",
+    externalId: target.id,
+    content: { text: source.data.text, settings: { spoiler_text: source.data.spoiler_text } },
+  };
+}
+
 // PUT /api/v1/statuses/:id (docs.joinmastodon.org/methods/statuses/, read 2026-11-27) answers the edited status; a 404
 // is a status that is missing, private or not the account's. Media is not sent: `media_ids` would replace the set.
 // A 5xx or a cut answer may follow an applied edit, and an answer for another status proves nothing, so both are unknown.
@@ -704,6 +726,23 @@ async function pollMedia(context: AdapterContext, input: PollInput): Promise<Pro
   return { ok: true, ...NO_EFFECT, mediaPoll: { ready: true } };
 }
 
+// A status with no content warning reports an empty one, so a frozen version that leaves it unset holds the same.
+function settingsWithDefaults(settings: Readonly<Record<string, string | number | boolean>>) {
+  const parsed = postSettings.safeParse(settings);
+  return parsed.success ? { ...settings, spoiler_text: parsed.data.spoiler_text ?? "" } : settings;
+}
+
 export function createMastodonAdapter(): ProviderAdapter {
-  return { prepare, commit, pollMedia, readBack, edit, delete: remove, inspect, connect };
+  return {
+    prepare,
+    commit,
+    pollMedia,
+    readBack,
+    readSource,
+    settingsWithDefaults,
+    edit,
+    delete: remove,
+    inspect,
+    connect,
+  };
 }

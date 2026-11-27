@@ -65,6 +65,9 @@ const snapshotSchema = z.object({
         channel_id: z.string(),
         locale: z.string().nullable(),
         text: z.string(),
+        parts: z
+          .array(z.object({ kind: z.enum(["thread_reply", "first_comment"]), text: z.string() }))
+          .default([]),
         media: z.array(z.object({ alt_text: z.string().nullable() })),
       }),
     ),
@@ -86,11 +89,24 @@ type Frozen =
       readonly alts: readonly (string | null)[];
       readonly settings: Readonly<Record<string, string | number | boolean>>;
       readonly locale: string | null;
+      /** The part this follow-up replies to; null for the root. */
+      readonly replyToPart: number | null;
     }
   | { readonly reason: "no_frozen_version" | "frozen_snapshot_unreadable" };
 
+type FollowUp = z.infer<typeof snapshotSchema>["draft"]["variants"][number]["parts"][number];
+
+// A thread reply answers the nearest earlier thread reply, else the root; a first comment answers the root.
+function replyTarget(parts: readonly FollowUp[], part: number): number {
+  if (parts[part - 1]?.kind !== "thread_reply") return 0;
+  for (let earlier = part - 1; earlier > 0; earlier--) {
+    if (parts[earlier - 1]?.kind === "thread_reply") return earlier;
+  }
+  return 0;
+}
+
 // The variant is the one of the operation's channel and locale: a post may hold one variant per locale of a channel.
-async function frozenFacts(pool: AppPool, held: Held): Promise<Frozen> {
+export async function frozenFacts(pool: AppPool, held: Held): Promise<Frozen> {
   const { operation } = held;
   if (operation.frozen_version_id === null) return { reason: "no_frozen_version" };
   const { rows } = await inJob(pool, operation.workspace_id, (tx) =>
@@ -103,11 +119,15 @@ async function frozenFacts(pool: AppPool, held: Held): Promise<Frozen> {
     candidate.channel_id === operation.channel_id && candidate.locale === operation.locale;
   const variant = snapshot?.draft.variants.find(ours);
   if (snapshot === undefined || variant === undefined) return { reason: "frozen_snapshot_unreadable" };
+  const part = operation.part_index;
+  const followUp = part === 0 ? undefined : variant.parts[part - 1];
+  if (part > 0 && followUp === undefined) return { reason: "frozen_snapshot_unreadable" };
   return {
-    text: variant.text,
-    alts: variant.media.map((medium) => medium.alt_text),
+    text: followUp?.text ?? variant.text,
+    alts: followUp === undefined ? variant.media.map((medium) => medium.alt_text) : [],
     settings: snapshot.resolved.variants.find(ours)?.settings ?? {},
     locale: variant.locale,
+    replyToPart: followUp === undefined ? null : replyTarget(variant.parts, part),
   };
 }
 
@@ -143,6 +163,8 @@ const factsOf = (held: Held): DispatchFacts => ({
   readBackMode: held.manifest.readBackMode,
   attemptCount: held.operation.attempt_count + 1,
   latenessLeftSeconds: held.operation.lateness_left_seconds,
+  kind: held.claim.kind,
+  targetExternalId: held.operation.target_external_id ?? undefined,
 });
 
 function attemptOf(result: CallResult, outcome: ResultMove): AttemptResult {
@@ -410,7 +432,7 @@ async function commit(
   channel: ChannelFacts,
   text: string,
   media: { reader: MediaReader; ids: readonly string[] },
-  facts: Pick<CommitInput, "settings" | "locale">,
+  facts: Pick<CommitInput, "settings" | "locale" | "replyToExternalId">,
   from: Source = "claimed",
 ): Promise<TurnResult> {
   const timeout = timeoutOf(deps, held);
@@ -435,8 +457,10 @@ async function commit(
 
 // The caller's heartbeat runs until this returns, so the lease holds through the call.
 export async function dispatch(deps: Dispatcher, held: Held, channel: ChannelFacts): Promise<TurnResult> {
-  // This turn only publishes: any other kind goes to a person with nothing sent.
-  if (held.claim.kind !== "publish") {
+  const { kind } = held.claim;
+  if (kind === "edit" || kind === "delete") return actionTurn(deps, held, channel, kind);
+  // Any other kind than a publish goes to a person with nothing sent.
+  if (kind !== "publish") {
     deps.logger.error(
       { operation: held.claim.id, workspace: held.claim.workspaceId, kind: held.claim.kind },
       "operation kind has no worker turn",
@@ -445,13 +469,83 @@ export async function dispatch(deps: Dispatcher, held: Held, channel: ChannelFac
   }
   const frozen = await frozenOrFail(deps, held, "claimed");
   if (isTurn(frozen)) return frozen;
+  const reply = await replyParent(deps, held, frozen);
+  if (isTurn(reply)) return reply;
   if (deps.closing.aborted) return handBack(deps.pool, held, "handed_back");
   const reader = await mediaReader(deps.pool, held, deps.storage, frozen.alts);
   const prepared = await prepare(deps, held, channel, frozen.text, reader);
   if (isTurn(prepared)) return prepared;
   if (deps.closing.aborted) return handBack(deps.pool, held, "handed_back");
   const ids = prepared.map((ref) => ref.id);
-  return commit(deps, held, channel, frozen.text, { reader, ids }, contentFacts(frozen));
+  return commit(deps, held, channel, frozen.text, { reader, ids }, { ...contentFacts(frozen), ...reply });
+}
+
+// A follow-up part answers the post of an earlier part; without that post's remote id there is nothing to answer, and
+// nothing was sent.
+async function replyParent(
+  deps: Dispatcher,
+  held: Held,
+  frozen: Content,
+): Promise<{ replyToExternalId?: string } | TurnResult> {
+  if (frozen.replyToPart === null) return {};
+  const { rows } = await inJob(deps.pool, held.claim.workspaceId, (tx) =>
+    tx.query<{ external_id: string | null }>(
+      `SELECT external_id FROM app.operations WHERE workspace_id = $1 AND variant_id = $2 AND kind = 'publish'
+         AND state = 'published' AND part_index = $3`,
+      [held.claim.workspaceId, held.operation.variant_id, frozen.replyToPart],
+    ),
+  );
+  const parent = rows[0]?.external_id;
+  if (parent !== null && parent !== undefined) return { replyToExternalId: parent };
+  deps.logger.error(
+    { operation: held.claim.id, workspace: held.claim.workspaceId, reason: "no_parent_post" },
+    "operation has nothing to reply to",
+  );
+  return movedOrLost(held, "failed", await move(deps.pool, held, "failed"));
+}
+
+async function deleteBucket(deps: Dispatcher, held: Held, channel: ChannelFacts): Promise<TurnResult | null> {
+  const denied = await takeLimits(deps.pool, held, channel, "delete", () => held.signal.aborted);
+  if (held.signal.aborted) return lostTurn(held);
+  return denied === null ? null : preflightMove(deps.pool, held, denied);
+}
+
+// An edit or a delete acts on the post that the target's publish answered with. It has no prepare step and spends no
+// quota of the manifest's send limits; a delete takes its own bucket before the call.
+async function actionTurn(
+  deps: Dispatcher,
+  held: Held,
+  channel: ChannelFacts,
+  kind: "edit" | "delete",
+): Promise<TurnResult> {
+  const frozen = kind === "edit" ? await frozenOrFail(deps, held, "claimed") : undefined;
+  if (frozen !== undefined && isTurn(frozen)) return frozen;
+  const target = held.operation.target_external_id;
+  const send = kind === "edit" ? deps.adapter.edit : deps.adapter.delete;
+  if (target === null || send === undefined) {
+    deps.logger.error(
+      { operation: held.claim.id, workspace: held.claim.workspaceId, kind, reason: "nothing_to_act_on" },
+      "operation has nothing to send",
+    );
+    return movedOrLost(held, "failed", await move(deps.pool, held, "failed"));
+  }
+  if (deps.closing.aborted) return handBack(deps.pool, held, "handed_back");
+  const refused = kind === "delete" ? await deleteBucket(deps, held, channel) : null;
+  if (refused !== null) return refused;
+  const timeout = timeoutOf(deps, held);
+  if (timeout === null) return handBack(deps.pool, held, "handed_back");
+  const started = await inJob(deps.pool, held.claim.workspaceId, (tx) =>
+    startAttempt(sqlOf(tx), { ...call(deps, held), step: "commit", quotas: {} }),
+  );
+  if (started.outcome !== "started") return lostTurn(held);
+  const post = { externalId: target, account: deps.account };
+  const context = contextFor(deps, held, timeout);
+  const result =
+    frozen === undefined
+      ? await deps.adapter.delete(context, post)
+      : await deps.adapter.edit?.(context, post, { text: frozen.text, ...contentFacts(frozen) });
+  if (held.signal.aborted || result === undefined) return lostTurn(held);
+  return settle(deps, held, channel, { id: started.attemptId, from: "dispatching" }, result);
 }
 
 type Content = Exclude<Frozen, { reason: string }>;

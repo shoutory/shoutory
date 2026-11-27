@@ -78,3 +78,56 @@ export function readBackOutcome(
   // A proven absence goes back to retry only where the manifest allows a resend; otherwise a person decides.
   return { kind: facts.resendAfterUnknown === "same_key_in_window" ? "absent_proven" : "needs_human" };
 }
+
+export type ActionReadOutcome =
+  | {
+      kind: "done";
+      evidence: {
+        kind: "edit_applied" | "removed";
+        level: "read_back";
+        outcome_kind: null;
+        refs: { source: "adapter"; external_id: string };
+      };
+    }
+  | { kind: "needs_human" | "inconclusive" };
+
+const sameLines = (text: string): string => text.replaceAll("\r\n", "\n");
+
+// What a read of the acted-on post says of an unknown edit or delete. A delete is done when the post is gone: one answer
+// of absence is enough, since removal is what was asked. An edit is done only when the post holds the frozen text and
+// settings the adapter could read back; a post that differs, has no readable content or is gone is a person's to decide.
+export function actionReadOutcome(input: {
+  kind: "edit" | "delete";
+  result: CallResult;
+  absentAnswers: readonly { readonly status?: number }[];
+  externalId: string;
+  expected?: { text: string; settings: Readonly<Record<string, string | number | boolean>> };
+}): ActionReadOutcome {
+  const { kind, result, expected } = input;
+  const absent =
+    result.absent === true ||
+    (result.httpStatus !== undefined &&
+      input.absentAnswers.some((answer) => answer.status === result.httpStatus));
+  const done = (evidenceKind: "edit_applied" | "removed"): ActionReadOutcome => ({
+    kind: "done",
+    evidence: {
+      kind: evidenceKind,
+      level: "read_back",
+      outcome_kind: null,
+      refs: { source: "adapter", external_id: input.externalId },
+    },
+  });
+  if (kind === "delete") {
+    if (absent) return done("removed");
+    return { kind: result.ok ? "needs_human" : "inconclusive" };
+  }
+  if (absent) return { kind: "needs_human" };
+  if (!result.ok) return { kind: "inconclusive" };
+  const held = result.content;
+  const matches =
+    held !== undefined &&
+    expected !== undefined &&
+    sameLines(held.text) === sameLines(expected.text) &&
+    Object.entries(held.settings).every(([key, value]) => expected.settings[key] === value);
+  return matches ? done("edit_applied") : { kind: "needs_human" };
+}

@@ -13,7 +13,7 @@ export const mastodonManifest = manifestSchema.parse({
   // read:accounts for verify_credentials, read:statuses so a read-back sees private and direct posts, write:statuses to
   // post and delete, write:media for uploads.
   scopes: ["read:accounts", "read:statuses", "write:statuses", "write:media"],
-  capabilities: ["text", "image", "video", "delete"],
+  capabilities: ["text", "image", "video", "edit", "delete", "thread", "first_comment"],
   readBackMode: "A",
   // The native Idempotency-Key (docs.joinmastodon.org/methods/statuses/, "stored for up to 1 hour"). VERIFY: the window is
   // measured on a live instance before a resend is ever allowed, so a resend after an unknown outcome waits for a
@@ -21,7 +21,15 @@ export const mastodonManifest = manifestSchema.parse({
   idempotency: { mechanism: "header", keyWindowSeconds: 3600, resendAfterUnknown: "read_back_only" },
   // A delete whose outcome is unknown is never sent again on its own: a 404 is confirmed by a read, and a status that is
   // still there after one is an unknown outcome for a person to decide.
-  retrySafety: { prepare: "safe", commit: "read_back_first", readBack: "safe", delete: "never" },
+  // An edit is idempotent (the same text again changes nothing), but a lost answer is still compared with the post's
+  // source before it is sent again.
+  retrySafety: {
+    prepare: "safe",
+    commit: "read_back_first",
+    readBack: "safe",
+    edit: "read_back_first",
+    delete: "never",
+  },
   // 300 calls per 5 minutes per account and 30 media uploads per 30 minutes (docs.joinmastodon.org/api/rate-limits/,
   // read 2026-11-24).
   rateLimits: [
@@ -34,8 +42,8 @@ export const mastodonManifest = manifestSchema.parse({
   egressHostSource: "channel",
   // `default` leaves the visibility out of a create, so the account's own default applies.
   providerDefault: { visibility: "default", sensitive: false, spoiler_text: "" },
-  followUpRoles: [],
-  leaseSeconds: { prepare: 60, commit: 120, readBack: 60, delete: 60 },
+  followUpRoles: ["thread_reply", "first_comment"],
+  leaseSeconds: { prepare: 60, commit: 120, readBack: 60, edit: 60, delete: 60 },
   callTimeoutSeconds: 30,
   // VERIFY: the media page gives no upload time or processing limit; both are chosen here until a live run measures them.
   uploadTimeoutSeconds: 300,

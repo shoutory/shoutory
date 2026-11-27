@@ -220,7 +220,7 @@ const claimOf = (row: z.infer<typeof claimRow>): Claim => ({
 export async function claimReconciles(
   run: SqlRun,
   call: { queue: string; limit: number; owner: string; leaseSeconds: number; classEKinds: readonly string[] },
-): Promise<Claim[]> {
+): Promise<{ leased: Claim[]; claimed: number }> {
   const { rows } = await run("SELECT * FROM app.claim_reconciles($1, $2, $3, $4, $5::text[])", [
     call.queue,
     call.limit,
@@ -228,11 +228,15 @@ export async function claimReconciles(
     call.leaseSeconds,
     call.classEKinds,
   ]);
-  // A row handed to a person has no lease: only the leased rows are parsed and returned.
-  return rows
-    .filter((row) => row.state === "reconciling")
-    .map((row) => claimRow.parse(row))
-    .map(claimOf);
+  // A row handed to a person has no lease: only the leased rows are parsed and returned, and the count says how many
+  // rows the call took, handed or leased.
+  return {
+    leased: rows
+      .filter((row) => row.state === "reconciling")
+      .map((row) => claimRow.parse(row))
+      .map(claimOf),
+    claimed: rows.length,
+  };
 }
 
 // The poll claim leaves the state as it is and raises the token; a row that is not `processing` is left to its lease.

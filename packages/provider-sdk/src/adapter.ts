@@ -129,6 +129,10 @@ export interface ProviderAdapter {
   /** Asks the provider whether media it is still processing are ready; a read, so it never has an effect. */
   pollMedia?(context: AdapterContext, input: PollInput): Promise<ProviderResult>;
   readBack(context: AdapterContext, post: RemotePost): Promise<ProviderResult>;
+  /** Reads the text and content warning a post holds, to compare an edit that may have been applied; a read. */
+  readSource?(context: AdapterContext, post: RemotePost): Promise<ProviderResult>;
+  /** The post settings with the adapter's own defaults filled in, as a source read reports them. */
+  settingsWithDefaults?(settings: PostSettings): PostSettings;
   delete(context: AdapterContext, post: RemotePost): Promise<ProviderResult>;
   edit?(
     context: AdapterContext,

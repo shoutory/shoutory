@@ -62,7 +62,7 @@ export async function runTurn(options: TurnOptions): Promise<TurnResult> {
     claim,
     operation,
     manifest,
-    leaseSeconds: publishLeaseSeconds(manifest.leaseSeconds),
+    leaseSeconds: leaseOf(manifest, claim.kind),
     owner: options.owner,
     now,
     started,
@@ -74,15 +74,44 @@ export async function runTurn(options: TurnOptions): Promise<TurnResult> {
   }
 }
 
-export async function readTarget(pool: AppPool, operation: Operation) {
+// An edit or a delete keeps the lease its own call needs; every other kind keeps the publish one.
+function leaseOf(manifest: Manifest, kind: string): number {
+  const own =
+    kind === "edit"
+      ? manifest.leaseSeconds.edit
+      : kind === "delete"
+        ? manifest.leaseSeconds.delete
+        : undefined;
+  return own ?? publishLeaseSeconds(manifest.leaseSeconds);
+}
+
+// A publish needs a target that is not yet sent; an edit needs a post that is live, and a delete one that is live or
+// already being removed.
+function liveFor(
+  kind: string,
+  variant: { schedule_state: string; presence: string },
+  post: PostFacts,
+): boolean {
+  if (kind === "delete")
+    return variant.schedule_state === "settled" && ["present", "removal_pending"].includes(variant.presence);
+  const live = post.status !== "archived" && post.deleted_at === null;
+  if (kind === "edit") return live && variant.schedule_state === "settled" && variant.presence === "present";
+  return live && variant.schedule_state !== "settled";
+}
+interface PostFacts {
+  readonly status: string;
+  readonly deleted_at: Date | null;
+}
+
+export async function readTarget(pool: AppPool, operation: Operation, kind = "publish") {
   return inJob(pool, operation.workspace_id, async (tx) => {
     const channel = await tx.query<ChannelFacts>(
       `SELECT provider_id, provider_account_id, instance_host, connection_state
          FROM app.channels WHERE id = $1`,
       [operation.channel_id],
     );
-    const variant = await tx.query<{ schedule_state: string }>(
-      "SELECT schedule_state FROM app.post_variants WHERE id = $1",
+    const variant = await tx.query<{ schedule_state: string; presence: string }>(
+      "SELECT schedule_state, presence FROM app.post_variants WHERE id = $1",
       [operation.variant_id],
     );
     const post = await tx.query<{ status: string; deleted_at: Date | null }>(
@@ -90,14 +119,10 @@ export async function readTarget(pool: AppPool, operation: Operation) {
          WHERE v.id = $1`,
       [operation.variant_id],
     );
-    const live = variant.rows[0] !== undefined && post.rows[0] !== undefined;
+    const [variantRow, postRow] = [variant.rows[0], post.rows[0]];
     return {
       channel: channel.rows[0],
-      targetLive:
-        live &&
-        variant.rows[0]?.schedule_state !== "settled" &&
-        post.rows[0]?.status !== "archived" &&
-        post.rows[0]?.deleted_at === null,
+      targetLive: variantRow !== undefined && postRow !== undefined && liveFor(kind, variantRow, postRow),
     };
   });
 }
@@ -106,7 +131,7 @@ export async function readTarget(pool: AppPool, operation: Operation) {
 // as it is now. Any other credential failure is the operator's to fix: the row waits and comes back, and is never
 // failed for it.
 async function afterRevocation(options: TurnOptions, held: Held): Promise<TurnResult> {
-  const { channel, targetLive } = await readTarget(options.pool, held.operation);
+  const { channel, targetLive } = await readTarget(options.pool, held.operation, held.claim.kind);
   if (channel === undefined) return preflightMove(options.pool, held, { to: "failed" });
   const outcome = rereadOutcome({ channelState: channel.connection_state, targetLive });
   const waitSeconds = backoffSeconds(held.operation.attempt_count);
@@ -134,7 +159,7 @@ async function preflight(options: TurnOptions, held: Held): Promise<TurnResult> 
   const { claim, operation, manifest, signal } = held;
   const lost: TurnResult = { kind: "lost", id: claim.id };
   if (closing.aborted) return handBack(pool, held, "closed");
-  const target = await readTarget(pool, operation);
+  const target = await readTarget(pool, operation, claim.kind);
   if (signal.aborted) return lost;
   // A channel the worker cannot see is a removed target, so the operation fails.
   const { channel } = target;

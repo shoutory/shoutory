@@ -118,6 +118,42 @@ const MOVES: [string, CallResult, Partial<DispatchFacts>, object][] = [
     {},
     { row: 21, to: "paused", reasonCode: "provider_cooldown", waitSeconds: 86_400 },
   ],
+  [
+    "an edit that succeeds is applied on the id it acted on",
+    { ok: true, effect: "confirmed", externalId: "other-id" },
+    { kind: "edit", targetExternalId: "p-1" },
+    {
+      row: 17,
+      to: "published",
+      evidence: {
+        kind: "edit_applied",
+        level: "receipt",
+        outcome_kind: null,
+        refs: { source: "adapter", external_id: "p-1" },
+      },
+    },
+  ],
+  [
+    "a delete the adapter confirmed gone with no id is removed on the id it acted on",
+    { ok: true, effect: "none" },
+    { kind: "delete", targetExternalId: "p-1" },
+    {
+      row: 17,
+      to: "published",
+      evidence: {
+        kind: "removed",
+        level: "receipt",
+        outcome_kind: null,
+        refs: { source: "adapter", external_id: "p-1" },
+      },
+    },
+  ],
+  [
+    "a delete that succeeds with no id to act on is an unknown outcome",
+    { ok: true, effect: "confirmed" },
+    { kind: "delete" },
+    { row: 22, to: "unknown_external_state", checkInSeconds: 60, horizonDays: 30 },
+  ],
 ];
 
 // [what the poll answered, the move]

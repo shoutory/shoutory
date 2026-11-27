@@ -26,7 +26,7 @@ describe("the manifest of the instance provider", () => {
 
   it("states the upload timeout and the processing wait the worker bounds a call and a wait with", () => {
     expect([parsed.uploadTimeoutSeconds, parsed.maxProcessingSeconds]).toEqual([300, 600]);
-    expect(parsed.leaseSeconds).toEqual({ prepare: 60, commit: 120, readBack: 60, delete: 60 });
+    expect(parsed.leaseSeconds).toEqual({ prepare: 60, commit: 120, readBack: 60, edit: 60, delete: 60 });
   });
 
   it.each([

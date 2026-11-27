@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CallResult } from "./dispatch.js";
-import { planReconcile, type ReconcileFacts, readBackOutcome } from "./reconcile.js";
+import { actionReadOutcome, planReconcile, type ReconcileFacts, readBackOutcome } from "./reconcile.js";
 
 const A: ReconcileFacts = {
   readBackMode: "A",
@@ -115,6 +115,68 @@ describe("readBackOutcome", () => {
         refs: { source: "adapter", external_id: "p-1" },
       },
     });
+  });
+});
+
+const DONE = (kind: string) => ({
+  kind: "done",
+  evidence: {
+    kind,
+    level: "read_back",
+    outcome_kind: null,
+    refs: { source: "adapter", external_id: "p-1" },
+  },
+});
+const gone: CallResult = { ok: false, effect: "none", httpStatus: 404 };
+const here: CallResult = { ok: true, effect: "none", externalId: "p-1" };
+const holding = (text: string, settings: Record<string, string | number | boolean> = {}): CallResult => ({
+  ...here,
+  content: { text, settings },
+});
+const WANT = { text: "new", settings: { note: "", kept: true } };
+// [case, the read, what the edit says, the outcome]
+const ACTION_READS: [string, "edit" | "delete", CallResult, object][] = [
+  ["a delete whose id answers 404 is removed", "delete", gone, DONE("removed")],
+  ["a delete whose id is still there goes to a person", "delete", here, { kind: "needs_human" }],
+  [
+    "a delete read that fails is inconclusive",
+    "delete",
+    { ok: false, effect: "none", httpStatus: 503 },
+    { kind: "inconclusive" },
+  ],
+  [
+    "an edit whose text and returned settings match is applied, a setting it did not return left alone",
+    "edit",
+    holding("new", { note: "" }),
+    DONE("edit_applied"),
+  ],
+  ["an edit whose text differs goes to a person", "edit", holding("old"), { kind: "needs_human" }],
+  [
+    "an edit whose returned setting differs goes to a person",
+    "edit",
+    holding("new", { note: "other" }),
+    { kind: "needs_human" },
+  ],
+  [
+    "an edit whose returned setting the frozen edit does not hold goes to a person",
+    "edit",
+    holding("new", { unknown: "x" }),
+    { kind: "needs_human" },
+  ],
+  ["an edit read with no content goes to a person", "edit", here, { kind: "needs_human" }],
+  ["an edit whose status is gone goes to a person", "edit", gone, { kind: "needs_human" }],
+  [
+    "an edit read that fails is inconclusive",
+    "edit",
+    { ok: false, effect: "none", httpStatus: 503 },
+    { kind: "inconclusive" },
+  ],
+];
+describe("actionReadOutcome", () => {
+  it.each(ACTION_READS)("%s", (_name, kind, result, outcome) => {
+    expect(
+      actionReadOutcome({ kind, result, absentAnswers: A.absentAnswers, externalId: "p-1", expected: WANT }),
+    ).toEqual(outcome);
   });
 });
 

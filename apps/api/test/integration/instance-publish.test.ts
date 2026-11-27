@@ -23,7 +23,7 @@ useDispatchEnv();
 const LEASE = 12;
 const manifest = {
   ...mastodonManifest,
-  leaseSeconds: { prepare: LEASE, commit: LEASE, readBack: LEASE, delete: LEASE },
+  leaseSeconds: { prepare: LEASE, commit: LEASE, readBack: LEASE, edit: LEASE, delete: LEASE },
   // A hung call ends at its own timeout, which a test keeps short.
   callTimeoutSeconds: 3,
 };

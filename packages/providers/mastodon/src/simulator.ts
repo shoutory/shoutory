@@ -390,6 +390,19 @@ const readStatus =
     return post ? { status: 200, body: statusBody(post, request.headers.host) } : fail(404, NOT_FOUND);
   };
 
+// GET /api/v1/statuses/:id/source (docs.joinmastodon.org/methods/statuses/#source, read 2026-11-27) answers the plain
+// text and content warning of a status the account owns; a stored post carries no content warning here.
+const readSource =
+  (state: State): Handler =>
+  (request) => {
+    const refused = refusedToken(state, request);
+    if (refused) return refused;
+    const post = state.statuses.get(request.params.id ?? "");
+    return post
+      ? { status: 200, body: { id: post.externalId, text: post.text, spoiler_text: "" } }
+      : fail(404, NOT_FOUND);
+  };
+
 // PUT /api/v1/statuses/:id (docs.joinmastodon.org/methods/statuses/, read 2026-11-27): the text of a status the account
 // owns is replaced; a missing status is a 404. The visibility is not an edit parameter and is ignored.
 const editStatus =
@@ -551,6 +564,7 @@ export async function startMastodonSimulator(options: MastodonSimulatorOptions):
     [ROUTES.poll]: readMedium(state),
     [ROUTES.commit]: createStatus(state),
     [ROUTES.readBack]: readStatus(state),
+    "GET /api/v1/statuses/:id/source": readSource(state),
     [ROUTES.delete]: deleteStatus(state),
     [ROUTES.edit]: editStatus(state),
   });

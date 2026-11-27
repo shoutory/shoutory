@@ -157,7 +157,11 @@ export async function makeEnv(o: Options = {}) {
 }
 export type Env = Awaited<ReturnType<typeof makeEnv>>;
 
-const SNAPSHOT = (channel: string) => ({
+export interface ThreadPart {
+  kind: "thread_reply" | "first_comment";
+  text: string;
+}
+const SNAPSHOT = (channel: string, parts: readonly ThreadPart[] = []) => ({
   version: 1,
   draft: {
     variants: [
@@ -166,7 +170,7 @@ const SNAPSHOT = (channel: string) => ({
         locale: null,
         post_type: "text",
         text: "hello dispatch",
-        parts: [],
+        parts,
         settings: {},
         media: [],
       },
@@ -197,6 +201,12 @@ export interface Plant {
   noCredential?: true;
   /** A workspace made by `newWorkspace`; the environment's own when absent. */
   workspace?: string;
+  /** An edit or delete of a post that was published: the variant is settled and holds this remote id. */
+  action?: { kind: "edit" | "delete"; externalId: string; presence?: string };
+  /** Inserted as admission does, with the ledger's triggers running; the state must be a first state. */
+  admitted?: true;
+  /** Follow-up parts of the frozen version. */
+  parts?: readonly ThreadPart[];
 }
 const plantExtras = (o: Plant): Record<string, unknown> => ({
   ...(o.attempts === undefined ? {} : { attempt_count: o.attempts }),
@@ -218,7 +228,7 @@ const plantVersion = async (o: Plant, post: string, channel: string): Promise<st
         [
           o.workspace ?? state.ws,
           post,
-          JSON.stringify(o.unreadable ? { version: 1 } : SNAPSHOT(channel)),
+          JSON.stringify(o.unreadable ? { version: 1 } : SNAPSHOT(channel, o.parts)),
           randomUUID(),
         ],
       )
@@ -250,13 +260,22 @@ export async function plant(
   const ws = o.workspace ?? state.ws;
   const channel = await plantChannel(e.providerId, o);
   const [post] = await rows(
-    "INSERT INTO app.posts (workspace_id, author_kind, author_id, status) VALUES ($1, 'user', $2, 'scheduled') RETURNING id",
-    [ws, randomUUID()],
+    "INSERT INTO app.posts (workspace_id, author_kind, author_id, status) VALUES ($1, 'user', $2, $3) RETURNING id",
+    [ws, randomUUID(), o.action ? "published" : "scheduled"],
   );
   const version = await plantVersion(o, String(post?.id), String(channel?.id));
   const [variant] = await rows(
-    "INSERT INTO app.post_variants (workspace_id, post_id, channel_id, schedule_state) VALUES ($1, $2, $3, 'in_progress') RETURNING id",
-    [ws, post?.id, channel?.id],
+    `INSERT INTO app.post_variants (workspace_id, post_id, channel_id, schedule_state, external_id, published_at, presence)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+    [
+      ws,
+      post?.id,
+      channel?.id,
+      o.action ? "settled" : "in_progress",
+      o.action?.externalId ?? null,
+      o.action ? new Date(Date.now() - 3_600_000) : null,
+      o.action?.presence ?? "present",
+    ],
   );
   const given: Record<string, unknown> = {
     workspace_id: ws,
@@ -264,7 +283,7 @@ export async function plant(
     channel_id: channel?.id,
     provider_id: e.providerId,
     queue: o.reconcile ? e.reconcileQueue : e.queueName,
-    kind: "publish",
+    kind: o.action?.kind ?? "publish",
     state: o.state ?? "pending",
     effect: o.effect ?? "none",
     last_actor: "S",
@@ -277,20 +296,92 @@ export async function plant(
     frozen_snapshot_hash: o.unfrozen ? null : Buffer.alloc(32, 0xab),
     requested_by: randomUUID(),
     lease_seconds: e.lease,
-    fencing_token: 1,
+    fencing_token: o.admitted ? 0 : 1,
     ...plantExtras(o),
   };
-  const names = Object.keys(given);
   return admin(async (client) => {
     await client.query("BEGIN");
     await client.query("SET LOCAL session_replication_role = replica");
-    const made = await client.query(
-      `INSERT INTO app.operations (${names.join(", ")}) VALUES (${names.map((_, i) => `$${i + 1}`).join(", ")}) RETURNING id`,
-      Object.values(given),
-    );
+    // The post the action acts on was published by an operation of its own.
+    if (o.action) await insertOperation(client, earlierPublish(given, o.action.externalId));
+    if (o.admitted) await client.query("SET LOCAL session_replication_role = origin");
+    const made = await insertOperation(client, given);
     await client.query("COMMIT");
-    return made.rows[0].id as string;
+    return made;
   });
+}
+// A scheduled post with a frozen version holding these follow-up parts, due a while ago: the tick admits its root.
+export async function scheduleThread(
+  e: Pick<Env, "providerId">,
+  parts: readonly ThreadPart[],
+): Promise<{ variant: string; post: string }> {
+  const channel = await plantChannel(e.providerId, {});
+  const [post] = await rows(
+    "INSERT INTO app.posts (workspace_id, author_kind, author_id, status) VALUES ($1, 'user', $2, 'scheduled') RETURNING id",
+    [state.ws, randomUUID()],
+  );
+  const version = await plantVersion({ parts }, String(post?.id), channel.id);
+  const [variant] = await rows(
+    `INSERT INTO app.post_variants (workspace_id, post_id, channel_id, schedule_state, due_at, frozen_version_id)
+     VALUES ($1, $2, $3, 'scheduled', now() - interval '2 minutes', $4) RETURNING id`,
+    [state.ws, post?.id, channel.id, version],
+  );
+  return { variant: String(variant?.id), post: String(post?.id) };
+}
+
+// The request to remove a thread: the delete of its highest published part, as the request path will insert it.
+export async function requestDelete(e: Pick<Env, "queueName">, variant: string): Promise<string> {
+  const [top] = await rows(
+    `SELECT * FROM app.operations WHERE variant_id = $1 AND kind = 'publish' AND state = 'published'
+     ORDER BY part_index DESC LIMIT 1`,
+    [variant],
+  );
+  const given: Fields = {
+    workspace_id: top?.workspace_id,
+    variant_id: variant,
+    channel_id: top?.channel_id,
+    provider_id: top?.provider_id,
+    queue: e.queueName,
+    kind: "delete",
+    part_index: top?.part_index,
+    state: "pending",
+    last_actor: "S",
+    due_at: new Date(Date.now() - 120_000),
+    next_attempt_at: new Date(Date.now() - 60_000),
+    lateness_deadline: new Date(Date.now() + 7_200_000),
+    idempotency_marker: `request-${randomUUID()}`,
+    frozen_version_id: top?.frozen_version_id,
+    frozen_snapshot_hash: top?.frozen_snapshot_hash,
+    requested_by: randomUUID(),
+    lease_seconds: top?.lease_seconds,
+  };
+  return admin(async (client) => insertOperation(client, given));
+}
+
+type Fields = Record<string, unknown>;
+const earlierPublish = (given: Fields, externalId: string): Fields => ({
+  ...given,
+  kind: "publish",
+  state: "published",
+  effect: "confirmed",
+  fencing_token: 1,
+  external_id: externalId,
+  settled_at: new Date(),
+  idempotency_marker: `dispatch-${randomUUID()}`,
+  lease_owner: null,
+  lease_expires_at: null,
+  heartbeat_at: null,
+});
+async function insertOperation(
+  client: Parameters<Parameters<typeof withAdminClient>[2]>[0],
+  fields: Fields,
+): Promise<string> {
+  const names = Object.keys(fields);
+  const made = await client.query(
+    `INSERT INTO app.operations (${names.join(", ")}) VALUES (${names.map((_, i) => `$${i + 1}`).join(", ")}) RETURNING id`,
+    Object.values(fields),
+  );
+  return made.rows[0].id as string;
 }
 export const opOf = async (id: string) =>
   (

@@ -23,9 +23,9 @@ import { type Pin, pinMedia } from "../support/ledger-media.js";
 
 useDispatchEnv();
 
-// The unavailable-kind guard: the worker has no turn for these kinds, so it must not run the publish path for them.
-describe("a claimed operation that is not a publish (floor)", () => {
-  it.each(["edit", "delete", "reply"])(
+// The unavailable-kind guard: the worker has no turn for a reply, so it must not run the publish path for it.
+describe("a claimed operation that is not a publish, edit or delete (floor)", () => {
+  it.each(["reply"])(
     "%s is settled needs_human with effect none and zero provider calls",
     async (kind) => {
       const calls: string[] = [];

@@ -67,6 +67,59 @@ describe("an edit of a published status (floor: unknown external state)", () => 
   });
 });
 
+const SOURCE = "GET /api/v1/statuses/:id/source";
+function readSource({ context, account, id }: Awaited<ReturnType<typeof seeded>>) {
+  if (!adapter.readSource) throw new Error("the adapter has no source read");
+  return adapter.readSource(context, { externalId: id, account });
+}
+
+describe("the source of a status", () => {
+  it("answers the text and content warning the status holds after an edit", async () => {
+    const post = await seeded("source-1");
+    await edit(post);
+    expect(await readSource(post)).toMatchObject({
+      ok: true,
+      effect: "none",
+      externalId: post.id,
+      content: { text: "second", settings: { spoiler_text: "" } },
+    });
+  });
+
+  it.each([
+    [
+      "a 404 is absence, carried as its status",
+      { kind: "respond", status: 404, body: { error: "Record not found" } },
+      { ok: false, httpStatus: 404 },
+    ],
+    [
+      "a 200 for another status proves nothing",
+      { kind: "respond", status: 200, body: { id: "109000000000000999", text: "x", spoiler_text: "" } },
+      { ok: false, errorClass: "unknown" },
+    ],
+    [
+      "a 200 that holds no text is unusable",
+      { kind: "respond", status: 200, body: { id: "1" } },
+      { ok: false, errorClass: "unknown" },
+    ],
+  ])("%s", async (_name, fault, expected) => {
+    const post = await seeded("source-2");
+    sim.faults.failNext(SOURCE, fault as Parameters<typeof sim.faults.failNext>[1]);
+    const answer = await readSource(post);
+    expect(answer).toMatchObject(expected);
+    expect(answer.content).toBeUndefined();
+  });
+});
+
+describe("the settings of a source are compared with the frozen ones with the instance's defaults", () => {
+  it.each([
+    ["no settings", {}, { spoiler_text: "" }],
+    ["a content warning", { spoiler_text: "careful" }, { spoiler_text: "careful" }],
+    ["settings that do not parse", { sensitive: "yes" }, { sensitive: "yes" }],
+  ])("%s", (_name, given, expected) => {
+    expect(adapter.settingsWithDefaults?.(given)).toEqual(expected);
+  });
+});
+
 describe("a reply names only an id the instance could have made (floor)", () => {
   it.each([["../accounts/1"], ["1?visibility=direct"], ["a b"], [""], ["9".repeat(65)]])(
     "%j is refused before any request",

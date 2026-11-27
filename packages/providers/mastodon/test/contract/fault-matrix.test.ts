@@ -21,23 +21,6 @@ const rows = faultMatrixRows({
   uploads: true,
 });
 
-// The real manifest declares edit, thread and first comment once the worker can drive them; the adapter's side is proven
-// here against a copy that already does.
-const withFollowUps = manifestSchema.parse({
-  ...mastodonManifest,
-  capabilities: [...mastodonManifest.capabilities, "edit", "thread", "first_comment"],
-  retrySafety: { ...mastodonManifest.retrySafety, edit: "read_back_first" },
-  leaseSeconds: { ...mastodonManifest.leaseSeconds, edit: 60 },
-  followUpRoles: ["thread_reply", "first_comment"],
-});
-const baseIds = new Set(rows.map((row) => row.id));
-const followUpRows = faultMatrixRows({
-  manifest: withFollowUps,
-  badRequestCodes: [],
-  revokedCode: "The access token is invalid",
-  uploads: true,
-}).filter((row) => !baseIds.has(row.id));
-
 const SMALL = {
   image: { mime: "image/png", bytes: new Uint8Array([137, 80, 78, 71, 1, 2, 3]) },
   video: { mime: "video/mp4", bytes: new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112]) },
@@ -90,18 +73,14 @@ function harness(): MatrixHarness {
 }
 
 describe("the Mastodon provider passes the fault matrix", () => {
-  it("declares a manifest the schema accepts, with text, image, video and delete", () => {
-    expect(manifestSchema.parse(mastodonManifest).capabilities).toEqual(["text", "image", "video", "delete"]);
+  it("declares a manifest the schema accepts, with text, image, video, edit, delete, thread and first comment", () => {
+    expect(manifestSchema.parse(mastodonManifest)).toMatchObject({
+      capabilities: ["text", "image", "video", "edit", "delete", "thread", "first_comment"],
+      followUpRoles: ["thread_reply", "first_comment"],
+    });
   });
 
   it.each(rows.map((row): [string, FaultRow] => [row.id, row]))("row %s", async (_id, row) => {
     await row.run(harness());
   });
-
-  it.each(followUpRows.map((row): [string, FaultRow] => [row.id, row]))(
-    "row %s on a manifest that declares edit, thread and first comment",
-    async (_id, row) => {
-      await row.run(harness());
-    },
-  );
 });

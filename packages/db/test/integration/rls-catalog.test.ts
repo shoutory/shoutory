@@ -477,6 +477,18 @@ const DEFINERS: Definer[] = [
     helper: true,
   },
   { name: "ledger_rollup", args: "p_ws uuid, p_variant uuid, p_fired text", callers: [], helper: true },
+  {
+    name: "ledger_thread_parts",
+    args: "p_ws uuid, p_version uuid, p_channel uuid, p_locale text",
+    callers: [],
+    helper: true,
+  },
+  {
+    name: "ledger_insert_follow_up",
+    args: "p_ws uuid, p_variant uuid, p_channel uuid, p_provider text, p_queue text, p_kind text, p_part integer, p_parent uuid, p_marker text, p_requested_by uuid, p_lease integer, p_version uuid, p_hash bytea, p_refused boolean",
+    callers: [],
+    helper: true,
+  },
   { name: "operations_rollup", args: "", callers: [] },
   { name: "operations_usage", args: "", callers: [] },
   {

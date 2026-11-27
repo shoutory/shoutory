@@ -10,6 +10,12 @@ export interface CallResult {
   readonly retryAfterMs?: number | undefined;
   readonly httpStatus?: number | undefined;
   readonly absent?: boolean | undefined;
+  readonly content?:
+    | {
+        readonly text: string;
+        readonly settings: Readonly<Record<string, string | number | boolean>>;
+      }
+    | undefined;
   readonly mediaPoll?: { readonly ready: boolean; readonly checkInSeconds?: number | undefined } | undefined;
 }
 
@@ -19,6 +25,10 @@ export interface DispatchFacts {
   readonly readBackMode: string;
   readonly attemptCount: number;
   readonly latenessLeftSeconds: number;
+  /** The operation's kind; a publish when absent. */
+  readonly kind?: string | undefined;
+  /** The remote id an edit or delete acts on. */
+  readonly targetExternalId?: string | undefined;
 }
 
 const BACKOFF_SECONDS = [60, 300, 900, 3_600, 21_600] as const;
@@ -35,6 +45,16 @@ export type ResultMove =
         level: "receipt";
         outcome_kind: "post";
         refs: { source: "adapter"; external_id: string; permalink?: string };
+      };
+    }
+  | {
+      row: 17;
+      to: "published";
+      evidence: {
+        kind: "edit_applied" | "removed";
+        level: "receipt";
+        outcome_kind: null;
+        refs: { source: "adapter"; external_id: string };
       };
     }
   | { row: 22; to: "unknown_external_state"; checkInSeconds: number; horizonDays: number }
@@ -76,6 +96,19 @@ function rateLimited(result: CallResult, facts: DispatchFacts): ResultMove {
 // A success with no id, or any failure that may have sent the call, is an unknown outcome: success is never simulated
 // and a receipt needs an id.
 export function resultMove(result: CallResult, facts: DispatchFacts): ResultMove {
+  // An edit or a delete answers with no new id: its success is the call's own, and the id it acted on is the one held.
+  const acted = facts.kind === "edit" ? "edit_applied" : facts.kind === "delete" ? "removed" : undefined;
+  if (result.ok && acted !== undefined && facts.targetExternalId !== undefined)
+    return {
+      row: 17,
+      to: "published",
+      evidence: {
+        kind: acted,
+        level: "receipt",
+        outcome_kind: null,
+        refs: { source: "adapter", external_id: facts.targetExternalId },
+      },
+    };
   if (result.ok && result.externalId !== undefined)
     return receipt({ ...result, externalId: result.externalId });
   if (result.ok || result.effect === "possible")

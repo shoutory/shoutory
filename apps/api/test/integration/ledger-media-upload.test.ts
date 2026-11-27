@@ -28,7 +28,7 @@ useDispatchEnv();
 const LEASE = 24;
 const manifest = {
   ...mastodonManifest,
-  leaseSeconds: { prepare: LEASE, commit: LEASE, readBack: LEASE, delete: LEASE },
+  leaseSeconds: { prepare: LEASE, commit: LEASE, readBack: LEASE, edit: LEASE, delete: LEASE },
 };
 const provider = {
   providerId: manifest.id,

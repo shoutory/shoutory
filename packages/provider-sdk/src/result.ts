@@ -51,6 +51,11 @@ export interface ProviderResult {
   readonly effect: Effect;
   readonly externalId?: string;
   readonly permalink?: string;
+  /** What a source read found: the text the post holds now and the post settings the adapter can read back, under the keys of its own settings. */
+  readonly content?: {
+    readonly text: string;
+    readonly settings: Readonly<Record<string, string | number | boolean>>;
+  };
   readonly errorClass?: ProviderErrorClass;
   readonly retryAfterMs?: number;
   readonly providerCode?: string;
