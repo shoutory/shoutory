@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { SealedSecret } from "@shoutory/core/crypto";
+import { withSystem } from "@shoutory/db/context/system";
 import { manifestSchema } from "@shoutory/provider-sdk/manifest";
 import { fixtureOAuthManifest } from "@shoutory/testkit/fixture-oauth/manifest";
 import { createFixtureAdapter } from "@shoutory/testkit/fixture-provider/adapter";
@@ -197,6 +198,21 @@ const stateOf = async (p: Planted) =>
       post: await rows("SELECT status, deleted_at FROM app.posts WHERE id = $1"),
     };
   });
+const publishNowOf = (p: Planted) =>
+  fx.admin(
+    async (client) =>
+      (await client.query("SELECT publish_now FROM app.post_variants WHERE id = $1", [p.variant])).rows[0]
+        .publish_now as boolean,
+  );
+// What the 30-second tick does: publish now only marks the target due, and admission makes its operation.
+const admit = () =>
+  withSystem(fx.db.pool("worker"), "ledger", (tx) =>
+    tx.query("SELECT * FROM app.admit_due_targets(100, $1::jsonb)", [
+      JSON.stringify({
+        fixture_oauth: { margin_seconds: 300, lease_seconds: { publish: 60, delete: 60, edit: 60 } },
+      }),
+    ]),
+  );
 const operationsOf = async (p: Planted, kind: string) =>
   (await stateOf(p)).operations.filter((row) => row.kind === kind);
 
@@ -234,7 +250,10 @@ const ROUTES: Route[] = [
     stage: "draft",
     path: (p) => `${base(p.workspace)}/${p.post}/publish`,
     body: () => ({}),
-    effect: async (p) => (await operationsOf(p, "publish")).length === 1,
+    effect: async (p) => {
+      const [row] = (await stateOf(p)).variants;
+      return row?.schedule_state === "scheduled" && (await publishNowOf(p)) === true;
+    },
   },
   {
     name: "edit",
@@ -509,6 +528,10 @@ describe("one click admits one operation", () => {
       expect(answers.some((answered) => answered.status === 200)).toBe(true);
       expect(answers.every((answered) => answered.status < 500)).toBe(true);
       const kind = route.name === "publish now" ? "publish" : route.name;
+      if (kind === "publish") {
+        await admit();
+        await admit();
+      }
       expect((await operationsOf(p, kind)).length).toBe(1);
     },
   );
@@ -524,6 +547,7 @@ describe("two writers on one target", () => {
       call(user("admin"), route, p, same),
     ]);
     expect(answers.every((answered) => answered.status < 500)).toBe(true);
+    await admit();
     expect((await operationsOf(p, "publish")).length).toBe(1);
   });
 
@@ -546,6 +570,8 @@ describe("two writers on one target", () => {
     const p = await plant("draft");
     const route = ROUTES.find((r) => r.name === "publish now") as Route;
     expect((await call(user("owner"), route, p)).status).toBe(200);
+    expect((await operationsOf(p, "publish")).length).toBe(0);
+    await admit();
     const row = await fx.admin(
       async (client) =>
         (
@@ -556,6 +582,31 @@ describe("two writers on one target", () => {
         ).rows[0],
     );
     expect(row).toEqual({ priority: true, queue: "publish.fixture_oauth" });
+  });
+});
+
+describe("Undo after publish now", () => {
+  it("unschedule leaves no operation and clears publish_now", async () => {
+    const p = await plant("draft");
+    const publish = routeNamed("publish now");
+    const undo = routeNamed("unschedule");
+    expect((await call(user("owner"), publish, p)).status).toBe(200);
+    const flagged = await fx.admin(
+      async (client) =>
+        (await client.query("SELECT publish_now FROM app.post_variants WHERE id = $1", [p.variant])).rows[0]
+          .publish_now,
+    );
+    expect(flagged).toBe(true);
+    expect((await call(user("owner"), undo, p)).status).toBe(200);
+    const after = await stateOf(p);
+    expect(after.operations).toEqual([]);
+    expect(after.variants[0]?.schedule_state).toBe("draft");
+    const cleared = await fx.admin(
+      async (client) =>
+        (await client.query("SELECT publish_now FROM app.post_variants WHERE id = $1", [p.variant])).rows[0]
+          .publish_now,
+    );
+    expect(cleared).toBe(false);
   });
 });
 

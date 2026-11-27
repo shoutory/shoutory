@@ -4,6 +4,7 @@ import { z } from "zod";
 import { Refusal } from "../../errors/refusal.js";
 import { type App, defineRoute } from "../define-route.js";
 import { definerRefusal } from "../definer-refusal.js";
+import { requireIdempotencyKey } from "../idempotency-key.js";
 
 // The definer `resolve_operation` is the authority on rank and on the post's author; the workspace access
 // only narrows the transaction, which lets the audit row be written with the resolution in the same transaction.
@@ -61,6 +62,22 @@ const refusedTime = (reason: string) =>
 
 // A reschedule names its new wall time and the workspace's zone gives the instant; the database refuses an instant
 // that is not ahead. Any other kind takes no time.
+export async function workspaceDue(
+  tx: TenantTx,
+  workspaceId: string,
+  localDue: string,
+  fold: "earlier" | "later" | undefined,
+): Promise<{ local_due: string; due_tz: string; due_at: string }> {
+  const { rows } = await tx.query<{ default_tz: string }>(
+    "SELECT default_tz FROM app.workspaces WHERE id = $1",
+    [workspaceId],
+  );
+  const zone = rows[0]?.default_tz ?? "UTC";
+  const resolved = resolveLocal(localDue, zone, { user: fold ?? null });
+  if (!resolved.ok) throw refusedTime(resolved.code);
+  return { local_due: localDue, due_tz: zone, due_at: resolved.instant };
+}
+
 async function newTime(
   tx: TenantTx,
   workspaceId: string,
@@ -73,14 +90,7 @@ async function newTime(
     return {};
   }
   if (localDue === undefined) throw refusedTime("local_due_required");
-  const { rows } = await tx.query<{ default_tz: string }>(
-    "SELECT default_tz FROM app.workspaces WHERE id = $1",
-    [workspaceId],
-  );
-  const zone = rows[0]?.default_tz ?? "UTC";
-  const resolved = resolveLocal(localDue, zone, { user: fold ?? null });
-  if (!resolved.ok) throw refusedTime(resolved.code);
-  return { local_due: localDue, due_tz: zone, due_at: resolved.instant };
+  return workspaceDue(tx, workspaceId, localDue, fold);
 }
 
 function registerResolve<K extends readonly [string, ...string[]]>(
@@ -123,7 +133,34 @@ function registerResolve<K extends readonly [string, ...string[]]>(
 
 const BASE = "/api/v1/workspaces/{workspace_id}/operations/{operation_id}/resolutions";
 
+// Cancel while no effect has been sent. The definer holds the rule: the Owner, an Admin or the author of the post.
+function registerCancel(app: App, ipHmac: IpHmac): void {
+  defineRoute(app, {
+    method: "post",
+    path: "/api/v1/workspaces/{workspace_id}/operations/{operation_id}/cancel",
+    policy: "session",
+    access: { workspace: "workspace_id", permission: "posts.edit" },
+    params,
+    body: z.strictObject({}),
+    handler: async ({ c, tx, scope, params: ids, clientAddress }) => {
+      requireIdempotencyKey(c);
+      try {
+        await tx.query("SELECT app.operation_cancel($1, $2)", [scope.workspaceId, ids.operation_id]);
+      } catch (error) {
+        throw definerRefusal(error) ?? error;
+      }
+      await tx.query("SELECT app.audit_insert('operation.cancelled', 'operation', $1, $2, $3, '{}'::jsonb)", [
+        ids.operation_id,
+        c.get("requestId"),
+        ipHmac(clientAddress),
+      ]);
+      return { operation_id: ids.operation_id, state: "cancelled" };
+    },
+  });
+}
+
 export function registerOperations(app: App, ipHmac: IpHmac): void {
+  registerCancel(app, ipHmac);
   registerResolve(app, ipHmac, { path: BASE, policy: "session", kinds: SESSION_KINDS });
   registerResolve(app, ipHmac, { path: `${BASE}/confirmed`, policy: "step_up", kinds: STEP_UP_KINDS });
 }

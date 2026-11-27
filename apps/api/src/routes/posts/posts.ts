@@ -9,6 +9,7 @@ import { Refusal } from "../../errors/refusal.js";
 import { type App, type AppEnv, defineRoute } from "../define-route.js";
 import { definerRefusal } from "../definer-refusal.js";
 import { pageAnswer, pageQuery } from "../input.js";
+import { registerPublish } from "./publish.js";
 import { resolveDraft } from "./resolve.js";
 
 const uuid = z.uuid().transform((id) => id.toLowerCase());
@@ -239,7 +240,7 @@ function registerRestore(app: App, providers: Providers, now: () => Date): void 
 export function registerPosts(
   app: App,
   providers: Providers,
-  options: { now?: () => number; auth: { throttle: Throttle } },
+  options: { now?: () => number; auth: { throttle: Throttle; ipHmac: (address: string) => Buffer } },
 ): void {
   const now = () => new Date(options.now?.() ?? Date.now());
   const { throttle } = options.auth;
@@ -249,4 +250,5 @@ export function registerPosts(
   registerChange(app, providers, now, "autosave", throttle);
   registerChange(app, providers, now, "save", throttle);
   registerRestore(app, providers, now);
+  registerPublish(app, options.auth.ipHmac);
 }
