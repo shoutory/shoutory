@@ -2,12 +2,14 @@ import type { AuthorizedScope } from "@shoutory/core/authz/scope";
 import { CONNECTION_STATES, type ConnectionState } from "@shoutory/core/channels/state";
 import type { TenantTx } from "@shoutory/db/context";
 import { z } from "zod";
+import type { CredentialService } from "../../channels/credentials.js";
 import type { HealthChecker, HealthProvider } from "../../channels/health.js";
 import { Refusal } from "../../errors/refusal.js";
 import { nameOf } from "../../names.js";
 import { type App, defineRoute } from "../define-route.js";
 import { definerRefusal } from "../definer-refusal.js";
 import { pageAnswer, pageQuery } from "../input.js";
+import { registerDisconnectRoutes } from "./disconnect.js";
 
 const uuid = z.uuid().transform((id) => id.toLowerCase());
 const workspaceParams = z.strictObject({ workspace_id: uuid });
@@ -16,18 +18,22 @@ const rename = z.strictObject({ nickname: nameOf(200).nullable() });
 
 // An allowlist of columns: no credential or provider secret is ever a field of the answer.
 const ANSWER = `id, provider_id, account_kind, display_name, handle, nickname, avatar, connection_state, state_reason,
-  health, health_checked_at, token_expires_at, reconnect_deadline, capability_epoch`;
+  health, health_checked_at, token_expires_at, disconnected_at, reconnect_deadline, capability_epoch`;
 
 // What the caller may do, said by the server so a screen never derives it. `reconnect` also needs a provider with a
 // connect side (start refuses one without), and `check` a connected channel.
-const ACTION = z.enum(["connect", "reconnect", "check"]);
+const ACTION = z.enum(["connect", "reconnect", "check", "disable", "enable", "rename", "disconnect"]);
 type Action = z.infer<typeof ACTION>;
 const connectionState = z.enum(CONNECTION_STATES);
-const RECONNECTABLE: ReadonlySet<ConnectionState> = new Set([
-  "needs_reconnect",
-  "disconnected",
-  "revoked_by_provider",
-]);
+// What can be done to a channel in each state; `check` also needs a provider the registry holds and `reconnect` one with
+// a connect side.
+const BY_STATE: Readonly<Record<ConnectionState, readonly Action[]>> = {
+  connected: ["check", "disable", "rename", "disconnect"],
+  needs_reconnect: ["reconnect", "disable", "rename", "disconnect"],
+  revoked_by_provider: ["reconnect", "disable", "rename", "disconnect"],
+  disconnected: ["reconnect", "rename"],
+  disabled: ["enable", "rename", "disconnect"],
+};
 
 interface Viewer {
   readonly canManage: boolean;
@@ -48,10 +54,14 @@ const actionRow = z.object({ provider_id: z.string(), connection_state: connecti
 
 function actionsOf(row: Record<string, unknown>, viewer: Viewer): Action[] {
   const { provider_id: providerId, connection_state: state } = actionRow.parse(row);
+  if (!viewer.canManage) return [];
   const provider = registered(viewer.check, providerId);
-  if (!viewer.canManage || !provider) return [];
-  if (state === "connected") return [ACTION.enum.check];
-  return RECONNECTABLE.has(state) && provider.adapter.connect ? [ACTION.enum.reconnect] : [];
+  return BY_STATE[state].filter((action) => {
+    if (action === "check") return provider !== undefined;
+    if (action === "reconnect") return provider?.adapter.connect !== undefined;
+    if (action === "disconnect") return viewer.check !== undefined;
+    return true;
+  });
 }
 
 const pageActionsOf = ({ canManage, check }: Viewer): Action[] =>
@@ -151,7 +161,7 @@ function registerMoves(app: App, ipHmac: IpHmac, check?: ChannelCheck): void {
 }
 
 // Short transactions around one provider read, none open while the provider answers.
-function registerCheck(app: App, { checker, providers }: ChannelCheck): void {
+function registerCheck(app: App, { checker, providers, credentials }: ChannelCheck): void {
   defineRoute(app, {
     method: "post",
     path: "/api/v1/workspaces/{workspace_id}/channels/{channel_id}/check",
@@ -202,7 +212,9 @@ function registerCheck(app: App, { checker, providers }: ChannelCheck): void {
           JSON.stringify(snapshot.limits),
         ]),
       );
-      return scoped(false, (tx, scope) => read(tx, scope, params.channel_id, { checker, providers }));
+      return scoped(false, (tx, scope) =>
+        read(tx, scope, params.channel_id, { checker, providers, credentials }),
+      );
     },
   });
 }
@@ -210,11 +222,13 @@ function registerCheck(app: App, { checker, providers }: ChannelCheck): void {
 export interface ChannelCheck {
   readonly checker: HealthChecker;
   readonly providers: Readonly<Record<string, HealthProvider>>;
+  readonly credentials: CredentialService;
 }
 
 export function registerChannels(app: App, ipHmac: IpHmac, check?: ChannelCheck): void {
   registerReads(app, check);
   registerRename(app, check);
   registerMoves(app, ipHmac, check);
+  registerDisconnectRoutes(app, ipHmac, check);
   if (check) registerCheck(app, check);
 }

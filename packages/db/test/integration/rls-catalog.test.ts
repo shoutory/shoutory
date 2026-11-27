@@ -310,6 +310,7 @@ const DEFINERS: Definer[] = [
     callers: ["shoutory_app"],
   },
   { name: "credential_destroy", args: "workspace_id uuid, channel_id uuid", callers: APP_WORKER },
+  { name: "credential_open_revoking", args: "workspace_id uuid, channel_id uuid", callers: APP_WORKER },
   { name: "credentials_revoking_stale", args: "p_age interval", callers: ["shoutory_worker"] },
   {
     name: "notice_create",

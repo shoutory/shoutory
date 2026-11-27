@@ -23,11 +23,12 @@ import { withSystem } from "@shoutory/db/context/system";
 import { withAdvisoryLock } from "@shoutory/db/locks";
 import type { AppPool } from "@shoutory/db/pool";
 import type { AdapterContext, AdapterMap, ProviderAdapter } from "@shoutory/provider-sdk/adapter";
-import type { Manifest } from "@shoutory/provider-sdk/manifest";
+import { type Manifest, scopeSetOf } from "@shoutory/provider-sdk/manifest";
 import type { Registry } from "@shoutory/provider-sdk/registry";
 import type { ProviderResult } from "@shoutory/provider-sdk/result";
 import { z } from "zod";
 import type { Logger } from "../logging/logger.js";
+import { readApp } from "./instance-app.js";
 import { readProviderApp } from "./provider-app.js";
 
 // The provider is called between short transactions with none open, and its timeout stays below the lease.
@@ -108,6 +109,8 @@ const usableOf = (opened: { accessToken: SealedSecret; dpopKey: SealedSecret | u
   accessToken: opened.accessToken,
   ...(opened.dpopKey === undefined ? {} : { dpopKey: opened.dpopKey }),
 });
+
+export type RevokeOutcome = "done" | "failed" | "unsupported";
 
 export type Usable =
   | { readonly kind: "ok"; readonly accessToken: SealedSecret; readonly dpopKey?: SealedSecret }
@@ -214,11 +217,14 @@ const callOf = (definer: string, params: unknown[]): [string, unknown[]] => [
   params,
 ];
 
-async function readOpenRow(pool: AppPool, workspaceId: string, channelId: string): Promise<OpenRow> {
+async function readOpenRow(
+  pool: AppPool,
+  workspaceId: string,
+  channelId: string,
+  definer: "credential_open" | "credential_open_revoking" = "credential_open",
+): Promise<OpenRow> {
   const ctx: TenantCtx = { principalKind: "job", principalId: randomUUID(), workspaceIds: [workspaceId] };
-  const found = await withTenant(pool, ctx, (tx) =>
-    tx.query(...callOf("credential_open", [workspaceId, channelId])),
-  );
+  const found = await withTenant(pool, ctx, (tx) => tx.query(...callOf(definer, [workspaceId, channelId])));
   if (!found.rows[0]) throw new CredentialError("the channel has no usable credential");
   return openRowSchema.parse(found.rows[0]);
 }
@@ -382,6 +388,61 @@ export class CredentialService {
       // A token with no expiry lives until the provider says otherwise.
       alive: left === undefined || left > 0,
     };
+  }
+
+  // The app a token was issued to, for a provider that revokes with it: the instance-wide one, or the one of the
+  // channel's own instance.
+  async #appOfToken(workspaceId: string, provider: ChannelProvider, instanceHost: string | undefined) {
+    if (provider.adapter.connect?.appKind === "provider") {
+      return this.#providerAppOf(workspaceId, provider.manifest.id, provider);
+    }
+    if (instanceHost === undefined) return undefined;
+    const key = {
+      workspaceId,
+      providerId: provider.manifest.id,
+      instanceHost,
+      scopes: scopeSetOf(provider.manifest),
+    };
+    return this.#asJob(workspaceId, (tx) => readApp(tx, this.#deps.keys, key));
+  }
+
+  // Ends the token at the provider once a disconnect has committed, with no transaction open. `unsupported` when the
+  // adapter cannot; `failed` when the provider refused or could not be reached (only the class is logged), which the
+  // caller tells the person. Neither stops the destroy.
+  async revoke(workspaceId: string, channelId: string, provider: ChannelProvider): Promise<RevokeOutcome> {
+    const { adapter } = provider;
+    if (adapter.revoke === undefined) return "unsupported";
+    try {
+      const row = await readOpenRow(this.#deps.pool, workspaceId, channelId, "credential_open_revoking");
+      const token = this.#tokenOf(row, workspaceId, channelId);
+      const egress = await this.egressFor(workspaceId, channelId, provider);
+      const { providerAccountId } = await this.channelFactsOf(workspaceId, channelId);
+      const app = await this.#appOfToken(workspaceId, provider, egress.instanceHost);
+      await adapter.revoke(
+        { fetch: egress.fetch, now: this.#deps.now, resolveTxt: egress.resolveTxt },
+        {
+          accessToken: new SealedSecret(token.access_token),
+          ...(egress.instanceHost === undefined ? {} : { instanceHost: egress.instanceHost }),
+          ...(providerAccountId === undefined ? {} : { providerAccountId }),
+          ...(token.dpop_private_jwk === undefined
+            ? {}
+            : { dpopKey: new SealedSecret(JSON.stringify(token.dpop_private_jwk)) }),
+          ...(app === undefined ? {} : { app }),
+        },
+      );
+      return "done";
+    } catch (error) {
+      this.#deps.logger.warn(
+        {
+          event: "revoke_failed",
+          workspaceId,
+          channelId,
+          error: error instanceof Error ? error.name : "NonError",
+        },
+        "the provider did not end the token",
+      );
+      return "failed";
+    }
   }
 
   // The token a call is made with: refreshed first when it is due. A refresh that failed for a while leaves the stored

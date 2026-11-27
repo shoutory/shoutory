@@ -82,6 +82,11 @@ export interface InspectInput {
   readonly dpopKey?: SealedSecret;
 }
 
+// What a provider that can end a token needs: the opened credential, and the app the token was issued to.
+export interface RevokeInput extends InspectInput {
+  readonly app?: AppCredentials;
+}
+
 export interface AppCredentials {
   readonly clientId: string;
   readonly clientSecret: SealedSecret;
@@ -198,5 +203,7 @@ export interface ProviderAdapter {
   ): Promise<ProviderResult>;
   refresh?(context: AdapterContext, input: RefreshInput): Promise<ProviderResult>;
   inspect(context: AdapterContext, input: InspectInput): Promise<ProviderResult>;
+  /** Ends the access token at the provider. Its presence is the capability; it throws when the provider refuses. */
+  revoke?(context: AdapterContext, input: RevokeInput): Promise<void>;
   connect?: ConnectAdapter;
 }

@@ -20,6 +20,8 @@ const DEFINERS = [
   "member_remove",
   "channel_disable",
   "channel_enable",
+  "channel_disconnect",
+  "credential_destroy",
   "channel_connect",
   "channel_check_begin",
   "oauth_flow_put",

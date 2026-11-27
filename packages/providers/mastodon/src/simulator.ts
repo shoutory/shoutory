@@ -220,6 +220,18 @@ const token =
     };
   };
 
+// https://docs.joinmastodon.org/methods/oauth/ (read 2026-11-27): 200 with an empty object once the token is ended, 403
+// when the client or its secret is not the one the token was issued to.
+const revokeToken =
+  (state: State): Handler =>
+  (request) => {
+    const fields = formOf(request.body);
+    const app = state.apps.find((candidate) => candidate.clientId === fields.client_id);
+    if (!app || app.clientSecret !== fields.client_secret) return fail(403, "unauthorized_client");
+    state.tokens = state.tokens.filter((held) => held !== fields.token);
+    return { status: 200, body: {} };
+  };
+
 function issue(state: State): string {
   const access = `token-${randomBytes(24).toString("base64url")}`;
   state.tokens.push(access);
@@ -558,6 +570,7 @@ export async function startMastodonSimulator(options: MastodonSimulatorOptions):
     "POST /api/v1/apps": registerApp(state),
     "GET /oauth/authorize": authorize(state),
     "POST /oauth/token": token(state),
+    "POST /oauth/revoke": revokeToken(state),
     "GET /api/v1/accounts/verify_credentials": verifyCredentials(state),
     "GET /api/v2/instance": instance(state),
     [ROUTES.upload]: uploadMedia(state),

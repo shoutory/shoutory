@@ -134,7 +134,7 @@ function channelServices(options: AppOptions): ChannelServices | undefined {
     credentials,
     connect,
   });
-  return { check: { checker, providers }, connect, secrets };
+  return { check: { checker, providers, credentials }, connect, secrets };
 }
 
 const SELF = ["'self'"];

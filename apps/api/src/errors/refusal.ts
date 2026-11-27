@@ -36,7 +36,14 @@ interface SettingIssue {
   readonly key: string;
   readonly reason: "undeclared" | "type";
 }
-export type RefusalDetails = Readonly<Record<string, string | boolean | readonly SettingIssue[]>>;
+// What the person may do about a refusal, in words the screens know, and the work that stands in the way.
+interface Blocking {
+  readonly kind: "operation";
+  readonly id: string;
+}
+export type RefusalDetails = Readonly<
+  Record<string, string | boolean | readonly SettingIssue[] | readonly string[] | readonly Blocking[]>
+>;
 
 interface RefusalOptions extends ErrorOptions {
   /** Fixed values and the caller's own setting names only: they are sent to the client. */

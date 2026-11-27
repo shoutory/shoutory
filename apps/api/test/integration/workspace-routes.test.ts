@@ -83,7 +83,9 @@ describe("PATCH /api/v1/workspaces/{workspace_id}", () => {
       expect(data.lateness_tolerance_minutes).toBe(minutes);
     },
   );
+});
 
+describe("who may change the workspace settings, and a slug that is taken", () => {
   it("refuses an Editor changing it with 403", async () => {
     const editor = await signedUser(fx, "profile-editor");
     await addWorkspaceMember(fx, workspaceId, editor.id, "editor");

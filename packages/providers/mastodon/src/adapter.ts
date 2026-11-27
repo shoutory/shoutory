@@ -18,6 +18,7 @@ import {
   type ProviderAdapter,
   type RegisterAppInput,
   type RemotePost,
+  type RevokeInput,
 } from "@shoutory/provider-sdk/adapter";
 import { isPolicyRefusal } from "@shoutory/provider-sdk/egress/errors";
 import { scopeSetOf } from "@shoutory/provider-sdk/manifest";
@@ -364,6 +365,26 @@ async function inspect(context: AdapterContext, input: InspectInput): Promise<Pr
   if (!who.found) return who.result;
   const limits = await instanceLimits(context, input.instanceHost);
   return { ok: true, ...NO_EFFECT, health: "ok", ...(limits.found ? limits.value : {}) };
+}
+
+// Built from https://docs.joinmastodon.org/methods/oauth/ (POST /oauth/revoke with client_id, client_secret and token;
+// 200 with an empty object, 403 when the token was not issued to the app), read 2026-11-27. The message carries the
+// status only, never a body or a secret.
+async function revoke(context: AdapterContext, input: RevokeInput): Promise<void> {
+  if (input.instanceHost === undefined || input.app === undefined) {
+    throw new Error("a revoke needs the instance host and its app");
+  }
+  const answer = await call(
+    context,
+    input.instanceHost,
+    "/oauth/revoke",
+    form({
+      client_id: input.app.clientId,
+      client_secret: input.app.clientSecret.expose(),
+      token: input.accessToken.expose(),
+    }),
+  );
+  if (!answer.ok) throw new Error(`the instance refused the revoke (${answer.status ?? "no answer"})`);
 }
 
 const connect: ConnectAdapter = {
@@ -746,6 +767,7 @@ export function createMastodonAdapter(): ProviderAdapter {
     edit,
     delete: remove,
     inspect,
+    revoke,
     connect,
   };
 }

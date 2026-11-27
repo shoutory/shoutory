@@ -80,21 +80,21 @@ const actionsOf = async (r: Registered, who: string, id: string) =>
 
 describe("the actions of a channel follow the caller's role, the state and the provider", () => {
   it.each<[role: string, provider: string, state: string, expected: string[]]>([
-    ["admin", CONNECTING, "connected", ["check"]],
-    ["owner", CONNECTING, "connected", ["check"]],
+    ["admin", CONNECTING, "connected", ["check", "disable", "rename", "disconnect"]],
+    ["owner", CONNECTING, "connected", ["check", "disable", "rename", "disconnect"]],
     ["editor", CONNECTING, "connected", []],
-    ["admin", CONNECTING, "needs_reconnect", ["reconnect"]],
-    ["owner", CONNECTING, "disconnected", ["reconnect"]],
-    ["admin", CONNECTING, "revoked_by_provider", ["reconnect"]],
+    ["admin", CONNECTING, "needs_reconnect", ["reconnect", "disable", "rename", "disconnect"]],
+    ["owner", CONNECTING, "disconnected", ["reconnect", "rename"]],
+    ["admin", CONNECTING, "revoked_by_provider", ["reconnect", "disable", "rename", "disconnect"]],
     ["editor", CONNECTING, "needs_reconnect", []],
-    ["admin", CONNECTING, "disabled", []],
-    ["owner", CONNECTING, "disabled", []],
+    ["admin", CONNECTING, "disabled", ["enable", "rename", "disconnect"]],
+    ["owner", CONNECTING, "disabled", ["enable", "rename", "disconnect"]],
     // A provider with no connect side can be checked but never reconnected (start refuses it).
-    ["admin", PLAIN, "connected", ["check"]],
-    ["admin", PLAIN, "needs_reconnect", []],
-    // A provider the registry does not hold has neither action.
-    ["admin", GONE, "connected", []],
-    ["admin", GONE, "needs_reconnect", []],
+    ["admin", PLAIN, "connected", ["check", "disable", "rename", "disconnect"]],
+    ["admin", PLAIN, "needs_reconnect", ["disable", "rename", "disconnect"]],
+    // A provider the registry does not hold has neither check nor reconnect, and can still be turned off or removed.
+    ["admin", GONE, "connected", ["disable", "rename", "disconnect"]],
+    ["admin", GONE, "needs_reconnect", ["disable", "rename", "disconnect"]],
   ])("a %s on a channel of %s in state %s sees %j", async (role, provider, state, expected) => {
     const id = await seedChannel(main.fx, main.ws, state, undefined, provider);
     expect(await actionsOf(main, role, id)).toEqual(expected);
@@ -103,8 +103,9 @@ describe("the actions of a channel follow the caller's role, the state and the p
   it("list, detail and the rename, disable and enable answers carry the same actions of one channel", async () => {
     const id = await seedChannel(main.fx, main.ws, "needs_reconnect", undefined, CONNECTING);
     const listed = (await pageOf(await get(main, "admin", ""))).data.find((row) => row.id === id);
-    expect(listed?.actions).toEqual(["reconnect"]);
-    expect(await actionsOf(main, "admin", id)).toEqual(["reconnect"]);
+    const open = ["reconnect", "disable", "rename", "disconnect"];
+    expect(listed?.actions).toEqual(open);
+    expect(await actionsOf(main, "admin", id)).toEqual(open);
     const change = async (method: string, path: string, body?: object) =>
       (
         (await (
@@ -115,9 +116,9 @@ describe("the actions of a channel follow the caller's role, the state and the p
           })
         ).json()) as { data: { actions: string[] } }
       ).data.actions;
-    expect(await change("PATCH", "", { nickname: "Renamed" })).toEqual(["reconnect"]);
-    expect(await change("POST", "/disable")).toEqual([]);
-    expect(await change("POST", "/enable")).toEqual(["reconnect"]);
+    expect(await change("PATCH", "", { nickname: "Renamed" })).toEqual(open);
+    expect(await change("POST", "/disable")).toEqual(["enable", "rename", "disconnect"]);
+    expect(await change("POST", "/enable")).toEqual(open);
   });
 
   it("a channel of another workspace is neither listed nor answered through this workspace", async () => {

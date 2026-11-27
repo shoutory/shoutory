@@ -21,6 +21,10 @@
       "source": "./src/channels/state.ts",
       "default": "./dist/channels/state.js"
     },
+    "./channels/disconnect": {
+      "source": "./src/channels/disconnect.ts",
+      "default": "./dist/channels/disconnect.js"
+    },
     "./channels/health": {
       "source": "./src/channels/health.ts",
       "default": "./dist/channels/health.js"

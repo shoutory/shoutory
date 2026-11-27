@@ -9,12 +9,13 @@ import type { Manifest } from "@shoutory/provider-sdk/manifest";
 import type { Registry } from "@shoutory/provider-sdk/registry";
 import { pastSunset } from "@shoutory/provider-sdk/snapshot";
 import type { PgBoss } from "pg-boss";
-import type { CredentialService } from "../../channels/credentials.js";
+import { type CredentialService, channelProvidersOf } from "../../channels/credentials.js";
 import type { Logger } from "../../logging/logger.js";
 import { type IntervalLoop, intervalLoop } from "../outbox-relay.js";
 import { refuseEgress } from "./held.js";
 import { pollStep } from "./poll.js";
 import { reconcileStep } from "./reconcile.js";
+import { finishRevoking } from "./revoking.js";
 
 const TICK_MS = 30_000;
 const STOP_MS = 10_000;
@@ -186,6 +187,9 @@ export function createLedgerTick({
     await step("expired leases", sweep("SELECT app.sweep_expired_leases($1::jsonb) AS n", sweeps.leases));
     await step("due moves", sweep("SELECT app.sweep_due_moves($1::jsonb) AS n", sweeps.due));
     await step("reconnect holds", sweep("SELECT app.sweep_blocked_moves() AS n"));
+    await step("revoking credentials", () =>
+      finishRevoking({ pool, credentials, providers: channelProvidersOf(registry, adapters), logger }),
+    );
     await step("admission", admitBacklog);
     // A post is admitted before it is due, so the wake-up of admission can come early: waking the queues at the end of
     // every tick sends it when it falls due, and covers a wake-up that was lost.

@@ -116,12 +116,19 @@ afterAll(() => fx.close());
 const path = (workspace: string, channel: string) =>
   `/api/v1/workspaces/${workspace}/channels/${channel}/disconnect`;
 let keyNo = 0;
-const disconnect = (who: User, workspace: string, channel: string, headers: Record<string, string> = {}) =>
-  fx.request(path(workspace, channel), {
+const disconnect = async (
+  who: User,
+  workspace: string,
+  channel: string,
+  headers: Record<string, string> = {},
+) => {
+  const answer = await fx.request(path(workspace, channel), {
     method: "POST",
     headers: { cookie: who.cookie, "idempotency-key": `disc-key-${++keyNo}`, ...headers },
     body: {},
   });
+  return answer;
+};
 const answerOf = async (response: Response) =>
   (await response.json()) as {
     data?: Record<string, unknown>;

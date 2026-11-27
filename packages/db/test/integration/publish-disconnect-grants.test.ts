@@ -28,6 +28,7 @@ const DEFINERS = [
   "notice_recipients",
   "channel_disconnect",
   "credential_destroy",
+  "credential_open_revoking",
   "credentials_revoking_stale",
 ];
 

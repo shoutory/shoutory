@@ -26,6 +26,7 @@ const ALLOWLIST = [
   "avatar",
   "capability_epoch",
   "connection_state",
+  "disconnected_at",
   "display_name",
   "handle",
   "health",
@@ -120,8 +121,9 @@ describe("what the channel list and detail answer", () => {
     expect(ids).toContain(mine);
     expect(ids).not.toContain(foreign);
     for (const row of body.data) expect(Object.keys(row).sort()).toEqual(ALLOWLIST);
-    // This app has no provider registry and no check wiring: no row has an action and the list offers no connect.
-    for (const row of body.data) expect(row.actions).toEqual([]);
+    // This app has no provider registry and no check wiring: no row offers check, reconnect or disconnect, and the
+    // list offers no connect.
+    for (const row of body.data) expect(row.actions).toEqual(["disable", "rename"]);
     expect(body.meta.actions).toEqual([]);
     const detail = (await (await call(user("admin"), "GET", `${base(ws)}/${mine}`)).json()) as {
       data: Record<string, unknown>;

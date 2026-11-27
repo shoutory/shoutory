@@ -71,12 +71,16 @@ BEGIN
   IF target.connection_state = 'disconnected' THEN
     RAISE EXCEPTION 'channel_disconnect: already_ended' USING ERRCODE = 'SH409';
   END IF;
-  SELECT coalesce(array_agg(o.id ORDER BY o.id), '{}') INTO blocking FROM (
-    SELECT o2.id FROM app.operations AS o2
-      WHERE o2.workspace_id = channel_disconnect.workspace_id AND o2.channel_id = channel_disconnect.channel_id
-        AND o2.state IN ('claimed', 'dispatching', 'provider_accepted', 'unknown_external_state', 'reconciling',
-          'needs_human', 'unverified')
-      ORDER BY o2.id FOR NO KEY UPDATE) AS o;
+  -- Every live operation of the channel is locked before any state is read, so a claim that won the row is waited for
+  -- and its new state is the one this reads; a claim that comes later skips the channel once it is disconnected.
+  PERFORM 1 FROM app.operations AS o2
+    WHERE o2.workspace_id = channel_disconnect.workspace_id AND o2.channel_id = channel_disconnect.channel_id
+      AND o2.state NOT IN ('published', 'failed', 'cancelled', 'missed', 'superseded_after_unknown_outcome')
+    ORDER BY o2.id FOR NO KEY UPDATE;
+  SELECT coalesce(array_agg(o.id ORDER BY o.id), '{}') INTO blocking FROM app.operations AS o
+    WHERE o.workspace_id = channel_disconnect.workspace_id AND o.channel_id = channel_disconnect.channel_id
+      AND o.state IN ('claimed', 'dispatching', 'provider_accepted', 'unknown_external_state', 'reconciling',
+        'needs_human', 'unverified');
   IF cardinality(blocking) > 0 THEN
     PERFORM set_config('app.job_purpose', coalesce(prior, ''), true);
     RETURN blocking;
@@ -89,7 +93,7 @@ BEGIN
     SELECT o.id AS oid, o.state AS was FROM app.operations AS o
       WHERE o.workspace_id = channel_disconnect.workspace_id AND o.channel_id = channel_disconnect.channel_id
         AND o.state IN ('pending', 'retry_wait', 'paused')
-      ORDER BY o.id FOR NO KEY UPDATE
+      ORDER BY o.id
   LOOP
     UPDATE app.operations AS o SET state = 'blocked_reconnect', last_actor = 'S', reason_code = 'pending',
         blocked_since = clock_timestamp()
@@ -127,11 +131,12 @@ DECLARE
 BEGIN
   IF kind = 'job' THEN
     PERFORM app.ledger_caller();
-  ELSIF kind IS DISTINCT FROM 'user' OR app.principal_id() IS NULL
-     OR app.tenancy_rank(credential_destroy.workspace_id, app.principal_id()) < 4 THEN
-    RAISE EXCEPTION 'credential_destroy: refused' USING ERRCODE = '42501';
   END IF;
   PERFORM set_config('app.job_purpose', 'credential_destroy', true);
+  IF kind IS DISTINCT FROM 'job' AND (kind IS DISTINCT FROM 'user' OR app.principal_id() IS NULL
+     OR app.tenancy_rank(credential_destroy.workspace_id, app.principal_id()) < 4) THEN
+    RAISE EXCEPTION 'credential_destroy: refused' USING ERRCODE = '42501';
+  END IF;
   UPDATE app.channel_credentials AS k SET ciphertext = '\x'::bytea, iv = '\x'::bytea, auth_tag = '\x'::bytea,
       wrap_iv = '\x'::bytea, wrap_tag = '\x'::bytea, wrapped_dek = '\x'::bytea, refresh_token_digest = NULL,
       refresh_attempt_digest = NULL, state = 'destroyed'
