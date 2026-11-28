@@ -84,16 +84,17 @@ describe("one sentence and one next step per kind", () => {
   it.each<[string, string, Record<string, unknown>, RegExp, string]>([
     [
       "token_expiry",
-      "14d",
+      "g1:14d",
       { name: "Acme Page" },
       /^Access to .*Acme Page.* ends in 14 days/,
       `${home}/channels`,
     ],
-    ["token_expiry", "1d", { name: "Acme Page", days: 1 }, /ends in 1 day\b/, `${home}/channels`],
-    ["token_expiry", "7d", {}, /^Access to a channel ends in 7 days/, `${home}/channels`],
+    ["token_expiry", "g2:1d", { name: "Acme Page", days: 1 }, /ends in 1 day\b/, `${home}/channels`],
+    ["token_expiry", "g1:7d", {}, /^Access to a channel ends in 7 days/, `${home}/channels`],
+    ["token_expiry", "g3:7d", { days: 3 }, /^Access to a channel ends in 3 days/, `${home}/channels`],
     [
       "reconnect_deadline",
-      "7d",
+      "g1:7d",
       { name: "Acme Page", days: 7 },
       /Acme Page.* is not connected\. Its waiting posts are kept for 7 more days/,
       `${home}/channels`,
@@ -136,7 +137,7 @@ describe("reminders and links", () => {
 
   it("links a channel notice to the channels page, never by its credential subject", async () => {
     const { host } = await visit({
-      notices: () => page([notice(1, { kind: "token_expiry", level: "7d" })]),
+      notices: () => page([notice(1, { kind: "token_expiry", level: "g1:7d" })]),
     });
     expect(rows(host)[0]?.querySelector("a")?.getAttribute("href")).not.toContain(SUBJECT);
   });

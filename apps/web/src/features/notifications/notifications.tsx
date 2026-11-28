@@ -109,8 +109,9 @@ function useNotices(ws: string) {
 const isolate = (value: string) =>
   `${String.fromCodePoint(0x2068)}${value.replaceAll(/\p{Bidi_Control}/gu, "")}${String.fromCodePoint(0x2069)}`;
 
-// The days come from the notice's own variable, else from its level (`7d`).
-const daysOf = (notice: Notice): number => notice.vars.days ?? (Number.parseInt(notice.level, 10) || 1);
+// The days come from the notice's own variable, else from its level (`g1:7d`: the credential's generation, then the days).
+const daysOf = (notice: Notice): number =>
+  notice.vars.days ?? (Number.parseInt(/:(\d+)d$/.exec(notice.level)?.[1] ?? "", 10) || 1);
 
 // 0 is the first notice of an unclear post; each later step is a reminder.
 const isReminder = (level: string): boolean => {
