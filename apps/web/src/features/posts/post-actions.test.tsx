@@ -138,6 +138,59 @@ describe("Cancel", () => {
   });
 });
 
+describe("what is announced and where focus goes after an action", () => {
+  const unscheduled = () => {
+    let done = false;
+    return {
+      postDetail: () =>
+        detailAnswer([
+          done
+            ? target([], { schedule_state: "draft", operation: null, due_at: null })
+            : target(["unschedule"], { operation: null }),
+        ]),
+      unschedule: () => {
+        done = true;
+        return json({ data: { post_id: postId(1), variant_ids: [variantId(1)] } });
+      },
+    };
+  };
+
+  it("keeps one live region mounted for the headline and says what the action did", async () => {
+    const { host } = await visit(unscheduled());
+    const live = byId(host, "post-live");
+    expect(live?.getAttribute("role")).toBe("status");
+    expect(live?.contains(byId(host, "post-headline"))).toBe(true);
+    expect(byId(host, "post-result")).toBeNull();
+    click(byId(host, "action-unschedule") as HTMLElement);
+    await settle();
+    expect(byId(host, "post-live")).toBe(live);
+    expect(live?.contains(byId(host, "post-result"))).toBe(true);
+    expect(byId(host, "post-result")?.textContent).toMatch(/Unscheduled/);
+    expect(live?.contains(byId(host, "post-headline"))).toBe(true);
+  });
+
+  it("moves focus to the heading of the row when the pressed button goes away", async () => {
+    const { host } = await visit(unscheduled());
+    const button = byId(host, "action-unschedule") as HTMLElement;
+    button.focus();
+    expect(document.activeElement).toBe(button);
+    click(button);
+    await settle();
+    expect(byId(host, "action-unschedule")).toBeNull();
+    expect(document.activeElement).toBe(byId(host, "target-heading"));
+  });
+
+  it("leaves focus with the refusal when the action is refused, and keeps the button", async () => {
+    const { host } = await visit({ ...showing(target(["cancel"])), cancel: () => refusal("conflict", 409) });
+    const button = byId(host, "action-cancel") as HTMLElement;
+    button.focus();
+    click(button);
+    await settle();
+    expect(byId(host, "action-cancel")).not.toBeNull();
+    expect(byId(host, "post-refusal")?.contains(document.activeElement)).toBe(true);
+  });
+});
+
 describe("a refused Cancel", () => {
   it("sends a new key on each press after a refusal", async () => {
     const { host, stub } = await visit({

@@ -1,5 +1,5 @@
 import { Trans } from "@lingui/react/macro";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { readZone } from "../../account/prefs";
 import { ApiError, request } from "../../http/client";
@@ -91,15 +91,25 @@ function usePostDetail(ws: string, postId: string) {
     void read();
   }, [read, attempt]);
 
+  useReadAgain(state, read);
+
+  return { state, refresh: () => void read(), retry: () => setAttempt((now) => now + 1) };
+}
+
+// Arms the next read after each finished one, and reads at once when a hidden tab shows again.
+function useReadAgain(state: DetailState, read: () => Promise<void>) {
   const ready = state.status === "ready";
   const targets = state.status === "ready" ? state.detail.targets : null;
   const reads = state.status === "ready" ? state.reads : 0;
   // biome-ignore lint/correctness/useExhaustiveDependencies: each finished read (`reads`) arms the next one.
   useEffect(() => {
     if (!ready || targets === null) return;
-    const timer = setTimeout(() => {
-      if (!document.hidden) void read();
-    }, pollDelayMs(targets, Date.now()));
+    const timer = setTimeout(
+      () => {
+        if (!document.hidden) void read();
+      },
+      pollDelayMs(targets, Date.now()),
+    );
     const shown = () => {
       if (!document.hidden) void read();
     };
@@ -109,8 +119,6 @@ function usePostDetail(ws: string, postId: string) {
       document.removeEventListener("visibilitychange", shown);
     };
   }, [ready, reads, read]);
-
-  return { state, refresh: () => void read(), retry: () => setAttempt((now) => now + 1) };
 }
 
 function formatValue(value: unknown): string | null {
@@ -217,13 +225,29 @@ const threadParts = (variant: RowProps["variant"]) =>
   1 + (variant?.parts.filter((part) => part.kind === "thread_reply").length ?? 0);
 
 function TargetRow({ target, variant, named, place }: RowProps) {
+  const row = useRef<HTMLLIElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const refocus = useRef(false);
+  // A button that did its work goes away with the next read; focus then moves to the heading of the row.
+  useEffect(() => {
+    if (!refocus.current || row.current?.contains(document.activeElement)) return;
+    refocus.current = false;
+    heading.current?.focus();
+  });
+  const rowPlace = {
+    ...place,
+    settled: () => {
+      refocus.current = true;
+    },
+  };
   return (
     <li
+      ref={row}
       data-testid="post-target"
       data-word={wordOf(factsOfDetail(target))}
       className="flex flex-col items-start gap-2 rounded-md border border-border px-5 py-4"
     >
-      <h3 className="font-medium">
+      <h3 ref={heading} tabIndex={-1} data-testid="target-heading" className="font-medium">
         <DirText>{named.channel}</DirText>
       </h3>
       <TargetSummary target={target} named={named} />
@@ -232,7 +256,7 @@ function TargetRow({ target, variant, named, place }: RowProps) {
       </p>
       <Settings settings={target.settings} />
       {target.attempts === undefined ? null : <Attempts attempts={target.attempts} />}
-      <TargetActions place={place} target={target} named={named} parts={threadParts(variant)} />
+      <TargetActions place={rowPlace} target={target} named={named} parts={threadParts(variant)} />
     </li>
   );
 }
@@ -295,11 +319,12 @@ function RefreshNote({ failed, at }: { failed: ApiError | null; at: Date }) {
 function Loaded({ ws, ready, refresh }: { ws: string; ready: Ready; refresh: () => void }) {
   const { detail, refreshFailed: failed, readAt } = ready;
   const names = useNames(ws);
-  const place = { ws, postId: detail.id, version: detail.current_version_id, refresh };
+  const [said, say] = useState<ReactNode>(null);
+  const place = { ws, postId: detail.id, version: detail.current_version_id, refresh, say };
   const headline = headlineOf(detail.status, detail.targets.map(factsOfDetail));
   return (
     <>
-      <section className="flex flex-col gap-1">
+      <section data-testid="post-live" role="status" className="flex flex-col gap-1">
         <h2 data-testid="post-headline" className="font-heading text-xl">
           <HeadlineWord headline={headline} />
         </h2>
@@ -309,6 +334,11 @@ function Loaded({ ws, ready, refresh }: { ws: string; ready: Ready; refresh: () 
         <p data-testid="post-meaning" className="text-sm">
           <HeadlineMeaning headline={headline} />
         </p>
+        {said === null ? null : (
+          <p data-testid="post-result" className="font-medium">
+            {said}
+          </p>
+        )}
       </section>
       <RefreshNote failed={failed} at={readAt} />
       <ul className="flex flex-col gap-3">

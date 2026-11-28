@@ -9,12 +9,15 @@ import type { Names } from "./post-names";
 import { ResolveButton } from "./resolve-dialog";
 
 function CancelButton({ place, target }: { place: Place; target: Target }) {
-  const call = useEffectCall(place, (key) =>
-    request(accepted, `/api/v1/workspaces/${place.ws}/operations/${target.operation?.id}/cancel`, {
-      method: "POST",
-      body: {},
-      idempotencyKey: key,
-    }),
+  const call = useEffectCall(
+    place,
+    (key) =>
+      request(accepted, `/api/v1/workspaces/${place.ws}/operations/${target.operation?.id}/cancel`, {
+        method: "POST",
+        body: {},
+        idempotencyKey: key,
+      }),
+    <Trans id="posts.result.cancelled">Cancelled. Nothing was posted.</Trans>,
   );
   return (
     <div className="flex flex-col items-start gap-2">
@@ -30,12 +33,15 @@ function CancelButton({ place, target }: { place: Place; target: Target }) {
 }
 
 function UnscheduleButton({ place, target }: { place: Place; target: Target }) {
-  const call = useEffectCall(place, (key) =>
-    request(accepted, `/api/v1/workspaces/${place.ws}/posts/${place.postId}/unschedule`, {
-      method: "POST",
-      body: { variant_ids: [target.variant_id] },
-      idempotencyKey: key,
-    }),
+  const call = useEffectCall(
+    place,
+    (key) =>
+      request(accepted, `/api/v1/workspaces/${place.ws}/posts/${place.postId}/unschedule`, {
+        method: "POST",
+        body: { variant_ids: [target.variant_id] },
+        idempotencyKey: key,
+      }),
+    <Trans id="posts.result.unscheduled">Unscheduled. It is a draft again.</Trans>,
   );
   return (
     <div className="flex flex-col items-start gap-3">

@@ -27,7 +27,6 @@ import { PostLink, refusalWords } from "./post-words";
 const answerSchema = z.looseObject({ operation_id: z.string() });
 const profileSchema = z.object({ default_tz: z.string() });
 
-
 function useSentences() {
   const { t } = useLingui();
   return {
@@ -561,8 +560,8 @@ export function ResolveButton({ place, target, named, done, onDone: setDone }: B
   }, [open]);
   if (target.operation === null) return null;
   const flavour = flavourOf(target.operation);
-  const listed = target.operation.resolutions.filter(
-    (one): one is { kind: Resolution; step_up: boolean } => RESOLUTIONS.some((kind) => kind === one.kind),
+  const listed = target.operation.resolutions.filter((one): one is { kind: Resolution; step_up: boolean } =>
+    RESOLUTIONS.some((kind) => kind === one.kind),
   );
   const kinds = listed.map((one) => one.kind);
   const stepUps = new Set(listed.filter((one) => one.step_up).map((one) => one.kind));

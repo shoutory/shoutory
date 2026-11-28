@@ -1,5 +1,5 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import { type Dispatch, type SetStateAction, useCallback, useEffect, useState } from "react";
+import { type Dispatch, type SetStateAction, useCallback, useState } from "react";
 import { useNavigate } from "react-router";
 import { z } from "zod";
 import { ApiError } from "../../http/client";
@@ -15,8 +15,6 @@ import type { SaveState } from "./composer-save";
 import { idsSchema, scheduledSchema, useEffectCall, useKeys } from "./publish-calls";
 import { PublishRefusal } from "./publish-refusal";
 
-const UNDO_SECONDS = 6;
-const SHOW_RESULT_MS = 2000;
 const issueSchema = z.array(z.object({ variant: z.number(), key: z.string(), reason: z.string() }));
 
 export interface PublishProps {
@@ -154,23 +152,8 @@ function problemOf(passed: boolean, reason: string): string | null {
   return INLINE.has(reason) ? reason : null;
 }
 
-type Sent = { ids: string[]; seconds: number } | null;
-
-// Six seconds to undo a publish; when they end the post's own page opens.
-function useCountdown(sent: Sent, setSent: Dispatch<SetStateAction<Sent>>, open: () => void) {
-  const running = sent !== null;
-  useEffect(() => {
-    if (!running) return;
-    const timer = setInterval(() => setSent((now) => now && { ...now, seconds: now.seconds - 1 }), 1000);
-    return () => clearInterval(timer);
-  }, [running, setSent]);
-  const over = sent !== null && sent.seconds <= 0;
-  useEffect(() => {
-    if (!over) return;
-    setSent(null);
-    open();
-  }, [over, setSent, open]);
-}
+// `started` is set when an Undo found that the sending had begun.
+type Sent = { ids: string[]; started: boolean } | null;
 
 interface Scheduled {
   at: Date;
@@ -247,23 +230,45 @@ function useActions(props: PublishProps, setSent: Dispatch<SetStateAction<Sent>>
       if (!(await props.saveNow())) return;
       const body = { variant_ids: availability("publish_now").ids };
       const done = await post(idsSchema, `${base}/publish`, body);
-      setSent({ ids: done.variant_ids, seconds: UNDO_SECONDS });
+      setSent({ ids: done.variant_ids, started: false });
     });
 
+  // Sending that has begun cannot be undone here; the refusal is an answer, shown with the Cancel the server lists.
   const undo = () =>
     call.run("undo", async () => {
-      await post(idsSchema, `${base}/unschedule`, { variant_ids: sent?.ids ?? [] });
+      try {
+        await post(idsSchema, `${base}/unschedule`, { variant_ids: sent?.ids ?? [] });
+      } catch (error) {
+        if (!(error instanceof ApiError) || error.details?.reason !== "post_in_flight") throw error;
+        setSent((now) => now && { ...now, started: true });
+        props.onChanged();
+        return;
+      }
       setSent(null);
       props.onChanged();
     });
 
-  return { call, availability, when, scheduled, schedule, publish, undo };
+  const cancellable = props.targets.flatMap((target) =>
+    sent?.ids.includes(target.variant_id) && target.actions.includes("cancel") && target.operation
+      ? [target.operation.id]
+      : [],
+  );
+  const cancel = () =>
+    call.run("cancel", async () => {
+      for (const id of cancellable) {
+        await post(z.looseObject({}), `/api/v1/workspaces/${props.workspace}/operations/${id}/cancel`, {});
+      }
+      setSent(null);
+      props.onChanged();
+    });
+
+  return { call, availability, when, scheduled, schedule, publish, undo, cancel, cancellable };
 }
 
 function Result({ scheduled, open }: { scheduled: Scheduled; open: () => void }) {
   const { i18n } = useLingui();
   return (
-    <Banner tone="info">
+    <Banner tone="info" announce={false}>
       <div data-testid="schedule-done" className="flex flex-wrap items-center gap-3">
         <span>
           <Trans id="composer.publish.scheduled">
@@ -279,15 +284,38 @@ function Result({ scheduled, open }: { scheduled: Scheduled; open: () => void })
   );
 }
 
-function Sending({ seconds, busy, onUndo }: { seconds: number; busy: boolean; onUndo: () => void }) {
+function Sending({ actions, started, open }: { actions: Actions; started: boolean; open: () => void }) {
+  const { call } = actions;
   return (
-    <Banner tone="info">
+    <Banner tone="info" announce={false}>
       <div data-testid="publish-sent" className="flex flex-wrap items-center gap-3">
         <span>
           <Trans id="composer.publish.sent">Sent to the queue</Trans>
         </span>
-        <Button data-testid="publish-undo" busy={busy} onPress={onUndo}>
-          <Trans id="composer.publish.undo">Undo (ends in {seconds} s)</Trans>
+        {started ? (
+          <>
+            <span data-testid="publish-started">
+              <Trans id="composer.publish.started">
+                It has started sending, so it can no longer be taken back here.
+              </Trans>
+            </span>
+            {actions.cancellable.length === 0 ? null : (
+              <Button
+                data-testid="publish-cancel"
+                busy={call.busy === "cancel"}
+                onPress={() => void actions.cancel()}
+              >
+                <Trans id="posts.action.cancel">Cancel</Trans>
+              </Button>
+            )}
+          </>
+        ) : (
+          <Button data-testid="publish-undo" busy={call.busy === "undo"} onPress={() => void actions.undo()}>
+            <Trans id="composer.publish.undo">Undo (until sending starts)</Trans>
+          </Button>
+        )}
+        <Button data-testid="publish-open" onPress={open}>
+          <Trans id="composer.publish.open">Open post</Trans>
         </Button>
       </div>
     </Banner>
@@ -366,22 +394,18 @@ export function PublishBar(props: PublishProps) {
   const { call, scheduled } = actions;
   const detail = `/w/${props.workspace}/posts/${props.postId}`;
   const open = useCallback(() => void navigate(detail), [navigate, detail]);
-  useCountdown(sent, setSent, open);
-  useEffect(() => {
-    if (scheduled === null) return;
-    const timer = setTimeout(open, SHOW_RESULT_MS);
-    return () => clearTimeout(timer);
-  }, [scheduled, open]);
   const problem = problemOf(actions.when.passed, call.failure?.details?.reason ?? "");
   return (
     <section aria-labelledby="composer-publish" className="flex flex-col gap-4">
       <h2 id="composer-publish" className="font-heading text-xl">
         <Trans id="composer.publish.title">Schedule</Trans>
       </h2>
-      {scheduled !== null ? <Result scheduled={scheduled} open={open} /> : null}
-      {scheduled === null && sent !== null ? (
-        <Sending seconds={sent.seconds} busy={call.busy === "undo"} onUndo={() => void actions.undo()} />
-      ) : null}
+      <div role="status" data-testid="publish-live">
+        {scheduled !== null ? <Result scheduled={scheduled} open={open} /> : null}
+        {scheduled === null && sent !== null ? (
+          <Sending actions={actions} started={sent.started} open={open} />
+        ) : null}
+      </div>
       {scheduled === null && sent === null ? (
         <>
           <ScheduleField

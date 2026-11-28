@@ -85,6 +85,7 @@ export function DeleteButton({ place, target, named, parts, open, onOpenChange }
         headers: { "If-Match": `"${place.version}"` },
         idempotencyKey: key,
       }),
+    undefined,
     () => onOpenChange(false),
   );
   return (

@@ -36,22 +36,29 @@ interface Setup {
   schedule?: (call: Call) => Response | Promise<Response>;
   publish?: (call: Call) => Response | Promise<Response>;
   unschedule?: (call: Call) => Response | Promise<Response>;
+  cancel?: (call: Call) => Response | Promise<Response>;
   patch?: (call: Call) => Response;
   channels?: unknown[];
 }
 
+const WRITES = { schedule: SCHEDULED, publish: SENT, unschedule: SENT } as const;
+
+function answerFor(setup: Setup, call: Call) {
+  if (call.method === "PATCH") return setup.patch?.(call);
+  if (call.method === "GET" && call.path === `posts/${POST}`) {
+    return (setup.detail ?? (() => detailOf([variantRow(CH.short, "Short words")])))();
+  }
+  if (call.path.endsWith("/cancel")) return setup.cancel?.(call);
+  const name = (Object.keys(WRITES) as (keyof typeof WRITES)[]).find(
+    (one) => call.path === `posts/${POST}/${one}`,
+  );
+  return name === undefined ? undefined : (setup[name]?.(call) ?? json({ data: WRITES[name] }));
+}
+
 async function open(setup: Setup = {}) {
-  const detail = setup.detail ?? (() => detailOf([variantRow(CH.short, "Short words")]));
   const stub = stubComposerApi({
     channelList: () => channelPage(setup.channels ?? CHANNELS, null, []),
-    answer: (call) => {
-      if (call.method === "GET" && call.path === `posts/${POST}`) return detail();
-      if (call.path === `posts/${POST}/schedule`) return setup.schedule?.(call) ?? json({ data: SCHEDULED });
-      if (call.path === `posts/${POST}/publish`) return setup.publish?.(call) ?? json({ data: SENT });
-      if (call.path === `posts/${POST}/unschedule`) return setup.unschedule?.(call) ?? json({ data: SENT });
-      if (call.method === "PATCH") return setup.patch?.(call);
-      return undefined;
-    },
+    answer: (call) => answerFor(setup, call),
   });
   const opened = await openApp(`/w/w1/posts/${POST}/edit`);
   await settle();
@@ -71,10 +78,12 @@ const reasonOf = (id: string) =>
   document.getElementById(byId(id)?.getAttribute("aria-describedby") ?? "")?.textContent ?? "";
 
 describe("scheduling in the workspace zone", () => {
-  it("names the zone, sends the wall time with a key, says when it is scheduled and goes to the post", async () => {
+  it("names the zone, sends the wall time with a key and says when it is scheduled, staying on the page", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const { stub, router } = await open();
     expect(document.body.textContent).toContain("Time zone: Cairo");
+    const live = byId("publish-live");
+    expect(live).not.toBeNull();
     await when("2026-12-01T11:00");
     expect(document.body.textContent).not.toContain("Scheduled for");
     await press("schedule-submit");
@@ -83,9 +92,13 @@ describe("scheduling in the workspace zone", () => {
     expect(call?.headers["Idempotency-Key"]).toBeTruthy();
     expect(byId("schedule-done")?.textContent).toContain("Scheduled for");
     expect(byId("schedule-done")?.textContent).toContain("Cairo");
+    expect(byId("publish-live")).toBe(live);
+    expect(live?.contains(byId("schedule-done"))).toBe(true);
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(2000);
+      await vi.advanceTimersByTimeAsync(10_000);
     });
+    expect(router.state.location.pathname).toBe(`/w/w1/posts/${POST}/edit`);
+    await press("schedule-open");
     expect(router.state.location.pathname).toBe(`/w/w1/posts/${POST}`);
   });
 
@@ -223,26 +236,27 @@ describe("pressing the buttons", () => {
   });
 });
 
-describe("publish now and the Undo", () => {
-  async function published() {
-    vi.useFakeTimers({ toFake: ["setTimeout", "setInterval", "clearTimeout", "clearInterval"] });
-    const opened = await open();
-    await press("publish-now");
-    return opened;
-  }
-  const after = (ms: number) =>
-    act(async () => {
-      await vi.advanceTimersByTimeAsync(ms);
-    });
+async function published(setup: Setup = {}) {
+  vi.useFakeTimers({ toFake: ["setTimeout", "setInterval", "clearTimeout", "clearInterval"] });
+  const opened = await open(setup);
+  await press("publish-now");
+  return opened;
+}
+const after = (ms: number) =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
 
-  it("says it went to the queue, never Published, and offers an Undo that says when it ends", async () => {
+describe("publish now and the Undo", () => {
+  it("says it went to the queue, never Published, and offers an Undo that has no countdown", async () => {
     const { stub } = await published();
     expect(callsOf(stub, "POST", `/posts/${POST}/publish`)[0]?.body).toEqual({ variant_ids: [VARIANT] });
     expect(byId("publish-sent")?.textContent).toContain("Sent to the queue");
+    expect(byId("publish-live")?.contains(byId("publish-sent"))).toBe(true);
     expect(document.body.textContent).not.toContain("Published");
-    expect(byId("publish-undo")?.textContent).toContain("Undo (ends in 6 s)");
-    await after(2000);
-    expect(byId("publish-undo")?.textContent).toContain("Undo (ends in 4 s)");
+    expect(byId("publish-undo")?.textContent).toContain("Undo (until sending starts)");
+    await after(10_000);
+    expect(byId("publish-undo")?.textContent).toContain("Undo (until sending starts)");
   });
 
   it("Undo takes the post back out of the queue", async () => {
@@ -253,11 +267,46 @@ describe("publish now and the Undo", () => {
     expect(router.state.location.pathname).toBe(`/w/w1/posts/${POST}/edit`);
   });
 
-  it("after six seconds the Undo is gone and the post's page opens", async () => {
+  it("stays on the page, with an Open post link, until the person moves on", async () => {
     const { router } = await published();
-    await after(6000);
-    expect(byId("publish-undo")).toBeNull();
+    await after(10_000);
+    expect(router.state.location.pathname).toBe(`/w/w1/posts/${POST}/edit`);
+    await press("publish-open");
     expect(router.state.location.pathname).toBe(`/w/w1/posts/${POST}`);
+  });
+});
+
+describe("an Undo that came too late", () => {
+  it("says sending has started and offers the Cancel the server lists", async () => {
+    const OPERATION = "0190a000-0000-7000-8000-0000000006b1";
+    let started = false;
+    const { stub } = await published({
+      detail: () =>
+        started
+          ? detailOf([variantRow(CH.short, "Short words")], ["cancel", "duplicate"], {
+              schedule_state: "in_progress",
+              operation: { id: OPERATION },
+            })
+          : detailOf([variantRow(CH.short, "Short words")]),
+      unschedule: () => {
+        started = true;
+        return refusal("conflict", 409, { reason: "post_in_flight" });
+      },
+      cancel: () => json({ data: { operation_id: OPERATION, state: "cancelled" } }),
+    });
+    await press("publish-undo");
+    expect(byId("publish-started")?.textContent).toContain("has started sending");
+    await press("publish-cancel");
+    expect(callsOf(stub, "POST", `/operations/${OPERATION}/cancel`)).toHaveLength(1);
+    expect(byId("publish-cancel")).toBeNull();
+  });
+
+  it("offers no Cancel when the server lists none", async () => {
+    await published({ unschedule: () => refusal("conflict", 409, { reason: "post_in_flight" }) });
+    await press("publish-undo");
+    expect(byId("publish-started")?.textContent).toContain("has started sending");
+    expect(byId("publish-cancel")).toBeNull();
+    expect(byId("publish-open")).not.toBeNull();
   });
 });
 

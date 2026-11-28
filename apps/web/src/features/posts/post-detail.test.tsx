@@ -459,7 +459,9 @@ describe("how often the post is read again", () => {
     await tick(31000);
     expect(detailCalls(stub)).toHaveLength(2);
   });
+});
 
+describe("when the post is read every 5 seconds", () => {
   it.each<[string, Record<string, unknown>]>([
     ["waiting to be sent", waiting],
     ["claimed", inState("claimed")],

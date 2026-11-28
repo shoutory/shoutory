@@ -21,16 +21,27 @@ export interface Place {
   readonly version: string;
   /** Reads the post again after an effect, so the rows show what the server now says. */
   readonly refresh: () => void;
+  /** Puts the result of an action into the page's live region. */
+  readonly say: (result: ReactNode) => void;
+  /** Called when an action of the row succeeded, so focus can move off a button that is about to go away. */
+  readonly settled?: () => void;
 }
 
 // One call that does something: a fresh key for each press, the post read again after it, and a refusal that says the
 // state moved on read again too. A second press while it runs is ignored by `useAction`.
-export function useEffectCall(place: Place, run: (key: string) => Promise<unknown>, after?: () => void) {
+export function useEffectCall(
+  place: Place,
+  run: (key: string) => Promise<unknown>,
+  said?: ReactNode,
+  after?: () => void,
+) {
   const signIn = useSignIn();
   return useAction(
     async () => {
       await run(uuidv7());
       place.refresh();
+      if (said !== undefined) place.say(said);
+      place.settled?.();
       after?.();
     },
     (error) => {

@@ -3993,7 +3993,7 @@ msgstr "اكتب الجملة كما هي تمامًا."
 
 #. js-lingui-explicit-id
 msgid "composer.publish.undo"
-msgstr "تراجع (ينتهي خلال {seconds} ث)"
+msgstr "تراجع (حتى يبدأ الإرسال)"
 
 #. js-lingui-explicit-id
 msgid "connect.result.state.unknown"
@@ -4757,3 +4757,15 @@ msgstr "يعمل فريقك معًا في مساحة عمل واحدة بقنو�
 #. js-lingui-explicit-id
 msgid "composer.conflict.yours"
 msgstr "نسختك"
+
+#. js-lingui-explicit-id
+msgid "composer.publish.started"
+msgstr "بدأ الإرسال، فلم يعد التراجع عنه ممكنًا من هنا."
+
+#. js-lingui-explicit-id
+msgid "posts.result.cancelled"
+msgstr "أُلغي. لم يُنشر شيء."
+
+#. js-lingui-explicit-id
+msgid "posts.result.unscheduled"
+msgstr "أُلغيت الجدولة. عاد المنشور مسودة."

@@ -3993,7 +3993,7 @@ msgstr "Type the sentence exactly as shown."
 
 #. js-lingui-explicit-id
 msgid "composer.publish.undo"
-msgstr "Undo (ends in {seconds} s)"
+msgstr "Undo (until sending starts)"
 
 #. js-lingui-explicit-id
 msgid "connect.result.state.unknown"
@@ -4757,3 +4757,15 @@ msgstr "Your team works together in one workspace with shared channels and appro
 #. js-lingui-explicit-id
 msgid "composer.conflict.yours"
 msgstr "Your version"
+
+#. js-lingui-explicit-id
+msgid "composer.publish.started"
+msgstr "It has started sending, so it can no longer be taken back here."
+
+#. js-lingui-explicit-id
+msgid "posts.result.cancelled"
+msgstr "Cancelled. Nothing was posted."
+
+#. js-lingui-explicit-id
+msgid "posts.result.unscheduled"
+msgstr "Unscheduled. It is a draft again."

@@ -44,6 +44,7 @@ const target = z.object({
   due_at: z.string().nullable(),
   due_tz: z.string().nullable(),
   hold_reason: z.string().nullable(),
+  operation: z.object({ id: z.string() }).nullable().default(null),
   actions: z.array(z.string()),
 });
 
