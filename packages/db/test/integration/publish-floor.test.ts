@@ -108,6 +108,32 @@ const claim = async (p: Provider, limit = 1) =>
     ])
   ).rows.map((row) => row.id as string);
 
+// With a plain scan and a sort priced out, a query shows the index that serves its order or no index at all.
+const planOf = (sql: string) =>
+  admin(async (client) => {
+    await client.query("SET enable_seqscan = off; SET enable_bitmapscan = off; SET enable_sort = off");
+    const plan = await client.query(`EXPLAIN ${sql}`);
+    return plan.rows.map((row) => row["QUERY PLAN"] as string).join("\n");
+  });
+
+describe("the indexes behind the claim order and the post list", () => {
+  it("the claim reads its candidates in order from an index", async () => {
+    const plan = await planOf(
+      `SELECT id FROM app.operations WHERE state = 'pending' AND queue = 'publish.x' AND next_attempt_at <= clock_timestamp()
+       ORDER BY priority DESC, next_attempt_at, id LIMIT 5`,
+    );
+    expect(plan).toContain("operations_claim_order_idx");
+  });
+
+  it("a page of the post list reads in order from an index", async () => {
+    const plan = await planOf(
+      `SELECT id FROM app.posts WHERE workspace_id = '${WA}' AND deleted_at IS NULL
+       ORDER BY updated_at DESC, id DESC LIMIT 20`,
+    );
+    expect(plan).toContain("posts_list_idx");
+  });
+});
+
 describe("claim order", () => {
   it("a publish-now operation is claimed before an older backlog of its own provider", async () => {
     const p = await provider();
