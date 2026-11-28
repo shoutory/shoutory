@@ -12,6 +12,7 @@ import { LocalizedDateTime } from "../../ui/localized";
 import { dateOf } from "../channels/channel-facts";
 import { useSignIn } from "../channels/channels-hub";
 import { Late } from "../media/media-library";
+import { DuplicateButton, type Place, TargetActions } from "./post-actions";
 import {
   type Detail,
   detailSchema,
@@ -231,9 +232,31 @@ interface RowProps {
   target: Target;
   text: string;
   named: Names;
+  place: Place;
 }
 
-function TargetRow({ target, text, named }: RowProps) {
+function TargetRow({ target, text, named, place }: RowProps) {
+  return (
+    <li
+      data-testid="post-target"
+      data-word={wordOf(factsOfDetail(target))}
+      className="flex flex-col items-start gap-2 rounded-md border border-border px-5 py-4"
+    >
+      <h3 className="font-medium">
+        <DirText>{named.channel}</DirText>
+      </h3>
+      <TargetSummary target={target} named={named} />
+      <p className="whitespace-pre-wrap text-sm">
+        <DirText>{text}</DirText>
+      </p>
+      <Settings settings={target.settings} />
+      {target.attempts === undefined ? null : <Attempts attempts={target.attempts} />}
+      <TargetActions place={place} target={target} />
+    </li>
+  );
+}
+
+function TargetSummary({ target, named }: { target: Target; named: Names }) {
   const facts = factsOfDetail(target);
   const word = wordOf(facts);
   const pause = usePauseReason(target.operation?.reason_code, named.provider);
@@ -241,14 +264,7 @@ function TargetRow({ target, text, named }: RowProps) {
   const address = permalinkOf(target.evidence);
   const context = { provider: named.provider, channel: named.channel };
   return (
-    <li
-      data-testid="post-target"
-      data-word={word}
-      className="flex flex-col items-start gap-2 rounded-md border border-border px-5 py-4"
-    >
-      <h3 className="font-medium">
-        <DirText>{named.channel}</DirText>
-      </h3>
+    <>
       <p data-testid="target-word" className="font-medium">
         <TargetLabel word={word} {...context} pauseReason={pause} />
       </p>
@@ -277,12 +293,7 @@ function TargetRow({ target, text, named }: RowProps) {
         </p>
       )}
       {address === null ? null : <PostLink address={address} provider={named.provider} />}
-      <p className="whitespace-pre-wrap text-sm">
-        <DirText>{text}</DirText>
-      </p>
-      <Settings settings={target.settings} />
-      {target.attempts === undefined ? null : <Attempts attempts={target.attempts} />}
-    </li>
+    </>
   );
 }
 
@@ -300,9 +311,10 @@ function RefreshNote({ failed, at }: { failed: ApiError | null; at: Date }) {
   );
 }
 
-function Loaded({ ws, ready }: { ws: string; ready: Ready }) {
+function Loaded({ ws, ready, refresh }: { ws: string; ready: Ready; refresh: () => void }) {
   const { detail, refreshFailed: failed, readAt } = ready;
   const names = useNames(ws);
+  const place = { ws, postId: detail.id, refresh };
   const headline = headlineOf(detail.status, detail.targets.map(factsOfDetail));
   return (
     <>
@@ -325,9 +337,13 @@ function Loaded({ ws, ready }: { ws: string; ready: Ready }) {
             target={target}
             text={detail.variants.find((one) => one.id === target.variant_id)?.text ?? ""}
             named={names(target.channel_id)}
+            place={place}
           />
         ))}
       </ul>
+      {detail.targets.some((target) => target.actions.includes("duplicate")) ? (
+        <DuplicateButton place={place} version={detail.current_version_id} />
+      ) : null}
     </>
   );
 }
@@ -359,7 +375,7 @@ function Failed({ error, retry }: { error: ApiError; retry: () => void }) {
 }
 
 function PostDetail({ ws, postId }: { ws: string; postId: string }) {
-  const { state, retry } = usePostDetail(ws, postId);
+  const { state, retry, refresh } = usePostDetail(ws, postId);
   if (state.status === "failed" && state.error.state === "not_found") return <NotFoundPage />;
   if (state.status === "failed" && state.error.state === "forbidden") return <ForbiddenPage />;
   return (
@@ -372,7 +388,7 @@ function PostDetail({ ws, postId }: { ws: string; postId: string }) {
       </h1>
       {state.status === "loading" ? <Skeleton /> : null}
       {state.status === "failed" ? <Failed error={state.error} retry={retry} /> : null}
-      {state.status === "ready" ? <Loaded ws={ws} ready={state} /> : null}
+      {state.status === "ready" ? <Loaded ws={ws} ready={state} refresh={refresh} /> : null}
     </div>
   );
 }

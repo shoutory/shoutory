@@ -3996,3 +3996,63 @@ msgstr "It is no longer on {platform}."
 #. js-lingui-explicit-id
 msgid "posts.meaning.removal_reported"
 msgstr "You told us it was removed."
+
+#. js-lingui-explicit-id
+msgid "posts.action.edit"
+msgstr "Edit"
+
+#. js-lingui-explicit-id
+msgid "posts.action.duplicate"
+msgstr "Duplicate"
+
+#. js-lingui-explicit-id
+msgid "posts.action.cancel"
+msgstr "Cancel"
+
+#. js-lingui-explicit-id
+msgid "posts.action.cancel_until"
+msgstr "You can cancel until sending starts."
+
+#. js-lingui-explicit-id
+msgid "posts.action.unschedule"
+msgstr "Unschedule"
+
+#. js-lingui-explicit-id
+msgid "posts.action.schedule"
+msgstr "Schedule"
+
+#. js-lingui-explicit-id
+msgid "posts.action.publish_now"
+msgstr "Publish now"
+
+#. js-lingui-explicit-id
+msgid "posts.refused.in_flight.what"
+msgstr "This channel is being posted right now"
+
+#. js-lingui-explicit-id
+msgid "posts.refused.in_flight.meaning"
+msgstr "Wait until it finishes, then try again. Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "posts.refused.forbidden.what"
+msgstr "You cannot do this"
+
+#. js-lingui-explicit-id
+msgid "posts.refused.forbidden.meaning"
+msgstr "Only the author of the post, an admin or the owner can. Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "posts.refused.moved.what"
+msgstr "This post changed while you were looking"
+
+#. js-lingui-explicit-id
+msgid "posts.refused.moved.meaning"
+msgstr "The page now shows the latest state. Check it, then try again. Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "posts.refused.failed.what"
+msgstr "We could not do that"
+
+#. js-lingui-explicit-id
+msgid "posts.refused.failed.meaning"
+msgstr "Nothing was changed. Try again."

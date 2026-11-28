@@ -3994,3 +3994,63 @@ msgstr "لم يعد موجودًا على {platform}."
 #. js-lingui-explicit-id
 msgid "posts.meaning.removal_reported"
 msgstr "أخبرتنا أنه حُذف."
+
+#. js-lingui-explicit-id
+msgid "posts.action.edit"
+msgstr "تعديل"
+
+#. js-lingui-explicit-id
+msgid "posts.action.duplicate"
+msgstr "نسخ"
+
+#. js-lingui-explicit-id
+msgid "posts.action.cancel"
+msgstr "إلغاء"
+
+#. js-lingui-explicit-id
+msgid "posts.action.cancel_until"
+msgstr "يمكنك الإلغاء حتى يبدأ الإرسال."
+
+#. js-lingui-explicit-id
+msgid "posts.action.unschedule"
+msgstr "إلغاء الجدولة"
+
+#. js-lingui-explicit-id
+msgid "posts.action.schedule"
+msgstr "جدولة"
+
+#. js-lingui-explicit-id
+msgid "posts.action.publish_now"
+msgstr "انشر الآن"
+
+#. js-lingui-explicit-id
+msgid "posts.refused.in_flight.what"
+msgstr "تُنشر هذه القناة الآن"
+
+#. js-lingui-explicit-id
+msgid "posts.refused.in_flight.meaning"
+msgstr "انتظر حتى ينتهي ثم حاول مرة أخرى. لم يتغير شيء."
+
+#. js-lingui-explicit-id
+msgid "posts.refused.forbidden.what"
+msgstr "لا يمكنك تنفيذ هذا الإجراء"
+
+#. js-lingui-explicit-id
+msgid "posts.refused.forbidden.meaning"
+msgstr "يستطيع ذلك كاتب المنشور أو المسؤول أو المالك فقط. لم يتغير شيء."
+
+#. js-lingui-explicit-id
+msgid "posts.refused.moved.what"
+msgstr "تغيّر هذا المنشور أثناء نظرك إليه"
+
+#. js-lingui-explicit-id
+msgid "posts.refused.moved.meaning"
+msgstr "تعرض الصفحة الآن أحدث حالة. راجعها ثم حاول مرة أخرى. لم يتغير شيء."
+
+#. js-lingui-explicit-id
+msgid "posts.refused.failed.what"
+msgstr "تعذّر تنفيذ ذلك"
+
+#. js-lingui-explicit-id
+msgid "posts.refused.failed.meaning"
+msgstr "لم يتغير شيء. حاول مرة أخرى."
