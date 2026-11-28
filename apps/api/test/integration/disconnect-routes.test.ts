@@ -132,7 +132,10 @@ const disconnect = async (
 const answerOf = async (response: Response) =>
   (await response.json()) as {
     data?: Record<string, unknown>;
-    error?: { code: string; details?: { reason?: string; blocking?: { kind: string; id: string }[] } };
+    error?: {
+      code: string;
+      details?: { reason?: string; truncated?: boolean; blocking?: Record<string, string>[] };
+    };
   };
 
 interface Planted {
@@ -212,6 +215,22 @@ const opState = (id: string) =>
   fx.admin(
     async (client) =>
       (await client.query("SELECT state FROM app.operations WHERE id = $1", [id])).rows[0].state,
+  );
+const postOf = (operation: string) =>
+  fx.admin(
+    async (client) =>
+      (
+        await client.query(
+          "SELECT v.post_id FROM app.operations AS o JOIN app.post_variants AS v ON v.id = o.variant_id WHERE o.id = $1",
+          [operation],
+        )
+      ).rows[0].post_id as string,
+  );
+const nameOf = (channel: string) =>
+  fx.admin(
+    async (client) =>
+      (await client.query("SELECT coalesce(nickname, display_name) AS name FROM app.channels WHERE id = $1", [channel]))
+        .rows[0].name as string,
   );
 const rowCounts = (workspace: string) =>
   fx.admin(
@@ -300,6 +319,7 @@ describe("a channel of another workspace", () => {
 describe("disconnect with work in flight", () => {
   it.each([
     "claimed",
+    "processing",
     "dispatching",
     "provider_accepted",
     "unknown_external_state",
@@ -316,7 +336,9 @@ describe("disconnect with work in flight", () => {
       "conflict",
       "channel_busy",
     ]);
-    expect(body.error?.details?.blocking).toEqual([{ kind: "operation", id: op }]);
+    expect(body.error?.details?.blocking).toEqual([
+      { kind: "operation", id: op, post_id: await postOf(op), channel_name: await nameOf(c.channel), state },
+    ]);
     expect((await channelRow(c.channel)).connection_state).toBe("connected");
     expect((await credentialRows(c.channel))[0]?.state).toBe("active");
     expect(await opState(op)).toBe(state);
@@ -459,6 +481,34 @@ describe("lock order: the channel advisory lock comes before any row", () => {
   });
 });
 
+// `count` posts, each with one variant in progress and one operation of the given state, in one statement.
+const plantMany = (c: Planted, state: string, count: number) =>
+  fx.admin(async (client) => {
+    await client.query("BEGIN");
+    await client.query("SET LOCAL session_replication_role = replica");
+    await client.query(
+      `WITH p AS (
+         INSERT INTO app.posts (workspace_id, author_kind, author_id, status)
+         SELECT $1, 'user', $2::uuid, 'scheduled' FROM generate_series(1, $5::int) RETURNING id),
+       v AS (
+         INSERT INTO app.post_versions (workspace_id, post_id, version_no, kind, snapshot, snapshot_hash, created_by)
+         SELECT $1, p.id, 1, 'scheduled', '{"version":1}'::jsonb, decode(repeat('ab', 32), 'hex'), $2::uuid FROM p
+         RETURNING id, post_id),
+       s AS (
+         INSERT INTO app.post_variants (workspace_id, post_id, channel_id, schedule_state, frozen_version_id, due_at)
+         SELECT $1, v.post_id, $3, 'in_progress', v.id, now() - interval '1 minute' FROM v
+         RETURNING id, frozen_version_id)
+       INSERT INTO app.operations (workspace_id, variant_id, channel_id, provider_id, queue, kind, state, effect,
+         last_actor, due_at, next_attempt_at, lateness_deadline, idempotency_marker, frozen_version_id,
+         frozen_snapshot_hash, requested_by, lease_seconds, fencing_token)
+       SELECT $1, s.id, $3, $4, 'publish.' || $4, 'publish', $6, CASE WHEN $6 = 'pending' THEN 'none' ELSE 'possible' END, 'S', now() - interval '2 minutes',
+         now() - interval '1 minute', now() + interval '2 hours', 'disc-' || gen_random_uuid()::text,
+         s.frozen_version_id, decode(repeat('ab', 32), 'hex'), $2::uuid, 60, 1 FROM s`,
+      [c.workspace, user("editor").id, c.channel, c.provider, count, state],
+    );
+    await client.query("COMMIT");
+  });
+
 const impactOf = (who: User, workspace: string, channel: string) =>
   fx.request(`/api/v1/workspaces/${workspace}/channels/${channel}/disconnect-impact`, {
     headers: { cookie: who.cookie },
@@ -518,8 +568,10 @@ describe("the disconnect impact preview", () => {
     const answered = await answerOf(await impactOf(user("admin"), ws, c.channel));
     const data = answered.data as {
       scheduled: { variantId: string; postId: string; dueAt: string | null }[];
-      blocking: { id: string; state: string }[];
+      blocking: Record<string, string>[];
       canDisconnect: boolean;
+      truncated: boolean;
+      revokeSupported: boolean;
     };
     expect(data.scheduled.map((row) => row.variantId).sort()).toEqual(
       [unadmitted.variant, await variantOf(waiting)].sort(),
@@ -527,10 +579,39 @@ describe("the disconnect impact preview", () => {
     expect(data.scheduled.find((row) => row.variantId === unadmitted.variant)).toMatchObject({
       postId: unadmitted.post,
     });
-    expect(data.blocking).toEqual([{ id: busy, state: "dispatching" }]);
-    expect(data.canDisconnect).toBe(false);
+    expect(data.blocking).toEqual([
+      {
+        id: busy,
+        state: "dispatching",
+        postId: await postOf(busy),
+        channelName: await nameOf(c.channel),
+      },
+    ]);
+    expect([data.canDisconnect, data.truncated, data.revokeSupported]).toEqual([false, false, true]);
     expect(await rowCounts(ws)).toEqual(before);
     expect((await channelRow(c.channel)).connection_state).toBe("connected");
+  });
+
+  it("bounds the scheduled list and the blocking list at 200 and says so, in the preview and in the refusal", async () => {
+    const c = await plantChannel();
+    await plantMany(c, "pending", 201);
+    await plantMany(c, "needs_human", 201);
+    const preview = (await answerOf(await impactOf(user("admin"), ws, c.channel))).data as {
+      scheduled: unknown[];
+      blocking: unknown[];
+      truncated: boolean;
+    };
+    expect([preview.scheduled.length, preview.blocking.length, preview.truncated]).toEqual([200, 200, true]);
+    const refused = (await answerOf(await disconnect(user("owner"), ws, c.channel))).error;
+    expect([refused?.details?.blocking?.length, refused?.details?.truncated]).toEqual([200, true]);
+  });
+
+  it("says whether the platform can end the access", async () => {
+    const [ends, keeps] = [await plantChannel(), await plantChannel(ws, "fixture_plain")];
+    const supported = async (c: Planted) =>
+      ((await answerOf(await impactOf(user("owner"), ws, c.channel))).data as { revokeSupported: boolean })
+        .revokeSupported;
+    expect([await supported(ends), await supported(keeps)]).toEqual([true, false]);
   });
 
   it("says a channel with nothing in the way can be disconnected", async () => {

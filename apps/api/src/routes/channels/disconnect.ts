@@ -1,4 +1,4 @@
-import { impactOf } from "@shoutory/core/channels/disconnect";
+import { impactOf, LIST_BOUND, type OperationRow } from "@shoutory/core/channels/disconnect";
 import { withAdvisoryLock } from "@shoutory/db/locks";
 import { z } from "zod";
 import type { CredentialService } from "../../channels/credentials.js";
@@ -23,7 +23,18 @@ const channelOf = z.object({ provider_id: z.string() });
 const providerOf = (deps: DisconnectDeps, id: string) =>
   Object.hasOwn(deps.providers, id) ? deps.providers[id] : undefined;
 
-function registerImpact(app: App): void {
+// The operations that are neither finished nor only waiting for the channel: the core rules say which of them block.
+// One more than the bound is read, so a list that holds more says so.
+const OPEN_OPERATIONS = `SELECT o.id, o.state, v.post_id AS "postId", coalesce(c.nickname, c.display_name) AS "channelName"
+  FROM app.operations AS o
+  JOIN app.post_variants AS v ON v.workspace_id = o.workspace_id AND v.id = o.variant_id
+  JOIN app.channels AS c ON c.workspace_id = o.workspace_id AND c.id = o.channel_id
+  WHERE o.workspace_id = $1 AND o.channel_id = $2 AND ($3::uuid[] IS NULL OR o.id = ANY ($3::uuid[]))
+    AND o.state NOT IN ('published', 'failed', 'cancelled', 'missed', 'superseded_after_unknown_outcome',
+      'pending', 'retry_wait', 'paused', 'blocked_reconnect')
+  ORDER BY o.id LIMIT ${LIST_BOUND + 1}`;
+
+function registerImpact(app: App, deps: DisconnectDeps | undefined): void {
   defineRoute(app, {
     method: "get",
     path: `${BASE}/disconnect-impact`,
@@ -35,7 +46,8 @@ function registerImpact(app: App): void {
         "SELECT provider_id FROM app.channels WHERE workspace_id = $1 AND id = $2",
         [scope.workspaceId, params.channel_id],
       );
-      if (!channel.rows[0]) throw new Refusal("not_found", "channel row not visible");
+      const found = channelOf.safeParse(channel.rows[0]);
+      if (!found.success) throw new Refusal("not_found", "channel row not visible");
       const scheduled = await tx.query<{ variantId: string; postId: string; dueAt: Date | null }>(
         `SELECT v.id AS "variantId", v.post_id AS "postId", v.due_at AS "dueAt" FROM app.post_variants AS v
          WHERE v.workspace_id = $1 AND v.channel_id = $2
@@ -43,23 +55,25 @@ function registerImpact(app: App): void {
              OR (v.schedule_state = 'in_progress' AND EXISTS (SELECT 1 FROM app.operations AS o
                WHERE o.workspace_id = v.workspace_id AND o.variant_id = v.id
                  AND o.state IN ('pending', 'retry_wait', 'paused', 'blocked_reconnect'))))
-         ORDER BY v.id`,
+         ORDER BY v.id LIMIT ${LIST_BOUND + 1}`,
         [scope.workspaceId, params.channel_id],
       );
-      const operations = await tx.query<{ id: string; state: string }>(
-        `SELECT o.id, o.state FROM app.operations AS o
-         WHERE o.workspace_id = $1 AND o.channel_id = $2
-           AND o.state NOT IN ('published', 'failed', 'cancelled', 'missed', 'superseded_after_unknown_outcome')
-         ORDER BY o.id`,
-        [scope.workspaceId, params.channel_id],
-      );
-      return impactOf(
-        scheduled.rows.map((row) => ({
-          ...row,
-          dueAt: row.dueAt === null ? null : new Date(row.dueAt).toISOString(),
-        })),
-        operations.rows,
-      );
+      const operations = await tx.query<OperationRow>(OPEN_OPERATIONS, [
+        scope.workspaceId,
+        params.channel_id,
+        null,
+      ]);
+      const provider = deps ? providerOf(deps, found.data.provider_id) : undefined;
+      return {
+        ...impactOf(
+          scheduled.rows.map((row) => ({
+            ...row,
+            dueAt: row.dueAt === null ? null : new Date(row.dueAt).toISOString(),
+          })),
+          operations.rows,
+        ),
+        revokeSupported: provider?.adapter.revoke !== undefined,
+      };
     },
   });
 }
@@ -94,10 +108,23 @@ function registerDisconnect(app: App, ipHmac: IpHmac, deps: DisconnectDeps): voi
               });
             const blocking = found.rows[0]?.blocking ?? [];
             if (blocking.length > 0) {
+              const named = await tx.query<OperationRow>(OPEN_OPERATIONS, [
+                scope.workspaceId,
+                params.channel_id,
+                blocking,
+              ]);
+              const shown = impactOf([], named.rows).blocking;
               throw new Refusal("conflict", "the channel has work in flight", {
                 details: {
                   reason: "channel_busy",
-                  blocking: blocking.map((id) => ({ kind: "operation" as const, id })),
+                  blocking: shown.map((row) => ({
+                    kind: "operation" as const,
+                    id: row.id,
+                    post_id: row.postId,
+                    channel_name: row.channelName,
+                    state: row.state,
+                  })),
+                  ...(blocking.length > LIST_BOUND ? { truncated: true } : {}),
                 },
               });
             }
@@ -129,6 +156,6 @@ function registerDisconnect(app: App, ipHmac: IpHmac, deps: DisconnectDeps): voi
 }
 
 export function registerDisconnectRoutes(app: App, ipHmac: IpHmac, deps: DisconnectDeps | undefined): void {
-  registerImpact(app);
+  registerImpact(app, deps);
   if (deps) registerDisconnect(app, ipHmac, deps);
 }

@@ -40,6 +40,9 @@ interface SettingIssue {
 interface Blocking {
   readonly kind: "operation";
   readonly id: string;
+  readonly post_id: string;
+  readonly channel_name: string;
+  readonly state: string;
 }
 export type RefusalDetails = Readonly<
   Record<string, string | boolean | readonly SettingIssue[] | readonly string[] | readonly Blocking[]>
