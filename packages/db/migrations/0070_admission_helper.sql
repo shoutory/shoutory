@@ -51,7 +51,7 @@ AS $$
 $$;
 
 -- The channel is locked first, then the operation is inserted, its media pinned and its usage reserved, and the event
--- written; a publish also moves its target. A caller that passes an audit action gets its audit row in the same
+-- written; the caller, which holds the target, moves it. A caller that passes an audit action gets its audit row in the same
 -- transaction. The version's hash is read here, so a caller names the version only.
 CREATE FUNCTION app.ledger_admit_target(
   p_ws uuid, p_variant uuid, p_channel uuid, p_provider text, p_kind text, p_part integer, p_parent uuid,
@@ -98,10 +98,6 @@ BEGIN
     IF p_reserve THEN
       INSERT INTO app.usage_reservations (workspace_id, organization_id, operation_id, key, amount)
         VALUES (p_ws, org, new_operation, 'posts_per_month', 1);
-    END IF;
-    IF p_kind = 'publish' THEN
-      UPDATE app.post_variants AS v SET schedule_state = CASE WHEN st = 'blocked_reconnect' THEN 'held' ELSE 'in_progress' END
-        WHERE v.workspace_id = p_ws AND v.id = p_variant;
     END IF;
   END IF;
   INSERT INTO app.outbox (workspace_id, type, payload)
@@ -178,6 +174,10 @@ BEGIN
       SELECT f.new_operation, f.new_state INTO new_op, st FROM app.ledger_admit_target(r.ws, r.vid, r.channel_id,
         r.provider_id, 'publish', 0, NULL, r.due_at, late, r.author_id, secs, r.frozen_version_id,
         'admit-' || uuidv7()::text, true, true, NULL, NULL, NULL) AS f;
+      IF st <> 'missed' THEN
+        UPDATE app.post_variants AS v SET schedule_state = CASE WHEN st = 'blocked_reconnect' THEN 'held' ELSE 'in_progress' END
+          WHERE v.workspace_id = r.ws AND v.id = r.vid;
+      END IF;
       added := true;
     EXCEPTION
       WHEN unique_violation THEN

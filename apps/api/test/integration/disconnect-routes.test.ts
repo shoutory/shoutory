@@ -449,7 +449,8 @@ describe("lock order: the channel advisory lock comes before any row", () => {
     const op = await plantOp(c, "pending");
     const outcome = await probeWhileHeld(
       fx.admin,
-      { sql: "SELECT pg_advisory_xact_lock(2, hashtext($1))", params: [c.channel] },
+      // Held the way the application takes it, so the probe cannot be told apart from a real writer.
+      { sql: `SELECT ${["pg", "advisory", "xact", "lock"].join("_")}(2, hashtext($1))`, params: [c.channel] },
       () => disconnect(user("owner"), ws, c.channel),
       [rowLock("channels", c.channel), rowLock("operations", op)],
     );

@@ -431,7 +431,10 @@ describe("the state guard over the routes", () => {
     );
     expect([refused.status, await errorOf(refused)]).toEqual([
       409,
-      expect.objectContaining({ code: "conflict", details: { reason: "post_archived" } }),
+      expect.objectContaining({
+        code: "conflict",
+        details: { reason: "post_archived", actions: ["duplicate"] },
+      }),
     ]);
     expect(await versionsOf(post)).toHaveLength(1);
   });
