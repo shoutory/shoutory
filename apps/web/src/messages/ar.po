@@ -3694,3 +3694,71 @@ msgstr "للعرض فقط: مساحة العمل هذه مؤرشفة."
 #. js-lingui-explicit-id
 msgid "composer.readonly.role"
 msgstr "للعرض فقط: دورك في مساحة العمل هذه لا يسمح بتغيير المنشورات."
+
+#. js-lingui-explicit-id
+msgid "composer.restore.no"
+msgstr "تجاهل"
+
+#. js-lingui-explicit-id
+msgid "composer.restore.yes"
+msgstr "استعادة"
+
+#. js-lingui-explicit-id
+msgid "composer.restore.body"
+msgstr "وجدنا تغييرات غير محفوظة من <0/>. هل تريد استعادتها؟"
+
+#. js-lingui-explicit-id
+msgid "composer.conflict.title"
+msgstr "تغيّرت هذه المسودة في مكان آخر"
+
+#. js-lingui-explicit-id
+msgid "composer.conflict.body"
+msgstr "حفظ شخص ما نسخة أحدث. نسختك ما زالت هنا. اختر النسخة التي تريد الاحتفاظ بها."
+
+#. js-lingui-explicit-id
+msgid "composer.conflict.yours"
+msgstr "نسختك"
+
+#. js-lingui-explicit-id
+msgid "composer.conflict.their_version"
+msgstr "نسختهم"
+
+#. js-lingui-explicit-id
+msgid "composer.conflict.mine"
+msgstr "الاحتفاظ بنسختي"
+
+#. js-lingui-explicit-id
+msgid "composer.conflict.theirs"
+msgstr "استخدام نسختهم"
+
+#. js-lingui-explicit-id
+msgid "composer.save.offline"
+msgstr "غير محفوظ على الخادم"
+
+#. js-lingui-explicit-id
+msgid "composer.save.saving"
+msgstr "جارٍ الحفظ"
+
+#. js-lingui-explicit-id
+msgid "composer.save.saved"
+msgstr "تم الحفظ (<0/>)"
+
+#. js-lingui-explicit-id
+msgid "composer.save.unsaved"
+msgstr "تغييرات غير محفوظة"
+
+#. js-lingui-explicit-id
+msgid "composer.save.paused"
+msgstr "توقف الحفظ للحظات. تغييراتك محفوظة على هذا الجهاز."
+
+#. js-lingui-explicit-id
+msgid "composer.save.retry"
+msgstr "احفظ مرة أخرى"
+
+#. js-lingui-explicit-id
+msgid "composer.save.failed.what"
+msgstr "تعذّر حفظ تغييراتك"
+
+#. js-lingui-explicit-id
+msgid "composer.save.failed.meaning"
+msgstr "تغييراتك محفوظة على هذا الجهاز. حاول الحفظ مرة أخرى."

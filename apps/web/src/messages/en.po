@@ -3696,3 +3696,71 @@ msgstr "View only: this workspace is archived."
 #. js-lingui-explicit-id
 msgid "composer.readonly.role"
 msgstr "View only: your role in this workspace cannot change posts."
+
+#. js-lingui-explicit-id
+msgid "composer.restore.no"
+msgstr "Discard"
+
+#. js-lingui-explicit-id
+msgid "composer.restore.yes"
+msgstr "Restore"
+
+#. js-lingui-explicit-id
+msgid "composer.restore.body"
+msgstr "We found unsaved changes from <0/>. Restore them?"
+
+#. js-lingui-explicit-id
+msgid "composer.conflict.title"
+msgstr "This draft changed somewhere else"
+
+#. js-lingui-explicit-id
+msgid "composer.conflict.body"
+msgstr "Someone saved a newer version. Yours is still here. Choose the one to keep."
+
+#. js-lingui-explicit-id
+msgid "composer.conflict.yours"
+msgstr "Your version"
+
+#. js-lingui-explicit-id
+msgid "composer.conflict.their_version"
+msgstr "Their version"
+
+#. js-lingui-explicit-id
+msgid "composer.conflict.mine"
+msgstr "Keep mine"
+
+#. js-lingui-explicit-id
+msgid "composer.conflict.theirs"
+msgstr "Use theirs"
+
+#. js-lingui-explicit-id
+msgid "composer.save.offline"
+msgstr "Not saved to the server"
+
+#. js-lingui-explicit-id
+msgid "composer.save.saving"
+msgstr "Saving"
+
+#. js-lingui-explicit-id
+msgid "composer.save.saved"
+msgstr "Saved (<0/>)"
+
+#. js-lingui-explicit-id
+msgid "composer.save.unsaved"
+msgstr "Unsaved changes"
+
+#. js-lingui-explicit-id
+msgid "composer.save.paused"
+msgstr "Saving paused for a moment. Your changes are kept on this device."
+
+#. js-lingui-explicit-id
+msgid "composer.save.retry"
+msgstr "Save again"
+
+#. js-lingui-explicit-id
+msgid "composer.save.failed.what"
+msgstr "We could not save your changes"
+
+#. js-lingui-explicit-id
+msgid "composer.save.failed.meaning"
+msgstr "Your changes are kept on this device. Try saving again."

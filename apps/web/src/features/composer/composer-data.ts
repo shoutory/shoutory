@@ -78,7 +78,7 @@ export const EMPTY_DOC: Doc = { base: "", baseMedia: [], variants: [] };
 export const textOf = (doc: Doc, variant: VariantDoc): string => variant.override ?? doc.base;
 const mediaOf = (doc: Doc, variant: VariantDoc): Medium[] => variant.mediaOverride ?? doc.baseMedia;
 
-function toDraft(doc: Doc): Draft {
+export function toDraft(doc: Doc): Draft {
   return {
     variants: doc.variants.map((variant) => ({
       channel_id: variant.channelId,
@@ -110,7 +110,7 @@ function mostCommon<T>(items: readonly T[], key: (item: T) => string): T | undef
   return best?.item;
 }
 
-function fromDraft(draft: Draft): Doc {
+export function fromDraft(draft: Draft): Doc {
   const base = mostCommon(draft.variants, (variant) => variant.text)?.text ?? "";
   const mediaKey = (media: Medium[]) => JSON.stringify(media);
   const baseMedia = mostCommon(draft.variants, (variant) => mediaKey(variant.media))?.media ?? [];

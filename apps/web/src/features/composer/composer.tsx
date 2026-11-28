@@ -1,7 +1,7 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import { ROLE_PERMISSIONS } from "@shoutory/core/authz";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { z } from "zod";
 import { type Loaded, useLoad } from "../../account/use-load";
 import { type ApiError, request, requestPages } from "../../http/client";
@@ -23,8 +23,11 @@ import {
   providerSchema,
   withChannels,
 } from "./composer-data";
+import { useSaver } from "./composer-save";
+import { ConflictDialog } from "./conflict-dialog";
 import { ValidationPanel } from "./counters";
 import { Preview } from "./preview";
+import { RestoreOffer, SaveFailure, SaveIndicator } from "./save-status";
 import { type Channels, VariantEditor } from "./variant-editor";
 
 interface Initial {
@@ -51,40 +54,88 @@ function useChannelFacts({ providers, channels }: Refs): Channels {
   }, [providers, channels]);
 }
 
-function Composer({
-  workspace,
-  refs,
-  initial,
-  canEdit,
-  reason,
-}: {
-  workspace: Workspace;
-  refs: Refs;
-  initial: Initial;
-  canEdit: boolean;
-  reason: string | null;
-}) {
-  const [doc, setDoc] = useState(initial.doc);
+// The tab being edited, and the jump from a check to the field it names.
+function useFields(doc: Doc, selected: readonly string[]) {
   const [tab, setTab] = useState("all");
   const [focus, setFocus] = useState<string | null>(null);
-  const [refused] = useState<Issue[]>([]);
-  const channels = useChannelFacts(refs);
-  const issues = useMemo(() => issuesOf(doc, channels.providerOf), [doc, channels]);
-  const selected = doc.variants.map((variant) => variant.channelId);
-  const activeTab = tab === "all" || selected.includes(tab) ? tab : "all";
-
   useEffect(() => {
     if (focus === null) return;
     document.querySelector<HTMLElement>(`[data-field="${focus}"]`)?.focus();
     setFocus(null);
   }, [focus]);
-
   const go = (issue: Issue) => {
     const variant = doc.variants.find((one) => one.channelId === issue.channelId);
     const own = issue.key !== "text" || variant?.override !== null;
     setTab(own ? issue.channelId : "all");
     setFocus(own ? `${issue.key}:${issue.channelId}` : "text:all");
   };
+  return { tab: tab === "all" || selected.includes(tab) ? tab : "all", setTab, go };
+}
+
+function SaveSurface({
+  saver,
+  workspace,
+  doc,
+  nameOf,
+}: {
+  saver: ReturnType<typeof useSaver>;
+  workspace: string;
+  doc: Doc;
+  nameOf: (id: string) => string;
+}) {
+  return (
+    <>
+      <RestoreOffer offer={saver.offer} onRestore={saver.restore} onDiscard={saver.discard} />
+      {saver.failure ? <SaveFailure error={saver.failure} onRetry={() => void saver.saveNow()} /> : null}
+      {saver.conflict !== null && saver.postId ? (
+        <ConflictDialog
+          base={`/api/v1/workspaces/${workspace}`}
+          postId={saver.postId}
+          theirs={saver.conflict}
+          mine={doc}
+          nameOf={nameOf}
+          onKeepMine={() => saver.keepMine(saver.conflict ?? "")}
+          onUseTheirs={(theirs) => saver.takeTheirs(theirs, saver.conflict ?? "")}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function Composer({
+  workspace,
+  refs,
+  initial,
+  canEdit,
+  reason,
+  onCreated,
+}: {
+  workspace: Workspace;
+  refs: Refs;
+  initial: Initial;
+  canEdit: boolean;
+  reason: string | null;
+  onCreated: (id: string) => void;
+}) {
+  const navigate = useNavigate();
+  const [doc, setDoc] = useState(initial.doc);
+  const [refused] = useState<Issue[]>([]);
+  const channels = useChannelFacts(refs);
+  const saver = useSaver({
+    workspace: workspace.id,
+    postId: initial.postId,
+    version: initial.version,
+    doc,
+    canSave: canEdit,
+    onCreated: (id) => {
+      onCreated(id);
+      void navigate(`/w/${workspace.id}/posts/${id}/edit`, { replace: true });
+    },
+    onReplace: setDoc,
+  });
+  const issues = useMemo(() => issuesOf(doc, channels.providerOf), [doc, channels]);
+  const selected = doc.variants.map((variant) => variant.channelId);
+  const { tab: activeTab, setTab, go } = useFields(doc, selected);
 
   return (
     <div className="flex flex-col gap-6">
@@ -93,6 +144,7 @@ function Composer({
           <span data-testid="composer-readonly">{reason}</span>
         </Banner>
       )}
+      <SaveSurface saver={saver} workspace={workspace.id} doc={doc} nameOf={channels.nameOf} />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="flex flex-col gap-6">
           <ChannelPicker
@@ -111,12 +163,13 @@ function Composer({
             onTab={setTab}
             refused={refused}
             readOnly={!canEdit}
-            onBlur={() => undefined}
+            onBlur={() => void saver.saveNow()}
           />
           <ValidationPanel issues={issues} nameOf={channels.nameOf} onGo={go} />
         </div>
         <Preview doc={doc} nameOf={channels.nameOf} tab={activeTab} />
       </div>
+      <SaveIndicator state={saver.state} savedAt={saver.savedAt} online={saver.online} />
     </div>
   );
 }
@@ -155,11 +208,14 @@ function Loading() {
 function useBoot(routeId: string | undefined, detail: Loaded<Detail | null>, refsReady: boolean) {
   const [boot, setBoot] = useState<Initial | null>(null);
   const known = useRef(routeId);
+  const created = useRef<string | undefined>(undefined);
+  // The page the composer made itself is the one it already shows; any other page starts the composer over.
   useEffect(() => {
-    if (routeId !== known.current) {
-      known.current = routeId;
-      setBoot((now) => (now?.postId === routeId ? now : null));
-    }
+    if (routeId === known.current) return;
+    known.current = routeId;
+    if (routeId !== undefined && routeId === created.current) return;
+    created.current = undefined;
+    setBoot(null);
   }, [routeId]);
   useEffect(() => {
     if (boot !== null || !refsReady || detail.status !== "done") return;
@@ -170,7 +226,12 @@ function useBoot(routeId: string | undefined, detail: Loaded<Detail | null>, ref
       if (doc) setBoot({ postId: routeId, version: data.current_version_id, doc });
     }
   }, [boot, routeId, detail, refsReady]);
-  return boot;
+  return {
+    boot,
+    markCreated: (id: string) => {
+      created.current = id;
+    },
+  };
 }
 
 const permissions: Readonly<Record<string, readonly string[] | undefined>> = ROLE_PERMISSIONS;
@@ -183,7 +244,7 @@ function ComposerLoader({ workspace, postId }: { workspace: Workspace; postId: s
   const loaded = useDetail(base, postId);
   const detail = loaded.state;
   const refsReady = providers.state.status === "done" && channels.state.status === "done";
-  const boot = useBoot(postId, detail, refsReady);
+  const { boot, markCreated } = useBoot(postId, detail, refsReady);
   const failure = [providers.state, channels.state, detail].find((state) => state.status === "failed");
   const allowed = permissions[workspace.role]?.includes("posts.edit") ?? false;
   const canEdit = allowed && !workspace.archived_at;
@@ -212,6 +273,7 @@ function ComposerLoader({ workspace, postId }: { workspace: Workspace; postId: s
           workspace={workspace}
           refs={refs}
           initial={boot}
+          onCreated={markCreated}
           canEdit={canEdit}
           reason={
             canEdit

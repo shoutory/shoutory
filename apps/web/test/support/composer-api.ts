@@ -81,6 +81,44 @@ export const BROKEN = named(CH.broken, "short_net", "Short Broken", {
   connection_state: "needs_reconnect",
 });
 
+export const variantRow = (channel: string, text: string, change: Record<string, unknown> = {}) => ({
+  channel_id: channel,
+  locale: null,
+  post_type: "text",
+  text,
+  parts: [],
+  settings: {},
+  media: [],
+  ...change,
+});
+
+/** The post as the server's detail answer gives it: one target for each variant, with what it may do. */
+export const detailOf = (
+  variants: ReturnType<typeof variantRow>[],
+  actions: string[] = ["schedule", "publish_now", "duplicate"],
+  change: Record<string, unknown> = {},
+  version = VERSION_1,
+) =>
+  json({
+    data: {
+      id: POST,
+      status: "draft",
+      current_version_id: version,
+      variants,
+      targets: variants.map((variant, at) => ({
+        variant_id: `0190a000-0000-7000-8000-00000000e00${at + 1}`,
+        channel_id: variant.channel_id,
+        schedule_state: "draft",
+        published_at: null,
+        due_at: null,
+        due_tz: null,
+        hold_reason: null,
+        actions,
+        ...change,
+      })),
+    },
+  });
+
 const callOf = (path: string, url: URL, init: RequestInit | undefined): Call => ({
   method: init?.method ?? "GET",
   path,
