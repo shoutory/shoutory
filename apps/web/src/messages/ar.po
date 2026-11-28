@@ -4622,3 +4622,75 @@ msgstr "لم يُنشر هذا المنشور"
 #. js-lingui-explicit-id
 msgid "posts.delete.unpublished.meaning"
 msgstr "لا يوجد على المنصة ما يُحذف. لم يتغير شيء."
+
+#. js-lingui-explicit-id
+msgid "composer.versions.open"
+msgstr "سجل النسخ"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.title"
+msgstr "سجل النسخ"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.row"
+msgstr "النسخة {0}، {1}"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.kind.autosave"
+msgstr "حفظ تلقائي"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.kind.save"
+msgstr "محفوظة"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.kind.submitted"
+msgstr "مُرسلة للمراجعة"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.kind.scheduled"
+msgstr "مجدولة"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.kind.posted"
+msgstr "أُرسلت للنشر"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.kind.other"
+msgstr "نسخة"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.preview"
+msgstr "معاينة"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.restore"
+msgstr "استعادة كنسخة جديدة"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.more"
+msgstr "عرض النسخ الأقدم"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.view"
+msgstr "هذه النسخة"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.close"
+msgstr "إغلاق"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.failed.what"
+msgstr "تعذّرت استعادة هذه النسخة"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.failed.meaning"
+msgstr "لم يتغير شيء."
+
+#. js-lingui-explicit-id
+msgid "composer.versions.list_failed.what"
+msgstr "تعذّر تحميل النسخ"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.list_failed.meaning"
+msgstr "لم يتغير شيء."

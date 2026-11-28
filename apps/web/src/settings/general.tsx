@@ -27,6 +27,7 @@ const profileSchema = z.object({
   slug: z.string(),
   colour: z.string().nullable(),
   default_tz: z.string(),
+  lateness_tolerance_minutes: z.number().int(),
 });
 type Profile = z.infer<typeof profileSchema>;
 
@@ -35,24 +36,51 @@ interface Draft {
   slug: string;
   colour: string | null;
   zone: string;
+  /** Minutes as typed: it stays text so a half-typed or wrong value is shown, not corrected. */
+  lateness: string;
 }
 const draftOf = (profile: Profile): Draft => ({
   name: profile.name,
   slug: profile.slug,
   colour: profile.colour,
   zone: profile.default_tz,
+  lateness: String(profile.lateness_tolerance_minutes),
 });
 
+const LATENESS_MIN = 5;
+const LATENESS_MAX = 1440;
+const latenessOf = (text: string): number | null => {
+  const value = text.trim();
+  if (!/^\d+$/.test(value)) return null;
+  const minutes = Number(value);
+  return minutes >= LATENESS_MIN && minutes <= LATENESS_MAX ? minutes : null;
+};
+
 function changesOf(draft: Draft, saved: Profile) {
-  const changes: Record<string, string> = {};
+  const changes: Record<string, string | number> = {};
   if (draft.name.trim() !== saved.name) changes.name = draft.name.trim();
   if (draft.slug.trim() !== saved.slug) changes.slug = draft.slug.trim();
   if (draft.colour !== null && draft.colour !== saved.colour) changes.colour = draft.colour;
   if (draft.zone !== saved.default_tz) changes.default_tz = draft.zone;
+  const minutes = latenessOf(draft.lateness);
+  if (minutes !== null && minutes !== saved.lateness_tolerance_minutes) {
+    changes.lateness_tolerance_minutes = minutes;
+  }
   return changes;
 }
 
 function saveCopy(error: ApiError) {
+  if (error.details?.reason === "lateness_out_of_range")
+    return {
+      what: (
+        <Trans id="settings.general.lateness_refused.what">The late publish window is out of range</Trans>
+      ),
+      meaning: (
+        <Trans id="settings.general.lateness_refused.meaning">
+          Enter a whole number of minutes from 5 to 1440. Nothing was changed.
+        </Trans>
+      ),
+    };
   // A conflict with a reason (an archived workspace) is not a taken address name.
   if (error.code === "conflict" && !error.details?.reason)
     return {
@@ -146,10 +174,53 @@ function useGeneral(profile: Profile) {
     setDraft((now) => ({ ...now, ...next }));
     setDone(false);
   };
-  return { draft, edit, dirty: Object.keys(changesOf(draft, saved)).length > 0, done, save, saved };
+  // A lateness text that is not a valid number is a change too: it must show as unsaved and be checked on submit.
+  const dirty =
+    Object.keys(changesOf(draft, saved)).length > 0 ||
+    draft.lateness.trim() !== String(saved.lateness_tolerance_minutes);
+  return { draft, edit, dirty, done, save, saved };
 }
 
-type Invalid = { name: boolean; slug: boolean };
+type Invalid = { name: boolean; slug: boolean; lateness: boolean };
+
+function LatenessField({
+  g,
+  canEdit,
+  invalid,
+  onValid,
+}: {
+  g: ReturnType<typeof useGeneral>;
+  canEdit: boolean;
+  invalid: boolean;
+  onValid: () => void;
+}) {
+  const { t } = useLingui();
+  const bad = t({
+    id: "settings.general.lateness_bad",
+    message: "Enter a whole number of minutes from 5 to 1440.",
+  });
+  return (
+    <div className="flex flex-col gap-2">
+      <TextField
+        label={t({ id: "settings.general.lateness", message: "Late publish window (minutes)" })}
+        name="lateness"
+        inputMode="numeric"
+        isReadOnly={!canEdit}
+        value={g.draft.lateness}
+        onChange={(lateness) => {
+          g.edit({ lateness });
+          onValid();
+        }}
+        {...(invalid ? { errorMessage: bad } : {})}
+      />
+      <p className="text-sm text-text-muted">
+        <Trans id="settings.general.lateness_hint">
+          The default is 120 minutes (2 hours). A post later than this is marked Missed, never sent late.
+        </Trans>
+      </p>
+    </div>
+  );
+}
 
 function TextFields({
   g,
@@ -199,14 +270,18 @@ function GeneralForm({ profile, canEdit }: { profile: Profile; canEdit: boolean 
   const form = useRef<HTMLFormElement>(null);
   const g = useGeneral(profile);
   const need = t({ id: "settings.need_admin", message: "You need the admin role to save changes." });
-  const [invalid, setInvalid] = useState<Invalid>({ name: false, slug: false });
+  const [invalid, setInvalid] = useState<Invalid>({ name: false, slug: false, lateness: false });
   const clear = (name: keyof Invalid) => setInvalid((now) => ({ ...now, [name]: false }));
   const submit = () => {
     // Enter in a field still submits while the button is unavailable.
     if (!canEdit) return;
-    const bad = { name: g.draft.name.trim() === "", slug: !SLUG.test(g.draft.slug.trim()) };
+    const bad = {
+      name: g.draft.name.trim() === "",
+      slug: !SLUG.test(g.draft.slug.trim()),
+      lateness: latenessOf(g.draft.lateness) === null,
+    };
     setInvalid(bad);
-    const first = (["name", "slug"] as const).find((field) => bad[field]);
+    const first = (["name", "slug", "lateness"] as const).find((field) => bad[field]);
     if (first) form.current?.querySelector<HTMLInputElement>(`input[name="${first}"]`)?.focus();
     else if (g.dirty) void g.save.run();
   };
@@ -220,6 +295,7 @@ function GeneralForm({ profile, canEdit }: { profile: Profile; canEdit: boolean 
       className="flex max-w-md flex-col gap-5"
     >
       <TextFields g={g} canEdit={canEdit} invalid={invalid} onValid={clear} />
+      <LatenessField g={g} canEdit={canEdit} invalid={invalid.lateness} onValid={() => clear("lateness")} />
       <Colours value={g.draft.colour} onChange={(colour) => g.edit({ colour })} readOnly={!canEdit} />
       <ZonePicker
         label={t({ id: "account.profile.zone", message: "Time zone" })}

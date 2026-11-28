@@ -24,6 +24,7 @@ import { Preview } from "./preview";
 import { PublishBar } from "./publish-bar";
 import { RestoreOffer, SaveFailure, SaveIndicator } from "./save-status";
 import { type Channels, VariantEditor } from "./variant-editor";
+import { VersionsPanel } from "./versions-panel";
 
 export interface Initial {
   postId: string | undefined;
@@ -94,7 +95,7 @@ function SaveSurface({
           mine={doc}
           nameOf={nameOf}
           onKeepMine={() => saver.keepMine(saver.conflict ?? "")}
-          onUseTheirs={(theirs) => saver.takeTheirs(theirs, saver.conflict ?? "")}
+          onUseTheirs={(theirs) => saver.adopt(theirs, saver.conflict ?? "")}
         />
       ) : null}
     </>
@@ -291,12 +292,61 @@ export function Composer({
         onBlur={() => void saver.saveNow()}
       />
       {copy.failure ? <CopyFailure error={copy.failure} /> : null}
+      <Footer
+        saver={saver}
+        workspace={workspace.id}
+        zone={refs.zone}
+        channels={channels}
+        selected={selected}
+        targets={targets}
+        issues={issues}
+        canEdit={canEdit}
+        actions={{ onIssues: setRefused, onDuplicate: copy.duplicate, onRefresh }}
+      />
+    </div>
+  );
+}
+
+// The save state, the version history and the controls that schedule or publish.
+function Footer({
+  saver,
+  workspace,
+  zone,
+  channels,
+  selected,
+  targets,
+  issues,
+  canEdit,
+  actions,
+}: {
+  saver: ReturnType<typeof useSaver>;
+  workspace: string;
+  zone: string;
+  channels: Channels;
+  selected: readonly string[];
+  targets: readonly Target[];
+  issues: readonly Issue[];
+  canEdit: boolean;
+  actions: { onIssues: (issues: Issue[]) => void; onDuplicate: () => void; onRefresh: () => void };
+}) {
+  return (
+    <>
       <SaveIndicator state={saver.state} savedAt={saver.savedAt} online={saver.online} />
+      {saver.postId ? (
+        <VersionsPanel
+          workspace={workspace}
+          postId={saver.postId}
+          nameOf={channels.nameOf}
+          beforeRestore={saver.saveNow}
+          currentVersion={saver.currentVersion}
+          onRestored={saver.adopt}
+        />
+      ) : null}
       {canEdit ? (
         <PublishBar
-          workspace={workspace.id}
+          workspace={workspace}
           postId={saver.postId}
-          zone={refs.zone}
+          zone={zone}
           selected={selected}
           targets={targets}
           channelOk={channels.okOf}
@@ -305,12 +355,12 @@ export function Composer({
           online={saver.online}
           pending={saver.pending}
           saveNow={saver.saveNow}
-          onIssues={setRefused}
-          onEdit={onRefresh}
-          onDuplicate={copy.duplicate}
-          onChanged={onRefresh}
+          onIssues={actions.onIssues}
+          onEdit={actions.onRefresh}
+          onDuplicate={actions.onDuplicate}
+          onChanged={actions.onRefresh}
         />
       ) : null}
-    </div>
+    </>
   );
 }

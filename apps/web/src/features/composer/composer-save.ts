@@ -243,11 +243,14 @@ export function useSaver(args: Args) {
       patch({ conflict: null });
       return saveNow();
     },
-    takeTheirs: (doc: Doc, theirs: string) => {
-      baseline.current = { ...baseline.current, json: JSON.stringify(doc), version: theirs };
+    // The server's own version of the document becomes the one the page holds: another person's save, or a restore.
+    adopt: (doc: Doc, version: string, pending: string[] = []) => {
+      baseline.current = { ...baseline.current, json: JSON.stringify(doc), version };
       held.current = false;
-      patch({ conflict: null, state: "saved" });
+      patch({ conflict: null, state: "saved", pending, savedAt: new Date() });
       args.onReplace(doc);
     },
+    /** The version the next save is made against. */
+    currentVersion: () => baseline.current.version,
   };
 }

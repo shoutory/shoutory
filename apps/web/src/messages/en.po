@@ -4624,3 +4624,75 @@ msgstr "This post was not published"
 #. js-lingui-explicit-id
 msgid "posts.delete.unpublished.meaning"
 msgstr "There is nothing on the platform to remove. Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "composer.versions.open"
+msgstr "Version history"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.title"
+msgstr "Version history"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.row"
+msgstr "Version {0}, {1}"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.kind.autosave"
+msgstr "Autosave"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.kind.save"
+msgstr "Saved"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.kind.submitted"
+msgstr "Submitted"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.kind.scheduled"
+msgstr "Scheduled"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.kind.posted"
+msgstr "Posted"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.kind.other"
+msgstr "Version"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.preview"
+msgstr "Preview"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.restore"
+msgstr "Restore as new version"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.more"
+msgstr "Show older versions"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.view"
+msgstr "This version"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.close"
+msgstr "Close"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.failed.what"
+msgstr "We could not restore this version"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.failed.meaning"
+msgstr "Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "composer.versions.list_failed.what"
+msgstr "We could not load the versions"
+
+#. js-lingui-explicit-id
+msgid "composer.versions.list_failed.meaning"
+msgstr "Nothing was changed."

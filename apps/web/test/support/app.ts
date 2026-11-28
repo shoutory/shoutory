@@ -499,6 +499,7 @@ export const PROFILE = {
   slug: "acme-one",
   colour: null,
   default_tz: "Africa/Cairo",
+  lateness_tolerance_minutes: 120,
 };
 
 function settingsAnswers(api: Api): Record<string, Answer> {

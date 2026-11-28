@@ -10,7 +10,8 @@ import { type Doc, fromDraft, textOf } from "./composer-data";
 
 const versionSchema = z.object({ draft: draftSchema });
 
-function Version({
+/** The words of a draft, channel by channel, each in its own direction. */
+export function DraftView({
   title,
   doc,
   nameOf,
@@ -79,14 +80,14 @@ export function ConflictDialog({
             Someone saved a newer version. Yours is still here. Choose the one to keep.
           </Trans>
         </p>
-        <Version
+        <DraftView
           testId="conflict-mine-text"
           title={<Trans id="composer.conflict.yours">Your version</Trans>}
           doc={mine}
           nameOf={nameOf}
         />
         {theirDoc ? (
-          <Version
+          <DraftView
             testId="conflict-theirs-text"
             title={<Trans id="composer.conflict.their_version">Their version</Trans>}
             doc={theirDoc}

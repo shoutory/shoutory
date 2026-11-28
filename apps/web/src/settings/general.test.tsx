@@ -6,9 +6,11 @@ import {
   click,
   closeApp,
   combobox,
+  json,
   mediaPage,
   mediaRow,
   openApp,
+  PROFILE,
   pageOf,
   refusal,
   roleOf,
@@ -190,6 +192,76 @@ describe("the workspace picture", () => {
     click(host.querySelector('[data-testid="avatar-remove"]') as HTMLElement);
     await settle();
     expect(JSON.parse(String(patches(stub)[0]?.[1]?.body))).toEqual({ avatar: null });
+  });
+});
+
+describe("the late publish window", () => {
+  const late = (host: ParentNode) => input(host, "lateness");
+
+  it("shows the window in minutes with its default as a hint, and explains what it does", async () => {
+    stubApi();
+    const { host } = await openApp(PATH);
+    expect(late(host)?.value).toBe("120");
+    expect(host.textContent).toContain("Late publish window");
+    expect(host.textContent).toMatch(/default is 120 minutes \(2 hours\)/i);
+    expect(host.textContent).toMatch(/marked Missed, never sent late/);
+  });
+
+  it.each([["5"], ["1440"], ["120"], ["  30  "]])("sends %s as a number of minutes", async (value) => {
+    const { stub } = await change({}, { lateness: value });
+    const sent = patches(stub)[0]?.[1]?.body;
+    expect(sent === undefined ? {} : JSON.parse(String(sent))).toEqual(
+      value === "120" ? {} : { lateness_tolerance_minutes: Number(value.trim()) },
+    );
+  });
+
+  it.each([["4"], ["1441"], ["0"], ["-5"], ["12.5"], ["two hours"], [""]])(
+    "refuses %s before any call and says the bounds",
+    async (value) => {
+      const { stub, host } = await change({}, { lateness: value });
+      expect(patches(stub)).toHaveLength(0);
+      expect(host.textContent).toMatch(/whole number of minutes from 5 to 1440/i);
+      expect(late(host)?.value).toBe(value);
+    },
+  );
+
+  it("says Saved after the answer, and shows the value the server kept", async () => {
+    const { host } = await change(
+      {
+        patchWorkspace: () => json({ data: { ...PROFILE, lateness_tolerance_minutes: 45 } }),
+      },
+      { lateness: "45" },
+    );
+    expect(host.textContent).toMatch(/saved/i);
+    expect(late(host)?.value).toBe("45");
+  });
+});
+
+describe("what the late publish window says when it is refused or read only", () => {
+  const late = (host: ParentNode) => input(host, "lateness");
+
+  it("says the bounds when the server refuses the value", async () => {
+    const { host } = await change(
+      { patchWorkspace: () => refusal("unprocessable_content", 422, { reason: "lateness_out_of_range" }) },
+      { lateness: "30" },
+    );
+    expect(host.querySelector('[role="alert"]')?.textContent).toMatch(/from 5 to 1440/);
+  });
+
+  it("says the bounds in Arabic", async () => {
+    stubApi();
+    const { host } = await openApp(PATH, "ar");
+    type(late(host) as HTMLInputElement, "4");
+    click(host.querySelector<HTMLElement>('button[type="submit"]') as HTMLElement);
+    await settle();
+    expect(host.textContent).toContain("من 5 إلى 1440");
+  });
+
+  it.each(["editor", "viewer"])("a %s sees it and cannot change it", async (role) => {
+    stubApi({ workspaces: roleOf(role) });
+    const { host } = await openApp(PATH);
+    expect(late(host)?.value).toBe("120");
+    expect(late(host)?.readOnly).toBe(true);
   });
 });
 
