@@ -4548,3 +4548,39 @@ msgstr "We could not load your files"
 #. js-lingui-explicit-id
 msgid "composer.library.failed.meaning"
 msgstr "Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "composer.parts.title"
+msgstr "Thread parts"
+
+#. js-lingui-explicit-id
+msgid "composer.parts.explain"
+msgstr "This channel posts the parts as a thread."
+
+#. js-lingui-explicit-id
+msgid "composer.parts.label"
+msgstr "Part {0}"
+
+#. js-lingui-explicit-id
+msgid "composer.parts.up"
+msgstr "Move up"
+
+#. js-lingui-explicit-id
+msgid "composer.parts.down"
+msgstr "Move down"
+
+#. js-lingui-explicit-id
+msgid "composer.parts.delete"
+msgstr "Delete part"
+
+#. js-lingui-explicit-id
+msgid "composer.parts.add"
+msgstr "Add part"
+
+#. js-lingui-explicit-id
+msgid "composer.parts.full"
+msgstr "A thread has at most {MAX_PARTS} parts."
+
+#. js-lingui-explicit-id
+msgid "composer.comment.label"
+msgstr "First comment"

@@ -17,6 +17,7 @@ import {
 } from "./composer-data";
 import { CounterLine, useIssueWords } from "./counters";
 import { MediaSection } from "./media-picker";
+import { FirstComment, PartsBuilder } from "./parts-builder";
 
 export interface Channels {
   nameOf: (channelId: string) => string;
@@ -177,7 +178,34 @@ function ChannelTab({ variant, props }: { variant: VariantDoc; props: EditorProp
         channels={channels}
         readOnly={readOnly}
       />
+      {provider ? <FollowUps variant={variant} provider={provider} props={props} /> : null}
     </div>
+  );
+}
+
+// The thread builder and the first comment, offered only where the network can do them.
+function FollowUps({
+  variant,
+  provider,
+  props,
+}: {
+  variant: VariantDoc;
+  provider: Provider;
+  props: EditorProps;
+}) {
+  const { doc, onDoc, readOnly, onBlur } = props;
+  const shared = {
+    variant,
+    provider,
+    readOnly,
+    onBlur,
+    onChange: (change: Partial<VariantDoc>) => onDoc(withVariant(doc, variant.channelId, change)),
+  };
+  return (
+    <>
+      {provider.capabilities.includes("thread") ? <PartsBuilder {...shared} /> : null}
+      {provider.follow_up_roles.includes("first_comment") ? <FirstComment {...shared} /> : null}
+    </>
   );
 }
 

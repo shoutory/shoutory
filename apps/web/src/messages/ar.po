@@ -4546,3 +4546,39 @@ msgstr "تعذّر تحميل ملفاتك"
 #. js-lingui-explicit-id
 msgid "composer.library.failed.meaning"
 msgstr "لم يتغير شيء."
+
+#. js-lingui-explicit-id
+msgid "composer.parts.title"
+msgstr "أجزاء السلسلة"
+
+#. js-lingui-explicit-id
+msgid "composer.parts.explain"
+msgstr "تنشر هذه القناة الأجزاء على شكل سلسلة."
+
+#. js-lingui-explicit-id
+msgid "composer.parts.label"
+msgstr "الجزء {0}"
+
+#. js-lingui-explicit-id
+msgid "composer.parts.up"
+msgstr "نقل لأعلى"
+
+#. js-lingui-explicit-id
+msgid "composer.parts.down"
+msgstr "نقل لأسفل"
+
+#. js-lingui-explicit-id
+msgid "composer.parts.delete"
+msgstr "حذف الجزء"
+
+#. js-lingui-explicit-id
+msgid "composer.parts.add"
+msgstr "إضافة جزء"
+
+#. js-lingui-explicit-id
+msgid "composer.parts.full"
+msgstr "للسلسلة {MAX_PARTS} جزءًا كحد أقصى."
+
+#. js-lingui-explicit-id
+msgid "composer.comment.label"
+msgstr "التعليق الأول"
