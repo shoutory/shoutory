@@ -84,7 +84,9 @@ describe("the channel page", () => {
     expect(textOf(host, "detail-disconnected")).toMatch(/^Disconnected on /);
     expect(textOf(host, "card-deadline")).toMatch(/^Reconnect by .*; after that these posts become drafts$/);
   });
+});
 
+describe("the channel page controls and failures", () => {
   it.each<[string, Record<string, unknown>]>([
     ["a channel the person may not manage", { actions: [] }],
     ["an unknown state", { connection_state: "from_the_future", actions: [] }],

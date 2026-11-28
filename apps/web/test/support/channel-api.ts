@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import { type Api, CONNECT_WS, channelRow, json, PROVIDERS, stubApi } from "./app";
+import { type Api, json, PROVIDERS, stubApi } from "./app";
 
 type Answer = () => Response | Promise<Response>;
 
@@ -45,7 +45,3 @@ export const providersWith =
   (...change: Record<string, unknown>[]) =>
   () =>
     json({ data: change.map((one, n) => ({ ...PROVIDERS[0], ...one, id: one.id ?? `fixture_${n}` })) });
-
-export const WS = CONNECT_WS;
-export const CHANNEL = channelRow().id;
-export const detailPath = (id = CHANNEL) => `/w/${WS}/channels/${id}`;

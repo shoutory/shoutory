@@ -155,7 +155,9 @@ describe("the impact first", () => {
     expect(disconnects(stub)).toHaveLength(0);
     expect(document.activeElement).toBe(byId(document, "detail-disconnect"));
   });
+});
 
+describe("an impact that cannot be confirmed", () => {
   it("offers no confirm when the impact cannot be read, and reads again on Try again", async () => {
     let failing = true;
     await open({ impact: () => (failing ? refusal("internal_error", 500) : impact()) });
@@ -227,7 +229,9 @@ describe("confirming", () => {
     expect(byId(dialog() as HTMLElement, "disconnect-done")).toBeNull();
     expect(dialogText()).toContain("We could not confirm that the channel was disconnected");
   });
+});
 
+describe("what the answer says", () => {
   it("says nothing was changed when the password check is cancelled", async () => {
     await open({ disconnect: () => refusal("step_up_required", 403) });
     confirm();
@@ -262,7 +266,9 @@ describe("confirming", () => {
     else expect(line?.textContent).not.toMatch(/Remove Shoutory/);
     expect(dialogText()).toContain("Reconnect by");
   });
+});
 
+describe("a refusal and a finished disconnect", () => {
   it("shows the waiting count when the server refuses because posts are being sent", async () => {
     await open({ disconnect: () => busyRefusal(3) });
     confirm();
