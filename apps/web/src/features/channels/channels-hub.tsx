@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useLocation, useNavigate, useParams } from "react-router";
+import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { z } from "zod";
 import { readZone } from "../../account/prefs";
 import { ApiError, request } from "../../http/client";
@@ -20,23 +20,22 @@ import { DirText } from "../../ui/dir-text";
 import { EmptyState } from "../../ui/empty-state";
 import { ErrorPanel } from "../../ui/error-panel";
 import { LocalizedDateTime } from "../../ui/localized";
-import { ReconnectSecret } from "./connect-secret";
-import { Reconnect } from "./connect-start";
+import { Switch } from "../../ui/switch";
+import {
+  CapabilityChips,
+  type Channel,
+  channelSchema,
+  dateOf,
+  ExpiryHint,
+  type ProviderInfo,
+  RECONNECTABLE,
+  ReconnectOf,
+  useProviderNames,
+  useWords,
+  type Words,
+} from "./channel-facts";
 import { ConnectWizard } from "./connect-wizard";
 
-const channelSchema = z.object({
-  id: z.uuid(),
-  provider_id: z.string(),
-  display_name: z.string(),
-  nickname: z.string().nullable(),
-  handle: z.string().nullable(),
-  connection_state: z.string(),
-  health: z.string().nullable(),
-  health_checked_at: z.string().nullable(),
-  reconnect_deadline: z.string().nullable(),
-  actions: z.array(z.string()),
-});
-type Channel = z.infer<typeof channelSchema>;
 const pageSchema = z.object({
   data: z.array(channelSchema),
   // Connecting is offered only when the server lists `connect`; the client never derives it.
@@ -172,65 +171,6 @@ function Failed({ error, retry }: { error: ApiError; retry: () => void }) {
   );
 }
 
-const providersSchema = z.array(
-  z.object({
-    id: z.string(),
-    display_name: z.string(),
-    secret_kind: z.enum(["bot_token", "webhook_url"]).nullable().default(null),
-  }),
-);
-interface ProviderInfo {
-  readonly name: string;
-  readonly secretKind: "bot_token" | "webhook_url" | null;
-}
-
-// A failed read never fails the hub: the card shows the provider id instead.
-function useProviderNames(ws: string): ReadonlyMap<string, ProviderInfo> {
-  const [names, setNames] = useState<ReadonlyMap<string, ProviderInfo>>(new Map());
-  useEffect(() => {
-    let live = true;
-    request(providersSchema, `/api/v1/workspaces/${ws}/providers`).then(
-      (providers) =>
-        live &&
-        setNames(
-          new Map(providers.map((one) => [one.id, { name: one.display_name, secretKind: one.secret_kind }])),
-        ),
-      (error: unknown) => {
-        if (!(error instanceof ApiError)) throw error;
-      },
-    );
-    return () => {
-      live = false;
-    };
-  }, [ws]);
-  return names;
-}
-
-// A value the page does not know gets the unknown word, never Connected.
-function useWords() {
-  const { t } = useLingui();
-  return {
-    state: new Map([
-      ["connected", t({ id: "channels.hub.state.connected", message: "Connected" })],
-      ["needs_reconnect", t({ id: "connect.result.state.needs_reconnect", message: "Reconnect needed" })],
-      ["disconnected", t({ id: "connect.result.state.disconnected", message: "Disconnected" })],
-      [
-        "revoked_by_provider",
-        t({ id: "connect.result.state.revoked_by_provider", message: "Access removed" }),
-      ],
-      ["disabled", t({ id: "connect.result.state.disabled", message: "Turned off" })],
-    ]),
-    unknownState: t({ id: "connect.result.state.unknown", message: "Unknown" }),
-    health: new Map([
-      ["ok", t({ id: "channels.hub.health.ok", message: "Healthy" })],
-      ["degraded", t({ id: "channels.hub.health.degraded", message: "Slow or limited" })],
-      ["failing", t({ id: "channels.hub.health.failing", message: "Failing" })],
-      ["unknown", t({ id: "channels.hub.health.unknown", message: "Not checked yet" })],
-    ]),
-  };
-}
-type Words = ReturnType<typeof useWords>;
-
 function initialsOf(name: string): string {
   const words = name
     .split(/\s+/)
@@ -246,12 +186,6 @@ function healthOf(row: Channel): "ok" | "degraded" | "failing" | "unknown" | nul
   if (row.health === "degraded" || row.health === "failing") return row.health;
   return row.health === "ok" && dateOf(row.health_checked_at) !== null ? "ok" : "unknown";
 }
-
-const dateOf = (value: string | null): Date | null => {
-  const date = value === null ? null : new Date(value);
-  return date === null || Number.isNaN(date.getTime()) ? null : date;
-};
-const RECONNECTABLE = new Set(["needs_reconnect", "disconnected", "revoked_by_provider"]);
 
 interface CardContext {
   names: ReadonlyMap<string, ProviderInfo>;
@@ -381,7 +315,9 @@ function Names({ row, context, nameId }: { row: Channel; context: CardContext; n
   return (
     <>
       <span id={nameId} data-testid="card-display-name" className="text-md font-medium">
-        <DirText>{row.display_name}</DirText>
+        <Link to={`/w/${context.ws}/channels/${row.id}`} className="text-link underline">
+          <DirText>{row.display_name}</DirText>
+        </Link>
       </span>
       {row.nickname === null ? null : (
         <span data-testid="card-nickname">
@@ -430,26 +366,9 @@ function Status({ row, context }: { row: Channel; context: CardContext }) {
           </Trans>
         </span>
       )}
+      <ExpiryHint row={row} zone={zone} />
     </>
   );
-}
-
-// A channel made from a pasted secret is reconnected by pasting it again, never through an authorization.
-function ReconnectOf({ row, context, nameId }: { row: Channel; context: CardContext; nameId: string }) {
-  const info = context.names.get(row.provider_id);
-  if (info?.secretKind) {
-    const platform = { id: row.provider_id, display_name: info.name, secret_kind: info.secretKind };
-    return (
-      <ReconnectSecret
-        ws={context.ws}
-        platform={platform}
-        channelId={row.id}
-        nameId={nameId}
-        onDone={context.onConnected}
-      />
-    );
-  }
-  return <Reconnect ws={context.ws} providerId={row.provider_id} channelId={row.id} nameId={nameId} />;
 }
 
 function Card({ row, context, focus }: { row: Channel; context: CardContext; focus: boolean }) {
@@ -476,9 +395,16 @@ function Card({ row, context, focus }: { row: Channel; context: CardContext; foc
       <div className="flex min-w-0 flex-[1_1_12rem] flex-col gap-1">
         <Names row={row} context={context} nameId={nameId} />
         <Status row={row} context={context} />
+        <CapabilityChips info={context.names.get(row.provider_id)} words={context.words} />
         <CheckNow row={row} context={context} nameId={nameId} focusCard={() => ref.current?.focus()} />
         {row.actions.includes("reconnect") ? (
-          <ReconnectOf row={row} context={context} nameId={nameId} />
+          <ReconnectOf
+            row={row}
+            info={context.names.get(row.provider_id)}
+            ws={context.ws}
+            nameId={nameId}
+            onConnected={context.onConnected}
+          />
         ) : null}
       </div>
     </li>
@@ -512,11 +438,53 @@ function ShowMore({ state, loadMore }: { state: Ready; loadMore: () => void }) {
 interface LoadedProps {
   state: Ready;
   context: CardContext;
+  attention: boolean;
   loadMore: () => void;
   onAdd: () => void;
+  onClearFilter: () => void;
 }
 
-function Loaded({ state, context, loadMore, onAdd }: LoadedProps) {
+// The server's own words decide: a channel that is not connected, or that offers a reconnect.
+const needsAttention = (row: Channel) =>
+  row.connection_state !== "connected" || row.actions.includes("reconnect");
+
+interface Group {
+  readonly key: string;
+  readonly name: string;
+  readonly rows: Channel[];
+}
+
+function groupsOf(rows: readonly Channel[], names: ReadonlyMap<string, ProviderInfo>): Group[] {
+  const groups = new Map<string, Group>();
+  for (const row of rows) {
+    const group = groups.get(row.provider_id) ?? {
+      key: row.provider_id,
+      name: names.get(row.provider_id)?.name ?? row.provider_id,
+      rows: [],
+    };
+    group.rows.push(row);
+    groups.set(row.provider_id, group);
+  }
+  return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function PlatformGroup({ group, state, context }: { group: Group; state: Ready; context: CardContext }) {
+  const headingId = useId();
+  return (
+    <section aria-labelledby={headingId} className="flex flex-col gap-3">
+      <h2 id={headingId} className="font-heading text-lg">
+        <DirText>{group.name}</DirText>
+      </h2>
+      <ul className="flex flex-col gap-3">
+        {group.rows.map((row) => (
+          <Card key={row.id} row={row} context={context} focus={row.id === state.focusId} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function Loaded({ state, context, attention, loadMore, onAdd, onClearFilter }: LoadedProps) {
   const { t } = useLingui();
   if (state.rows.length === 0) {
     const add = {
@@ -536,13 +504,22 @@ function Loaded({ state, context, loadMore, onAdd }: LoadedProps) {
       </EmptyState>
     );
   }
+  const shown = attention ? state.rows.filter(needsAttention) : state.rows;
   return (
     <>
-      <ul className="flex flex-col gap-3">
-        {state.rows.map((row) => (
-          <Card key={row.id} row={row} context={context} focus={row.id === state.focusId} />
-        ))}
-      </ul>
+      {shown.length === 0 ? (
+        <EmptyState
+          kind="filtered-out"
+          title={<Trans id="channels.hub.no_match">No channels match</Trans>}
+          onClearFilters={onClearFilter}
+        >
+          <Trans id="channels.hub.no_match_meaning">Every channel loaded so far is connected.</Trans>
+        </EmptyState>
+      ) : (
+        groupsOf(shown, context.names).map((group) => (
+          <PlatformGroup key={group.key} group={group} state={state} context={context} />
+        ))
+      )}
       <ShowMore state={state} loadMore={loadMore} />
     </>
   );
@@ -564,6 +541,7 @@ function useAddDialog() {
 function ChannelsHub({ ws }: { ws: string }) {
   const { state, loadMore, retry, replaceRow, dropRow } = useChannelList(ws);
   const [removed, setRemoved] = useState(false);
+  const [attention, setAttention] = useState(false);
   const { adding, setAdding, addRef } = useAddDialog();
   const canConnect = state.status === "ready" && state.canConnect;
   const context = {
@@ -612,8 +590,22 @@ function ChannelsHub({ ws }: { ws: string }) {
         </div>
       ) : null}
       {state.status === "failed" ? <Failed error={state.error} retry={tryAgain} /> : null}
+      {state.status === "ready" && state.rows.length > 0 ? (
+        <Switch
+          label={<Trans id="channels.hub.filter_attention">Needs attention</Trans>}
+          isSelected={attention}
+          onChange={setAttention}
+        />
+      ) : null}
       {state.status === "ready" ? (
-        <Loaded state={state} context={context} loadMore={loadMore} onAdd={() => setAdding(true)} />
+        <Loaded
+          state={state}
+          context={context}
+          attention={attention}
+          loadMore={loadMore}
+          onAdd={() => setAdding(true)}
+          onClearFilter={() => setAttention(false)}
+        />
       ) : null}
     </div>
   );

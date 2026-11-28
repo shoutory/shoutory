@@ -2002,6 +2002,58 @@ msgid "channels.hub.reconnect"
 msgstr "Reconnect"
 
 #. js-lingui-explicit-id
+msgid "channels.hub.filter_attention"
+msgstr "Needs attention"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.no_match"
+msgstr "No channels match"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.no_match_meaning"
+msgstr "Every channel loaded so far is connected."
+
+#. js-lingui-explicit-id
+msgid "channels.expiry"
+msgstr "Access ends <0/>"
+
+#. js-lingui-explicit-id
+msgid "channels.capability.text"
+msgstr "Text"
+
+#. js-lingui-explicit-id
+msgid "channels.capability.image"
+msgstr "Images"
+
+#. js-lingui-explicit-id
+msgid "channels.capability.video"
+msgstr "Video"
+
+#. js-lingui-explicit-id
+msgid "channels.capability.link_card"
+msgstr "Link cards"
+
+#. js-lingui-explicit-id
+msgid "channels.capability.thread"
+msgstr "Threads"
+
+#. js-lingui-explicit-id
+msgid "channels.capability.first_comment"
+msgstr "First comment"
+
+#. js-lingui-explicit-id
+msgid "channels.capability.edit"
+msgstr "Edit after posting"
+
+#. js-lingui-explicit-id
+msgid "channels.capability.delete"
+msgstr "Delete after posting"
+
+#. js-lingui-explicit-id
+msgid "channels.capability.refresh"
+msgstr "Renews its own access"
+
+#. js-lingui-explicit-id
 msgid "connect.wizard.title"
 msgstr "Connect a channel"
 

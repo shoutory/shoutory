@@ -2000,6 +2000,58 @@ msgid "channels.hub.reconnect"
 msgstr "إعادة الربط"
 
 #. js-lingui-explicit-id
+msgid "channels.hub.filter_attention"
+msgstr "تحتاج إلى انتباه"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.no_match"
+msgstr "لا توجد قنوات مطابقة"
+
+#. js-lingui-explicit-id
+msgid "channels.hub.no_match_meaning"
+msgstr "كل القنوات المحمّلة حتى الآن متصلة."
+
+#. js-lingui-explicit-id
+msgid "channels.expiry"
+msgstr "ينتهي الوصول في <0/>"
+
+#. js-lingui-explicit-id
+msgid "channels.capability.text"
+msgstr "نصوص"
+
+#. js-lingui-explicit-id
+msgid "channels.capability.image"
+msgstr "صور"
+
+#. js-lingui-explicit-id
+msgid "channels.capability.video"
+msgstr "فيديو"
+
+#. js-lingui-explicit-id
+msgid "channels.capability.link_card"
+msgstr "بطاقات الروابط"
+
+#. js-lingui-explicit-id
+msgid "channels.capability.thread"
+msgstr "سلاسل المنشورات"
+
+#. js-lingui-explicit-id
+msgid "channels.capability.first_comment"
+msgstr "التعليق الأول"
+
+#. js-lingui-explicit-id
+msgid "channels.capability.edit"
+msgstr "التعديل بعد النشر"
+
+#. js-lingui-explicit-id
+msgid "channels.capability.delete"
+msgstr "الحذف بعد النشر"
+
+#. js-lingui-explicit-id
+msgid "channels.capability.refresh"
+msgstr "يجدّد وصوله بنفسه"
+
+#. js-lingui-explicit-id
 msgid "connect.wizard.title"
 msgstr "ربط قناة"
 
