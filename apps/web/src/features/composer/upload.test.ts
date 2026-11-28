@@ -1,10 +1,13 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { closeApp, json, refusal } from "../../../test/support/app";
 import { type Call, callsOf, stubComposerApi } from "../../../test/support/composer-api";
 import { ApiError } from "../../http/client";
 import { type Session, uploadFile } from "./upload";
 
-afterEach(closeApp);
+afterEach(() => {
+  vi.restoreAllMocks();
+  closeApp();
+});
 
 const MEDIA = "0190a000-0000-7000-8000-0000000000f9";
 const base = `media/${MEDIA}`;
@@ -73,34 +76,55 @@ describe("uploading one file", () => {
   });
 });
 
-describe("a file sent in parts", () => {
-  const bytes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const bytes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-  const urlsFor = (call: Call) => {
-    const wanted = (call.body as { parts: { number: number }[] }).parts;
-    const parts = wanted.map(({ number }) => ({
-      number,
-      url: `/api/v1/workspaces/w1/${base}/parts/${number}`,
-      headers: {},
-    }));
-    return json({ data: { parts } });
+const urlsFor = (call: Call) => {
+  const wanted = (call.body as { parts: { number: number }[] }).parts;
+  const parts = wanted.map(({ number }) => ({
+    number,
+    url: `/api/v1/workspaces/w1/${base}/parts/${number}`,
+    headers: {},
+  }));
+  return json({ data: { parts } });
+};
+
+function parts(held: { number: number; size: number }[]) {
+  const routes: Record<string, (call: Call) => Response> = {
+    "POST media": () => json({ data: { id: MEDIA, duplicate: false, part_size: 4 } }, 201),
+    [`GET ${base}/parts`]: () => json({ data: { part_size: 4, part_count: 3, parts: held } }),
+    [`POST ${base}/parts`]: urlsFor,
+    [`POST ${base}/complete`]: () => done(),
   };
+  return stub((call) =>
+    call.method === "PUT" ? json({ data: { number: 1 } }) : routes[`${call.method} ${call.path}`]?.(call),
+  );
+}
 
-  function parts(held: { number: number; size: number }[]) {
-    const routes: Record<string, (call: Call) => Response> = {
-      "POST media": () => json({ data: { id: MEDIA, duplicate: false, part_size: 4 } }, 201),
-      [`GET ${base}/parts`]: () => json({ data: { part_size: 4, part_count: 3, parts: held } }),
-      [`POST ${base}/parts`]: urlsFor,
-      [`POST ${base}/complete`]: () => done(),
-    };
-    return stub((call) =>
-      call.method === "PUT" ? json({ data: { number: 1 } }) : routes[`${call.method} ${call.path}`]?.(call),
-    );
-  }
+const registrations = (seen: ReturnType<typeof stub>) =>
+  seen.mock.calls.filter(([url, init]) => url.endsWith("/media") && init?.method === "POST");
 
-  const registrations = (seen: ReturnType<typeof stub>) =>
-    seen.mock.calls.filter(([url, init]) => url.endsWith("/media") && init?.method === "POST");
+describe("hashing a file sent in parts", () => {
+  it("hashes the parts one at a time, so a large file is never held in memory part by part at once", async () => {
+    const real = crypto.subtle.digest.bind(crypto.subtle);
+    let live = 0;
+    let most = 0;
+    vi.spyOn(crypto.subtle, "digest").mockImplementation(async (algorithm, data) => {
+      live += 1;
+      most = Math.max(most, live);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      try {
+        return await real(algorithm, data);
+      } finally {
+        live -= 1;
+      }
+    });
+    parts([]);
+    await uploadFile("w1", file(bytes), hooks());
+    expect(most).toBe(1);
+  });
+});
 
+describe("a file sent in parts", () => {
   it("sends every part and the digest of each", async () => {
     const seen = parts([]);
     await uploadFile("w1", file(bytes), hooks());

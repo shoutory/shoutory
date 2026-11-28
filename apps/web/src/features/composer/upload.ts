@@ -90,19 +90,17 @@ async function sendParts(base: string, file: File, session: Session & { partSize
   hooks.onProgress(Math.floor((sent * PERCENT) / total));
   for (let at = 0; at < todo.length; at += PARTS_PER_CALL) {
     const batch = todo.slice(at, at + PARTS_PER_CALL);
-    const slices = batch.map((number) => ({
-      number,
-      blob: file.slice((number - 1) * session.partSize, number * session.partSize),
-    }));
-    const hashed = await Promise.all(
-      slices.map(async ({ number, blob }) => ({ number, sha256: await sha256Of(blob) })),
-    );
+    const sliceOf = (number: number) =>
+      file.slice((number - 1) * session.partSize, number * session.partSize);
+    // One part is read into memory at a time; a digest is all that is kept of it.
+    const hashed: { number: number; sha256: string }[] = [];
+    for (const number of batch) hashed.push({ number, sha256: await sha256Of(sliceOf(number)) });
     const urls = await request(partUrls, `${base}/${session.id}/parts`, {
       method: "POST",
       body: { parts: hashed },
     });
     for (const { number, url, headers } of urls.parts) {
-      await put(url, headers, slices.find((slice) => slice.number === number)?.blob ?? new Blob());
+      await put(url, headers, sliceOf(number));
       sent += 1;
       hooks.onProgress(Math.floor((sent * PERCENT) / total));
     }
