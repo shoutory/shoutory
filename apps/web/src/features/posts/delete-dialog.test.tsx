@@ -64,7 +64,7 @@ const open = async (api: PostApi, locale: "en" | "ar" = "en") => {
 };
 const deletes = (stub: ReturnType<typeof stubPostApi>) =>
   stub.mock.calls.filter(([, init]) => init?.method === "DELETE");
-const headerOf = (call: [string, RequestInit?] | undefined, name: string) =>
+const headerOf = (call: [path: string, init?: RequestInit | undefined] | undefined, name: string) =>
   (call?.[1]?.headers as Record<string, string> | undefined)?.[name];
 
 describe("the Delete button", () => {

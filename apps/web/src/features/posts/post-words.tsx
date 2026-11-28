@@ -31,7 +31,7 @@ export function usePauseReason(code: string | null | undefined, provider: string
   return words[code];
 }
 
-export interface WordContext {
+interface WordContext {
   readonly provider: string;
   readonly channel: string;
   readonly pauseReason?: ReactNode;
@@ -228,7 +228,7 @@ function HeadlineNote({ headline }: { headline: Headline }) {
   }
 }
 
-export interface MeaningContext extends WordContext {
+interface MeaningContext extends WordContext {
   readonly dueAt: Date | null;
   readonly zone: string;
   readonly deadline: Date | null;

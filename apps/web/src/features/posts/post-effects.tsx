@@ -40,7 +40,7 @@ export function useEffectCall(place: Place, run: (key: string) => Promise<unknow
   );
 }
 
-export function useOffline() {
+function useOffline() {
   const { t } = useLingui();
   return t({ id: "auth.offline", message: "You are offline. This needs the server." });
 }

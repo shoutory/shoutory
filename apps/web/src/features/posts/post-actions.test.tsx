@@ -38,7 +38,7 @@ const target = (actions: string[], change: Record<string, unknown> = {}) =>
 const showing = (...targets: unknown[]): PostApi => ({ postDetail: () => detailAnswer(targets) });
 const callsTo = (stub: ReturnType<typeof stubPostApi>, method: string, part: string) =>
   stub.mock.calls.filter(([url, init]) => url.includes(part) && (init?.method ?? "GET") === method);
-const keyOf = (call: [string, RequestInit?] | undefined) =>
+const keyOf = (call: [path: string, init?: RequestInit | undefined] | undefined) =>
   (call?.[1]?.headers as Record<string, string> | undefined)?.["Idempotency-Key"];
 function deferred() {
   let release: (answer: Response) => void = () => undefined;

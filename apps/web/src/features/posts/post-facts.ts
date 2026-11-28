@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const listTargetSchema = z.object({
+const listTargetSchema = z.object({
   variant_id: z.string(),
   channel_id: z.string(),
   schedule_state: z.string(),
@@ -32,7 +32,7 @@ export const operationSchema = z.object({
   part_index: z.number().int(),
 });
 
-export const evidenceSchema = z.object({
+const evidenceSchema = z.object({
   kind: z.string(),
   level: z.string(),
   outcome_kind: z.string().nullable(),
@@ -41,7 +41,7 @@ export const evidenceSchema = z.object({
 });
 export type Evidence = z.infer<typeof evidenceSchema>;
 
-export const attemptSchema = z.object({
+const attemptSchema = z.object({
   attempt_no: z.number().int(),
   step: z.string(),
   effect: z.string(),
@@ -52,7 +52,7 @@ export const attemptSchema = z.object({
 });
 
 // `evidence` and `attempts` are absent, not empty, for a person who may not see them.
-export const targetSchema = z.object({
+const targetSchema = z.object({
   variant_id: z.string(),
   channel_id: z.string(),
   schedule_state: z.string(),
