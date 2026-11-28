@@ -1,5 +1,5 @@
--- The operation of a first publish part takes the target's publish-now flag with it, so admission clears the flag on the
--- target: a later reschedule of the same target has no priority.
+-- The operation of a first publish part takes the target's publish-now flag with it as its priority, and admission
+-- clears the flag on the target first: a later reschedule of the same target has no priority.
 SET ROLE shoutory_definer;
 
 CREATE OR REPLACE FUNCTION app.ledger_admit_target(
@@ -18,7 +18,13 @@ DECLARE
   op_reason text;
   digest bytea;
   frozen uuid;
+  first_now boolean;
 BEGIN
+  IF p_kind = 'publish' AND p_part = 0 THEN
+    UPDATE app.post_variants AS v SET publish_now = false
+      WHERE v.workspace_id = p_ws AND v.id = p_variant AND v.publish_now
+      RETURNING true INTO first_now;
+  END IF;
   SELECT w.lateness_tolerance, w.organization_id INTO tolerance, org FROM app.workspaces AS w WHERE w.id = p_ws;
   SELECT c.connection_state INTO ch FROM app.channels AS c WHERE c.workspace_id = p_ws AND c.id = p_channel FOR SHARE;
   IF p_missed THEN
@@ -38,11 +44,8 @@ BEGIN
     'due_at', p_due, 'lateness_deadline', p_due + tolerance, 'next_attempt_at', p_due,
     'blocked_since', CASE WHEN st = 'blocked_reconnect' THEN clock_timestamp() END,
     'idempotency_marker', p_marker, 'requested_by', p_requested_by, 'lease_seconds', p_lease,
+    'priority', coalesce(first_now, false),
     'frozen_version_id', frozen, 'frozen_snapshot_hash', encode(digest, 'hex'))), 'S');
-  IF p_kind = 'publish' AND p_part = 0 THEN
-    UPDATE app.post_variants AS v SET publish_now = false
-      WHERE v.workspace_id = p_ws AND v.id = p_variant AND v.publish_now;
-  END IF;
   IF st <> 'missed' THEN
     IF p_pin THEN
       PERFORM app.operation_media_lock(p_ws, frozen, new_operation);
