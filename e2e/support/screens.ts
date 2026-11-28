@@ -309,6 +309,76 @@ async function fulfilLibrary(page: Page, workspace: string): Promise<void> {
   );
 }
 
+// The composer reads the channels, what each provider counts and allows, and, for a saved draft, the post itself.
+const DRAFT_ID = "0190a000-0000-7000-8000-0000000003a1";
+const DRAFT_VERSION = "0190a000-0000-7000-8000-0000000003b1";
+
+async function fulfilComposer(page: Page, workspace: string, saved: boolean): Promise<void> {
+  const base = `**/api/v1/workspaces/${workspace}`;
+  await page.addInitScript(() => localStorage.setItem("shoutory.zone", "UTC"));
+  await page.route(`${base}/channels?*`, (route) =>
+    route.fulfill(reply({ data: channelRows(), meta: { next_cursor: null, actions: [] } })),
+  );
+  await page.route(`${base}/providers`, (route) =>
+    route.fulfill(
+      reply({
+        data: [
+          {
+            id: "example_network",
+            display_name: "Example Network",
+            lifecycle: "ga",
+            auth_kind: "oauth2_pkce",
+            connectable: true,
+            needs_instance_host: false,
+            capabilities: ["text", "image", "thread", "first_comment"],
+            counting: { unit: "graphemes" },
+            limits: { text_length: 280, media_max_count: 4 },
+            follow_up_roles: ["thread_reply", "first_comment"],
+          },
+        ],
+      }),
+    ),
+  );
+  if (saved) await fulfilDraft(page, base);
+}
+
+async function fulfilDraft(page: Page, base: string): Promise<void> {
+  await page.route(`${base}/posts/${DRAFT_ID}`, (route) =>
+    route.fulfill(
+      reply({
+        data: {
+          id: DRAFT_ID,
+          status: "draft",
+          current_version_id: DRAFT_VERSION,
+          variants: [
+            {
+              channel_id: CHANNEL_CARDS[0]?.id,
+              locale: null,
+              post_type: "text",
+              text: "Doors open on Saturday at nine.",
+              parts: [],
+              settings: {},
+              media: [],
+            },
+          ],
+          targets: [
+            {
+              variant_id: "0190a000-0000-7000-8000-0000000003c1",
+              channel_id: CHANNEL_CARDS[0]?.id,
+              schedule_state: "draft",
+              published_at: null,
+              due_at: null,
+              due_tz: null,
+              hold_reason: null,
+              actions: ["schedule", "publish_now", "duplicate"],
+            },
+          ],
+        },
+      }),
+    ),
+  );
+}
+
 // The image's workspace is active, so its list answer is rewritten to show it archived, under a fixed name.
 async function archiveInList(page: Page, workspace: string): Promise<void> {
   await page.route(/\/api\/v1\/workspaces\?/, async (route) => {
@@ -381,6 +451,24 @@ export const SCREENS: readonly Screen[] = [
     open: async (page, context) => {
       await fulfilPosts(page, context.workspace);
       await visit((c) => `/w/${c.workspace}/posts`)(page, context);
+    },
+  },
+  {
+    id: "composer-new",
+    pattern: "/w/:ws/posts/new",
+    audience: "founder",
+    open: async (page, context) => {
+      await fulfilComposer(page, context.workspace, false);
+      await visit((c) => `/w/${c.workspace}/posts/new`)(page, context);
+    },
+  },
+  {
+    id: "composer-draft",
+    pattern: "/w/:ws/posts/:postId/edit",
+    audience: "founder",
+    open: async (page, context) => {
+      await fulfilComposer(page, context.workspace, true);
+      await visit((c) => `/w/${c.workspace}/posts/${DRAFT_ID}/edit`)(page, context);
     },
   },
   {

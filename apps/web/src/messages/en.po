@@ -3540,3 +3540,159 @@ msgstr "Archived"
 #. js-lingui-explicit-id
 msgid "posts.headline.unknown"
 msgstr "Status not available"
+
+#. js-lingui-explicit-id
+msgid "composer.issue.unsupported"
+msgstr "{channel} cannot post this type"
+
+#. js-lingui-explicit-id
+msgid "composer.counter.length"
+msgstr "<0/> of <1/>"
+
+#. js-lingui-explicit-id
+msgid "composer.counter.bytes"
+msgstr "<0/> of <1/> bytes"
+
+#. js-lingui-explicit-id
+msgid "composer.counter.over"
+msgstr "<0/> over"
+
+#. js-lingui-explicit-id
+msgid "composer.issue.empty"
+msgstr "Add text or a file for {channel}"
+
+#. js-lingui-explicit-id
+msgid "composer.tabs.all"
+msgstr "All channels"
+
+#. js-lingui-explicit-id
+msgid "composer.preview.label"
+msgstr "Approximate preview"
+
+#. js-lingui-explicit-id
+msgid "composer.picker.title"
+msgstr "Channels"
+
+#. js-lingui-explicit-id
+msgid "composer.checks.title"
+msgstr "Checks"
+
+#. js-lingui-explicit-id
+msgid "composer.picker.empty.action"
+msgstr "Connect a channel"
+
+#. js-lingui-explicit-id
+msgid "composer.picker.empty.body"
+msgstr "Connect a channel to choose where this post goes."
+
+#. js-lingui-explicit-id
+msgid "composer.edit.title"
+msgstr "Edit post"
+
+#. js-lingui-explicit-id
+msgid "composer.checks.go"
+msgstr "Go to field"
+
+#. js-lingui-explicit-id
+msgid "composer.title"
+msgstr "New post"
+
+#. js-lingui-explicit-id
+msgid "composer.picker.empty.title"
+msgstr "No channels yet"
+
+#. js-lingui-explicit-id
+msgid "composer.checks.ok"
+msgstr "Nothing stops this post from being scheduled."
+
+#. js-lingui-explicit-id
+msgid "composer.load.meaning"
+msgstr "Nothing was changed. Try again."
+
+#. js-lingui-explicit-id
+msgid "composer.load.what"
+msgstr "We could not open the composer"
+
+#. js-lingui-explicit-id
+msgid "composer.type.image"
+msgstr "One image"
+
+#. js-lingui-explicit-id
+msgid "composer.variant.overridden"
+msgstr "Overridden"
+
+#. js-lingui-explicit-id
+msgid "composer.base.label"
+msgstr "Post text"
+
+#. js-lingui-explicit-id
+msgid "composer.variant.post_type"
+msgstr "Post type"
+
+#. js-lingui-explicit-id
+msgid "composer.preview.title"
+msgstr "Preview"
+
+#. js-lingui-explicit-id
+msgid "composer.picker.reconnect"
+msgstr "Reconnect"
+
+#. js-lingui-explicit-id
+msgid "composer.picker.reconnect_needed"
+msgstr "Reconnect needed"
+
+#. js-lingui-explicit-id
+msgid "composer.variant.reset"
+msgstr "Reset to base"
+
+#. js-lingui-explicit-id
+msgid "composer.variant.same"
+msgstr "Same as base"
+
+#. js-lingui-explicit-id
+msgid "composer.preview.empty"
+msgstr "Select a channel to see a preview."
+
+#. js-lingui-explicit-id
+msgid "composer.picker.all"
+msgstr "Select all"
+
+#. js-lingui-explicit-id
+msgid "composer.type.multi_image"
+msgstr "Several images"
+
+#. js-lingui-explicit-id
+msgid "composer.type.text"
+msgstr "Text"
+
+#. js-lingui-explicit-id
+msgid "composer.tabs.label"
+msgstr "Text and files by channel"
+
+#. js-lingui-explicit-id
+msgid "composer.variant.label"
+msgstr "Text for this channel"
+
+#. js-lingui-explicit-id
+msgid "composer.issue.too_long"
+msgstr "The text is too long for {channel}"
+
+#. js-lingui-explicit-id
+msgid "composer.issue.too_many"
+msgstr "There are too many files for {channel}"
+
+#. js-lingui-explicit-id
+msgid "composer.issue.other"
+msgstr "This does not fit {channel}"
+
+#. js-lingui-explicit-id
+msgid "composer.type.video"
+msgstr "Video"
+
+#. js-lingui-explicit-id
+msgid "composer.readonly.archived"
+msgstr "View only: this workspace is archived."
+
+#. js-lingui-explicit-id
+msgid "composer.readonly.role"
+msgstr "View only: your role in this workspace cannot change posts."

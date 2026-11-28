@@ -3538,3 +3538,159 @@ msgstr "مؤرشف"
 #. js-lingui-explicit-id
 msgid "posts.headline.unknown"
 msgstr "الحالة غير متاحة"
+
+#. js-lingui-explicit-id
+msgid "composer.issue.unsupported"
+msgstr "{channel} لا تقبل هذا النوع من المنشورات"
+
+#. js-lingui-explicit-id
+msgid "composer.counter.length"
+msgstr "<0/> من <1/>"
+
+#. js-lingui-explicit-id
+msgid "composer.counter.bytes"
+msgstr "<0/> من <1/> بايت"
+
+#. js-lingui-explicit-id
+msgid "composer.counter.over"
+msgstr "<0/> زيادة"
+
+#. js-lingui-explicit-id
+msgid "composer.issue.empty"
+msgstr "أضف نصًا أو ملفًا إلى {channel}"
+
+#. js-lingui-explicit-id
+msgid "composer.tabs.all"
+msgstr "كل القنوات"
+
+#. js-lingui-explicit-id
+msgid "composer.preview.label"
+msgstr "معاينة تقريبية"
+
+#. js-lingui-explicit-id
+msgid "composer.picker.title"
+msgstr "القنوات"
+
+#. js-lingui-explicit-id
+msgid "composer.checks.title"
+msgstr "الفحوص"
+
+#. js-lingui-explicit-id
+msgid "composer.picker.empty.action"
+msgstr "اربط قناة"
+
+#. js-lingui-explicit-id
+msgid "composer.picker.empty.body"
+msgstr "اربط قناة لتختار أين يُنشر هذا المنشور."
+
+#. js-lingui-explicit-id
+msgid "composer.edit.title"
+msgstr "تعديل المنشور"
+
+#. js-lingui-explicit-id
+msgid "composer.checks.go"
+msgstr "اذهب إلى الحقل"
+
+#. js-lingui-explicit-id
+msgid "composer.title"
+msgstr "منشور جديد"
+
+#. js-lingui-explicit-id
+msgid "composer.picker.empty.title"
+msgstr "لا توجد قنوات بعد"
+
+#. js-lingui-explicit-id
+msgid "composer.checks.ok"
+msgstr "لا شيء يمنع جدولة هذا المنشور."
+
+#. js-lingui-explicit-id
+msgid "composer.load.meaning"
+msgstr "لم يتغير شيء. حاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "composer.load.what"
+msgstr "تعذّر فتح المحرر"
+
+#. js-lingui-explicit-id
+msgid "composer.type.image"
+msgstr "صورة واحدة"
+
+#. js-lingui-explicit-id
+msgid "composer.variant.overridden"
+msgstr "نص مخصص"
+
+#. js-lingui-explicit-id
+msgid "composer.base.label"
+msgstr "نص المنشور"
+
+#. js-lingui-explicit-id
+msgid "composer.variant.post_type"
+msgstr "نوع المنشور"
+
+#. js-lingui-explicit-id
+msgid "composer.preview.title"
+msgstr "المعاينة"
+
+#. js-lingui-explicit-id
+msgid "composer.picker.reconnect"
+msgstr "إعادة الربط"
+
+#. js-lingui-explicit-id
+msgid "composer.picker.reconnect_needed"
+msgstr "يحتاج إلى إعادة ربط"
+
+#. js-lingui-explicit-id
+msgid "composer.variant.reset"
+msgstr "العودة إلى النص الأساسي"
+
+#. js-lingui-explicit-id
+msgid "composer.variant.same"
+msgstr "مثل النص الأساسي"
+
+#. js-lingui-explicit-id
+msgid "composer.preview.empty"
+msgstr "اختر قناة لتظهر المعاينة."
+
+#. js-lingui-explicit-id
+msgid "composer.picker.all"
+msgstr "تحديد الكل"
+
+#. js-lingui-explicit-id
+msgid "composer.type.multi_image"
+msgstr "عدة صور"
+
+#. js-lingui-explicit-id
+msgid "composer.type.text"
+msgstr "نص"
+
+#. js-lingui-explicit-id
+msgid "composer.tabs.label"
+msgstr "النص والملفات حسب القناة"
+
+#. js-lingui-explicit-id
+msgid "composer.variant.label"
+msgstr "نص هذه القناة"
+
+#. js-lingui-explicit-id
+msgid "composer.issue.too_long"
+msgstr "النص أطول من المسموح في {channel}"
+
+#. js-lingui-explicit-id
+msgid "composer.issue.too_many"
+msgstr "عدد الملفات أكبر من المسموح في {channel}"
+
+#. js-lingui-explicit-id
+msgid "composer.issue.other"
+msgstr "هذا لا يناسب {channel}"
+
+#. js-lingui-explicit-id
+msgid "composer.type.video"
+msgstr "فيديو"
+
+#. js-lingui-explicit-id
+msgid "composer.readonly.archived"
+msgstr "للعرض فقط: مساحة العمل هذه مؤرشفة."
+
+#. js-lingui-explicit-id
+msgid "composer.readonly.role"
+msgstr "للعرض فقط: دورك في مساحة العمل هذه لا يسمح بتغيير المنشورات."
