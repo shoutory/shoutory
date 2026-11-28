@@ -38,7 +38,12 @@ function registerImpact(app: App): void {
       if (!channel.rows[0]) throw new Refusal("not_found", "channel row not visible");
       const scheduled = await tx.query<{ variantId: string; postId: string; dueAt: Date | null }>(
         `SELECT v.id AS "variantId", v.post_id AS "postId", v.due_at AS "dueAt" FROM app.post_variants AS v
-         WHERE v.workspace_id = $1 AND v.channel_id = $2 AND v.schedule_state IN ('scheduled', 'held') ORDER BY v.id`,
+         WHERE v.workspace_id = $1 AND v.channel_id = $2
+           AND (v.schedule_state IN ('scheduled', 'held')
+             OR (v.schedule_state = 'in_progress' AND EXISTS (SELECT 1 FROM app.operations AS o
+               WHERE o.workspace_id = v.workspace_id AND o.variant_id = v.id
+                 AND o.state IN ('pending', 'retry_wait', 'paused', 'blocked_reconnect'))))
+         ORDER BY v.id`,
         [scope.workspaceId, params.channel_id],
       );
       const operations = await tx.query<{ id: string; state: string }>(

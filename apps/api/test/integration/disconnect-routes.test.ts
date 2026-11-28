@@ -458,3 +458,141 @@ describe("lock order: the channel advisory lock comes before any row", () => {
     expect(outcome.response.status).toBe(200);
   });
 });
+
+const impactOf = (who: User, workspace: string, channel: string) =>
+  fx.request(`/api/v1/workspaces/${workspace}/channels/${channel}/disconnect-impact`, {
+    headers: { cookie: who.cookie },
+  });
+
+async function plantScheduled(c: Planted): Promise<{ post: string; variant: string }> {
+  return fx.admin(async (client) => {
+    const post = await client.query(
+      "INSERT INTO app.posts (workspace_id, author_kind, author_id, status) VALUES ($1, 'user', $2, 'scheduled') RETURNING id",
+      [c.workspace, user("editor").id],
+    );
+    const frozen = await seedFrozenVersion(client, c.workspace, post.rows[0].id, c.channel);
+    const variant = await client.query(
+      `INSERT INTO app.post_variants (workspace_id, post_id, channel_id, schedule_state, frozen_version_id, due_at)
+       VALUES ($1, $2, $3, 'scheduled', $4, now() - interval '1 minute') RETURNING id`,
+      [c.workspace, post.rows[0].id, c.channel, frozen],
+    );
+    return { post: post.rows[0].id as string, variant: variant.rows[0].id as string };
+  });
+}
+const variantOf = (operation: string) =>
+  fx.admin(
+    async (client) =>
+      (await client.query("SELECT variant_id FROM app.operations WHERE id = $1", [operation])).rows[0]
+        .variant_id as string,
+  );
+const admit = () =>
+  withSystem(fx.db.pool("worker"), "ledger", (tx) =>
+    tx.query("SELECT * FROM app.admit_due_targets(100, $1::jsonb)", [
+      JSON.stringify({ fixture_oauth: { margin_seconds: 300, lease_seconds: { publish: 60 } } }),
+    ]),
+  );
+
+describe("the disconnect impact preview", () => {
+  it.each([
+    ["viewer", 403],
+    ["approver", 403],
+    ["editor", 403],
+    ["admin", 200],
+    ["owner", 200],
+  ] as const)("%s answers %i", async (seat, status) => {
+    const c = await plantChannel();
+    expect((await impactOf(user(seat), ws, c.channel)).status).toBe(status);
+  });
+
+  it("answers 404 for a channel of another workspace", async () => {
+    const theirs = await plantChannel(other);
+    expect((await impactOf(user("owner"), ws, theirs.channel)).status).toBe(404);
+  });
+
+  it("lists scheduled posts, admitted or not, and the work that stands in the way, and changes nothing", async () => {
+    const c = await plantChannel();
+    const unadmitted = await plantScheduled(c);
+    const waiting = await plantOp(c, "pending");
+    const busy = await plantOp(c, "dispatching", "possible");
+    const before = await rowCounts(ws);
+    const answered = await answerOf(await impactOf(user("admin"), ws, c.channel));
+    const data = answered.data as {
+      scheduled: { variantId: string; postId: string; dueAt: string | null }[];
+      blocking: { id: string; state: string }[];
+      canDisconnect: boolean;
+    };
+    expect(data.scheduled.map((row) => row.variantId).sort()).toEqual(
+      [unadmitted.variant, await variantOf(waiting)].sort(),
+    );
+    expect(data.scheduled.find((row) => row.variantId === unadmitted.variant)).toMatchObject({
+      postId: unadmitted.post,
+    });
+    expect(data.blocking).toEqual([{ id: busy, state: "dispatching" }]);
+    expect(data.canDisconnect).toBe(false);
+    expect(await rowCounts(ws)).toEqual(before);
+    expect((await channelRow(c.channel)).connection_state).toBe("connected");
+  });
+
+  it("says a channel with nothing in the way can be disconnected", async () => {
+    const c = await plantChannel();
+    await plantScheduled(c);
+    const data = (await answerOf(await impactOf(user("owner"), ws, c.channel))).data as {
+      canDisconnect: boolean;
+      blocking: unknown[];
+    };
+    expect([data.canDisconnect, data.blocking]).toEqual([true, []]);
+  });
+});
+
+describe("the answer for a disconnected channel", () => {
+  it("carries disconnected_at and offers only what still applies, in the list and in the detail alike", async () => {
+    const c = await plantChannel();
+    const open = async () => {
+      const detail = await fx.request(`/api/v1/workspaces/${ws}/channels/${c.channel}`, {
+        headers: { cookie: user("admin").cookie },
+      });
+      const list = await fx.request(`/api/v1/workspaces/${ws}/channels`, {
+        headers: { cookie: user("admin").cookie },
+      });
+      const one = ((await detail.json()) as { data: Record<string, unknown> }).data;
+      const listed = ((await list.json()) as { data: Record<string, unknown>[] }).data.find(
+        (row) => row.id === c.channel,
+      );
+      return { one, listed };
+    };
+    const before = await open();
+    expect(before.one.disconnected_at).toBeNull();
+    expect(before.one.actions).toEqual(expect.arrayContaining(["rename", "disconnect"]));
+    expect((await disconnect(user("owner"), ws, c.channel)).status).toBe(200);
+    const after = await open();
+    expect(new Date(String(after.one.disconnected_at)).toISOString()).toBe(after.one.disconnected_at);
+    expect(after.listed?.disconnected_at).toBe(after.one.disconnected_at);
+    expect(after.one.actions).toEqual(after.listed?.actions);
+    expect(after.one.actions).toContain("rename");
+    for (const gone of ["disconnect", "disable", "check"]) expect(after.one.actions).not.toContain(gone);
+  });
+});
+
+describe("the targets of a disconnected channel", () => {
+  it("an admitted target is held at disconnect, an unadmitted scheduled variant at admission, and nothing is deleted", async () => {
+    const c = await plantChannel();
+    const admitted = await plantOp(c, "pending");
+    const unadmitted = await plantScheduled(c);
+    const before = await rowCounts(ws);
+    expect((await disconnect(user("owner"), ws, c.channel)).status).toBe(200);
+    expect(await opState(admitted)).toBe("blocked_reconnect");
+    expect(await rowCounts(ws)).toEqual(before);
+    await admit();
+    const made = await fx.admin(
+      async (client) =>
+        (
+          await client.query(
+            `SELECT o.state, v.schedule_state FROM app.operations o JOIN app.post_variants v ON v.id = o.variant_id
+             WHERE o.variant_id = $1`,
+            [unadmitted.variant],
+          )
+        ).rows,
+    );
+    expect(made).toEqual([{ state: "blocked_reconnect", schedule_state: "held" }]);
+  });
+});
