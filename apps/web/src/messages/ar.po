@@ -4582,3 +4582,43 @@ msgstr "للسلسلة {MAX_PARTS} جزءًا كحد أقصى."
 #. js-lingui-explicit-id
 msgid "composer.comment.label"
 msgstr "التعليق الأول"
+
+#. js-lingui-explicit-id
+msgid "posts.delete.open"
+msgstr "حذف من <0>{0}</0>"
+
+#. js-lingui-explicit-id
+msgid "posts.delete.title"
+msgstr "حذف هذا المنشور من القناة؟"
+
+#. js-lingui-explicit-id
+msgid "posts.delete.impact"
+msgstr "يُحذف من <0>{provider}</0>."
+
+#. js-lingui-explicit-id
+msgid "posts.delete.parts"
+msgstr "{parts, plural, zero {{shown} جزء من السلسلة.} one {جزء واحد من السلسلة.} two {جزءان من السلسلة.} few {{shown} أجزاء من السلسلة.} many {{shown} جزءًا من السلسلة.} other {{shown} جزء من السلسلة.}}"
+
+#. js-lingui-explicit-id
+msgid "posts.delete.permanent"
+msgstr "لا يمكن التراجع عنه على المنصة."
+
+#. js-lingui-explicit-id
+msgid "posts.delete.confirm"
+msgstr "حذف"
+
+#. js-lingui-explicit-id
+msgid "posts.delete.window.what"
+msgstr "انقضت مهلة الحذف"
+
+#. js-lingui-explicit-id
+msgid "posts.delete.window.meaning"
+msgstr "لم تعد <0>{provider}</0> تسمح بحذفه من هنا. احذفه على <1>{provider}</1> نفسها. لم يتغير شيء."
+
+#. js-lingui-explicit-id
+msgid "posts.delete.unpublished.what"
+msgstr "لم يُنشر هذا المنشور"
+
+#. js-lingui-explicit-id
+msgid "posts.delete.unpublished.meaning"
+msgstr "لا يوجد على المنصة ما يُحذف. لم يتغير شيء."

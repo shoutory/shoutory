@@ -12,7 +12,8 @@ import { LocalizedDateTime } from "../../ui/localized";
 import { dateOf } from "../channels/channel-facts";
 import { useSignIn } from "../channels/channels-hub";
 import { Late } from "../media/media-library";
-import { DuplicateButton, type Place, TargetActions } from "./post-actions";
+import { TargetActions } from "./post-actions";
+import { DuplicateButton, type Place } from "./post-effects";
 import {
   type Detail,
   detailSchema,
@@ -206,12 +207,16 @@ function TargetTimes({ target }: { target: Target }) {
 
 interface RowProps {
   target: Target;
-  text: string;
+  variant: Detail["variants"][number] | undefined;
   named: Names;
   place: Place;
 }
 
-function TargetRow({ target, text, named, place }: RowProps) {
+// A thread is the first text and each reply after it; a first comment is not a part of it.
+const threadParts = (variant: RowProps["variant"]) =>
+  1 + (variant?.parts.filter((part) => part.kind === "thread_reply").length ?? 0);
+
+function TargetRow({ target, variant, named, place }: RowProps) {
   return (
     <li
       data-testid="post-target"
@@ -223,11 +228,11 @@ function TargetRow({ target, text, named, place }: RowProps) {
       </h3>
       <TargetSummary target={target} named={named} />
       <p className="whitespace-pre-wrap text-sm">
-        <DirText>{text}</DirText>
+        <DirText>{variant?.text ?? ""}</DirText>
       </p>
       <Settings settings={target.settings} />
       {target.attempts === undefined ? null : <Attempts attempts={target.attempts} />}
-      <TargetActions place={place} target={target} named={named} />
+      <TargetActions place={place} target={target} named={named} parts={threadParts(variant)} />
     </li>
   );
 }
@@ -290,7 +295,7 @@ function RefreshNote({ failed, at }: { failed: ApiError | null; at: Date }) {
 function Loaded({ ws, ready, refresh }: { ws: string; ready: Ready; refresh: () => void }) {
   const { detail, refreshFailed: failed, readAt } = ready;
   const names = useNames(ws);
-  const place = { ws, postId: detail.id, refresh };
+  const place = { ws, postId: detail.id, version: detail.current_version_id, refresh };
   const headline = headlineOf(detail.status, detail.targets.map(factsOfDetail));
   return (
     <>
@@ -311,14 +316,14 @@ function Loaded({ ws, ready, refresh }: { ws: string; ready: Ready; refresh: () 
           <TargetRow
             key={target.variant_id}
             target={target}
-            text={detail.variants.find((one) => one.id === target.variant_id)?.text ?? ""}
+            variant={detail.variants.find((one) => one.id === target.variant_id)}
             named={names(target.channel_id)}
             place={place}
           />
         ))}
       </ul>
       {detail.targets.some((target) => target.actions.includes("duplicate")) ? (
-        <DuplicateButton place={place} version={detail.current_version_id} />
+        <DuplicateButton place={place} />
       ) : null}
     </>
   );

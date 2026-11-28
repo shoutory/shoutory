@@ -77,7 +77,7 @@ export const detailSchema = z.object({
     z.object({
       id: z.string(),
       text: z.string(),
-      parts: z.array(z.unknown()),
+      parts: z.array(z.looseObject({ kind: z.string() })),
       settings: z.record(z.string(), z.unknown()),
     }),
   ),

@@ -12,7 +12,7 @@ import { DirText } from "../../ui/dir-text";
 import { ErrorPanel } from "../../ui/error-panel";
 import { TextField } from "../../ui/text-field";
 import { useSignIn } from "../channels/channels-hub";
-import type { Place } from "./post-actions";
+import type { Place } from "./post-effects";
 import { type Flavour, permalinkOf, type Resolution, resolutionsOf, type Target } from "./post-facts";
 import type { Names } from "./post-names";
 import { PostLink, refusalWords } from "./post-words";

@@ -4584,3 +4584,43 @@ msgstr "A thread has at most {MAX_PARTS} parts."
 #. js-lingui-explicit-id
 msgid "composer.comment.label"
 msgstr "First comment"
+
+#. js-lingui-explicit-id
+msgid "posts.delete.open"
+msgstr "Delete from <0>{0}</0>"
+
+#. js-lingui-explicit-id
+msgid "posts.delete.title"
+msgstr "Delete this post from the channel?"
+
+#. js-lingui-explicit-id
+msgid "posts.delete.impact"
+msgstr "Removes it from <0>{provider}</0>."
+
+#. js-lingui-explicit-id
+msgid "posts.delete.parts"
+msgstr "{parts, plural, one {1 thread part.} other {{shown} thread parts.}}"
+
+#. js-lingui-explicit-id
+msgid "posts.delete.permanent"
+msgstr "This cannot be undone on the platform."
+
+#. js-lingui-explicit-id
+msgid "posts.delete.confirm"
+msgstr "Delete"
+
+#. js-lingui-explicit-id
+msgid "posts.delete.window.what"
+msgstr "The time to delete this has passed"
+
+#. js-lingui-explicit-id
+msgid "posts.delete.window.meaning"
+msgstr "<0>{provider}</0> no longer lets us delete it from here. Delete it on <1>{provider}</1> itself. Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "posts.delete.unpublished.what"
+msgstr "This post was not published"
+
+#. js-lingui-explicit-id
+msgid "posts.delete.unpublished.meaning"
+msgstr "There is nothing on the platform to remove. Nothing was changed."

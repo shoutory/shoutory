@@ -644,6 +644,16 @@ const selectAllFiles = async (page: Page) => {
 
 export const DIALOGS: readonly Dialog[] = [
   {
+    id: "post-delete",
+    screen: "post-detail",
+    titleId: "posts.delete.title",
+    role: "alertdialog",
+    open: async (page) => {
+      await page.getByTestId("action-delete").click();
+      await page.getByRole("alertdialog").waitFor();
+    },
+  },
+  {
     id: "post-resolve",
     screen: "post-detail",
     titleId: "posts.resolve.title_unclear",
