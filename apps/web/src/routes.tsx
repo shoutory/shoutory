@@ -29,6 +29,7 @@ import { ComposerPage } from "./features/composer/composer";
 import { MediaDetailPage } from "./features/media/media-detail";
 import { MediaLibraryPage } from "./features/media/media-library";
 import { NotificationsPage } from "./features/notifications/notifications";
+import { PostDetailPage } from "./features/posts/post-detail";
 import { PostsPage } from "./features/posts/posts-list";
 import { ApiError } from "./http/client";
 import { ClientsPage } from "./org/clients";
@@ -74,6 +75,7 @@ const TITLES = {
   channel: msg({ id: "channels.detail.title", message: "Channel" }),
   notices: msg({ id: "notices.title", message: "Notifications" }),
   posts: msg({ id: "posts.title", message: "Posts" }),
+  post: msg({ id: "posts.detail.title", message: "Post" }),
   media: msg({ id: "media.title", message: "Media" }),
   composerNew: msg({ id: "composer.title", message: "New post" }),
   composerEdit: msg({ id: "composer.edit.title", message: "Edit post" }),
@@ -242,6 +244,11 @@ export const routes: RouteObject[] = [
                 path: "w/:ws/posts",
                 handle: titled(TITLES.posts, (shell, params) => isUnknownWorkspace(shell, params.ws)),
                 element: <PostsPage />,
+              },
+              {
+                path: "w/:ws/posts/:postId",
+                handle: titled(TITLES.post, (shell, params) => isUnknownWorkspace(shell, params.ws)),
+                element: <PostDetailPage />,
               },
               {
                 path: "w/:ws/posts/new",

@@ -32,6 +32,120 @@ export const operationSchema = z.object({
   part_index: z.number().int(),
 });
 
+export const evidenceSchema = z.object({
+  kind: z.string(),
+  level: z.string(),
+  outcome_kind: z.string().nullable(),
+  permalink: z.string().nullable(),
+  observed_at: z.string(),
+});
+export type Evidence = z.infer<typeof evidenceSchema>;
+
+export const attemptSchema = z.object({
+  attempt_no: z.number().int(),
+  step: z.string(),
+  effect: z.string(),
+  http_status: z.number().int().nullable(),
+  error_class: z.string().nullable(),
+  started_at: z.string(),
+  finished_at: z.string().nullable(),
+});
+
+// `evidence` and `attempts` are absent, not empty, for a person who may not see them.
+export const targetSchema = z.object({
+  variant_id: z.string(),
+  channel_id: z.string(),
+  schedule_state: z.string(),
+  presence: z.string(),
+  published_at: z.string().nullable(),
+  due_at: z.string().nullable(),
+  due_tz: z.string().nullable(),
+  settings: z.record(z.string(), z.unknown()),
+  hold_reason: z.string().nullable(),
+  operation: operationSchema.nullable(),
+  evidence: z.array(evidenceSchema).optional(),
+  attempts: z.array(attemptSchema).optional(),
+  actions: z.array(z.string()),
+});
+export type Target = z.infer<typeof targetSchema>;
+
+export const detailSchema = z.object({
+  id: z.string(),
+  status: z.string(),
+  current_version_id: z.string(),
+  variants: z.array(
+    z.object({
+      id: z.string(),
+      text: z.string(),
+      parts: z.array(z.unknown()),
+      settings: z.record(z.string(), z.unknown()),
+    }),
+  ),
+  targets: z.array(targetSchema),
+});
+export type Detail = z.infer<typeof detailSchema>;
+
+// The OL evidence levels, weakest first: a stronger one is the one shown, whatever is newer.
+const LEVEL_RANK: Readonly<Record<string, number>> = {
+  human: 1,
+  receipt: 2,
+  poll_status: 3,
+  webhook: 4,
+  read_back: 5,
+};
+const CONFIRMING: ReadonlySet<string> = new Set(["accepted", "verified", "observed", "human_confirmed"]);
+
+const strongest = (list: readonly Evidence[]): Evidence | undefined =>
+  list.reduce<Evidence | undefined>(
+    (best, one) => ((LEVEL_RANK[one.level] ?? 0) > (LEVEL_RANK[best?.level ?? ""] ?? 0) ? one : best),
+    undefined,
+  );
+
+export type EvidenceLine = "answer" | "read_back" | "you";
+
+/** How we know a post is live: the strongest confirming evidence, never a weaker one that is newer. */
+export function evidenceLine(list: readonly Evidence[] | undefined): EvidenceLine | null {
+  const top = strongest((list ?? []).filter((one) => CONFIRMING.has(one.kind)));
+  if (!top) return null;
+  if (top.level === "human") return "you";
+  return top.level === "read_back" ? "read_back" : "answer";
+}
+
+const shownOutcome = (list: readonly Evidence[] | undefined): string | null =>
+  strongest((list ?? []).filter((one) => one.outcome_kind !== null))?.outcome_kind ?? null;
+
+export const permalinkOf = (list: readonly Evidence[] | undefined): string | null =>
+  strongest((list ?? []).filter((one) => one.permalink !== null))?.permalink ?? null;
+
+/** Only an http or https address is a link; anything else is shown as text. */
+export function safeLink(address: string): string | null {
+  if (!URL.canParse(address)) return null;
+  const url = new URL(address);
+  return url.protocol === "https:" || url.protocol === "http:" ? url.href : null;
+}
+
+export const factsOfDetail = (target: Target): Facts => ({
+  scheduleState: target.schedule_state,
+  presence: target.presence,
+  publishedAt: target.published_at,
+  state: target.operation?.state ?? null,
+  kind: target.operation?.kind ?? null,
+  reason: target.operation?.reason_code ?? null,
+  effect: target.operation?.effect ?? null,
+  partIndex: target.operation?.part_index ?? 0,
+  outcome: shownOutcome(target.evidence),
+  holdReason: target.hold_reason,
+});
+
+// A draft target is idle; a target with no operation yet that is waiting for admission is not finished.
+const IDLE_SCHEDULE: ReadonlySet<string> = new Set(["draft", "archived", "settled"]);
+
+export function isFinished(target: Target): boolean {
+  if (target.presence === "removal_pending") return false;
+  if (target.operation === null) return IDLE_SCHEDULE.has(target.schedule_state);
+  return TERMINAL.has(target.operation.state);
+}
+
 /** What the words and the headline need to know about one target, from a list row or from the detail. */
 export interface Facts {
   readonly scheduleState: string;

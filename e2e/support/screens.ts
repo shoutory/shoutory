@@ -244,6 +244,95 @@ async function fulfilPosts(page: Page, workspace: string): Promise<void> {
   await fulfilProviders(page, workspace);
 }
 
+// One post with a published, a scheduled, a needs-human and a media-held target, each with the actions the server lists.
+const DETAIL_POST = POST_ID(5);
+const operationOf = (state: string, change: object = {}) => ({
+  id: "0190a000-0000-7000-8000-0000000006b1",
+  kind: "publish",
+  state,
+  effect: "none",
+  reason_code: null,
+  part_index: 0,
+  ...change,
+});
+const detailTarget = (n: number, channel: number, change: object) => ({
+  variant_id: VARIANT_ID(n),
+  channel_id: CHANNEL_CARDS[channel]?.id,
+  schedule_state: "settled",
+  presence: "present",
+  published_at: null,
+  due_at: null,
+  due_tz: null,
+  settings: { audience: "everyone" },
+  hold_reason: null,
+  operation: null,
+  actions: ["duplicate"],
+  ...change,
+});
+const DETAIL_TARGETS = [
+  detailTarget(1, 0, {
+    published_at: "2026-11-27T10:00:00.000Z",
+    operation: operationOf("published", { effect: "confirmed" }),
+    actions: ["delete", "duplicate"],
+  }),
+  detailTarget(2, 1, {
+    schedule_state: "scheduled",
+    due_at: "2026-12-01T09:00:00.000Z",
+    due_tz: "UTC",
+    operation: operationOf("pending", { id: "0190a000-0000-7000-8000-0000000006b2" }),
+    actions: ["cancel", "duplicate"],
+  }),
+  detailTarget(3, 2, {
+    schedule_state: "held",
+    operation: operationOf("needs_human", { id: "0190a000-0000-7000-8000-0000000006b3", effect: "possible" }),
+    actions: ["resolve", "duplicate"],
+  }),
+  detailTarget(4, 0, {
+    schedule_state: "scheduled",
+    due_at: "2026-12-02T09:00:00.000Z",
+    due_tz: "UTC",
+    hold_reason: "held_media",
+    operation: operationOf("pending", { id: "0190a000-0000-7000-8000-0000000006b4" }),
+    actions: ["duplicate"],
+  }),
+];
+
+async function fulfilPostDetail(page: Page, workspace: string): Promise<void> {
+  await page.addInitScript(() => localStorage.setItem("shoutory.zone", "UTC"));
+  await page.route(`**/api/v1/workspaces/${workspace}/posts/${DETAIL_POST}`, (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      headers: { etag: '"0190a000-0000-7000-8000-0000000005d1"' },
+      body: JSON.stringify({
+        data: {
+          id: DETAIL_POST,
+          status: "needs_attention",
+          current_version_id: "0190a000-0000-7000-8000-0000000005d1",
+          author_kind: "user",
+          author_id: "0190a000-0000-7000-8000-0000000005f1",
+          created_at: "2026-11-26T10:00:00.000Z",
+          updated_at: "2026-11-27T10:00:00.000Z",
+          variants: DETAIL_TARGETS.map((target) => ({
+            id: target.variant_id,
+            channel_id: target.channel_id,
+            locale: "en",
+            post_type: "text",
+            text: "Photos from the team day",
+            parts: [],
+            settings: { audience: "everyone" },
+            media: [],
+          })),
+          targets: DETAIL_TARGETS,
+        },
+      }),
+    }),
+  );
+  await page.route(`**/api/v1/workspaces/${workspace}/channels`, (route) =>
+    route.fulfill(reply({ data: channelRows(), meta: { next_cursor: null, actions: [] } })),
+  );
+  await fulfilProviders(page, workspace);
+}
+
 // The image starts with no media, so one file and where it fits are shown from fixed answers. With no ready thumbnail
 // the page asks for no image, and the picture is the same on every run.
 const MEDIUM_ID = "0190a000-0000-7000-8000-0000000002b1";
@@ -469,6 +558,15 @@ export const SCREENS: readonly Screen[] = [
     open: async (page, context) => {
       await fulfilComposer(page, context.workspace, true);
       await visit((c) => `/w/${c.workspace}/posts/${DRAFT_ID}/edit`)(page, context);
+    },
+  },
+  {
+    id: "post-detail",
+    pattern: "/w/:ws/posts/:postId",
+    audience: "founder",
+    open: async (page, context) => {
+      await fulfilPostDetail(page, context.workspace);
+      await visit((c) => `/w/${c.workspace}/posts/${DETAIL_POST}`)(page, context);
     },
   },
   {

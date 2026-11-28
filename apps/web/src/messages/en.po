@@ -3764,3 +3764,235 @@ msgstr "We could not save your changes"
 #. js-lingui-explicit-id
 msgid "composer.save.failed.meaning"
 msgstr "Your changes are kept on this device. Try saving again."
+
+#. js-lingui-explicit-id
+msgid "posts.detail.title"
+msgstr "Post"
+
+#. js-lingui-explicit-id
+msgid "posts.detail.back"
+msgstr "All posts"
+
+#. js-lingui-explicit-id
+msgid "posts.detail.loading"
+msgstr "Loading this post"
+
+#. js-lingui-explicit-id
+msgid "posts.detail.failed.what"
+msgstr "We could not load this post"
+
+#. js-lingui-explicit-id
+msgid "posts.detail.failed.meaning"
+msgstr "Nothing was changed. Try again."
+
+#. js-lingui-explicit-id
+msgid "posts.refresh_failed"
+msgstr "We could not refresh this post, so what you see may be out of date."
+
+#. js-lingui-explicit-id
+msgid "posts.refresh_as_of"
+msgstr "Showing it as of <0/>."
+
+#. js-lingui-explicit-id
+msgid "posts.target.due"
+msgstr "Due <0/>"
+
+#. js-lingui-explicit-id
+msgid "posts.link.open"
+msgstr "Open the post on <0>{provider}</0> (opens in a new tab)"
+
+#. js-lingui-explicit-id
+msgid "posts.hold.media"
+msgstr "Waiting for its media. A file is still being prepared or was not accepted; check the files of this post."
+
+#. js-lingui-explicit-id
+msgid "posts.evidence.you"
+msgstr "Confirmed by you"
+
+#. js-lingui-explicit-id
+msgid "posts.evidence.read_back"
+msgstr "Confirmed by reading the post back"
+
+#. js-lingui-explicit-id
+msgid "posts.evidence.answer"
+msgstr "Confirmed by <0>{provider}</0>'s answer"
+
+#. js-lingui-explicit-id
+msgid "posts.settings.title"
+msgstr "Settings"
+
+#. js-lingui-explicit-id
+msgid "posts.settings.none"
+msgstr "No settings"
+
+#. js-lingui-explicit-id
+msgid "posts.settings.yes"
+msgstr "Yes"
+
+#. js-lingui-explicit-id
+msgid "posts.settings.no"
+msgstr "No"
+
+#. js-lingui-explicit-id
+msgid "posts.settings.not_set"
+msgstr "Not set"
+
+#. js-lingui-explicit-id
+msgid "posts.attempts.title"
+msgstr "Attempts"
+
+#. js-lingui-explicit-id
+msgid "posts.attempts.number"
+msgstr "Attempt {0}"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.need_you"
+msgstr "{0, plural, one {1 needs you.} other {{need} need you.}}"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.waiting"
+msgstr "<0/> waiting"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.live"
+msgstr "Live on every channel"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.did_not_go"
+msgstr "<0/> did not go out"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.publishing"
+msgstr "Being sent now"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.failed"
+msgstr "Nothing was posted"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.headline_missed"
+msgstr "Its time passed and we never send late"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.removing"
+msgstr "Being removed from the channel"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.removed"
+msgstr "Removed from every channel"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.draft"
+msgstr "Not scheduled yet"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.pending"
+msgstr "Goes out <0/>"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.claimed"
+msgstr "Preparing to send"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.processing"
+msgstr "Not posted yet; this usually takes a few minutes"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.dispatching"
+msgstr "Being sent to {platform}"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.accepted"
+msgstr "{platform} is finishing it; a post may still appear or fail; we are confirming"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.retry_wait"
+msgstr "Nothing was posted yet."
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.paused"
+msgstr "We will continue when the cause is gone"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.held"
+msgstr "Reconnect by <0/>; after that this becomes a draft"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.held_no_date"
+msgstr "Reconnect the channel; after the deadline this becomes a draft"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.checking"
+msgstr "We are checking. To avoid a duplicate we have not posted again."
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.reconciling"
+msgstr "We are reading the channel to confirm"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.needs_check"
+msgstr "We could not confirm this. To avoid a duplicate we have not posted again"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.past_due"
+msgstr "<0>{channel}</0> was disconnected when this was due. Posting now would be late"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.unverified"
+msgstr "We stopped checking; it still blocks new posts to this channel"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.removal_unknown"
+msgstr "Open <0>{provider}</0> to check, then confirm what you found."
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.draft_delivered"
+msgstr "Finish posting there"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.scheduled_there"
+msgstr "Nothing is wrong; {platform} will publish it at that time and we will confirm"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.failed_part"
+msgstr "Parts 1 to <0/> are live; part <1/> was not posted"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.failed_none"
+msgstr "Nothing was posted to {place}"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.failed_other"
+msgstr "We could not post to {place}"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.cancelled"
+msgstr "It was cancelled before anything was sent"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.missed"
+msgstr "Its time passed; we never send late"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.replaced"
+msgstr "A new post was made; we are still watching for the old one"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.edit_pending"
+msgstr "The change is being sent to {platform}. The live post may still show the old text."
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.edit_failed"
+msgstr "The change was not applied. The post may still show the earlier text."
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.removal_pending"
+msgstr "Asked {platform} to remove it. We are confirming."
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.removed_there"
+msgstr "It is no longer on {platform}."
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.removal_reported"
+msgstr "You told us it was removed."

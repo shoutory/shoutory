@@ -3762,3 +3762,235 @@ msgstr "تعذّر حفظ تغييراتك"
 #. js-lingui-explicit-id
 msgid "composer.save.failed.meaning"
 msgstr "تغييراتك محفوظة على هذا الجهاز. حاول الحفظ مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "posts.detail.title"
+msgstr "منشور"
+
+#. js-lingui-explicit-id
+msgid "posts.detail.back"
+msgstr "كل المنشورات"
+
+#. js-lingui-explicit-id
+msgid "posts.detail.loading"
+msgstr "نحمّل هذا المنشور"
+
+#. js-lingui-explicit-id
+msgid "posts.detail.failed.what"
+msgstr "تعذّر تحميل هذا المنشور"
+
+#. js-lingui-explicit-id
+msgid "posts.detail.failed.meaning"
+msgstr "لم يتغير شيء. حاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "posts.refresh_failed"
+msgstr "تعذّر تحديث هذا المنشور، فقد يكون ما تراه قديمًا."
+
+#. js-lingui-explicit-id
+msgid "posts.refresh_as_of"
+msgstr "نعرضه كما كان في <0/>."
+
+#. js-lingui-explicit-id
+msgid "posts.target.due"
+msgstr "موعده <0/>"
+
+#. js-lingui-explicit-id
+msgid "posts.link.open"
+msgstr "افتح المنشور على <0>{provider}</0> (يفتح في علامة تبويب جديدة)"
+
+#. js-lingui-explicit-id
+msgid "posts.hold.media"
+msgstr "بانتظار الوسائط. ملف قيد التحضير أو لم يُقبل، راجع ملفات هذا المنشور."
+
+#. js-lingui-explicit-id
+msgid "posts.evidence.you"
+msgstr "تأكدتَ أنت منه"
+
+#. js-lingui-explicit-id
+msgid "posts.evidence.read_back"
+msgstr "تأكدنا بقراءة المنشور من المنصة"
+
+#. js-lingui-explicit-id
+msgid "posts.evidence.answer"
+msgstr "تأكدنا بإجابة <0>{provider}</0>"
+
+#. js-lingui-explicit-id
+msgid "posts.settings.title"
+msgstr "الإعدادات"
+
+#. js-lingui-explicit-id
+msgid "posts.settings.none"
+msgstr "لا توجد إعدادات"
+
+#. js-lingui-explicit-id
+msgid "posts.settings.yes"
+msgstr "نعم"
+
+#. js-lingui-explicit-id
+msgid "posts.settings.no"
+msgstr "لا"
+
+#. js-lingui-explicit-id
+msgid "posts.settings.not_set"
+msgstr "غير محدد"
+
+#. js-lingui-explicit-id
+msgid "posts.attempts.title"
+msgstr "المحاولات"
+
+#. js-lingui-explicit-id
+msgid "posts.attempts.number"
+msgstr "المحاولة {0}"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.need_you"
+msgstr "{0, plural, zero {لا شيء يحتاج إليك.} one {واحد يحتاج إليك.} two {اثنان يحتاجان إليك.} few {{need} تحتاج إليك.} many {{need} يحتاج إليك.} other {{need} يحتاج إليك.}}"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.waiting"
+msgstr "<0/> بانتظار موعدها"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.live"
+msgstr "ظاهر على كل القنوات"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.did_not_go"
+msgstr "تعذّر نشر <0/>"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.publishing"
+msgstr "يجري إرساله الآن"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.failed"
+msgstr "لم يُنشر شيء"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.headline_missed"
+msgstr "مضى وقته ولا نرسل متأخرًا أبدًا"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.removing"
+msgstr "يجري حذفه من القناة"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.removed"
+msgstr "حُذف من كل القنوات"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.draft"
+msgstr "لم يُجدول بعد"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.pending"
+msgstr "سيُنشر في <0/>"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.claimed"
+msgstr "نجهّزه للإرسال"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.processing"
+msgstr "لم يُنشر بعد، وعادةً تستغرق بضع دقائق"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.dispatching"
+msgstr "يُرسل إلى {platform}"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.accepted"
+msgstr "{platform} تُنهيه؛ قد يظهر المنشور أو يفشل بعد قليل ونحن نتأكد منه"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.retry_wait"
+msgstr "لم يُنشر شيء بعد."
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.paused"
+msgstr "سنتابع عندما يزول السبب"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.held"
+msgstr "أعد الربط قبل <0/>، وبعده يتحول إلى مسودة"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.held_no_date"
+msgstr "أعد ربط القناة، وبعد انتهاء المهلة يتحول إلى مسودة"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.checking"
+msgstr "نتحقق الآن. لتجنب النشر المكرر لم نعد النشر."
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.reconciling"
+msgstr "نقرأ القناة للتأكد"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.needs_check"
+msgstr "لم نستطع التأكد. لتجنب النشر المكرر لم نعد النشر"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.past_due"
+msgstr "كانت <0>{channel}</0> غير متصلة عند موعده، والنشر الآن سيكون متأخرًا"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.unverified"
+msgstr "توقفنا عن الفحص، ولا يزال يمنع منشورات جديدة على هذه القناة"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.removal_unknown"
+msgstr "افتح <0>{provider}</0> للتحقق ثم أكد ما وجدته."
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.draft_delivered"
+msgstr "أكمل النشر هناك"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.scheduled_there"
+msgstr "لا مشكلة؛ ستنشره {platform} في ذلك الوقت ونتأكد منه"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.failed_part"
+msgstr "الأجزاء من 1 إلى <0/> منشورة، ولم يُنشر الجزء <1/>"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.failed_none"
+msgstr "لم يُنشر شيء على {place}"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.failed_other"
+msgstr "تعذّر النشر على {place}"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.cancelled"
+msgstr "أُلغي قبل إرسال أي شيء"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.missed"
+msgstr "مضى وقته ولا نرسل متأخرًا"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.replaced"
+msgstr "أُنشئ منشور جديد ولا نزال نراقب المنشور القديم"
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.edit_pending"
+msgstr "يُرسل التغيير إلى {platform}. قد يظل المنشور الظاهر يعرض النص القديم."
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.edit_failed"
+msgstr "لم يُطبَّق التغيير. قد يظل المنشور يعرض النص السابق."
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.removal_pending"
+msgstr "طلبنا من {platform} حذفه ونتأكد من ذلك."
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.removed_there"
+msgstr "لم يعد موجودًا على {platform}."
+
+#. js-lingui-explicit-id
+msgid "posts.meaning.removal_reported"
+msgstr "أخبرتنا أنه حُذف."

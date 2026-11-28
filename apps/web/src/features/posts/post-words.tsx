@@ -1,8 +1,10 @@
+import { plural } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { ReactNode } from "react";
+import { formatNumber } from "../../i18n/i18n";
 import { DirText } from "../../ui/dir-text";
-import { LocalizedNumber } from "../../ui/localized";
-import type { Headline, HeadlineKey, WordKey } from "./post-facts";
+import { LocalizedDateTime, LocalizedNumber, useFormatPrefs } from "../../ui/localized";
+import type { EvidenceLine, Headline, HeadlineKey, WordKey } from "./post-facts";
 
 const PAUSE_REASONS = [
   "quota",
@@ -172,3 +174,245 @@ export function Summary({ headline }: { headline: Headline }) {
     </Trans>
   );
 }
+
+/** The sentence under the headline; the count line is `Summary`. */
+export function HeadlineMeaning({ headline }: { headline: Headline }) {
+  const { t } = useLingui();
+  const prefs = useFormatPrefs();
+  const need = formatNumber(headline.x, prefs);
+  switch (headline.key) {
+    case "needs_attention":
+      return t({
+        id: "posts.meaning.need_you",
+        message: plural(headline.x, {
+          one: "1 needs you.",
+          other: `${need} need you.`,
+        }),
+      });
+    case "scheduled":
+      return (
+        <Trans id="posts.meaning.waiting">
+          <LocalizedNumber value={headline.waiting} /> waiting
+        </Trans>
+      );
+    case "published":
+      return <Trans id="posts.meaning.live">Live on every channel</Trans>;
+    case "partially_published":
+      return (
+        <Trans id="posts.meaning.did_not_go">
+          <LocalizedNumber value={headline.f} /> did not go out
+        </Trans>
+      );
+    default:
+      return <HeadlineNote headline={headline} />;
+  }
+}
+
+function HeadlineNote({ headline }: { headline: Headline }) {
+  switch (headline.key) {
+    case "publishing":
+      return <Trans id="posts.meaning.publishing">Being sent now</Trans>;
+    case "failed":
+      return <Trans id="posts.meaning.failed">Nothing was posted</Trans>;
+    case "missed":
+      return <Trans id="posts.meaning.headline_missed">Its time passed and we never send late</Trans>;
+    case "removing":
+      return <Trans id="posts.meaning.removing">Being removed from the channel</Trans>;
+    case "removed":
+      return <Trans id="posts.meaning.removed">Removed from every channel</Trans>;
+    case "draft":
+      return <Trans id="posts.meaning.draft">Not scheduled yet</Trans>;
+    default:
+      return null;
+  }
+}
+
+export interface MeaningContext extends WordContext {
+  readonly dueAt: Date | null;
+  readonly zone: string;
+  readonly deadline: Date | null;
+  readonly partIndex: number;
+  readonly effect: string | null;
+}
+type MeaningProps = { word: WordKey } & MeaningContext;
+
+/** The one line under a target's word. A fact the answer does not carry is left out, never invented. */
+export function TargetMeaning(props: MeaningProps) {
+  return progressMeaning(props) ?? attentionMeaning(props) ?? endMeaning(props);
+}
+
+function progressMeaning({ word, provider, dueAt, zone }: MeaningProps): ReactNode {
+  const platform = <DirText>{provider}</DirText>;
+  switch (word) {
+    case "draft":
+      return <Trans id="posts.meaning.draft">Not scheduled yet</Trans>;
+    case "pending":
+      return dueAt === null ? null : (
+        <Trans id="posts.meaning.pending">
+          Goes out <LocalizedDateTime value={dueAt} timeZone={zone} />
+        </Trans>
+      );
+    case "claimed":
+      return <Trans id="posts.meaning.claimed">Preparing to send</Trans>;
+    case "processing":
+      return <Trans id="posts.meaning.processing">Not posted yet; this usually takes a few minutes</Trans>;
+    case "dispatching":
+      return <Trans id="posts.meaning.dispatching">Being sent to {platform}</Trans>;
+    case "provider_accepted":
+      return (
+        <Trans id="posts.meaning.accepted">
+          {platform} is finishing it; a post may still appear or fail; we are confirming
+        </Trans>
+      );
+    case "retry_wait":
+      return <Trans id="posts.meaning.retry_wait">Nothing was posted yet.</Trans>;
+    case "paused":
+      return <Trans id="posts.meaning.paused">We will continue when the cause is gone</Trans>;
+    default:
+      return null;
+  }
+}
+
+function attentionMeaning({ word, provider, channel, deadline, zone }: MeaningProps): ReactNode {
+  switch (word) {
+    case "blocked_reconnect":
+      return deadline === null ? (
+        <Trans id="posts.meaning.held_no_date">
+          Reconnect the channel; after the deadline this becomes a draft
+        </Trans>
+      ) : (
+        <Trans id="posts.meaning.held">
+          Reconnect by <LocalizedDateTime value={deadline} timeZone={zone} />; after that this becomes a draft
+        </Trans>
+      );
+    case "unknown_external_state":
+      return (
+        <Trans id="posts.meaning.checking">
+          We are checking. To avoid a duplicate we have not posted again.
+        </Trans>
+      );
+    case "reconciling":
+      return <Trans id="posts.meaning.reconciling">We are reading the channel to confirm</Trans>;
+    case "needs_human":
+      return (
+        <Trans id="posts.meaning.needs_check">
+          We could not confirm this. To avoid a duplicate we have not posted again
+        </Trans>
+      );
+    case "needs_human_past_due":
+      return (
+        <Trans id="posts.meaning.past_due">
+          <DirText>{channel}</DirText> was disconnected when this was due. Posting now would be late
+        </Trans>
+      );
+    case "unverified":
+      return (
+        <Trans id="posts.meaning.unverified">
+          We stopped checking; it still blocks new posts to this channel
+        </Trans>
+      );
+    case "removal_unknown":
+      return (
+        <Trans id="posts.meaning.removal_unknown">
+          Open <DirText>{provider}</DirText> to check, then confirm what you found.
+        </Trans>
+      );
+    default:
+      return null;
+  }
+}
+
+function endMeaning({ word, provider, channel, partIndex, effect }: MeaningProps): ReactNode {
+  const platform = <DirText>{provider}</DirText>;
+  const place = <DirText>{channel}</DirText>;
+  switch (word) {
+    case "published_draft_delivered":
+      return <Trans id="posts.meaning.draft_delivered">Finish posting there</Trans>;
+    case "published_scheduled":
+      return (
+        <Trans id="posts.meaning.scheduled_there">
+          Nothing is wrong; {platform} will publish it at that time and we will confirm
+        </Trans>
+      );
+    case "failed":
+      return <FailedMeaning place={place} partIndex={partIndex} effect={effect} />;
+    case "cancelled":
+      return <Trans id="posts.meaning.cancelled">It was cancelled before anything was sent</Trans>;
+    case "missed":
+      return <Trans id="posts.meaning.missed">Its time passed; we never send late</Trans>;
+    case "superseded_after_unknown_outcome":
+      return (
+        <Trans id="posts.meaning.replaced">A new post was made; we are still watching for the old one</Trans>
+      );
+    default:
+      return editMeaning(word, platform);
+  }
+}
+
+function editMeaning(word: WordKey, platform: ReactNode): ReactNode {
+  switch (word) {
+    case "edit_pending":
+      return (
+        <Trans id="posts.meaning.edit_pending">
+          The change is being sent to {platform}. The live post may still show the old text.
+        </Trans>
+      );
+    case "edit_failed":
+      return (
+        <Trans id="posts.meaning.edit_failed">
+          The change was not applied. The post may still show the earlier text.
+        </Trans>
+      );
+    case "removal_pending":
+      return (
+        <Trans id="posts.meaning.removal_pending">Asked {platform} to remove it. We are confirming.</Trans>
+      );
+    case "removed_at_provider":
+      return <Trans id="posts.meaning.removed_there">It is no longer on {platform}.</Trans>;
+    case "removal_reported":
+      return <Trans id="posts.meaning.removal_reported">You told us it was removed.</Trans>;
+    default:
+      return null;
+  }
+}
+
+function FailedMeaning({
+  place,
+  partIndex,
+  effect,
+}: {
+  place: ReactNode;
+  partIndex: number;
+  effect: string | null;
+}) {
+  if (partIndex > 0) {
+    return (
+      <Trans id="posts.meaning.failed_part">
+        Parts 1 to <LocalizedNumber value={partIndex} /> are live; part{" "}
+        <LocalizedNumber value={partIndex + 1} /> was not posted
+      </Trans>
+    );
+  }
+  if (effect === "none") {
+    return <Trans id="posts.meaning.failed_none">Nothing was posted to {place}</Trans>;
+  }
+  return <Trans id="posts.meaning.failed_other">We could not post to {place}</Trans>;
+}
+
+export function EvidenceWords({ line, provider }: { line: EvidenceLine; provider: string }) {
+  if (line === "you") return <Trans id="posts.evidence.you">Confirmed by you</Trans>;
+  if (line === "read_back") {
+    return <Trans id="posts.evidence.read_back">Confirmed by reading the post back</Trans>;
+  }
+  return (
+    <Trans id="posts.evidence.answer">
+      Confirmed by <DirText>{provider}</DirText>'s answer
+    </Trans>
+  );
+}
+
+export const HeldMediaWords = () => (
+  <Trans id="posts.hold.media">
+    Waiting for its media. A file is still being prepared or was not accepted; check the files of this post.
+  </Trans>
+);
