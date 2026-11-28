@@ -369,6 +369,41 @@ describe("each kind of resolution", () => {
   );
 });
 
+// [route, kind, the plant, the body, which operation sends again: the resolved one or the one it made]
+const SENDS_FIRST: ["A" | "B", string, Partial<Plant>, Record<string, unknown>, "same" | "new"][] = [
+  ["A", "attest_not_executed", {}, { ack_text: "not sent" }, "same"],
+  ["B", "publish_late", { effect: "none" }, {}, "same"],
+  ["A", "supersede", {}, { ack_text: "again" }, "new"],
+  ["B", "publish_late", { state: "missed", effect: "none" }, {}, "new"],
+];
+describe("a resolution that sends again is claimed before the backlog", () => {
+  it.each(SENDS_FIRST)(
+    "%s %s sets the priority of the %s operation",
+    async (route, kind, planted, body, which) => {
+      const op = await plantOp({ author: user("writer").id, ...planted });
+      const path = (route === "A" ? routeA : routeB)(ws, op);
+      const done = await answer(await post(user("admin"), path, { kind, ...body }));
+      expect(done.status).toBe(200);
+      const sending = which === "same" ? op : (done.data?.new_operation_id as string);
+      const [row] = (
+        await fx.admin((client) =>
+          client.query("SELECT priority FROM app.operations WHERE id = $1", [sending]),
+        )
+      ).rows;
+      expect(row.priority).toBe(true);
+    },
+  );
+
+  it("a resolution that does not send leaves the priority off", async () => {
+    const op = await plantOp({ author: user("writer").id });
+    await post(user("admin"), routeA(ws, op), { kind: "attest_published" });
+    const [row] = (
+      await fx.admin((client) => client.query("SELECT priority FROM app.operations WHERE id = $1", [op]))
+    ).rows;
+    expect(row.priority).toBe(false);
+  });
+});
+
 describe("the answers of a refused resolution", () => {
   it("a 400 and a 404 carry the error envelope with a code and a request id (the 409 is the repeat row's)", async () => {
     const op = await plantOp({ author: user("writer").id });
