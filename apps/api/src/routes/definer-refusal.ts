@@ -91,6 +91,7 @@ const REASONS: ReadonlySet<string> = new Set([
   "deletion_requested",
   "idempotency_key_reused",
   "in_the_past",
+  "version_changed",
 ]);
 
 // A definer that explains its refusal in a sentence instead of a code; the sentence becomes the code a client reads.
@@ -135,7 +136,7 @@ function detailsOf(state: string, message: string, detail: unknown): RefusalDeta
 // Only the invitation, member, channel, resolution, creation and archive definers raise the SH states, and the post writes for
 // their named reasons; the same state under another definer's name is a defect.
 const SH_DEFINERS =
-  /^(invitation|member|channel)_|^connect_challenge_(put|renew):|^(resolve_operation|operation_cancel):|^(workspace|organization)_create:|^workspace_(archive|unarchive|avatar_set|guard):|^media_(register|mark_uploaded|set_multipart|delete|set_metadata):|^post: (media_unavailable|post_in_flight|use_edit|variant_has_history|post_archived|channel_not_connected|not_published|edit_window_closed|delete_window_closed|capability_missing)$/;
+  /^(invitation|member|channel)_|^connect_challenge_(put|renew):|^(resolve_operation|operation_cancel):|^(workspace|organization)_create:|^workspace_(archive|unarchive|avatar_set|guard):|^media_(register|mark_uploaded|set_multipart|delete|set_metadata):|^post: (media_unavailable|post_in_flight|use_edit|variant_has_history|post_archived|channel_not_connected|not_published|edit_window_closed|delete_window_closed|capability_missing|in_the_past|version_changed)$/;
 const LIMIT_DEFINERS = /^(workspace|organization)_create:/;
 
 // A creation definer's SH429 puts "retry after N seconds" in DETAIL; anything else gives the default Retry-After.

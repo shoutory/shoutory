@@ -312,12 +312,12 @@ const DEFINERS: Definer[] = [
   { name: "credential_destroy", args: "workspace_id uuid, channel_id uuid", callers: APP_WORKER },
   {
     name: "post_schedule",
-    args: "workspace_id uuid, post_id uuid, variant_ids uuid[], local_due timestamp without time zone, due_tz text, due_at timestamp with time zone, publish_now boolean",
+    args: "workspace_id uuid, post_id uuid, variant_ids uuid[], local_due timestamp without time zone, due_tz text, due_at timestamp with time zone, publish_now boolean, expected_version uuid",
     callers: ["shoutory_app"],
   },
   {
     name: "post_publish_now",
-    args: "workspace_id uuid, post_id uuid, variant_ids uuid[]",
+    args: "workspace_id uuid, post_id uuid, variant_ids uuid[], expected_version uuid",
     callers: ["shoutory_app"],
   },
   {

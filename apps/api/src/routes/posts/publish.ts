@@ -7,7 +7,7 @@ import { definerRefusal } from "../definer-refusal.js";
 import { requireIdempotencyKey } from "../idempotency-key.js";
 import { workspaceDue } from "../operations/operations.js";
 import { expectedVersion, livePost, staleRefusal } from "./preconditions.js";
-import { checkForSchedule, resolveDraft } from "./resolve.js";
+import { checkForSchedule, checkVariants, resolveDraft } from "./resolve.js";
 
 // Schedule, Update schedule, publish now, unschedule (the Undo), edit and delete. The permission is posts.edit for all
 // of them; the definers check the post, its targets and their channels under the post lock.
@@ -38,17 +38,27 @@ function registerSchedule(app: App, deps: Deps, ipHmac: IpHmac): void {
     handler: async ({ c, tx, scope, params, body, clientAddress }) => {
       requireIdempotencyKey(c);
       await livePost(tx, scope, params.post_id);
-      await checkForSchedule(tx, scope.workspaceId, params.post_id, body.variant_ids, deps.providers);
+      const version = await checkForSchedule(
+        tx,
+        scope.workspaceId,
+        params.post_id,
+        body.variant_ids,
+        deps.providers,
+      );
       const due = await workspaceDue(tx, scope.workspaceId, body.local_due, body.fold);
       const done = await tx
-        .query<{ ids: string[] }>("SELECT app.post_schedule($1, $2, $3::uuid[], $4, $5, $6, false) AS ids", [
-          scope.workspaceId,
-          params.post_id,
-          body.variant_ids ?? null,
-          due.local_due,
-          due.due_tz,
-          due.due_at,
-        ])
+        .query<{ ids: string[] }>(
+          "SELECT app.post_schedule($1, $2, $3::uuid[], $4, $5, $6, false, $7) AS ids",
+          [
+            scope.workspaceId,
+            params.post_id,
+            body.variant_ids ?? null,
+            due.local_due,
+            due.due_tz,
+            due.due_at,
+            version,
+          ],
+        )
         .catch((error: unknown) => {
           throw definerRefusal(error) ?? error;
         });
@@ -65,7 +75,7 @@ function registerSchedule(app: App, deps: Deps, ipHmac: IpHmac): void {
 
 function registerMarks(app: App, deps: Deps, ipHmac: IpHmac): void {
   for (const [name, sql, action] of [
-    ["publish", "SELECT app.post_publish_now($1, $2, $3::uuid[]) AS ids", "post.publish_now"],
+    ["publish", "SELECT app.post_publish_now($1, $2, $3::uuid[], $4) AS ids", "post.publish_now"],
     ["unschedule", "SELECT app.post_unschedule($1, $2, $3::uuid[]) AS ids", "post.unscheduled"],
   ] as const) {
     defineRoute(app, {
@@ -77,12 +87,15 @@ function registerMarks(app: App, deps: Deps, ipHmac: IpHmac): void {
       body: targetsBody,
       handler: async ({ c, tx, scope, params, body, clientAddress }) => {
         requireIdempotencyKey(c);
+        const args: unknown[] = [scope.workspaceId, params.post_id, body.variant_ids ?? null];
         if (name === "publish") {
           await livePost(tx, scope, params.post_id);
-          await checkForSchedule(tx, scope.workspaceId, params.post_id, body.variant_ids, deps.providers);
+          args.push(
+            await checkForSchedule(tx, scope.workspaceId, params.post_id, body.variant_ids, deps.providers),
+          );
         }
         const done = await tx
-          .query<{ ids: string[] }>(sql, [scope.workspaceId, params.post_id, body.variant_ids ?? null])
+          .query<{ ids: string[] }>(sql, args)
           .catch((error: unknown) => {
             throw definerRefusal(error) ?? error;
           });
@@ -129,6 +142,7 @@ function registerEdit(app: App, deps: Deps, ipHmac: IpHmac): void {
         deps.providers,
         deps.now(),
       );
+      await checkVariants(tx, scope.workspaceId, body.draft, deps.providers);
       const done = await tx
         .query<{ outcome: string; version_id: string; operation_ids: string[] }>(
           "SELECT * FROM app.post_edit($1, $2, $3, $4::jsonb, $5, $6::jsonb, $7, $8)",

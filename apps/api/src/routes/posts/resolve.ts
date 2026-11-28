@@ -179,31 +179,15 @@ async function requireUsableMedia(tx: TenantTx, workspaceId: string, draft: Draf
 }
 
 /**
- * The checks that only scheduling makes, for the targets it names (all of the post's when none are named): the
- * manifest's limits in strict form, then the media. The draft is the one the post is at now.
+ * The strict form of the manifest's limits, then the media, for a draft about to be scheduled or to replace a
+ * published one.
  */
-export async function checkForSchedule(
+export async function checkVariants(
   tx: TenantTx,
   workspaceId: string,
-  postId: string,
-  variantIds: readonly string[] | undefined,
+  draft: Draft,
   providers: Providers,
 ): Promise<void> {
-  const found = await tx.query<{ draft: unknown }>(
-    `SELECT v.snapshot -> 'draft' AS draft FROM app.posts AS p
-       JOIN app.post_versions AS v ON v.workspace_id = p.workspace_id AND v.id = p.current_version_id
-      WHERE p.workspace_id = $1 AND p.id = $2`,
-    [workspaceId, postId],
-  );
-  const parsed = draftSchema.safeParse(found.rows[0]?.draft);
-  if (!parsed.success) throw unprocessable("draft_invalid");
-  const named = await tx.query<{ channel_id: string; locale: string | null }>(
-    `SELECT channel_id, locale FROM app.post_variants
-      WHERE workspace_id = $1 AND post_id = $2 AND ($3::uuid[] IS NULL OR id = ANY ($3::uuid[]))`,
-    [workspaceId, postId, variantIds ?? null],
-  );
-  const wanted = new Set(named.rows.map(targetOf));
-  const draft: Draft = { variants: parsed.data.variants.filter((variant) => wanted.has(targetOf(variant))) };
   const channels = await providersOfChannels(tx, workspaceId, draft, providers);
   const issues = draft.variants.flatMap((variant, index) => {
     const manifest = channels.get(variant.channel_id.toLowerCase())?.manifest;
@@ -219,6 +203,36 @@ export async function checkForSchedule(
     });
   }
   await requireUsableMedia(tx, workspaceId, draft);
+}
+
+/**
+ * The checks that only scheduling makes, for the targets it names (all of the post's when none are named). The draft
+ * is the one the post is at now; its version id is returned so the write can refuse if the post has moved on.
+ */
+export async function checkForSchedule(
+  tx: TenantTx,
+  workspaceId: string,
+  postId: string,
+  variantIds: readonly string[] | undefined,
+  providers: Providers,
+): Promise<string> {
+  const found = await tx.query<{ version_id: string; draft: unknown }>(
+    `SELECT v.id AS version_id, v.snapshot -> 'draft' AS draft FROM app.posts AS p
+       JOIN app.post_versions AS v ON v.workspace_id = p.workspace_id AND v.id = p.current_version_id
+      WHERE p.workspace_id = $1 AND p.id = $2`,
+    [workspaceId, postId],
+  );
+  const parsed = draftSchema.safeParse(found.rows[0]?.draft);
+  if (!parsed.success || found.rows[0] === undefined) throw unprocessable("draft_invalid");
+  const named = await tx.query<{ channel_id: string; locale: string | null }>(
+    `SELECT channel_id, locale FROM app.post_variants
+      WHERE workspace_id = $1 AND post_id = $2 AND ($3::uuid[] IS NULL OR id = ANY ($3::uuid[]))`,
+    [workspaceId, postId, variantIds ?? null],
+  );
+  const wanted = new Set(named.rows.map(targetOf));
+  const draft: Draft = { variants: parsed.data.variants.filter((variant) => wanted.has(targetOf(variant))) };
+  await checkVariants(tx, workspaceId, draft, providers);
+  return found.rows[0].version_id;
 }
 
 export async function resolveDraft(

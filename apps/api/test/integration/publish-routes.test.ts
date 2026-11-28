@@ -592,6 +592,7 @@ describe("two writers on one target", () => {
         ).rows[0],
     );
     expect(row).toEqual({ priority: true, queue: "publish.fixture_oauth" });
+    expect(await publishNowOf(p)).toBe(false);
   });
 });
 
@@ -906,6 +907,72 @@ describe("the strict check at schedule and publish now", () => {
   );
 });
 
+describe("the strict check at an edit", () => {
+  // [case, the edited text, the issue the answer lists]
+  const EDITS: [string, string, { variant: number; key: string; reason: string }][] = [
+    ["a text over the provider's limit", "x".repeat(501), { variant: 0, key: "text", reason: "too_long" }],
+    ["nothing to send", "", { variant: 0, key: "text", reason: "empty" }],
+  ];
+  it.each(EDITS)("%s answers 422 variant_invalid and admits nothing", async (_name, text, issue) => {
+    const p = await plant("published");
+    const before = await stateOf(p);
+    const answered = await send(
+      user("owner"),
+      "POST",
+      `${base(ws)}/${p.post}/edit`,
+      { draft: { variants: [variantOf(p.channel, text)] } },
+      { "idempotency-key": key(), ...ifMatch(p) },
+    );
+    const error = await errorOf(answered);
+    expect([answered.status, error?.code, error?.details?.reason, error?.details?.issues]).toEqual([
+      422,
+      "unprocessable_content",
+      "variant_invalid",
+      [issue],
+    ]);
+    expect(await stateOf(p)).toEqual(before);
+  });
+});
+
+describe("a version that changes between the check and the write", () => {
+  it.each(["schedule", "publish"])("%s answers 409 conflict version_changed and changes nothing", async (route) => {
+    const p = await planted("first");
+    const saved = await dataOf(
+      await send(
+        user("author"),
+        "POST",
+        `${base(ws)}/${p.post}/save`,
+        { draft: { variants: [variantOf(channel, "second")] } },
+        { "if-match": `"${p.version}"` },
+      ),
+    );
+    const newer = saved.version_id as string;
+    await fx.admin(async (client) => {
+      await client.query("BEGIN");
+      await client.query("SET LOCAL session_replication_role = replica");
+      await client.query("UPDATE app.posts SET current_version_id = $2 WHERE id = $1", [p.post, p.version]);
+      await client.query("COMMIT");
+    });
+    const before = await stateOf(p);
+    const outcome = await probeWhileHeld(
+      fx.admin,
+      {
+        sql: `SET LOCAL session_replication_role = replica; UPDATE app.posts SET current_version_id = '${newer}' WHERE id = '${p.post}'`,
+        params: [],
+      },
+      () => scheduleVia(route, p),
+      [],
+    );
+    const error = await errorOf(outcome.response);
+    expect([outcome.response.status, error?.code, error?.details?.reason]).toEqual([
+      409,
+      "conflict",
+      "version_changed",
+    ]);
+    expect((await stateOf(p)).variants).toEqual(before.variants);
+  });
+});
+
 describe("the media of a scheduled post", () => {
   const withMedium = async (state: string | null) => {
     const p = await planted("with a medium");
@@ -985,6 +1052,7 @@ describe("the time of a schedule in the workspace zone", () => {
     ["2027-11-07T01:30", "earlier", 200, "2027-11-07T05:30:00.000Z"],
     ["2027-11-07T01:30", "later", 200, "2027-11-07T06:30:00.000Z"],
     ["2027-06-01T09:00", undefined, 200, "2027-06-01T13:00:00.000Z"],
+    ["2020-06-01T09:00", undefined, 422, "in_the_past"],
   ];
   it.each(TIMES)("%s with %s answers %i (%s)", async (localDue, fold, status, expected) => {
     const zoned = await seedWorkspace(fx, await seedOrganization(fx, user("owner").id));
