@@ -94,11 +94,9 @@ function registerMarks(app: App, deps: Deps, ipHmac: IpHmac): void {
             await checkForSchedule(tx, scope.workspaceId, params.post_id, body.variant_ids, deps.providers),
           );
         }
-        const done = await tx
-          .query<{ ids: string[] }>(sql, args)
-          .catch((error: unknown) => {
-            throw definerRefusal(error) ?? error;
-          });
+        const done = await tx.query<{ ids: string[] }>(sql, args).catch((error: unknown) => {
+          throw definerRefusal(error) ?? error;
+        });
         await tx.query("SELECT app.audit_insert($1, 'post', $2, $3, $4, $5::jsonb)", [
           action,
           params.post_id,

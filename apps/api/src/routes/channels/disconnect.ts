@@ -1,4 +1,5 @@
 import { impactOf, LIST_BOUND, type OperationRow } from "@shoutory/core/channels/disconnect";
+import type { TenantTx } from "@shoutory/db/context";
 import { withAdvisoryLock } from "@shoutory/db/locks";
 import { z } from "zod";
 import type { CredentialService } from "../../channels/credentials.js";
@@ -34,6 +35,28 @@ const OPEN_OPERATIONS = `SELECT o.id, o.state, v.post_id AS "postId", coalesce(c
       'pending', 'retry_wait', 'paused', 'blocked_reconnect')
   ORDER BY o.id LIMIT ${LIST_BOUND + 1}`;
 
+const SCHEDULED_TARGETS = `SELECT v.id AS "variantId", v.post_id AS "postId", v.due_at AS "dueAt"
+  FROM app.post_variants AS v
+  WHERE v.workspace_id = $1 AND v.channel_id = $2
+    AND (v.schedule_state IN ('scheduled', 'held')
+      OR (v.schedule_state = 'in_progress' AND EXISTS (SELECT 1 FROM app.operations AS o
+        WHERE o.workspace_id = v.workspace_id AND o.variant_id = v.id
+          AND o.state IN ('pending', 'retry_wait', 'paused', 'blocked_reconnect'))))
+  ORDER BY v.id LIMIT ${LIST_BOUND + 1}`;
+
+async function impactAnswer(tx: TenantTx, workspaceId: string, channelId: string, revokes: boolean) {
+  const scheduled = await tx.query<{ variantId: string; postId: string; dueAt: Date | null }>(
+    SCHEDULED_TARGETS,
+    [workspaceId, channelId],
+  );
+  const operations = await tx.query<OperationRow>(OPEN_OPERATIONS, [workspaceId, channelId, null]);
+  const rows = scheduled.rows.map((row) => ({
+    ...row,
+    dueAt: row.dueAt === null ? null : new Date(row.dueAt).toISOString(),
+  }));
+  return { ...impactOf(rows, operations.rows), revokeSupported: revokes };
+}
+
 function registerImpact(app: App, deps: DisconnectDeps | undefined): void {
   defineRoute(app, {
     method: "get",
@@ -48,37 +71,31 @@ function registerImpact(app: App, deps: DisconnectDeps | undefined): void {
       );
       const found = channelOf.safeParse(channel.rows[0]);
       if (!found.success) throw new Refusal("not_found", "channel row not visible");
-      const scheduled = await tx.query<{ variantId: string; postId: string; dueAt: Date | null }>(
-        `SELECT v.id AS "variantId", v.post_id AS "postId", v.due_at AS "dueAt" FROM app.post_variants AS v
-         WHERE v.workspace_id = $1 AND v.channel_id = $2
-           AND (v.schedule_state IN ('scheduled', 'held')
-             OR (v.schedule_state = 'in_progress' AND EXISTS (SELECT 1 FROM app.operations AS o
-               WHERE o.workspace_id = v.workspace_id AND o.variant_id = v.id
-                 AND o.state IN ('pending', 'retry_wait', 'paused', 'blocked_reconnect'))))
-         ORDER BY v.id LIMIT ${LIST_BOUND + 1}`,
-        [scope.workspaceId, params.channel_id],
-      );
-      const operations = await tx.query<OperationRow>(OPEN_OPERATIONS, [
-        scope.workspaceId,
-        params.channel_id,
-        null,
-      ]);
       const provider = deps ? providerOf(deps, found.data.provider_id) : undefined;
-      return {
-        ...impactOf(
-          scheduled.rows.map((row) => ({
-            ...row,
-            dueAt: row.dueAt === null ? null : new Date(row.dueAt).toISOString(),
-          })),
-          operations.rows,
-        ),
-        revokeSupported: provider?.adapter.revoke !== undefined,
-      };
+      return impactAnswer(tx, scope.workspaceId, params.channel_id, provider?.adapter.revoke !== undefined);
     },
   });
 }
 
 type IpHmac = (address: string) => Buffer;
+
+// The refusal names each operation in the way with its post, its channel and its state, and says when it was cut.
+async function refuseBusy(tx: TenantTx, workspaceId: string, channelId: string, blocking: string[]) {
+  const named = await tx.query<OperationRow>(OPEN_OPERATIONS, [workspaceId, channelId, blocking]);
+  throw new Refusal("conflict", "the channel has work in flight", {
+    details: {
+      reason: "channel_busy",
+      blocking: impactOf([], named.rows).blocking.map((row) => ({
+        kind: "operation" as const,
+        id: row.id,
+        post_id: row.postId,
+        channel_name: row.channelName,
+        state: row.state,
+      })),
+      ...(blocking.length > LIST_BOUND ? { truncated: true } : {}),
+    },
+  });
+}
 
 // Transaction 1 takes the channel lock first, then the definer refuses or disconnects; the provider is called with no
 // transaction open; transaction 2 overwrites the secret bytes. A failed revoke never stops the destroy.
@@ -107,27 +124,7 @@ function registerDisconnect(app: App, ipHmac: IpHmac, deps: DisconnectDeps): voi
                 throw definerRefusal(error) ?? error;
               });
             const blocking = found.rows[0]?.blocking ?? [];
-            if (blocking.length > 0) {
-              const named = await tx.query<OperationRow>(OPEN_OPERATIONS, [
-                scope.workspaceId,
-                params.channel_id,
-                blocking,
-              ]);
-              const shown = impactOf([], named.rows).blocking;
-              throw new Refusal("conflict", "the channel has work in flight", {
-                details: {
-                  reason: "channel_busy",
-                  blocking: shown.map((row) => ({
-                    kind: "operation" as const,
-                    id: row.id,
-                    post_id: row.postId,
-                    channel_name: row.channelName,
-                    state: row.state,
-                  })),
-                  ...(blocking.length > LIST_BOUND ? { truncated: true } : {}),
-                },
-              });
-            }
+            if (blocking.length > 0) await refuseBusy(tx, scope.workspaceId, params.channel_id, blocking);
             const channel = await tx.query(
               "SELECT provider_id FROM app.channels WHERE workspace_id = $1 AND id = $2",
               [scope.workspaceId, params.channel_id],

@@ -229,8 +229,12 @@ const postOf = (operation: string) =>
 const nameOf = (channel: string) =>
   fx.admin(
     async (client) =>
-      (await client.query("SELECT coalesce(nickname, display_name) AS name FROM app.channels WHERE id = $1", [channel]))
-        .rows[0].name as string,
+      (
+        await client.query(
+          "SELECT coalesce(nickname, display_name) AS name FROM app.channels WHERE id = $1",
+          [channel],
+        )
+      ).rows[0].name as string,
   );
 const rowCounts = (workspace: string) =>
   fx.admin(
@@ -592,6 +596,18 @@ describe("the disconnect impact preview", () => {
     expect((await channelRow(c.channel)).connection_state).toBe("connected");
   });
 
+  it("says a channel with nothing in the way can be disconnected", async () => {
+    const c = await plantChannel();
+    await plantScheduled(c);
+    const data = (await answerOf(await impactOf(user("owner"), ws, c.channel))).data as {
+      canDisconnect: boolean;
+      blocking: unknown[];
+    };
+    expect([data.canDisconnect, data.blocking]).toEqual([true, []]);
+  });
+});
+
+describe("what the impact preview says about its length and the platform", () => {
   it("bounds the scheduled list and the blocking list at 200 and says so, in the preview and in the refusal", async () => {
     const c = await plantChannel();
     await plantMany(c, "pending", 201);
@@ -612,16 +628,6 @@ describe("the disconnect impact preview", () => {
       ((await answerOf(await impactOf(user("owner"), ws, c.channel))).data as { revokeSupported: boolean })
         .revokeSupported;
     expect([await supported(ends), await supported(keeps)]).toEqual([true, false]);
-  });
-
-  it("says a channel with nothing in the way can be disconnected", async () => {
-    const c = await plantChannel();
-    await plantScheduled(c);
-    const data = (await answerOf(await impactOf(user("owner"), ws, c.channel))).data as {
-      canDisconnect: boolean;
-      blocking: unknown[];
-    };
-    expect([data.canDisconnect, data.blocking]).toEqual([true, []]);
   });
 });
 

@@ -67,7 +67,11 @@ const CASES: [string, ActionFacts, string[]][] = [
     "a published target after both windows",
     published({
       publishedAt: new Date(NOW.getTime() - 7_200_000),
-      provider: { capabilities: ["text", "edit", "delete"], editWindowSeconds: 3600, deleteWindowSeconds: 3600 },
+      provider: {
+        capabilities: ["text", "edit", "delete"],
+        editWindowSeconds: 3600,
+        deleteWindowSeconds: 3600,
+      },
     }),
     ["duplicate"],
   ],
@@ -75,7 +79,11 @@ const CASES: [string, ActionFacts, string[]][] = [
     "a published target after the edit window and inside the delete window",
     published({
       publishedAt: new Date(NOW.getTime() - 7_200_000),
-      provider: { capabilities: ["text", "edit", "delete"], editWindowSeconds: 3600, deleteWindowSeconds: 86_400 },
+      provider: {
+        capabilities: ["text", "edit", "delete"],
+        editWindowSeconds: 3600,
+        deleteWindowSeconds: 86_400,
+      },
     }),
     ["delete", "duplicate"],
   ],
@@ -114,12 +122,7 @@ const RESOLUTIONS: [string, ResolutionFacts, boolean, { kind: string; step_up: b
     "an unclear publish",
     op("needs_human"),
     true,
-    [
-      STEPPED("attest_published"),
-      STEPPED("attest_not_executed"),
-      STEPPED("supersede"),
-      PLAIN("dismiss"),
-    ],
+    [STEPPED("attest_published"), STEPPED("attest_not_executed"), STEPPED("supersede"), PLAIN("dismiss")],
   ],
   ["an unclear publish to someone who may not act", op("needs_human"), false, []],
   [
@@ -134,8 +137,18 @@ const RESOLUTIONS: [string, ResolutionFacts, boolean, { kind: string; step_up: b
     true,
     [],
   ],
-  ["a missed operation", op("missed", { effect: "none" }), true, [PLAIN("publish_late"), PLAIN("reschedule")]],
-  ["an unclear delete", op("needs_human", { kind: "delete" }), true, [STEPPED("confirm_removed"), PLAIN("dismiss")]],
+  [
+    "a missed operation",
+    op("missed", { effect: "none" }),
+    true,
+    [PLAIN("publish_late"), PLAIN("reschedule")],
+  ],
+  [
+    "an unclear delete",
+    op("needs_human", { kind: "delete" }),
+    true,
+    [STEPPED("confirm_removed"), PLAIN("dismiss")],
+  ],
   ["an unverified publish", op("unverified"), true, [STEPPED("attest_published"), STEPPED("supersede")]],
   ["an unverified delete", op("unverified", { kind: "delete" }), true, []],
   ["a pending operation", op("pending", { effect: "none" }), true, []],

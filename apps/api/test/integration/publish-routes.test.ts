@@ -935,42 +935,45 @@ describe("the strict check at an edit", () => {
 });
 
 describe("a version that changes between the check and the write", () => {
-  it.each(["schedule", "publish"])("%s answers 409 conflict version_changed and changes nothing", async (route) => {
-    const p = await planted("first");
-    const saved = await dataOf(
-      await send(
-        user("author"),
-        "POST",
-        `${base(ws)}/${p.post}/save`,
-        { draft: { variants: [variantOf(channel, "second")] } },
-        { "if-match": `"${p.version}"` },
-      ),
-    );
-    const newer = saved.version_id as string;
-    await fx.admin(async (client) => {
-      await client.query("BEGIN");
-      await client.query("SET LOCAL session_replication_role = replica");
-      await client.query("UPDATE app.posts SET current_version_id = $2 WHERE id = $1", [p.post, p.version]);
-      await client.query("COMMIT");
-    });
-    const before = await stateOf(p);
-    const outcome = await probeWhileHeld(
-      fx.admin,
-      {
-        sql: `SET LOCAL session_replication_role = replica; UPDATE app.posts SET current_version_id = '${newer}' WHERE id = '${p.post}'`,
-        params: [],
-      },
-      () => scheduleVia(route, p),
-      [],
-    );
-    const error = await errorOf(outcome.response);
-    expect([outcome.response.status, error?.code, error?.details?.reason]).toEqual([
-      409,
-      "conflict",
-      "version_changed",
-    ]);
-    expect((await stateOf(p)).variants).toEqual(before.variants);
-  });
+  it.each(["schedule", "publish"])(
+    "%s answers 409 conflict version_changed and changes nothing",
+    async (route) => {
+      const p = await planted("first");
+      const saved = await dataOf(
+        await send(
+          user("author"),
+          "POST",
+          `${base(ws)}/${p.post}/save`,
+          { draft: { variants: [variantOf(channel, "second")] } },
+          { "if-match": `"${p.version}"` },
+        ),
+      );
+      const newer = saved.version_id as string;
+      await fx.admin(async (client) => {
+        await client.query("BEGIN");
+        await client.query("SET LOCAL session_replication_role = replica");
+        await client.query("UPDATE app.posts SET current_version_id = $2 WHERE id = $1", [p.post, p.version]);
+        await client.query("COMMIT");
+      });
+      const before = await stateOf(p);
+      const outcome = await probeWhileHeld(
+        fx.admin,
+        {
+          sql: `SET LOCAL session_replication_role = replica; UPDATE app.posts SET current_version_id = '${newer}' WHERE id = '${p.post}'`,
+          params: [],
+        },
+        () => scheduleVia(route, p),
+        [],
+      );
+      const error = await errorOf(outcome.response);
+      expect([outcome.response.status, error?.code, error?.details?.reason]).toEqual([
+        409,
+        "conflict",
+        "version_changed",
+      ]);
+      expect((await stateOf(p)).variants).toEqual(before.variants);
+    },
+  );
 });
 
 describe("the media of a scheduled post", () => {

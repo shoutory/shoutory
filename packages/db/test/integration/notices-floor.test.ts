@@ -367,8 +367,9 @@ describe("how long a notification is kept", () => {
       );
     await plant("retained-old", "91 days");
     await plant("retained-young", "89 days");
-    const [purged] = (await db.pool("worker").query("SELECT removed FROM app.purge_expired('app.notifications')"))
-      .rows;
+    const [purged] = (
+      await db.pool("worker").query("SELECT removed FROM app.purge_expired('app.notifications')")
+    ).rows;
     expect(Number(purged?.removed)).toBeGreaterThanOrEqual(1);
     const left = await rows("SELECT level FROM app.notifications WHERE level LIKE 'retained-%'");
     expect(left.map((row) => row.level)).toEqual(["retained-young"]);

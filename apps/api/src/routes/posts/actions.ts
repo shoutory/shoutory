@@ -100,8 +100,9 @@ function operationActions(facts: ActionFacts, mayAct: boolean): TargetAction[] {
 }
 
 // The cancel and resolve rules are the Owner's and Admin's, or the author's own.
-export const mayResolve = (facts: Pick<ActionFacts, "permissions" | "postAuthorId" | "principalId">): boolean =>
-  facts.permissions.has("publish.resolve") || facts.postAuthorId === facts.principalId;
+export const mayResolve = (
+  facts: Pick<ActionFacts, "permissions" | "postAuthorId" | "principalId">,
+): boolean => facts.permissions.has("publish.resolve") || facts.postAuthorId === facts.principalId;
 
 export function targetActions(facts: ActionFacts): TargetAction[] {
   if (!facts.permissions.has("posts.edit")) return [];

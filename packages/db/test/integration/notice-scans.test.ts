@@ -313,15 +313,18 @@ describe("held media candidates use the one held-media predicate", () => {
   it.each([
     ["a service", ["service", randomUUID()]],
     ["a person who is no member of the workspace", ["user", U.bOwner]],
-  ] as [string, [string, string]][])("a held variant of a post written by %s has no recipient and is not listed", async (_name, author) => {
-    const planted = await plantTarget({
-      schedule: "scheduled",
-      dueAgo: "1 minute",
-      media: await asset("processing"),
-      author,
-    });
-    expect(await levelsOf(planted.variant)).toEqual([]);
-  });
+  ] as [string, [string, string]][])(
+    "a held variant of a post written by %s has no recipient and is not listed",
+    async (_name, author) => {
+      const planted = await plantTarget({
+        schedule: "scheduled",
+        dueAgo: "1 minute",
+        media: await asset("processing"),
+        author,
+      });
+      expect(await levelsOf(planted.variant)).toEqual([]);
+    },
+  );
 
   it("a medium that does not exist holds the variant, and a variant already in progress is not listed", async () => {
     const missing = await plantTarget({ schedule: "scheduled", dueAgo: "1 minute", media: randomUUID() });
