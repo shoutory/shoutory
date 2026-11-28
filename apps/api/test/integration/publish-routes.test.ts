@@ -856,6 +856,158 @@ describe("the one held-media predicate", () => {
   );
 });
 
+// A draft the route took (a draft may hold what a provider refuses), then changed in place as a stored fact.
+async function planted(text: string, target = channel): Promise<Planted> {
+  const made = await send(user("author"), "POST", base(ws), {
+    draft: { variants: [variantOf(target, text)] },
+  });
+  const created = await dataOf(made);
+  const p: Planted = {
+    post: created.id as string,
+    version: created.version_id as string,
+    variant: "",
+    workspace: ws,
+    channel: target,
+  };
+  p.variant = (await rowsOf("SELECT id FROM app.post_variants WHERE post_id = $1", [p.post]))[0]?.id;
+  return p;
+}
+const scheduleVia = (route: string, p: Planted) =>
+  send(
+    user("owner"),
+    "POST",
+    `${base(ws)}/${p.post}/${route}`,
+    route === "schedule" ? { local_due: "2099-01-05T09:00" } : {},
+    { "idempotency-key": key() },
+  );
+
+describe("the strict check at schedule and publish now", () => {
+  // [case, the text, the issue the answer lists]
+  const CASES: [string, string, { variant: number; key: string; reason: string }][] = [
+    ["a text over the provider's limit", "x".repeat(501), { variant: 0, key: "text", reason: "too_long" }],
+    ["nothing to send", "", { variant: 0, key: "text", reason: "empty" }],
+  ];
+  it.each(CASES.flatMap((row) => ["schedule", "publish"].map((route) => [route, ...row] as const)))(
+    "%s: %s answers 422 variant_invalid with the issue and changes nothing",
+    async (route, _name, text, issue) => {
+      const p = await planted(text);
+      const before = await stateOf(p);
+      const answered = await scheduleVia(route, p);
+      const error = await errorOf(answered);
+      expect([answered.status, error?.code, error?.details?.reason, error?.details?.issues]).toEqual([
+        422,
+        "unprocessable_content",
+        "variant_invalid",
+        [issue],
+      ]);
+      expect(await stateOf(p)).toEqual(before);
+    },
+  );
+});
+
+describe("the media of a scheduled post", () => {
+  const withMedium = async (state: string | null) => {
+    const p = await planted("with a medium");
+    const asset = randomUUID();
+    await fx.admin(async (client) => {
+      if (state !== null) {
+        await client.query(
+          `INSERT INTO app.media_assets (id, workspace_id, object_key, file_name, mime, source, created_by, state, sha256)
+           VALUES ($1::uuid, $2::uuid, 'ws/' || $2::text || '/' || $1::text || '/1/original', 'm.mp4', 'video/mp4',
+             'upload', $3::uuid, $4, decode(md5($1::text) || md5($2::text), 'hex'))`,
+          [asset, ws, randomUUID(), state],
+        );
+      }
+      await client.query("BEGIN");
+      await client.query("SET LOCAL session_replication_role = replica");
+      await client.query(
+        `UPDATE app.post_versions SET snapshot = jsonb_set(snapshot, '{draft,variants,0,media}',
+           jsonb_build_array(jsonb_build_object('media_id', $2::text, 'alt_text', null, 'crop', null))) WHERE id = $1`,
+        [p.version, asset],
+      );
+      await client.query("COMMIT");
+    });
+    return p;
+  };
+  // [the medium, the status]
+  const MEDIA: [string | null, number][] = [
+    ["rejected", 422],
+    [null, 422],
+    ["processing", 200],
+  ];
+  it.each(MEDIA)("a %s medium answers %i", async (state, status) => {
+    const p = await withMedium(state);
+    const answered = await scheduleVia("schedule", p);
+    expect(answered.status).toBe(status);
+    if (status === 422) expect((await errorOf(answered))?.details?.reason).toBe("media_unavailable");
+    expect((await stateOf(p)).variants[0]?.schedule_state).toBe(status === 200 ? "scheduled" : "draft");
+  });
+});
+
+describe("what a schedule does to the post", () => {
+  it("freezes the current version by relabelling it, without a copy", async () => {
+    const p = await planted("freeze me");
+    expect((await scheduleVia("schedule", p)).status).toBe(200);
+    const after = await stateOf(p);
+    expect(after.versions).toEqual([{ version_no: 1, kind: "scheduled" }]);
+    expect(after.variants[0]?.frozen_version_id).toBe(p.version);
+  });
+
+  it.each(["needs_reconnect", "disconnected", "revoked_by_provider"])(
+    "a %s channel answers 409 channel_not_connected",
+    async (connection) => {
+      const own = await seedChannel(fx, ws, connection, `pub-${randomUUID()}`, "fixture_oauth");
+      const p = await planted("no channel", own);
+      const answered = await scheduleVia("schedule", p);
+      const error = await errorOf(answered);
+      expect([answered.status, error?.code, error?.details?.reason]).toEqual([
+        409,
+        "conflict",
+        "channel_not_connected",
+      ]);
+      expect((await stateOf(p)).variants[0]?.schedule_state).toBe("draft");
+    },
+  );
+
+  it("a disabled channel is accepted: its operation waits paused", async () => {
+    const own = await seedChannel(fx, ws, "disabled", `pub-${randomUUID()}`, "fixture_oauth");
+    const p = await planted("disabled", own);
+    expect((await scheduleVia("schedule", p)).status).toBe(200);
+  });
+});
+
+describe("the time of a schedule in the workspace zone", () => {
+  // [local time, the choice, the status, the reason or the instant]
+  const TIMES: [string, string | undefined, number, string][] = [
+    ["2027-03-14T02:30", undefined, 422, "local_time_nonexistent"],
+    ["2027-11-07T01:30", undefined, 422, "local_time_ambiguous"],
+    ["2027-11-07T01:30", "earlier", 200, "2027-11-07T05:30:00.000Z"],
+    ["2027-11-07T01:30", "later", 200, "2027-11-07T06:30:00.000Z"],
+    ["2027-06-01T09:00", undefined, 200, "2027-06-01T13:00:00.000Z"],
+  ];
+  it.each(TIMES)("%s with %s answers %i (%s)", async (localDue, fold, status, expected) => {
+    const zoned = await seedWorkspace(fx, await seedOrganization(fx, user("owner").id));
+    await addWorkspaceMember(fx, zoned, user("owner").id, "owner");
+    await fx.admin((client) =>
+      client.query("UPDATE app.workspaces SET default_tz = 'America/New_York' WHERE id = $1", [zoned]),
+    );
+    const zonedChannel = await seedChannel(fx, zoned, "connected", `pub-${randomUUID()}`, "fixture_oauth");
+    const made = await dataOf(
+      await send(user("owner"), "POST", base(zoned), { draft: { variants: [variantOf(zonedChannel)] } }),
+    );
+    const answered = await send(
+      user("owner"),
+      "POST",
+      `${base(zoned)}/${made.id}/schedule`,
+      { local_due: localDue, ...(fold === undefined ? {} : { fold }) },
+      { "idempotency-key": key() },
+    );
+    expect(answered.status).toBe(status);
+    if (status === 422) expect((await errorOf(answered))?.details?.reason).toBe(expected);
+    else expect(new Date(String((await dataOf(answered)).due_at)).toISOString()).toBe(expected);
+  });
+});
+
 describe("the actions of the post detail come from the server", () => {
   // [stage, seat, the actions the server lists]
   const ACTIONS: [Stage, string, string[]][] = [

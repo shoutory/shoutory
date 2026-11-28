@@ -34,7 +34,7 @@ const RETRY_AFTER_SECONDS = "5";
 interface SettingIssue {
   readonly variant: number;
   readonly key: string;
-  readonly reason: "undeclared" | "type";
+  readonly reason: string;
 }
 // What the person may do about a refusal, in words the screens know, and the work that stands in the way.
 interface Blocking {

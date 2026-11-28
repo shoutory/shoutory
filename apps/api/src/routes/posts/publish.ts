@@ -7,7 +7,7 @@ import { definerRefusal } from "../definer-refusal.js";
 import { requireIdempotencyKey } from "../idempotency-key.js";
 import { workspaceDue } from "../operations/operations.js";
 import { expectedVersion, livePost, staleRefusal } from "./preconditions.js";
-import { resolveDraft } from "./resolve.js";
+import { checkForSchedule, resolveDraft } from "./resolve.js";
 
 // Schedule, Update schedule, publish now, unschedule (the Undo), edit and delete. The permission is posts.edit for all
 // of them; the definers check the post, its targets and their channels under the post lock.
@@ -27,7 +27,7 @@ const EDIT = { workspace: "workspace_id", permission: "posts.edit" } as const;
 
 type IpHmac = (address: string) => Buffer;
 
-function registerSchedule(app: App, ipHmac: IpHmac): void {
+function registerSchedule(app: App, deps: Deps, ipHmac: IpHmac): void {
   defineRoute(app, {
     method: "post",
     path: `${BASE}/schedule`,
@@ -37,6 +37,8 @@ function registerSchedule(app: App, ipHmac: IpHmac): void {
     body: scheduleBody,
     handler: async ({ c, tx, scope, params, body, clientAddress }) => {
       requireIdempotencyKey(c);
+      await livePost(tx, scope, params.post_id);
+      await checkForSchedule(tx, scope.workspaceId, params.post_id, body.variant_ids, deps.providers);
       const due = await workspaceDue(tx, scope.workspaceId, body.local_due, body.fold);
       const done = await tx
         .query<{ ids: string[] }>("SELECT app.post_schedule($1, $2, $3::uuid[], $4, $5, $6, false) AS ids", [
@@ -61,7 +63,7 @@ function registerSchedule(app: App, ipHmac: IpHmac): void {
   });
 }
 
-function registerMarks(app: App, ipHmac: IpHmac): void {
+function registerMarks(app: App, deps: Deps, ipHmac: IpHmac): void {
   for (const [name, sql, action] of [
     ["publish", "SELECT app.post_publish_now($1, $2, $3::uuid[]) AS ids", "post.publish_now"],
     ["unschedule", "SELECT app.post_unschedule($1, $2, $3::uuid[]) AS ids", "post.unscheduled"],
@@ -75,6 +77,10 @@ function registerMarks(app: App, ipHmac: IpHmac): void {
       body: targetsBody,
       handler: async ({ c, tx, scope, params, body, clientAddress }) => {
         requireIdempotencyKey(c);
+        if (name === "publish") {
+          await livePost(tx, scope, params.post_id);
+          await checkForSchedule(tx, scope.workspaceId, params.post_id, body.variant_ids, deps.providers);
+        }
         const done = await tx
           .query<{ ids: string[] }>(sql, [scope.workspaceId, params.post_id, body.variant_ids ?? null])
           .catch((error: unknown) => {
@@ -186,8 +192,8 @@ function registerDelete(app: App, deps: Deps, ipHmac: IpHmac): void {
 }
 
 export function registerPublish(app: App, ipHmac: IpHmac, deps: Deps): void {
-  registerSchedule(app, ipHmac);
-  registerMarks(app, ipHmac);
+  registerSchedule(app, deps, ipHmac);
+  registerMarks(app, deps, ipHmac);
   registerEdit(app, deps, ipHmac);
   registerDelete(app, deps, ipHmac);
 }

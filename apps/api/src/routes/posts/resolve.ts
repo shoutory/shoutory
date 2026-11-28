@@ -1,5 +1,13 @@
-import { type Draft, settingsIssues, supportsVariant } from "@shoutory/core/content";
+import {
+  type Draft,
+  draftSchema,
+  settingsIssues,
+  supportsVariant,
+  targetOf,
+  type Variant,
+} from "@shoutory/core/content";
 import { buildSnapshot, type Resolved, snapshotHash } from "@shoutory/core/content/snapshot";
+import { countText } from "@shoutory/core/counting";
 import { mediaFits, type RejectReason } from "@shoutory/core/media";
 import type { TenantTx } from "@shoutory/db/context";
 import { snapshotOf } from "@shoutory/provider-sdk/snapshot";
@@ -123,6 +131,94 @@ function checkSettings(draft: Draft, defaults: Record<string, Defaults>): void {
   throw new Refusal("unprocessable_content", "draft refused: settings", {
     details: { reason, issues: issues.slice(0, MAX_ISSUES), ...(cut ? { truncated: true } : {}) },
   });
+}
+
+interface VariantIssue {
+  variant: number;
+  key: string;
+  reason: string;
+}
+
+// What a provider refuses of one variant: the text it cannot hold, a post type it does not take, nothing to send and
+// more media than it allows. A draft may hold all of these; scheduling may not.
+function variantIssues(
+  variant: Variant,
+  index: number,
+  manifest: HealthProvider["manifest"],
+): VariantIssue[] {
+  const issues: VariantIssue[] = [];
+  const limit = manifest.limits.textLength?.value;
+  const long = (text: string) => limit !== undefined && countText(manifest.counting, text) > limit;
+  if (!supportsVariant(variant, manifest))
+    issues.push({ variant: index, key: "post_type", reason: "unsupported" });
+  if (long(variant.text)) issues.push({ variant: index, key: "text", reason: "too_long" });
+  variant.parts.forEach((part, at) => {
+    if (long(part.text)) issues.push({ variant: index, key: `parts.${at}`, reason: "too_long" });
+  });
+  if (variant.text.trim() === "" && variant.media.length === 0) {
+    issues.push({ variant: index, key: "text", reason: "empty" });
+  }
+  const most = manifest.limits.mediaMaxCount?.value;
+  if (most !== undefined && variant.media.length > most) {
+    issues.push({ variant: index, key: "media", reason: "too_many" });
+  }
+  return issues;
+}
+
+// A medium still in the pipeline is accepted: admission holds the target until it is ready. One that is rejected,
+// deleted or not there is refused now.
+const WAITABLE = ["uploaded", "scanning", "processing", "ready"];
+async function requireUsableMedia(tx: TenantTx, workspaceId: string, draft: Draft): Promise<void> {
+  const ids = [...new Set(draft.variants.flatMap((v) => v.media.map((m) => m.media_id.toLowerCase())))];
+  if (ids.length === 0) return;
+  const found = await tx.query<{ n: number }>(
+    "SELECT count(*)::int AS n FROM app.media_assets WHERE workspace_id = $1 AND id = ANY ($2::uuid[]) AND state = ANY ($3::text[])",
+    [workspaceId, ids, WAITABLE],
+  );
+  if (found.rows[0]?.n !== ids.length) throw unprocessable("media_unavailable");
+}
+
+/**
+ * The checks that only scheduling makes, for the targets it names (all of the post's when none are named): the
+ * manifest's limits in strict form, then the media. The draft is the one the post is at now.
+ */
+export async function checkForSchedule(
+  tx: TenantTx,
+  workspaceId: string,
+  postId: string,
+  variantIds: readonly string[] | undefined,
+  providers: Providers,
+): Promise<void> {
+  const found = await tx.query<{ draft: unknown }>(
+    `SELECT v.snapshot -> 'draft' AS draft FROM app.posts AS p
+       JOIN app.post_versions AS v ON v.workspace_id = p.workspace_id AND v.id = p.current_version_id
+      WHERE p.workspace_id = $1 AND p.id = $2`,
+    [workspaceId, postId],
+  );
+  const parsed = draftSchema.safeParse(found.rows[0]?.draft);
+  if (!parsed.success) throw unprocessable("draft_invalid");
+  const named = await tx.query<{ channel_id: string; locale: string | null }>(
+    `SELECT channel_id, locale FROM app.post_variants
+      WHERE workspace_id = $1 AND post_id = $2 AND ($3::uuid[] IS NULL OR id = ANY ($3::uuid[]))`,
+    [workspaceId, postId, variantIds ?? null],
+  );
+  const wanted = new Set(named.rows.map(targetOf));
+  const draft: Draft = { variants: parsed.data.variants.filter((variant) => wanted.has(targetOf(variant))) };
+  const channels = await providersOfChannels(tx, workspaceId, draft, providers);
+  const issues = draft.variants.flatMap((variant, index) => {
+    const manifest = channels.get(variant.channel_id.toLowerCase())?.manifest;
+    return manifest ? variantIssues(variant, index, manifest) : [];
+  });
+  if (issues.length > 0) {
+    throw new Refusal("unprocessable_content", "draft refused: variant", {
+      details: {
+        reason: "variant_invalid",
+        issues: issues.slice(0, MAX_ISSUES),
+        ...(issues.length > MAX_ISSUES ? { truncated: true } : {}),
+      },
+    });
+  }
+  await requireUsableMedia(tx, workspaceId, draft);
 }
 
 export async function resolveDraft(
