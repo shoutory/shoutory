@@ -551,7 +551,7 @@ describe("the answer for a disconnected channel", () => {
       const detail = await fx.request(`/api/v1/workspaces/${ws}/channels/${c.channel}`, {
         headers: { cookie: user("admin").cookie },
       });
-      const list = await fx.request(`/api/v1/workspaces/${ws}/channels`, {
+      const list = await fx.request(`/api/v1/workspaces/${ws}/channels?limit=100`, {
         headers: { cookie: user("admin").cookie },
       });
       const one = ((await detail.json()) as { data: Record<string, unknown> }).data;
