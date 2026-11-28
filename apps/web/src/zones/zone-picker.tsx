@@ -41,7 +41,7 @@ function changesClock(zone: string, at: Date): boolean {
   );
 }
 
-const cityOf = (zone: string, locale: Locale) => zones[zone]?.[locale] ?? zone;
+export const cityOf = (zone: string, locale: Locale) => zones[zone]?.[locale] ?? zone;
 
 export function ZonePicker({
   label,

@@ -4056,3 +4056,171 @@ msgstr "We could not do that"
 #. js-lingui-explicit-id
 msgid "posts.refused.failed.meaning"
 msgstr "Nothing was changed. Try again."
+
+#. js-lingui-explicit-id
+msgid "composer.refused.in_flight.what"
+msgstr "This post is being sent right now"
+
+#. js-lingui-explicit-id
+msgid "composer.refused.in_flight.meaning"
+msgstr "Your change is kept here and can be applied when sending ends. Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "composer.refused.use_edit.what"
+msgstr "This post is already live"
+
+#. js-lingui-explicit-id
+msgid "composer.refused.use_edit.meaning"
+msgstr "Changing it here would not change what people see."
+
+#. js-lingui-explicit-id
+msgid "composer.refused.history.what"
+msgstr "A channel already has a posting record"
+
+#. js-lingui-explicit-id
+msgid "composer.refused.history.meaning"
+msgstr "Remove it from the post with Delete instead, so the record stays clear."
+
+#. js-lingui-explicit-id
+msgid "composer.refused.archived.what"
+msgstr "This post is archived"
+
+#. js-lingui-explicit-id
+msgid "composer.refused.archived.meaning"
+msgstr "Restore it to make changes."
+
+#. js-lingui-explicit-id
+msgid "composer.refused.channel.what"
+msgstr "A channel needs to be reconnected"
+
+#. js-lingui-explicit-id
+msgid "composer.refused.channel.meaning"
+msgstr "Reconnect it or take it out of this post. Nothing was scheduled."
+
+#. js-lingui-explicit-id
+msgid "composer.refused.media.what"
+msgstr "A file cannot be used"
+
+#. js-lingui-explicit-id
+msgid "composer.refused.media.meaning"
+msgstr "Remove it or choose another. Nothing was scheduled."
+
+#. js-lingui-explicit-id
+msgid "composer.refused.window.what"
+msgstr "The time for editing this post has ended"
+
+#. js-lingui-explicit-id
+msgid "composer.refused.window.meaning"
+msgstr "The network no longer lets this post be edited. Make a copy instead."
+
+#. js-lingui-explicit-id
+msgid "composer.refused.other.what"
+msgstr "We could not do that"
+
+#. js-lingui-explicit-id
+msgid "composer.refused.other.meaning"
+msgstr "Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "composer.refused.edit"
+msgstr "Edit this post"
+
+#. js-lingui-explicit-id
+msgid "composer.refused.duplicate"
+msgstr "Duplicate to draft"
+
+#. js-lingui-explicit-id
+msgid "composer.copy.what"
+msgstr "We could not make a copy"
+
+#. js-lingui-explicit-id
+msgid "composer.copy.meaning"
+msgstr "Nothing was changed. Try again."
+
+#. js-lingui-explicit-id
+msgid "composer.publish.title"
+msgstr "Schedule"
+
+#. js-lingui-explicit-id
+msgid "composer.publish.schedule"
+msgstr "Schedule"
+
+#. js-lingui-explicit-id
+msgid "composer.publish.update"
+msgstr "Update schedule"
+
+#. js-lingui-explicit-id
+msgid "composer.publish.now"
+msgstr "Publish now"
+
+#. js-lingui-explicit-id
+msgid "composer.publish.summary"
+msgstr "This posts to {0} channels now."
+
+#. js-lingui-explicit-id
+msgid "composer.publish.sent"
+msgstr "Sent to the queue"
+
+#. js-lingui-explicit-id
+msgid "composer.publish.undo"
+msgstr "Undo (ends in {left} s)"
+
+#. js-lingui-explicit-id
+msgid "composer.publish.scheduled"
+msgstr "Scheduled for <0/> ({0})"
+
+#. js-lingui-explicit-id
+msgid "composer.publish.open"
+msgstr "Open post"
+
+#. js-lingui-explicit-id
+msgid "composer.publish.invalid"
+msgstr "Some channels need changes before this can be sent. Nothing was scheduled."
+
+#. js-lingui-explicit-id
+msgid "composer.publish.wait_save"
+msgstr "Wait for your changes to be saved first."
+
+#. js-lingui-explicit-id
+msgid "composer.publish.nothing"
+msgstr "Nothing in this post can be sent from here."
+
+#. js-lingui-explicit-id
+msgid "composer.publish.reconnect"
+msgstr "Reconnect needed"
+
+#. js-lingui-explicit-id
+msgid "composer.publish.fix"
+msgstr "Fix {blocking} problems in the checks first."
+
+#. js-lingui-explicit-id
+msgid "composer.schedule.label"
+msgstr "Date and time (Time zone: {city})"
+
+#. js-lingui-explicit-id
+msgid "composer.schedule.passed"
+msgstr "That time has passed. Pick a later time or publish now."
+
+#. js-lingui-explicit-id
+msgid "composer.schedule.gap"
+msgstr "This time does not exist on {date}. Pick another time"
+
+#. js-lingui-explicit-id
+msgid "composer.schedule.fold"
+msgstr "That time happens twice. Choose which one."
+
+#. js-lingui-explicit-id
+msgid "composer.schedule.invalid"
+msgstr "Enter a date and a time."
+
+#. js-lingui-explicit-id
+msgid "composer.schedule.fold_label"
+msgstr "Which one"
+
+#. js-lingui-explicit-id
+msgid "composer.schedule.earlier"
+msgstr "Earlier"
+
+#. js-lingui-explicit-id
+msgid "composer.schedule.later"
+msgstr "Later"

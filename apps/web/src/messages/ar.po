@@ -4054,3 +4054,171 @@ msgstr "تعذّر تنفيذ ذلك"
 #. js-lingui-explicit-id
 msgid "posts.refused.failed.meaning"
 msgstr "لم يتغير شيء. حاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "composer.refused.in_flight.what"
+msgstr "هذا المنشور يُرسل الآن"
+
+#. js-lingui-explicit-id
+msgid "composer.refused.in_flight.meaning"
+msgstr "تغييرك محفوظ هنا ويمكن تطبيقه عند انتهاء الإرسال. لم يتغير شيء."
+
+#. js-lingui-explicit-id
+msgid "composer.refused.use_edit.what"
+msgstr "هذا المنشور ظاهر بالفعل"
+
+#. js-lingui-explicit-id
+msgid "composer.refused.use_edit.meaning"
+msgstr "تغييره من هنا لن يغيّر ما يراه الناس."
+
+#. js-lingui-explicit-id
+msgid "composer.refused.history.what"
+msgstr "لهذه القناة سجل نشر بالفعل"
+
+#. js-lingui-explicit-id
+msgid "composer.refused.history.meaning"
+msgstr "أزلها من المنشور بالحذف بدلًا من ذلك ليبقى السجل واضحًا."
+
+#. js-lingui-explicit-id
+msgid "composer.refused.archived.what"
+msgstr "هذا المنشور مؤرشف"
+
+#. js-lingui-explicit-id
+msgid "composer.refused.archived.meaning"
+msgstr "استعده لتتمكن من إجراء تغييرات."
+
+#. js-lingui-explicit-id
+msgid "composer.refused.channel.what"
+msgstr "قناة تحتاج إلى إعادة ربط"
+
+#. js-lingui-explicit-id
+msgid "composer.refused.channel.meaning"
+msgstr "أعد ربطها أو أخرجها من هذا المنشور. لم تتم جدولة شيء."
+
+#. js-lingui-explicit-id
+msgid "composer.refused.media.what"
+msgstr "تعذّر استخدام ملف"
+
+#. js-lingui-explicit-id
+msgid "composer.refused.media.meaning"
+msgstr "أزله أو اختر ملفًا آخر. لم تتم جدولة شيء."
+
+#. js-lingui-explicit-id
+msgid "composer.refused.window.what"
+msgstr "انتهت مهلة تعديل هذا المنشور"
+
+#. js-lingui-explicit-id
+msgid "composer.refused.window.meaning"
+msgstr "لم تعد الشبكة تسمح بتعديل هذا المنشور. أنشئ نسخة منه بدلًا من ذلك."
+
+#. js-lingui-explicit-id
+msgid "composer.refused.other.what"
+msgstr "تعذّر تنفيذ ذلك"
+
+#. js-lingui-explicit-id
+msgid "composer.refused.other.meaning"
+msgstr "لم يتغير شيء."
+
+#. js-lingui-explicit-id
+msgid "composer.refused.edit"
+msgstr "تعديل هذا المنشور"
+
+#. js-lingui-explicit-id
+msgid "composer.refused.duplicate"
+msgstr "نسخه كمسودة"
+
+#. js-lingui-explicit-id
+msgid "composer.copy.what"
+msgstr "تعذّر إنشاء نسخة"
+
+#. js-lingui-explicit-id
+msgid "composer.copy.meaning"
+msgstr "لم يتغير شيء. حاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "composer.publish.title"
+msgstr "الجدولة"
+
+#. js-lingui-explicit-id
+msgid "composer.publish.schedule"
+msgstr "جدولة"
+
+#. js-lingui-explicit-id
+msgid "composer.publish.update"
+msgstr "تحديث الجدولة"
+
+#. js-lingui-explicit-id
+msgid "composer.publish.now"
+msgstr "انشر الآن"
+
+#. js-lingui-explicit-id
+msgid "composer.publish.summary"
+msgstr "سيُنشر هذا على {0} قنوات الآن."
+
+#. js-lingui-explicit-id
+msgid "composer.publish.sent"
+msgstr "أُرسل إلى قائمة النشر"
+
+#. js-lingui-explicit-id
+msgid "composer.publish.undo"
+msgstr "تراجع (ينتهي خلال {left} ث)"
+
+#. js-lingui-explicit-id
+msgid "composer.publish.scheduled"
+msgstr "مجدول في <0/> ({0})"
+
+#. js-lingui-explicit-id
+msgid "composer.publish.open"
+msgstr "فتح المنشور"
+
+#. js-lingui-explicit-id
+msgid "composer.publish.invalid"
+msgstr "بعض القنوات تحتاج إلى تغييرات قبل الإرسال. لم تتم جدولة شيء."
+
+#. js-lingui-explicit-id
+msgid "composer.publish.wait_save"
+msgstr "انتظر حتى تُحفظ تغييراتك أولًا."
+
+#. js-lingui-explicit-id
+msgid "composer.publish.nothing"
+msgstr "لا شيء في هذا المنشور يمكن إرساله من هنا."
+
+#. js-lingui-explicit-id
+msgid "composer.publish.reconnect"
+msgstr "يحتاج إلى إعادة ربط"
+
+#. js-lingui-explicit-id
+msgid "composer.publish.fix"
+msgstr "أصلح {blocking} مشكلات في الفحوص أولًا."
+
+#. js-lingui-explicit-id
+msgid "composer.schedule.label"
+msgstr "التاريخ والوقت (المنطقة الزمنية: {city})"
+
+#. js-lingui-explicit-id
+msgid "composer.schedule.passed"
+msgstr "مضى هذا الوقت. اختر وقتًا لاحقًا أو انشر الآن."
+
+#. js-lingui-explicit-id
+msgid "composer.schedule.gap"
+msgstr "هذا الوقت غير موجود في {date}. اختر وقتًا آخر"
+
+#. js-lingui-explicit-id
+msgid "composer.schedule.fold"
+msgstr "هذا الوقت يحدث مرتين. اختر أحدهما."
+
+#. js-lingui-explicit-id
+msgid "composer.schedule.invalid"
+msgstr "أدخل تاريخًا ووقتًا."
+
+#. js-lingui-explicit-id
+msgid "composer.schedule.fold_label"
+msgstr "أي مرة"
+
+#. js-lingui-explicit-id
+msgid "composer.schedule.earlier"
+msgstr "الأولى"
+
+#. js-lingui-explicit-id
+msgid "composer.schedule.later"
+msgstr "الثانية"

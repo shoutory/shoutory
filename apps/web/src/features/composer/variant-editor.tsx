@@ -20,6 +20,8 @@ import { CounterLine, useIssueWords } from "./counters";
 export interface Channels {
   nameOf: (channelId: string) => string;
   providerOf: (channelId: string) => Provider | undefined;
+  /** False for a channel that needs reconnecting. */
+  okOf: (channelId: string) => boolean;
 }
 
 export interface EditorProps {

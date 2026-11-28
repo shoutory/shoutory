@@ -47,6 +47,25 @@ const target = z.object({
   actions: z.array(z.string()),
 });
 
+export type Target = z.infer<typeof target>;
+
+export const profileSchema = z.object({ default_tz: z.string() });
+
+/** A wall-clock time as `YYYY-MM-DDTHH:mm` in a zone, the form the schedule takes; read, never computed with. */
+export function wallClock(zone: string, at: Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: zone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(at);
+  const part = (type: string) => parts.find((one) => one.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
+}
+
 export const detailSchema = z.object({
   id: z.string(),
   current_version_id: z.string(),
