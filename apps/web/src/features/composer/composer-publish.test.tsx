@@ -156,6 +156,12 @@ describe("what the server refuses", () => {
       "A file cannot be used",
     ],
     [
+      "a post that changed under the schedule",
+      () => refusal("conflict", 409, { reason: "version_changed" }),
+      "schedule-failure",
+      "changed while you were looking",
+    ],
+    [
       "a post that is already live",
       () => withLists({ reason: "use_edit", actions: ["edit", "duplicate"] }, 409, "conflict"),
       "schedule-failure",

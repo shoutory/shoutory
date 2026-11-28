@@ -412,18 +412,77 @@ export function EvidenceWords({ line, provider }: { line: EvidenceLine; provider
   );
 }
 
+// The refusals of a write to a post that have words of their own, by the reason the server gives.
+function reasonWords(reason: string | undefined): { what: ReactNode; meaning: ReactNode } | undefined {
+  switch (reason) {
+    case "post_in_flight":
+      return {
+        what: <Trans id="posts.refused.in_flight.what">This channel is being posted right now</Trans>,
+        meaning: (
+          <Trans id="posts.refused.in_flight.meaning">
+            Wait until it finishes, then try again. Nothing was changed.
+          </Trans>
+        ),
+      };
+    case "use_edit":
+      return {
+        what: <Trans id="composer.refused.use_edit.what">This post is already live</Trans>,
+        meaning: (
+          <Trans id="composer.refused.use_edit.meaning">
+            Changing it here would not change what people see.
+          </Trans>
+        ),
+      };
+    case "variant_has_history":
+      return {
+        what: <Trans id="composer.refused.history.what">A channel already has a posting record</Trans>,
+        meaning: (
+          <Trans id="composer.refused.history.meaning">
+            Remove it from the post with Delete instead, so the record stays clear.
+          </Trans>
+        ),
+      };
+    case "post_archived":
+      return {
+        what: <Trans id="composer.refused.archived.what">This post is archived</Trans>,
+        meaning: <Trans id="composer.refused.archived.meaning">Restore it to make changes.</Trans>,
+      };
+    case "channel_not_connected":
+      return {
+        what: <Trans id="composer.refused.channel.what">A channel needs to be reconnected</Trans>,
+        meaning: (
+          <Trans id="composer.refused.channel.meaning">
+            Reconnect it or take it out of this post. Nothing was scheduled.
+          </Trans>
+        ),
+      };
+    case "media_unavailable":
+      return {
+        what: <Trans id="composer.refused.media.what">A file cannot be used</Trans>,
+        meaning: (
+          <Trans id="composer.refused.media.meaning">
+            Remove it or choose another. Nothing was scheduled.
+          </Trans>
+        ),
+      };
+    case "edit_window_closed":
+      return {
+        what: <Trans id="composer.refused.window.what">The time for editing this post has ended</Trans>,
+        meaning: (
+          <Trans id="composer.refused.window.meaning">
+            The network no longer lets this post be edited. Make a copy instead.
+          </Trans>
+        ),
+      };
+    default:
+      return undefined;
+  }
+}
+
 /** What a refused write says: what happened and what it means for the post, never the server's own words. */
 export function refusalWords(error: ApiError): { what: ReactNode; meaning: ReactNode } {
-  if (error.details?.reason === "post_in_flight") {
-    return {
-      what: <Trans id="posts.refused.in_flight.what">This channel is being posted right now</Trans>,
-      meaning: (
-        <Trans id="posts.refused.in_flight.meaning">
-          Wait until it finishes, then try again. Nothing was changed.
-        </Trans>
-      ),
-    };
-  }
+  const known = reasonWords(error.details?.reason);
+  if (known) return known;
   if (error.state === "forbidden") {
     return {
       what: <Trans id="posts.refused.forbidden.what">You cannot do this</Trans>,

@@ -2059,10 +2059,6 @@ msgid "composer.library.failed.meaning"
 msgstr "لم يتغير شيء."
 
 #. js-lingui-explicit-id
-msgid "composer.refused.other.meaning"
-msgstr "لم يتغير شيء."
-
-#. js-lingui-explicit-id
 msgid "composer.versions.failed.meaning"
 msgstr "لم يتغير شيء."
 
@@ -3806,10 +3802,6 @@ msgid "composer.refused.archived.what"
 msgstr "هذا المنشور مؤرشف"
 
 #. js-lingui-explicit-id
-msgid "composer.refused.in_flight.what"
-msgstr "هذا المنشور يُرسل الآن"
-
-#. js-lingui-explicit-id
 msgid "posts.delete.unpublished.what"
 msgstr "لم يُنشر هذا المنشور"
 
@@ -4271,10 +4263,6 @@ msgid "posts.refused.failed.what"
 msgstr "تعذّر تنفيذ ذلك"
 
 #. js-lingui-explicit-id
-msgid "composer.refused.other.what"
-msgstr "تعذّر تنفيذ ذلك"
-
-#. js-lingui-explicit-id
 msgid "connect.start.account_not_found"
 msgstr "لم نجد هذا الحساب. تحقّق من الاسم ثم حاول مرة أخرى. لم يتغيّر شيء."
 
@@ -4681,10 +4669,6 @@ msgstr "ستلصق سرًّا واحدًا من <0>{provider}</0>. يحتفظ ب
 #. js-lingui-explicit-id
 msgid "connect.wizard.host.intro"
 msgstr "حسابك على <0>{provider}</0> موجود على خادم اخترته. اكتب عنوان ذلك الخادم."
-
-#. js-lingui-explicit-id
-msgid "composer.refused.in_flight.meaning"
-msgstr "تغييرك محفوظ هنا ويمكن تطبيقه عند انتهاء الإرسال. لم يتغير شيء."
 
 #. js-lingui-explicit-id
 msgid "composer.edit.explain"

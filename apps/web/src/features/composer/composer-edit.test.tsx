@@ -133,7 +133,7 @@ describe("what the server refuses to edit", () => {
     json({ error: { code: "conflict", message: "x", requestId: "r", details: { reason, actions } } }, 409);
 
   it.each<[string, () => Response, string, boolean]>([
-    ["a post being sent", () => lists("post_in_flight", ["duplicate"]), "being sent right now", true],
+    ["a post being sent", () => lists("post_in_flight", ["duplicate"]), "being posted right now", true],
     [
       "the end of the edit window",
       () => refusal("conflict", 409, { reason: "edit_window_closed" }),
