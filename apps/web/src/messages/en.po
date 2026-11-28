@@ -4452,7 +4452,15 @@ msgstr "We stopped checking; it still blocks new posts to this channel"
 
 #. js-lingui-explicit-id
 msgid "channels.disconnect.revoke_preview"
-msgstr "We will also ask the platform to end this access where it supports that."
+msgstr "We will also ask {platform} to end this access."
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.revoke_none_preview"
+msgstr "{platform} gives Shoutory no way to end this access. After you disconnect, remove Shoutory's access in your account settings on {platform}."
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.truncated"
+msgstr "Only the first {shown} are listed."
 
 #. js-lingui-explicit-id
 msgid "posts.meaning.paused"

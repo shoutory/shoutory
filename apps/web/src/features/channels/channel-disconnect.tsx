@@ -1,5 +1,6 @@
 import { plural } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
+import { LIST_BOUND } from "@shoutory/core/channels/disconnect";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { z } from "zod";
@@ -13,12 +14,35 @@ import { Dialog } from "../../ui/dialog";
 import { DirText } from "../../ui/dir-text";
 import { ErrorPanel } from "../../ui/error-panel";
 import { LocalizedDateTime, useFormatPrefs } from "../../ui/localized";
+import { wordOf } from "../posts/post-facts";
+import { TargetLabel } from "../posts/post-words";
 import { dateOf } from "./channel-facts";
 import { useSignIn } from "./channels-hub";
 
+const blockingSchema = z.object({
+  id: z.string(),
+  state: z.string(),
+  postId: z.string(),
+  channelName: z.string(),
+});
+type Blocking = z.infer<typeof blockingSchema>;
+// The refusal names the same facts in the API's other spelling.
+const refusedItem = z
+  .object({ id: z.string(), state: z.string(), post_id: z.string(), channel_name: z.string() })
+  .transform(
+    (item): Blocking => ({
+      id: item.id,
+      state: item.state,
+      postId: item.post_id,
+      channelName: item.channel_name,
+    }),
+  );
+
 const impactSchema = z.object({
   scheduled: z.array(z.object({ variantId: z.string(), postId: z.string(), dueAt: z.string().nullable() })),
-  blocking: z.array(z.object({ id: z.string() })),
+  blocking: z.array(blockingSchema),
+  truncated: z.boolean(),
+  revokeSupported: z.boolean(),
   canDisconnect: z.boolean(),
 });
 type Impact = z.infer<typeof impactSchema>;
@@ -35,13 +59,18 @@ type Step =
   | { name: "loading" }
   | { name: "unreadable"; error: ApiError }
   | { name: "ready"; impact: Impact }
-  | { name: "waiting"; count: number }
+  | { name: "waiting"; items: Blocking[]; truncated: boolean }
   | { name: "refused"; why: "forbidden" | "step_up" | "unconfirmed" }
   | { name: "done"; answer: Answer };
 
 const SHOWN_AT_FIRST = 5;
 
-function useImpact(base: string, open: boolean, set: (step: Step) => void) {
+function useImpact(
+  base: string,
+  open: boolean,
+  set: (step: Step) => void,
+  setRevokeSupported: (supported: boolean) => void,
+) {
   const [attempt, setAttempt] = useState(0);
   const expired = useSignIn();
   // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` is the read-again counter; `expired` follows the location.
@@ -52,8 +81,12 @@ function useImpact(base: string, open: boolean, set: (step: Step) => void) {
     request(impactSchema, `${base}/disconnect-impact`).then(
       (impact) => {
         if (!live) return;
-        const { blocking } = impact;
-        set(impact.canDisconnect ? { name: "ready", impact } : { name: "waiting", count: blocking.length });
+        setRevokeSupported(impact.revokeSupported);
+        set(
+          impact.canDisconnect
+            ? { name: "ready", impact }
+            : { name: "waiting", items: impact.blocking, truncated: impact.truncated },
+        );
       },
       (error: unknown) => {
         if (!(error instanceof ApiError)) throw error;
@@ -89,7 +122,11 @@ function useDisconnect(base: string, set: (step: Step) => void) {
       if (error.status >= 400 && error.status < 500) post.current = keyedPost();
       if (error.state === "session_expired") return expired();
       if (error.details?.reason === "channel_busy") {
-        return set({ name: "waiting", count: error.lists?.blocking?.length ?? 0 });
+        const items = (error.lists?.blocking ?? []).flatMap((one) => {
+          const parsed = refusedItem.safeParse(one);
+          return parsed.success ? [parsed.data] : [];
+        });
+        return set({ name: "waiting", items, truncated: error.flags?.truncated === true });
       }
       if (error.code === "step_up_required") return set({ name: "refused", why: "step_up" });
       set({ name: "refused", why: error.state === "forbidden" ? "forbidden" : "unconfirmed" });
@@ -144,12 +181,45 @@ function Scheduled({ ws, impact }: { ws: string; impact: Impact }) {
           </Button>
         </div>
       ) : null}
+      {impact.truncated ? <Truncated /> : null}
     </div>
   );
 }
 
-function Waiting({ ws, count }: { ws: string; count: number }) {
+function Truncated() {
+  const shown = formatNumber(LIST_BOUND, useFormatPrefs());
+  return (
+    <p data-testid="disconnect-truncated" className="text-sm">
+      <Trans id="channels.disconnect.truncated">Only the first {shown} are listed.</Trans>
+    </p>
+  );
+}
+
+const quiet = {
+  scheduleState: "in_progress",
+  presence: "present",
+  publishedAt: null,
+  kind: null,
+  reason: null,
+  effect: null,
+  partIndex: 0,
+  outcome: null,
+  holdReason: null,
+} as const;
+
+function Waiting({
+  ws,
+  items,
+  truncated,
+  provider,
+}: {
+  ws: string;
+  items: Blocking[];
+  truncated: boolean;
+  provider: string;
+}) {
   const { t } = useLingui();
+  const count = items.length;
   const shown = formatNumber(count, useFormatPrefs());
   return (
     <div data-testid="disconnect-waiting" className="flex flex-col items-start gap-2">
@@ -165,6 +235,25 @@ function Waiting({ ws, count }: { ws: string; count: number }) {
       <p>
         <Trans id="channels.disconnect.waiting_hint">Wait for these to finish or resolve them.</Trans>
       </p>
+      <ul data-testid="disconnect-blocking" className="flex flex-col gap-1">
+        {items.map((item) => (
+          <li key={item.id}>
+            <Link
+              to={`/w/${ws}/posts/${item.postId}`}
+              className="inline-flex min-h-6 pointer-coarse:min-h-11 items-center gap-2 text-link underline"
+            >
+              <DirText>{item.channelName}</DirText>
+              {": "}
+              <TargetLabel
+                word={wordOf({ ...quiet, state: item.state })}
+                provider={provider}
+                channel={item.channelName}
+              />
+            </Link>
+          </li>
+        ))}
+      </ul>
+      {truncated ? <Truncated /> : null}
       <Link
         to={`/w/${ws}/posts`}
         className="inline-flex min-h-6 pointer-coarse:min-h-11 items-center text-link underline"
@@ -175,7 +264,8 @@ function Waiting({ ws, count }: { ws: string; count: number }) {
   );
 }
 
-function Promises() {
+function Promises({ provider, revokeSupported }: { provider: string; revokeSupported: boolean }) {
+  const platform = <DirText>{provider}</DirText>;
   return (
     <>
       <p>
@@ -185,9 +275,16 @@ function Promises() {
         </Trans>
       </p>
       <p>
-        <Trans id="channels.disconnect.revoke_preview">
-          We will also ask the platform to end this access where it supports that.
-        </Trans>
+        {revokeSupported ? (
+          <Trans id="channels.disconnect.revoke_preview">
+            We will also ask {platform} to end this access.
+          </Trans>
+        ) : (
+          <Trans id="channels.disconnect.revoke_none_preview">
+            {platform} gives Shoutory no way to end this access. After you disconnect, remove Shoutory's
+            access in your account settings on {platform}.
+          </Trans>
+        )}
       </p>
     </>
   );
@@ -268,7 +365,9 @@ interface Props {
   onDone: () => void;
 }
 
-function Content(props: Props & { step: Step; busy: boolean; online: boolean } & Handlers) {
+function Content(
+  props: Props & { step: Step; revokeSupported: boolean; busy: boolean; online: boolean } & Handlers,
+) {
   const { step, ws } = props;
   const { t } = useLingui();
   if (step.name === "loading") {
@@ -298,12 +397,14 @@ function Content(props: Props & { step: Step; busy: boolean; online: boolean } &
   }
   if (step.name === "done")
     return <Done answer={step.answer} provider={props.provider} onClose={props.onClose} />;
-  if (step.name === "waiting") return <Waiting ws={ws} count={step.count} />;
+  if (step.name === "waiting") {
+    return <Waiting ws={ws} items={step.items} truncated={step.truncated} provider={props.provider} />;
+  }
   const offline = t({ id: "auth.offline", message: "You are offline. This needs the server." });
   return (
     <>
       {step.name === "ready" ? <Scheduled ws={ws} impact={step.impact} /> : null}
-      <Promises />
+      <Promises provider={props.provider} revokeSupported={props.revokeSupported} />
       {step.name === "refused" ? (
         <p data-testid="disconnect-refused" data-why={step.why} role="alert">
           {REFUSED_WORDS[step.why]}
@@ -333,7 +434,8 @@ export function DisconnectButton(props: Props) {
   const [step, setStep] = useState<Step>({ name: "loading" });
   const trigger = useRef<HTMLButtonElement>(null);
   const wasOpen = useRef(false);
-  const retry = useImpact(props.base, open, setStep);
+  const [revokeSupported, setRevokeSupported] = useState(true);
+  const retry = useImpact(props.base, open, setStep, setRevokeSupported);
   const disconnect = useDisconnect(props.base, setStep);
   // Closing returns focus to the button, also where the press did not focus it first.
   useEffect(() => {
@@ -366,6 +468,7 @@ export function DisconnectButton(props: Props) {
         <Content
           {...props}
           step={step}
+          revokeSupported={revokeSupported}
           busy={disconnect.pending}
           online={disconnect.online}
           onRetry={retry}

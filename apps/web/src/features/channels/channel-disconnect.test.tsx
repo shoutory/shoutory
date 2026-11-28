@@ -38,9 +38,17 @@ const impact = (change: Record<string, unknown> = {}) =>
       scheduled: [scheduled(POST, "2026-12-01T09:00:00.000Z"), scheduled(OTHER_POST, null)],
       blocking: [],
       canDisconnect: true,
+      truncated: false,
+      revokeSupported: true,
       ...change,
     },
   });
+const busyItem = (n: number, state = "dispatching", post = POST) => ({
+  id: `op-${n}`,
+  state,
+  postId: post,
+  channelName: "Acme Page",
+});
 const disconnected = (revoke: string, state = "disconnected") =>
   json({
     data: {
@@ -51,7 +59,7 @@ const disconnected = (revoke: string, state = "disconnected") =>
       revoke,
     },
   });
-const busyRefusal = (count: number) =>
+const busyRefusal = (count: number, truncated = false) =>
   json(
     {
       error: {
@@ -59,7 +67,14 @@ const busyRefusal = (count: number) =>
         requestId: "req-42",
         details: {
           reason: "channel_busy",
-          blocking: Array.from({ length: count }, (_, n) => ({ kind: "operation", id: `op-${n}` })),
+          blocking: Array.from({ length: count }, (_, n) => ({
+            kind: "operation",
+            id: `op-${n}`,
+            post_id: n === 0 ? POST : OTHER_POST,
+            channel_name: "Acme Page",
+            state: "dispatching",
+          })),
+          ...(truncated ? { truncated: true } : {}),
         },
       },
     },
@@ -122,7 +137,7 @@ describe("the impact first", () => {
     expect(text).toContain(
       "You can reconnect for 30 days. Posts waiting for this channel are held, not deleted; after 30 days they become drafts. Your data is kept.",
     );
-    expect(text).toContain("We will also ask the platform to end this access where it supports that.");
+    expect(text).toContain("We will also ask Fixture Network to end this access.");
     const links = [...(dialog()?.querySelectorAll<HTMLAnchorElement>("li a") ?? [])];
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
       `/w/${CONNECT_WS}/posts/${POST}`,
@@ -130,7 +145,26 @@ describe("the impact first", () => {
     ]);
     expect(links[0]?.querySelector("time")?.getAttribute("datetime")).toBe("2026-12-01T09:00:00.000Z");
   });
+});
 
+describe("what the impact says about the platform and the length of its lists", () => {
+  it("says before it starts that a platform that cannot end the access leaves that to the person", async () => {
+    await open({ impact: () => impact({ revokeSupported: false }) });
+    expect(dialogText()).toContain(
+      "Fixture Network gives Shoutory no way to end this access. After you disconnect, remove Shoutory's access in your account settings on Fixture Network.",
+    );
+    expect(dialogText()).not.toContain("We will also ask");
+  });
+
+  it("says when the list shows only the first of more", async () => {
+    await open({ impact: () => impact({ truncated: true }) });
+    expect(byId(dialog() as HTMLElement, "disconnect-truncated")?.textContent).toContain(
+      "Only the first 200 are listed",
+    );
+  });
+});
+
+describe("the posts the impact lists", () => {
   it("says plainly when no post is scheduled", async () => {
     await open({ impact: () => impact({ scheduled: [] }) });
     expect(dialogText()).toContain("No posts are scheduled for this channel.");
@@ -173,10 +207,7 @@ describe("an impact that cannot be confirmed", () => {
     await open({
       impact: () =>
         impact({
-          blocking: [
-            { id: "op-1", state: "dispatching" },
-            { id: "op-2", state: "needs_human" },
-          ],
+          blocking: [busyItem(1, "dispatching"), busyItem(2, "needs_human", OTHER_POST)],
           canDisconnect: false,
         }),
     });
@@ -186,6 +217,24 @@ describe("an impact that cannot be confirmed", () => {
       (one) => one.textContent === "Open posts",
     );
     expect(open_?.getAttribute("href")).toBe(`/w/${CONNECT_WS}/posts`);
+  });
+
+  it("links each post that is being sent, naming its channel and what it is doing", async () => {
+    await open({
+      impact: () =>
+        impact({
+          blocking: [busyItem(1, "dispatching"), busyItem(2, "needs_human", OTHER_POST)],
+          canDisconnect: false,
+        }),
+    });
+    const items = [...(byId(dialog() as HTMLElement, "disconnect-blocking")?.querySelectorAll("li") ?? [])];
+    expect(items.map((one) => one.querySelector("a")?.getAttribute("href"))).toEqual([
+      `/w/${CONNECT_WS}/posts/${POST}`,
+      `/w/${CONNECT_WS}/posts/${OTHER_POST}`,
+    ]);
+    expect(items[0]?.textContent).toContain("Acme Page");
+    expect(items[0]?.textContent).toContain("Sending");
+    expect(items[1]?.textContent).toContain("Needs your check");
   });
 });
 
@@ -279,6 +328,19 @@ describe("a refusal and a finished disconnect", () => {
     expect([...(dialog()?.querySelectorAll("a") ?? [])].map((one) => one.getAttribute("href"))).toContain(
       `/w/${CONNECT_WS}/posts`,
     );
+  });
+
+  it("links each post of the refusal to its page and says when the list is cut", async () => {
+    await open({ disconnect: () => busyRefusal(2, true) });
+    confirm();
+    await settle();
+    const items = [...(byId(dialog() as HTMLElement, "disconnect-blocking")?.querySelectorAll("li") ?? [])];
+    expect(items.map((one) => one.querySelector("a")?.getAttribute("href"))).toEqual([
+      `/w/${CONNECT_WS}/posts/${POST}`,
+      `/w/${CONNECT_WS}/posts/${OTHER_POST}`,
+    ]);
+    expect(items[0]?.textContent).toContain("Acme Page");
+    expect(byId(dialog() as HTMLElement, "disconnect-truncated")).not.toBeNull();
   });
 
   it("reads the channel again when the finished dialog is closed", async () => {

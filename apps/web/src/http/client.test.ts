@@ -103,9 +103,11 @@ describe("the lists in the details of a refusal", () => {
     const failure = (await request(answer, "/api/v1/x").catch((caught: unknown) => caught)) as {
       details?: unknown;
       lists?: unknown;
+      flags?: unknown;
     };
     expect(failure.details).toEqual({ reason: "variant_invalid" });
     expect(failure.lists).toEqual({ issues });
+    expect(failure.flags).toEqual({ truncated: true });
   });
 });
 

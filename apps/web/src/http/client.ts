@@ -11,6 +11,8 @@ export class ApiError extends Error {
   readonly details: Readonly<Record<string, string>> | undefined;
   /** The list-valued parts of the details (the issues of a refused draft, the work blocking a disconnect). */
   readonly lists: Readonly<Record<string, readonly unknown[]>> | undefined;
+  /** The yes-or-no parts of the details (a list that was cut short). */
+  readonly flags: Readonly<Record<string, boolean>> | undefined;
 
   constructor(
     code: ApiError["code"],
@@ -20,6 +22,7 @@ export class ApiError extends Error {
       cause?: unknown;
       details?: Readonly<Record<string, string>>;
       lists?: Readonly<Record<string, readonly unknown[]>>;
+      flags?: Readonly<Record<string, boolean>>;
     },
   ) {
     super(`api call failed: ${code}`, options?.cause === undefined ? undefined : { cause: options.cause });
@@ -29,6 +32,7 @@ export class ApiError extends Error {
     this.requestId = requestId;
     this.details = options?.details;
     this.lists = options?.lists;
+    this.flags = options?.flags;
     this.state = stateOf(code, status);
   }
 }
@@ -51,14 +55,19 @@ const errorEnvelope = z.object({
   }),
 });
 
-// The text entries are the details, the list entries the lists; any other value (a flag) is not shown to a person.
+// The text entries are the details, the list entries the lists and the yes-or-no entries the flags; any other value
+// is not shown to a person.
 function partsOf(raw: Record<string, unknown> | undefined) {
   if (raw === undefined) return {};
   const text = Object.entries(raw).filter((entry): entry is [string, string] => typeof entry[1] === "string");
   const lists = Object.entries(raw).filter((entry): entry is [string, unknown[]] => Array.isArray(entry[1]));
+  const flags = Object.entries(raw).filter(
+    (entry): entry is [string, boolean] => typeof entry[1] === "boolean",
+  );
   return {
     ...(text.length > 0 ? { details: Object.fromEntries(text) } : {}),
     ...(lists.length > 0 ? { lists: Object.fromEntries(lists) } : {}),
+    ...(flags.length > 0 ? { flags: Object.fromEntries(flags) } : {}),
   };
 }
 

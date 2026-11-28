@@ -4452,7 +4452,15 @@ msgstr "توقفنا عن الفحص، ولا يزال يمنع منشورات �
 
 #. js-lingui-explicit-id
 msgid "channels.disconnect.revoke_preview"
-msgstr "سنطلب أيضًا من المنصة إنهاء هذا الوصول حيثما تدعم ذلك."
+msgstr "سنطلب أيضًا من {platform} إنهاء هذا الوصول."
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.revoke_none_preview"
+msgstr "لا تتيح {platform} لـ Shoutory إنهاء هذا الوصول. بعد أن تفصل القناة، أزل وصول Shoutory من إعدادات حسابك على {platform}."
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.truncated"
+msgstr "تُعرض الأولى فقط، وعددها {shown}."
 
 #. js-lingui-explicit-id
 msgid "posts.meaning.paused"
