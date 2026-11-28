@@ -83,7 +83,7 @@ async function bundleSimulators(simDir: string): Promise<void> {
     configFile: false,
     logLevel: "warn",
     resolve: { conditions: ["source"] },
-    ssr: { noExternal: true },
+    ssr: { noExternal: true, resolve: { conditions: ["source"] } },
     build: {
       ssr: join(ROOT, "e2e/fixtures/simulators-server.ts"),
       outDir: simDir,
