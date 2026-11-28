@@ -4694,3 +4694,31 @@ msgstr "تعذّر تحميل النسخ"
 #. js-lingui-explicit-id
 msgid "composer.versions.list_failed.meaning"
 msgstr "لم يتغير شيء."
+
+#. js-lingui-explicit-id
+msgid "composer.edit.heading"
+msgstr "تغيير منشور ظاهر بالفعل"
+
+#. js-lingui-explicit-id
+msgid "composer.edit.explain"
+msgstr "يُرسل تغييرك إلى كل قناة على شكل تعديل. وإلى أن تؤكده القناة يبقى المنشور هناك كما كان."
+
+#. js-lingui-explicit-id
+msgid "composer.edit.submit"
+msgstr "إرسال التغيير"
+
+#. js-lingui-explicit-id
+msgid "composer.edit.unchanged"
+msgstr "لا توجد تغييرات لإرسالها."
+
+#. js-lingui-explicit-id
+msgid "composer.edit.stale.what"
+msgstr "تغيّر هذا المنشور منذ فتحته"
+
+#. js-lingui-explicit-id
+msgid "composer.edit.stale.meaning"
+msgstr "لم يُرسل شيء. أعد التحميل لترى أحدث نسخة."
+
+#. js-lingui-explicit-id
+msgid "composer.edit.reload"
+msgstr "إعادة التحميل"

@@ -31,11 +31,21 @@ export function useEffectCall() {
 // A press gets its own key; only a retry of the same request after a lost answer keeps the key it had.
 export function useKeys() {
   const lost = useRef<{ signature: string; key: string } | null>(null);
-  return async <T>(schema: z.ZodType<T>, path: string, body: Record<string, unknown>): Promise<T> => {
-    const signature = JSON.stringify([path, body]);
+  return async <T>(
+    schema: z.ZodType<T>,
+    path: string,
+    body: Record<string, unknown>,
+    headers?: Record<string, string>,
+  ): Promise<T> => {
+    const signature = JSON.stringify([path, body, headers]);
     const key = lost.current?.signature === signature ? lost.current.key : uuidv7();
     try {
-      const answer = await request(schema, path, { method: "POST", body, idempotencyKey: key });
+      const answer = await request(schema, path, {
+        method: "POST",
+        body,
+        idempotencyKey: key,
+        ...(headers ? { headers } : {}),
+      });
       lost.current = null;
       return answer;
     } catch (error) {

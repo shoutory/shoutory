@@ -20,6 +20,7 @@ import {
 import { useSaver } from "./composer-save";
 import { ConflictDialog } from "./conflict-dialog";
 import { ValidationPanel } from "./counters";
+import { EditBar } from "./edit-bar";
 import { Preview } from "./preview";
 import { PublishBar } from "./publish-bar";
 import { RestoreOffer, SaveFailure, SaveIndicator } from "./save-status";
@@ -132,17 +133,20 @@ function useDraft(args: {
   workspace: string;
   initial: Initial;
   canEdit: boolean;
+  targets: readonly Target[];
   onCreated: (id: string) => void;
   onRefresh: () => void;
 }) {
   const navigate = useNavigate();
   const [doc, setDoc] = useState(args.initial.doc);
+  // A post that is live is changed by an edit the person sends, never by a draft saved as they type.
+  const editing = args.targets.some((target) => target.actions.includes("edit"));
   const saver = useSaver({
     workspace: args.workspace,
     postId: args.initial.postId,
     version: args.initial.version,
     doc,
-    canSave: args.canEdit,
+    canSave: args.canEdit && !editing,
     onCreated: (id) => {
       args.onCreated(id);
       void navigate(`/w/${args.workspace}/posts/${id}/edit`, { replace: true });
@@ -156,7 +160,7 @@ function useDraft(args: {
   useEffect(() => {
     if (savedAt !== null) refresh.current();
   }, [savedAt]);
-  return { doc, setDoc, saver };
+  return { doc, setDoc, saver, editing };
 }
 
 function Fields({
@@ -256,10 +260,11 @@ export function Composer({
 }) {
   const [refused, setRefused] = useState<Issue[]>([]);
   const channels = useChannelFacts(refs);
-  const { doc, setDoc, saver } = useDraft({
+  const { doc, setDoc, saver, editing } = useDraft({
     workspace: workspace.id,
     initial,
     canEdit,
+    targets,
     onCreated,
     onRefresh,
   });
@@ -301,6 +306,7 @@ export function Composer({
         targets={targets}
         issues={issues}
         canEdit={canEdit}
+        edit={editing ? { doc, loaded: initial.doc } : null}
         actions={{ onIssues: setRefused, onDuplicate: copy.duplicate, onRefresh }}
       />
     </div>
@@ -317,6 +323,7 @@ function Footer({
   targets,
   issues,
   canEdit,
+  edit,
   actions,
 }: {
   saver: ReturnType<typeof useSaver>;
@@ -327,12 +334,28 @@ function Footer({
   targets: readonly Target[];
   issues: readonly Issue[];
   canEdit: boolean;
+  /** Set for a post that is live: what is on screen and what was loaded. */
+  edit: { doc: Doc; loaded: Doc } | null;
   actions: { onIssues: (issues: Issue[]) => void; onDuplicate: () => void; onRefresh: () => void };
 }) {
   return (
     <>
       <SaveIndicator state={saver.state} savedAt={saver.savedAt} online={saver.online} />
-      {saver.postId ? (
+      {canEdit && edit && saver.postId ? (
+        <EditBar
+          workspace={workspace}
+          postId={saver.postId}
+          doc={edit.doc}
+          loaded={edit.loaded}
+          targets={targets}
+          issues={issues}
+          online={saver.online}
+          version={saver.currentVersion}
+          onDuplicate={actions.onDuplicate}
+          onReload={() => window.location.reload()}
+        />
+      ) : null}
+      {saver.postId && !edit ? (
         <VersionsPanel
           workspace={workspace}
           postId={saver.postId}
@@ -342,7 +365,7 @@ function Footer({
           onRestored={saver.adopt}
         />
       ) : null}
-      {canEdit ? (
+      {canEdit && !edit ? (
         <PublishBar
           workspace={workspace}
           postId={saver.postId}

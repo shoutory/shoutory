@@ -4696,3 +4696,31 @@ msgstr "We could not load the versions"
 #. js-lingui-explicit-id
 msgid "composer.versions.list_failed.meaning"
 msgstr "Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "composer.edit.heading"
+msgstr "Change a post that is live"
+
+#. js-lingui-explicit-id
+msgid "composer.edit.explain"
+msgstr "Your change is sent to each channel as an edit. Until the channel confirms it, the post there stays as it was."
+
+#. js-lingui-explicit-id
+msgid "composer.edit.submit"
+msgstr "Send the change"
+
+#. js-lingui-explicit-id
+msgid "composer.edit.unchanged"
+msgstr "There are no changes to send."
+
+#. js-lingui-explicit-id
+msgid "composer.edit.stale.what"
+msgstr "This post changed since you opened it"
+
+#. js-lingui-explicit-id
+msgid "composer.edit.stale.meaning"
+msgstr "Nothing was sent. Reload to see the latest version."
+
+#. js-lingui-explicit-id
+msgid "composer.edit.reload"
+msgstr "Reload"
