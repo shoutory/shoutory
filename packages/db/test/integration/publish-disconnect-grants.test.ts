@@ -28,6 +28,7 @@ const DEFINERS = [
   "notice_recipients",
   "notice_candidates",
   "notice_escalation_advance",
+  "user_locale_set",
   "channel_disconnect",
   "credential_destroy",
   "credential_open_revoking",

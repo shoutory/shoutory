@@ -347,6 +347,7 @@ const DEFINERS: Definer[] = [
     args: "workspace_id uuid, kind text, subject_id uuid",
     callers: ["shoutory_worker"],
   },
+  { name: "user_locale_set", args: "p_user_id uuid, p_locale text", callers: ["shoutory_auth"] },
   { name: "notice_candidates", args: "p_limit integer", callers: ["shoutory_worker"] },
   {
     name: "notice_escalation_advance",

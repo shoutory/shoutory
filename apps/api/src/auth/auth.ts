@@ -116,7 +116,17 @@ const ADVANCED = {
 interface Effects {
   queue(mail: QueuedMail): Promise<void>;
   claimOwner(userId: string): Promise<void>;
+  setLocale(userId: string, locale: MailLocale): Promise<void>;
 }
+
+type HookContext = { request?: Request | undefined; headers?: Headers | undefined } | null;
+
+// The account row is written inside the library's transaction, so the profile row, which points at it, is written once
+// that transaction has committed. The language is the one of the request that caused the account or the session.
+const writeLocale = (effects: Effects, userId: string, context: HookContext): Promise<void> =>
+  queueAfterTransactionHook(() =>
+    effects.setLocale(userId, requestLocale(context?.request?.headers ?? context?.headers)),
+  );
 
 /**
  * The mail is queued after the sign-up's transaction commits: the queue then asks the pool for a connection while the
@@ -193,7 +203,10 @@ function createLibrary(options: AuthOptions, effects: Effects, throttle: Throttl
     advanced: ADVANCED,
     databaseHooks: {
       user: {
-        create: { before: async (user) => (signupAllowed(user.email) ? undefined : false) },
+        create: {
+          before: async (user) => (signupAllowed(user.email) ? undefined : false),
+          after: async (user, context) => writeLocale(effects, user.id, context),
+        },
       },
       session: {
         create: {
@@ -204,6 +217,8 @@ function createLibrary(options: AuthOptions, effects: Effects, throttle: Throttl
                 : null,
             },
           }),
+          // No profile call exists yet for a language switcher, so each sign-in writes the language.
+          after: async (session, context) => writeLocale(effects, session.userId, context),
         },
       },
     },
@@ -224,6 +239,9 @@ export function createAuth(options: AuthOptions): AuthService {
     },
     claimOwner: async (userId) => {
       await options.pool.query("SELECT app.instance_admin_claim($1)", [userId]);
+    },
+    setLocale: async (userId, locale) => {
+      await options.pool.query("SELECT app.user_locale_set($1, $2)", [userId, locale]);
     },
   };
   const throttle = createThrottle(options.pool, options.pepper);
