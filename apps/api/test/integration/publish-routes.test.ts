@@ -802,3 +802,74 @@ describe("a delete of a published post", () => {
     expect(parts).toEqual([{ part_index: 2 }]);
   });
 });
+
+describe("the one held-media predicate", () => {
+  // [state of the medium, whether the target waits for it]
+  const MEDIA: [string, boolean][] = [
+    ["ready", false],
+    ["processing", true],
+    ["rejected", true],
+    ["missing", true],
+  ];
+  it.each(MEDIA)(
+    "a %s medium: admission, the detail reason and the predicate agree (held: %s)",
+    async (state, held) => {
+      const p = await plant("scheduled");
+      const asset = randomUUID();
+      await fx.admin(async (client) => {
+        if (state !== "missing") {
+          await client.query(
+            `INSERT INTO app.media_assets (id, workspace_id, object_key, file_name, mime, source, created_by, state, sha256)
+             VALUES ($1::uuid, $2::uuid, 'ws/' || $2::text || '/' || $1::text || '/1/original', 'held.mp4', 'video/mp4',
+               'upload', $3::uuid, $4, decode(md5($1::text) || md5($2::text), 'hex'))`,
+            [asset, ws, randomUUID(), state],
+          );
+        }
+        await client.query("BEGIN");
+        await client.query("SET LOCAL session_replication_role = replica");
+        await client.query(
+          `UPDATE app.post_versions SET snapshot = jsonb_set(snapshot, '{resolved,media}', jsonb_build_object($2::text, 'ab'))
+            WHERE id = $1`,
+          [p.version, asset],
+        );
+        await client.query(
+          "UPDATE app.post_variants SET due_at = now() - interval '1 minute' WHERE id = $1",
+          [p.variant],
+        );
+        await client.query("COMMIT");
+      });
+      const detail = (await dataOf(await send(user("owner"), "GET", `${base(ws)}/${p.post}`)))
+        .targets as Record<string, unknown>[];
+      const [predicate] = await fx.admin(
+        async (client) =>
+          (await client.query("SELECT app.media_held($1, $2) AS held", [ws, p.version])).rows as {
+            held: boolean;
+          }[],
+      );
+      await admit();
+      expect([detail[0]?.hold_reason, predicate?.held, (await operationsOf(p, "publish")).length]).toEqual([
+        held ? "held_media" : null,
+        held,
+        held ? 0 : 1,
+      ]);
+    },
+  );
+});
+
+describe("the actions of the post detail come from the server", () => {
+  // [stage, seat, the actions the server lists]
+  const ACTIONS: [Stage, string, string[]][] = [
+    ["draft", "viewer", []],
+    ["draft", "editor", ["schedule", "publish_now", "duplicate"]],
+    ["scheduled", "editor", ["schedule", "publish_now", "unschedule", "duplicate"]],
+    ["published", "editor", ["edit", "delete", "duplicate"]],
+    ["in_flight", "approver", []],
+  ];
+  it.each(ACTIONS)("a %s target shows the %s %j", async (stage, seat, expected) => {
+    const p = await plant(stage);
+    const targets = (await dataOf(await send(user(seat), "GET", `${base(ws)}/${p.post}`))).targets as {
+      actions: string[];
+    }[];
+    expect(targets[0]?.actions).toEqual(expected);
+  });
+});

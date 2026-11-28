@@ -1,3 +1,4 @@
+import type { Permission } from "@shoutory/core/authz";
 import type { AuthorizedScope } from "@shoutory/core/authz/scope";
 import { draftSchema } from "@shoutory/core/content";
 import type { TenantTx } from "@shoutory/db/context";
@@ -9,6 +10,7 @@ import { Refusal } from "../../errors/refusal.js";
 import { type App, type AppEnv, defineRoute } from "../define-route.js";
 import { definerRefusal } from "../definer-refusal.js";
 import { pageAnswer, pageQuery } from "../input.js";
+import { TARGETS_COLUMN, targetsWithActions } from "./post-detail.js";
 import { expectedVersion, livePost, staleRefusal } from "./preconditions.js";
 import { registerPublish } from "./publish.js";
 import { resolveDraft } from "./resolve.js";
@@ -80,10 +82,11 @@ const READ_POST = `
         coalesce((SELECT json_agg(json_build_object('position', m.position, 'media_id', m.media_id,
             'alt_text', m.alt_text, 'crop', m.crop) ORDER BY m.position)
           FROM app.post_media AS m WHERE m.workspace_id = p.workspace_id AND m.variant_id = s.id), '[]'::json) AS media
-      FROM app.post_variants AS s WHERE s.workspace_id = p.workspace_id AND s.post_id = p.id) AS v), '[]'::json) AS variants
+      FROM app.post_variants AS s WHERE s.workspace_id = p.workspace_id AND s.post_id = p.id) AS v), '[]'::json) AS variants,
+    ${TARGETS_COLUMN}
   FROM app.posts AS p WHERE p.workspace_id = $1 AND p.id = $2 AND p.deleted_at IS NULL`;
 
-function registerGet(app: App): void {
+function registerGet(app: App, providers: Providers, now: () => Date): void {
   defineRoute(app, {
     method: "get",
     path: `${BASE}/{post_id}`,
@@ -91,9 +94,22 @@ function registerGet(app: App): void {
     access: VIEW,
     params: postParams,
     handler: async ({ c, tx, scope, params }) => {
-      const post = (await tx.query(READ_POST, [scope.workspaceId, params.post_id])).rows[0];
+      const sees = (permission: Permission) => scope.permissions.has(permission);
+      const read = await tx.query(READ_POST, [
+        scope.workspaceId,
+        params.post_id,
+        sees("posts.edit"),
+        sees("publish.resolve"),
+      ]);
+      const post = read.rows[0];
       if (!post) throw new Refusal("not_found", "post row not visible");
-      return answer(c, 200, post, post.current_version_id);
+      const targets = targetsWithActions(post.targets, {
+        scope,
+        providers,
+        authorId: post.author_id,
+        now: now(),
+      });
+      return answer(c, 200, { ...post, targets }, post.current_version_id);
     },
   });
 }
@@ -216,7 +232,7 @@ export function registerPosts(
   const now = () => new Date(options.now?.() ?? Date.now());
   const { throttle } = options.auth;
   registerCreate(app, providers, now);
-  registerGet(app);
+  registerGet(app, providers, now);
   registerVersions(app);
   registerChange(app, providers, now, "autosave", throttle);
   registerChange(app, providers, now, "save", throttle);
