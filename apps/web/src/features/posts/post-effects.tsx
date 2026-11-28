@@ -1,10 +1,10 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import { draftSchema } from "@shoutory/core/content";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { z } from "zod";
 import { useAction } from "../../auth/auth-frame";
-import { type ApiError, request, uuidv7 } from "../../http/client";
+import { type ApiError, keyedPost, request } from "../../http/client";
 import { Button } from "../../ui/button";
 import { ErrorPanel } from "../../ui/error-panel";
 import { useSignIn } from "../channels/channels-hub";
@@ -27,18 +27,20 @@ export interface Place {
   readonly settled?: () => void;
 }
 
-// One call that does something: a fresh key for each press, the post read again after it, and a refusal that says the
-// state moved on read again too. A second press while it runs is ignored by `useAction`.
+// One call that does something: a key for each press (kept only for a retry after a lost answer), the post read again
+// after it, and a refusal that says the state moved on read again too. A second press while it runs is ignored by
+// `useAction`.
 export function useEffectCall(
   place: Place,
-  run: (key: string) => Promise<unknown>,
+  run: (post: ReturnType<typeof keyedPost>) => Promise<unknown>,
   said?: ReactNode,
   after?: () => void,
 ) {
   const signIn = useSignIn();
+  const [post] = useState(keyedPost);
   return useAction(
     async () => {
-      await run(uuidv7());
+      await run(post);
       place.refresh();
       if (said !== undefined) place.say(said);
       place.settled?.();
@@ -109,9 +111,10 @@ export function Refusal({
 export function DuplicateButton({ place }: { place: Place }) {
   const navigate = useNavigate();
   const base = `/api/v1/workspaces/${place.ws}/posts`;
+  const [post] = useState(keyedPost);
   const call = useAction(async () => {
     const { draft } = await request(versionSchema, `${base}/${place.postId}/versions/${place.version}`);
-    const copy = await request(created, base, { method: "POST", body: { draft }, idempotencyKey: uuidv7() });
+    const copy = await post(created, base, { draft });
     void navigate(`/w/${place.ws}/posts/${copy.id}/edit`);
   });
   return (

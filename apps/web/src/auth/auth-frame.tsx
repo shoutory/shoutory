@@ -54,16 +54,17 @@ export function BadLink({ action }: { action: ReactNode }) {
   );
 }
 
-// Ignores a second press while it runs (Enter in a field submits even when the button is aria-disabled).
-export function useAction(act: () => Promise<void>, onFailure?: (error: ApiError) => void) {
+// One thing at a time under a name: a press while another runs is ignored (Enter in a field submits even when the
+// button is aria-disabled), and the refusal of the last one is kept to be shown.
+export function useActions(onFailure?: (error: ApiError) => void) {
   const running = useRef(false);
   const online = useOnline();
-  const [pending, setPending] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
   const [failure, setFailure] = useState<ApiError | null>(null);
-  async function run() {
+  async function run(name: string, act: () => Promise<void>) {
     if (running.current || !online) return;
     running.current = true;
-    setPending(true);
+    setBusy(name);
     setFailure(null);
     try {
       await act();
@@ -73,10 +74,22 @@ export function useAction(act: () => Promise<void>, onFailure?: (error: ApiError
       setFailure(error);
     } finally {
       running.current = false;
-      setPending(false);
+      setBusy(null);
     }
   }
-  return { run, pending, failure, online, reset: () => setFailure(null) };
+  return { run, busy, failure, online, reset: () => setFailure(null) };
+}
+
+// The same for a form or a button that does one thing.
+export function useAction(act: () => Promise<void>, onFailure?: (error: ApiError) => void) {
+  const actions = useActions(onFailure);
+  return {
+    run: () => actions.run("action", act),
+    pending: actions.busy !== null,
+    failure: actions.failure,
+    online: actions.online,
+    reset: actions.reset,
+  };
 }
 
 export function SubmitButton({

@@ -95,6 +95,35 @@ describe("the details of a refusal", () => {
   });
 });
 
+describe("a keyed request that is not a plain create", () => {
+  const keyOf = (call: [string, (RequestInit | undefined)?]) =>
+    new Headers(call[1]?.headers).get("Idempotency-Key");
+
+  it("sends its method and its headers, and a different path or header is a different request", async () => {
+    const fetchStub = vi.fn((_path: string, _init?: RequestInit) =>
+      Promise.resolve(json({ data: { open: true } })),
+    );
+    vi.stubGlobal("fetch", fetchStub);
+    const post = keyedPost();
+    await post(answer, "/api/v1/x", { a: 1 }, { method: "DELETE", headers: { "If-Match": '"v1"' } });
+    await post(answer, "/api/v1/y", { a: 1 }, { method: "DELETE", headers: { "If-Match": '"v1"' } });
+    const [first, second] = fetchStub.mock.calls;
+    expect(first?.[1]?.method).toBe("DELETE");
+    expect(new Headers(first?.[1]?.headers).get("If-Match")).toBe('"v1"');
+    expect(keyOf(first as [string, RequestInit])).not.toBe(keyOf(second as [string, RequestInit]));
+  });
+
+  it("a lost answer keeps the key of the same request", async () => {
+    const fetchStub = vi.fn((_path: string, _init?: RequestInit) => Promise.reject(new TypeError("network")));
+    vi.stubGlobal("fetch", fetchStub);
+    const post = keyedPost();
+    await post(answer, "/api/v1/x", { a: 1 }).catch(() => undefined);
+    await post(answer, "/api/v1/x", { a: 1 }).catch(() => undefined);
+    const [first, second] = fetchStub.mock.calls;
+    expect(keyOf(first as [string, RequestInit])).toBe(keyOf(second as [string, RequestInit]));
+  });
+});
+
 describe("the lists in the details of a refusal", () => {
   it("keeps the text of the details and hands the lists apart, so an issue list never hides the reason", async () => {
     const issues = [{ variant: 0, key: "text", reason: "too_long" }];
@@ -214,6 +243,18 @@ describe("a create that is safe to retry", () => {
       json({ error: { code: "unprocessable_content", details: { reason: "idempotency_key_reused" } } }, 422),
       { name: "a" },
       false,
+    ],
+    [
+      "a request the server refused gets a new key",
+      json({ error: { code: "conflict" } }, 409),
+      { name: "a" },
+      false,
+    ],
+    [
+      "the password check repeats the request with the same key",
+      json({ error: { code: "step_up_required" } }, 403),
+      { name: "a" },
+      true,
     ],
   ])("%s", async (_name, first, second, same) => {
     const fetchStub = vi.fn((_path: string, _init?: RequestInit) => Promise.resolve(first.clone()));

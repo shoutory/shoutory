@@ -1,7 +1,6 @@
 import { Trans } from "@lingui/react/macro";
 import { type ReactNode, useState } from "react";
 import { Link } from "react-router";
-import { request } from "../../http/client";
 import { DeleteButton } from "./delete-dialog";
 import { accepted, EffectButton, LINK, type Place, Refusal, useEffectCall } from "./post-effects";
 import type { Resolution, Target } from "./post-facts";
@@ -11,12 +10,7 @@ import { ResolveButton } from "./resolve-dialog";
 function CancelButton({ place, target }: { place: Place; target: Target }) {
   const call = useEffectCall(
     place,
-    (key) =>
-      request(accepted, `/api/v1/workspaces/${place.ws}/operations/${target.operation?.id}/cancel`, {
-        method: "POST",
-        body: {},
-        idempotencyKey: key,
-      }),
+    (post) => post(accepted, `/api/v1/workspaces/${place.ws}/operations/${target.operation?.id}/cancel`, {}),
     <Trans id="posts.result.cancelled">Cancelled. Nothing was posted.</Trans>,
   );
   return (
@@ -35,11 +29,9 @@ function CancelButton({ place, target }: { place: Place; target: Target }) {
 function UnscheduleButton({ place, target }: { place: Place; target: Target }) {
   const call = useEffectCall(
     place,
-    (key) =>
-      request(accepted, `/api/v1/workspaces/${place.ws}/posts/${place.postId}/unschedule`, {
-        method: "POST",
-        body: { variant_ids: [target.variant_id] },
-        idempotencyKey: key,
+    (post) =>
+      post(accepted, `/api/v1/workspaces/${place.ws}/posts/${place.postId}/unschedule`, {
+        variant_ids: [target.variant_id],
       }),
     <Trans id="posts.result.unscheduled">Unscheduled. It is a draft again.</Trans>,
   );

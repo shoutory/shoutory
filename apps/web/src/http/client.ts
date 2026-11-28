@@ -179,21 +179,38 @@ export function uuidv7(now = Date.now()): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+interface KeyedOptions {
+  method?: string;
+  headers?: Readonly<Record<string, string>>;
+}
+
 /**
- * A create that is safe to retry: the same body keeps its key, so a retry after a lost answer finds the row the
- * first try made instead of making a second one. A changed body, a success or a refused key starts a new key.
+ * A write that is safe to retry: the same request keeps its key, so a retry after a lost answer finds what the first
+ * try made instead of doing it twice. A different request, a success or any refusal the server gave (the password
+ * check apart, which repeats the same request) starts a new key.
  */
 export function keyedPost() {
-  let last: { body: string; key: string } | null = null;
-  return async <T>(schema: ZodType<T>, path: string, body: unknown): Promise<T> => {
-    const text = JSON.stringify(body);
-    if (last?.body !== text) last = { body: text, key: uuidv7() };
+  let last: { identity: string; key: string } | null = null;
+  return async <T>(
+    schema: ZodType<T>,
+    path: string,
+    body: unknown,
+    { method = "POST", headers }: KeyedOptions = {},
+  ): Promise<T> => {
+    const identity = JSON.stringify([method, path, body, headers]);
+    if (last?.identity !== identity) last = { identity, key: uuidv7() };
     try {
-      const answer = await request(schema, path, { method: "POST", body, idempotencyKey: last.key });
+      const answer = await request(schema, path, {
+        method,
+        body,
+        idempotencyKey: last.key,
+        ...(headers ? { headers } : {}),
+      });
       last = null;
       return answer;
     } catch (error) {
-      if (error instanceof ApiError && error.details?.reason === "idempotency_key_reused") last = null;
+      const refused = error instanceof ApiError && error.status >= 400 && error.status < 500;
+      if (refused && error.code !== "step_up_required") last = null;
       throw error;
     }
   };

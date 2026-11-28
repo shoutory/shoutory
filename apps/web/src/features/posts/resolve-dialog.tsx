@@ -4,7 +4,7 @@ import { Form } from "react-aria-components";
 import { z } from "zod";
 import { useAction } from "../../auth/auth-frame";
 import { useStepUp } from "../../auth/step-up";
-import { type ApiError, request, uuidv7 } from "../../http/client";
+import { type ApiError, keyedPost, request } from "../../http/client";
 import { Button } from "../../ui/button";
 import { Choice, Choices } from "../../ui/choices";
 import { Dialog } from "../../ui/dialog";
@@ -271,6 +271,7 @@ function useResolve(
   const stepUp = useStepUp();
   const signIn = useSignIn();
   const sentences = useSentences();
+  const [post] = useState(keyedPost);
   const [kind, setKind] = useState<Resolution | "">("");
   const [fields, setFields] = useState<Fields>({ ack: "", link: "", date: "", time: "", fold: null });
   const [problem, setProblem] = useState<Problem>(null);
@@ -281,11 +282,7 @@ function useResolve(
       const path = `/api/v1/workspaces/${place.ws}/operations/${target.operation?.id}/resolutions`;
       const stepped = stepUps.has(kind);
       const go = () =>
-        request(answerSchema, stepped ? `${path}/confirmed` : path, {
-          method: "POST",
-          body: bodyOf(kind, fields, sentence),
-          idempotencyKey: uuidv7(),
-        });
+        post(answerSchema, stepped ? `${path}/confirmed` : path, bodyOf(kind, fields, sentence));
       await (stepped ? stepUp(go) : go());
       place.refresh();
       onDone(kind);

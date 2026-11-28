@@ -106,11 +106,10 @@ function useDisconnect(base: string, set: (step: Step) => void) {
   const stepUp = useStepUp();
   const expired = useSignIn();
   // One key per disconnect: the repeat after the password check and a retry after a lost answer share it.
-  const post = useRef(keyedPost());
+  const [post] = useState(keyedPost);
   return useAction(
     async () => {
-      const answer = await stepUp(() => post.current(answerSchema, `${base}/disconnect`, {}));
-      post.current = keyedPost();
+      const answer = await stepUp(() => post(answerSchema, `${base}/disconnect`, {}));
       set(
         answer.connection_state === "disconnected"
           ? { name: "done", answer }
@@ -118,8 +117,6 @@ function useDisconnect(base: string, set: (step: Step) => void) {
       );
     },
     (error) => {
-      // A refusal is an answer: the next try is a new request. Only a lost answer keeps the key.
-      if (error.status >= 400 && error.status < 500) post.current = keyedPost();
       if (error.state === "session_expired") return expired();
       if (error.details?.reason === "channel_busy") {
         const items = (error.lists?.blocking ?? []).flatMap((one) => {

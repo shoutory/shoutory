@@ -2,11 +2,12 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { z } from "zod";
+import { useActions } from "../../auth/auth-frame";
+import { type ApiError, keyedPost } from "../../http/client";
 import { Banner } from "../../ui/banner";
 import { Button } from "../../ui/button";
 import { ErrorPanel } from "../../ui/error-panel";
 import { type Doc, type Issue, type Target, toDraft } from "./composer-data";
-import { useEffectCall, useKeys } from "./publish-calls";
 import { PublishRefusal } from "./publish-refusal";
 
 const answerSchema = z.object({ id: z.string(), operation_ids: z.array(z.string()) });
@@ -38,8 +39,8 @@ export interface EditProps {
 export function EditBar(props: EditProps) {
   const { t } = useLingui();
   const navigate = useNavigate();
-  const call = useEffectCall();
-  const post = useKeys();
+  const call = useActions();
+  const [post] = useState(keyedPost);
   const [sent, setSent] = useState(false);
   const draft = editableDraft(props.doc, props.targets);
   const changed = JSON.stringify(draft) !== JSON.stringify(editableDraft(props.loaded, props.targets));
@@ -64,7 +65,7 @@ export function EditBar(props: EditProps) {
   const submit = () =>
     call.run("edit", async () => {
       const path = `/api/v1/workspaces/${props.workspace}/posts/${props.postId}/edit`;
-      await post(answerSchema, path, { draft }, { "If-Match": `"${props.version()}"` });
+      await post(answerSchema, path, { draft }, { headers: { "If-Match": `"${props.version()}"` } });
       setSent(true);
     });
   return (
@@ -105,7 +106,7 @@ export function EditBar(props: EditProps) {
   );
 }
 
-function Failure({ props, error }: { props: EditProps; error: ReturnType<typeof useEffectCall>["failure"] }) {
+function Failure({ props, error }: { props: EditProps; error: ApiError | null }) {
   if (error === null) return null;
   if (error.code === "precondition_failed") {
     return (

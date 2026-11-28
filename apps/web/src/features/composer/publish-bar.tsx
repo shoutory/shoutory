@@ -2,7 +2,8 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { type Dispatch, type SetStateAction, useCallback, useState } from "react";
 import { useNavigate } from "react-router";
 import { z } from "zod";
-import { ApiError } from "../../http/client";
+import { useActions } from "../../auth/auth-frame";
+import { ApiError, keyedPost } from "../../http/client";
 import { formatDate } from "../../i18n/i18n";
 import { Banner } from "../../ui/banner";
 import { Button } from "../../ui/button";
@@ -12,7 +13,7 @@ import { TextField } from "../../ui/text-field";
 import { cityOf } from "../../zones/zone-picker";
 import { type Issue, type Target, wallClock } from "./composer-data";
 import type { SaveState } from "./composer-save";
-import { idsSchema, scheduledSchema, useEffectCall, useKeys } from "./publish-calls";
+import { idsSchema, scheduledSchema } from "./publish-calls";
 import { PublishRefusal } from "./publish-refusal";
 
 const issueSchema = z.array(z.object({ variant: z.number(), key: z.string(), reason: z.string() }));
@@ -206,11 +207,11 @@ function scheduleBody(
   };
 }
 
-function useActions(props: PublishProps, setSent: Dispatch<SetStateAction<Sent>>, sent: Sent) {
-  const call = useEffectCall();
-  const post = useKeys();
+function usePublishActions(props: PublishProps, setSent: Dispatch<SetStateAction<Sent>>, sent: Sent) {
+  const call = useActions();
+  const [post] = useState(keyedPost);
   const availability = useAvailability(props);
-  const when = useWhen(props, call.clear);
+  const when = useWhen(props, call.reset);
   const [scheduled, setScheduled] = useState<Scheduled | null>(null);
   const base = `/api/v1/workspaces/${props.workspace}/posts/${props.postId}`;
 
@@ -346,7 +347,7 @@ function Failure({ props, error }: { props: PublishProps; error: ApiError }) {
   );
 }
 
-type Actions = ReturnType<typeof useActions>;
+type Actions = ReturnType<typeof usePublishActions>;
 
 function Buttons({ actions, updating }: { actions: Actions; updating: boolean }) {
   const { call, availability } = actions;
@@ -390,7 +391,7 @@ function Buttons({ actions, updating }: { actions: Actions; updating: boolean })
 export function PublishBar(props: PublishProps) {
   const navigate = useNavigate();
   const [sent, setSent] = useState<Sent>(null);
-  const actions = useActions(props, setSent, sent);
+  const actions = usePublishActions(props, setSent, sent);
   const { call, scheduled } = actions;
   const detail = `/w/${props.workspace}/posts/${props.postId}`;
   const open = useCallback(() => void navigate(detail), [navigate, detail]);

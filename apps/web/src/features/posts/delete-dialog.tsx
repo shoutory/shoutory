@@ -1,7 +1,6 @@
 import { plural } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useRef } from "react";
-import { request } from "../../http/client";
 import { formatNumber } from "../../i18n/i18n";
 import { Button } from "../../ui/button";
 import { Dialog } from "../../ui/dialog";
@@ -78,13 +77,13 @@ export function DeleteButton({ place, target, named, parts, open, onOpenChange }
   }, [open]);
   const call = useEffectCall(
     place,
-    (key) =>
-      request(accepted, `/api/v1/workspaces/${place.ws}/posts/${place.postId}`, {
-        method: "DELETE",
-        body: { variant_ids: [target.variant_id] },
-        headers: { "If-Match": `"${place.version}"` },
-        idempotencyKey: key,
-      }),
+    (post) =>
+      post(
+        accepted,
+        `/api/v1/workspaces/${place.ws}/posts/${place.postId}`,
+        { variant_ids: [target.variant_id] },
+        { method: "DELETE", headers: { "If-Match": `"${place.version}"` } },
+      ),
     undefined,
     () => onOpenChange(false),
   );
