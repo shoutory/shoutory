@@ -1,16 +1,10 @@
 import { mkdirSync } from "node:fs";
-import {
-  prepareSimulators,
-  publishSimulators,
-  removeSimulatorFiles,
-  removeStaleSimulatorFiles,
-} from "./fixtures/simulators";
+import { prepareSimulators, publishSimulators, removeSimulatorFiles } from "./fixtures/simulators";
 import { flagRemovalDate, REMOVE_BY_VARIABLE, STATE_DIR, type Stack, startStack } from "./support/stack";
 
 export default async function globalSetup(): Promise<() => void> {
   mkdirSync(STATE_DIR, { recursive: true });
   const removeBy = flagRemovalDate();
-  removeStaleSimulatorFiles();
   const files = await prepareSimulators();
   let stack: Stack | undefined;
   try {

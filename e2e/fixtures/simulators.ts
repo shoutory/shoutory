@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash, createPublicKey } from "node:crypto";
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -116,13 +116,7 @@ export async function prepareSimulators(): Promise<SimulatorFiles> {
   }
 }
 
-/** The folders of an interrupted earlier run. */
-export function removeStaleSimulatorFiles(): void {
-  for (const name of readdirSync(tmpdir()).filter((entry) => entry.startsWith(FOLDER_PREFIX))) {
-    rmSync(join(tmpdir(), name), { recursive: true, force: true });
-  }
-}
-
+/** Removes the folder this run made and nothing else: another run on the same machine keeps its own. */
 export function removeSimulatorFiles(files: SimulatorFiles): void {
   rmSync(files.root, { recursive: true, force: true });
 }
