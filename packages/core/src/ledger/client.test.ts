@@ -10,13 +10,23 @@ import {
 
 describe("providersArgument", () => {
   const lease = { prepare: 60, commit: 120, edit: 90 };
-  it("carries the edit window only for a provider that declares one", () => {
+  it("carries the edit and delete windows only for a provider that declares them", () => {
     const given = providersArgument([
-      { id: "a", dispatchMarginSeconds: 300, leaseSeconds: lease, actionWindows: { edit: 3600 } },
+      {
+        id: "a",
+        dispatchMarginSeconds: 300,
+        leaseSeconds: lease,
+        actionWindows: { edit: 3600, delete: 7200 },
+      },
       { id: "b", dispatchMarginSeconds: 300, leaseSeconds: { prepare: 60, commit: 60 }, actionWindows: {} },
     ]);
     expect(given).toEqual({
-      a: { margin_seconds: 300, edit_window_seconds: 3600, lease_seconds: { publish: 120, edit: 90 } },
+      a: {
+        margin_seconds: 300,
+        edit_window_seconds: 3600,
+        delete_window_seconds: 7200,
+        lease_seconds: { publish: 120, edit: 90 },
+      },
       b: { margin_seconds: 300, lease_seconds: { publish: 60 } },
     });
   });

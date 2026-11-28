@@ -54,7 +54,7 @@ interface ProviderFacts {
   id: string;
   dispatchMarginSeconds: number;
   leaseSeconds: { prepare: number; commit: number; edit?: number | undefined; delete?: number | undefined };
-  actionWindows?: { edit?: number | undefined } | undefined;
+  actionWindows?: { edit?: number | undefined; delete?: number | undefined } | undefined;
 }
 export function providersArgument(facts: readonly ProviderFacts[]): Record<string, unknown> {
   return Object.fromEntries(
@@ -63,6 +63,7 @@ export function providersArgument(facts: readonly ProviderFacts[]): Record<strin
       {
         margin_seconds: dispatchMarginSeconds,
         ...(actionWindows?.edit === undefined ? {} : { edit_window_seconds: actionWindows.edit }),
+        ...(actionWindows?.delete === undefined ? {} : { delete_window_seconds: actionWindows.delete }),
         lease_seconds: {
           publish: publishLeaseSeconds(lease),
           ...(lease.edit === undefined ? {} : { edit: lease.edit }),
