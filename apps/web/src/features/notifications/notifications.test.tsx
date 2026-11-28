@@ -135,6 +135,20 @@ describe("reminders and links", () => {
     expect(rows(host)[0]?.querySelector("p")?.textContent?.startsWith("Reminder: ")).toBe(reminder);
   });
 
+  it.each<[string, string, string]>([
+    ["needs_human", "escalation_0", "منشور على ⁨Acme Page⁩ ينتظر قرارك."],
+    ["needs_human", "escalation_2", "تذكير: منشور على ⁨Acme Page⁩ ينتظر قرارك."],
+    ["unverified", "escalation_1", "تذكير: لم يتأكد نشر منشور على ⁨Acme Page⁩."],
+  ])("a %s notice at %s reads as one Arabic sentence", async (kind, level, words) => {
+    const { host } = await visit(
+      {
+        notices: () => page([notice(1, { kind, level, vars: { name: "Acme Page" } })]),
+      },
+      "ar",
+    );
+    expect(rows(host)[0]?.querySelector("p")?.textContent).toContain(words);
+  });
+
   it("links a channel notice to the channels page, never by its credential subject", async () => {
     const { host } = await visit({
       notices: () => page([notice(1, { kind: "token_expiry", level: "g1:7d" })]),

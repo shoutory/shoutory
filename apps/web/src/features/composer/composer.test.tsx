@@ -109,6 +109,21 @@ describe("the picker", () => {
     expect(allById("tab-channel")).toHaveLength(1);
   });
 
+  it("the state of a channel is part of the name of its checkbox", async () => {
+    await open({ channelList: () => channelPage([...CHANNELS, BROKEN], null, []) });
+    const nameOf = (id: string) => {
+      const box = allById("picker-channel").find((label) => label.querySelector("input")?.value === id);
+      return (box?.querySelector("input")?.getAttribute("aria-labelledby") ?? "")
+        .split(" ")
+        .map((part) => document.getElementById(part)?.textContent ?? "")
+        .join(" ");
+    };
+    expect(nameOf(CH.broken)).toContain("Reconnect needed");
+    const connected = byId("picker-state")?.textContent ?? "";
+    expect(connected).not.toBe("");
+    expect(nameOf(CH.short)).toContain(connected);
+  });
+
   it("select all picks every channel and a second press clears them", async () => {
     await open();
     await click(byId("picker-all") as HTMLElement);

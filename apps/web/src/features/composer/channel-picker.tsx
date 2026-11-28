@@ -1,4 +1,5 @@
 import { Trans, useLingui } from "@lingui/react/macro";
+import { useId } from "react";
 import { Checkbox, CheckboxGroup } from "react-aria-components";
 import { Link, useNavigate } from "react-router";
 import { DirText } from "../../ui/dir-text";
@@ -25,11 +26,11 @@ function PlugIcon() {
   );
 }
 
-function ChannelState({ channel }: { channel: Channel }) {
+function ChannelState({ channel, id }: { channel: Channel; id: string }) {
   const words = useWords();
   if (RECONNECTABLE.has(channel.connection_state)) {
     return (
-      <span data-testid="picker-reconnect" className="flex items-center gap-2 text-sm text-attention">
+      <span id={id} data-testid="picker-reconnect" className="flex items-center gap-2 text-sm text-attention">
         <PlugIcon />
         <Trans id="composer.picker.reconnect_needed">Reconnect needed</Trans>
       </span>
@@ -40,7 +41,7 @@ function ChannelState({ channel }: { channel: Channel }) {
       ? words.health.get(channel.health ?? "unknown")
       : words.state.get(channel.connection_state);
   return (
-    <span data-testid="picker-state" className="flex items-center gap-2 text-sm text-text-muted">
+    <span id={id} data-testid="picker-state" className="flex items-center gap-2 text-sm text-text-muted">
       <span aria-hidden="true" className="size-2 rounded-full bg-current" />
       {word ?? words.unknownState}
     </span>
@@ -48,16 +49,20 @@ function ChannelState({ channel }: { channel: Channel }) {
 }
 
 function ChannelRow({ channel, workspace }: { channel: Channel; workspace: string }) {
+  const [nameId, stateId] = [useId(), useId()];
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
       <Checkbox
         value={channel.id}
         data-testid="picker-channel"
+        aria-labelledby={`${nameId} ${stateId}`}
         className="group flex min-h-6 pointer-coarse:min-h-11 items-center gap-3 outline-none"
       >
         <Box />
         <span className="flex flex-col">
-          <DirText>{channel.nickname ?? channel.display_name}</DirText>
+          <span id={nameId}>
+            <DirText>{channel.nickname ?? channel.display_name}</DirText>
+          </span>
           {channel.handle ? (
             <span className="text-sm text-text-muted">
               <DirText dir="ltr">{channel.handle}</DirText>
@@ -65,7 +70,7 @@ function ChannelRow({ channel, workspace }: { channel: Channel; workspace: strin
           ) : null}
         </span>
       </Checkbox>
-      <ChannelState channel={channel} />
+      <ChannelState channel={channel} id={stateId} />
       {RECONNECTABLE.has(channel.connection_state) ? (
         <Link
           to={`/w/${workspace}/channels/${channel.id}`}

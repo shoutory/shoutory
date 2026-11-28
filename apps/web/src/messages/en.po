@@ -241,7 +241,7 @@ msgstr "A newer word replaced this one. Close this and use the newest."
 
 #. js-lingui-explicit-id
 msgid "notices.unverified"
-msgstr "A post to {who} is not confirmed. Check the channel, then tell us what you found."
+msgstr "{reminded, select, yes {Reminder: A post to {who} is not confirmed. Check the channel, then tell us what you found.} other {A post to {who} is not confirmed. Check the channel, then tell us what you found.}}"
 
 #. js-lingui-explicit-id
 msgid "notices.held_media"
@@ -249,7 +249,7 @@ msgstr "A post to {who} is waiting for its media."
 
 #. js-lingui-explicit-id
 msgid "notices.needs_human"
-msgstr "A post to {who} needs your decision."
+msgstr "{reminded, select, yes {Reminder: A post to {who} needs your decision.} other {A post to {who} needs your decision.}}"
 
 #. js-lingui-explicit-id
 msgid "media.delete.in_use.meaning"
@@ -2670,10 +2670,6 @@ msgstr "Reload"
 #. js-lingui-explicit-id
 msgid "system.maintenance.action"
 msgstr "Reload the page"
-
-#. js-lingui-explicit-id
-msgid "notices.reminder"
-msgstr "Reminder: "
 
 #. js-lingui-explicit-id
 msgid "admin.flags.col_remove_by"

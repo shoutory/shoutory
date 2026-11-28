@@ -1,4 +1,4 @@
-import { plural } from "@lingui/core/macro";
+import { plural, select } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
@@ -123,9 +123,8 @@ function useSentence() {
   const { t } = useLingui();
   const prefs = useFormatPrefs();
   const fallback = t({ id: "notices.a_channel", message: "a channel" });
-  const reminder = t({ id: "notices.reminder", message: "Reminder: " });
   return (notice: Notice): string => {
-    const prefix = isReminder(notice.level) ? reminder : "";
+    const reminded = isReminder(notice.level) ? "yes" : "no";
     const who = notice.vars.name === undefined ? fallback : isolate(notice.vars.name);
     const days = daysOf(notice);
     const shown = formatNumber(days, prefs);
@@ -147,12 +146,21 @@ function useSentence() {
           }),
         });
       case "needs_human":
-        return `${prefix}${t({ id: "notices.needs_human", message: `A post to ${who} needs your decision.` })}`;
+        return t({
+          id: "notices.needs_human",
+          message: select(reminded, {
+            yes: `Reminder: A post to ${who} needs your decision.`,
+            other: `A post to ${who} needs your decision.`,
+          }),
+        });
       case "unverified":
-        return `${prefix}${t({
+        return t({
           id: "notices.unverified",
-          message: `A post to ${who} is not confirmed. Check the channel, then tell us what you found.`,
-        })}`;
+          message: select(reminded, {
+            yes: `Reminder: A post to ${who} is not confirmed. Check the channel, then tell us what you found.`,
+            other: `A post to ${who} is not confirmed. Check the channel, then tell us what you found.`,
+          }),
+        });
       case "held_media":
         return t({ id: "notices.held_media", message: `A post to ${who} is waiting for its media.` });
       case "drafts_day_30":

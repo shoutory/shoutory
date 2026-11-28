@@ -241,7 +241,7 @@ msgstr "حلّت كلمة أحدث محل هذه الكلمة. أغلق هذه �
 
 #. js-lingui-explicit-id
 msgid "notices.unverified"
-msgstr "لم يتأكد نشر منشور على {who}. تحقّق من القناة ثم أخبرنا بما وجدته."
+msgstr "{reminded, select, yes {تذكير: لم يتأكد نشر منشور على {who}. تحقّق من القناة ثم أخبرنا بما وجدته.} other {لم يتأكد نشر منشور على {who}. تحقّق من القناة ثم أخبرنا بما وجدته.}}"
 
 #. js-lingui-explicit-id
 msgid "notices.held_media"
@@ -249,7 +249,7 @@ msgstr "منشور على {who} ينتظر وسائطه."
 
 #. js-lingui-explicit-id
 msgid "notices.needs_human"
-msgstr "منشور على {who} ينتظر قرارك."
+msgstr "{reminded, select, yes {تذكير: منشور على {who} ينتظر قرارك.} other {منشور على {who} ينتظر قرارك.}}"
 
 #. js-lingui-explicit-id
 msgid "media.delete.in_use.meaning"
@@ -2670,10 +2670,6 @@ msgstr "إعادة التحميل"
 #. js-lingui-explicit-id
 msgid "system.maintenance.action"
 msgstr "إعادة تحميل الصفحة"
-
-#. js-lingui-explicit-id
-msgid "notices.reminder"
-msgstr "تذكير: "
 
 #. js-lingui-explicit-id
 msgid "admin.flags.col_remove_by"
