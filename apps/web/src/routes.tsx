@@ -22,6 +22,7 @@ import { StepUpProvider } from "./auth/step-up";
 import { TwoFactorSetupPage } from "./auth/two-factor-setup";
 import { VerifyPage } from "./auth/verify";
 import { BillingPage } from "./billing/billing";
+import { ChannelDetailPage } from "./features/channels/channel-detail";
 import { ChannelsHubPage } from "./features/channels/channels-hub";
 import { ConnectResultPage } from "./features/channels/connect-result";
 import { MediaDetailPage } from "./features/media/media-detail";
@@ -67,6 +68,7 @@ const TITLES = {
   notFound: msg({ id: "system.not_found.title", message: "Page not found" }),
   workspace: msg({ id: "shell.workspace.title", message: "Workspace" }),
   channels: msg({ id: "channels.hub.title", message: "Channels" }),
+  channel: msg({ id: "channels.detail.title", message: "Channel" }),
   media: msg({ id: "media.title", message: "Media" }),
   connectResult: msg({ id: "connect.result.title", message: "Connection result" }),
   clients: msg({ id: "org.clients.title", message: "Clients" }),
@@ -223,6 +225,11 @@ export const routes: RouteObject[] = [
                 path: "w/:ws/channels",
                 handle: titled(TITLES.channels, (shell, params) => isUnknownWorkspace(shell, params.ws)),
                 element: <ChannelsHubPage />,
+              },
+              {
+                path: "w/:ws/channels/:channelId",
+                handle: titled(TITLES.channel, (shell, params) => isUnknownWorkspace(shell, params.ws)),
+                element: <ChannelDetailPage />,
               },
               {
                 path: "w/:ws/media",

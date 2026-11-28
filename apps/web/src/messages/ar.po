@@ -2052,6 +2052,58 @@ msgid "channels.capability.refresh"
 msgstr "يجدّد وصوله بنفسه"
 
 #. js-lingui-explicit-id
+msgid "channels.detail.title"
+msgstr "القناة"
+
+#. js-lingui-explicit-id
+msgid "channels.detail.back"
+msgstr "كل القنوات"
+
+#. js-lingui-explicit-id
+msgid "channels.detail.loading"
+msgstr "جارٍ تحميل هذه القناة"
+
+#. js-lingui-explicit-id
+msgid "channels.detail.load_failed.what"
+msgstr "تعذّر تحميل هذه القناة"
+
+#. js-lingui-explicit-id
+msgid "channels.detail.load_failed.meaning"
+msgstr "لم يتغيّر شيء. حاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "channels.detail.forbidden"
+msgstr "لا يمكنك تغيير هذه القناة. اطلب ذلك من مالك مساحة العمل أو مديرها."
+
+#. js-lingui-explicit-id
+msgid "channels.detail.failed"
+msgstr "لم يتغيّر شيء. حاول مرة أخرى، أو أعد تحميل الصفحة."
+
+#. js-lingui-explicit-id
+msgid "channels.detail.nickname"
+msgstr "الاسم المستعار"
+
+#. js-lingui-explicit-id
+msgid "channels.detail.rename"
+msgstr "حفظ الاسم المستعار"
+
+#. js-lingui-explicit-id
+msgid "channels.detail.disable"
+msgstr "إيقاف"
+
+#. js-lingui-explicit-id
+msgid "channels.detail.enable"
+msgstr "تشغيل"
+
+#. js-lingui-explicit-id
+msgid "channels.detail.disconnected_on"
+msgstr "فُصلت في <0/>"
+
+#. js-lingui-explicit-id
+msgid "channels.detail.deadline"
+msgstr "أعد الربط قبل <0/>؛ وبعده تتحول هذه المنشورات إلى مسودات"
+
+#. js-lingui-explicit-id
 msgid "connect.wizard.title"
 msgstr "ربط قناة"
 

@@ -2054,6 +2054,58 @@ msgid "channels.capability.refresh"
 msgstr "Renews its own access"
 
 #. js-lingui-explicit-id
+msgid "channels.detail.title"
+msgstr "Channel"
+
+#. js-lingui-explicit-id
+msgid "channels.detail.back"
+msgstr "All channels"
+
+#. js-lingui-explicit-id
+msgid "channels.detail.loading"
+msgstr "Loading this channel"
+
+#. js-lingui-explicit-id
+msgid "channels.detail.load_failed.what"
+msgstr "We could not load this channel"
+
+#. js-lingui-explicit-id
+msgid "channels.detail.load_failed.meaning"
+msgstr "Nothing was changed. Try again."
+
+#. js-lingui-explicit-id
+msgid "channels.detail.forbidden"
+msgstr "You cannot change this channel. Ask an owner or admin of this workspace."
+
+#. js-lingui-explicit-id
+msgid "channels.detail.failed"
+msgstr "Nothing was changed. Try again, or reload the page."
+
+#. js-lingui-explicit-id
+msgid "channels.detail.nickname"
+msgstr "Nickname"
+
+#. js-lingui-explicit-id
+msgid "channels.detail.rename"
+msgstr "Save nickname"
+
+#. js-lingui-explicit-id
+msgid "channels.detail.disable"
+msgstr "Turn off"
+
+#. js-lingui-explicit-id
+msgid "channels.detail.enable"
+msgstr "Turn on"
+
+#. js-lingui-explicit-id
+msgid "channels.detail.disconnected_on"
+msgstr "Disconnected on <0/>"
+
+#. js-lingui-explicit-id
+msgid "channels.detail.deadline"
+msgstr "Reconnect by <0/>; after that these posts become drafts"
+
+#. js-lingui-explicit-id
 msgid "connect.wizard.title"
 msgstr "Connect a channel"
 

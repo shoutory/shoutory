@@ -29,11 +29,12 @@ import {
   ExpiryHint,
   type ProviderInfo,
   RECONNECTABLE,
-  ReconnectOf,
   useProviderNames,
   useWords,
   type Words,
 } from "./channel-facts";
+import { ReconnectSecret } from "./connect-secret";
+import { Reconnect } from "./connect-start";
 import { ConnectWizard } from "./connect-wizard";
 
 const pageSchema = z.object({
@@ -369,6 +370,30 @@ function Status({ row, context }: { row: Channel; context: CardContext }) {
       <ExpiryHint row={row} zone={zone} />
     </>
   );
+}
+
+// A channel made from a pasted secret is reconnected by pasting it again, never through an authorization.
+export function ReconnectOf(props: {
+  row: Channel;
+  info: ProviderInfo | undefined;
+  ws: string;
+  nameId: string;
+  onConnected: () => void;
+}) {
+  const { row, info, ws, nameId } = props;
+  if (info?.secretKind) {
+    const platform = { id: row.provider_id, display_name: info.name, secret_kind: info.secretKind };
+    return (
+      <ReconnectSecret
+        ws={ws}
+        platform={platform}
+        channelId={row.id}
+        nameId={nameId}
+        onDone={props.onConnected}
+      />
+    );
+  }
+  return <Reconnect ws={ws} providerId={row.provider_id} channelId={row.id} nameId={nameId} />;
 }
 
 function Card({ row, context, focus }: { row: Channel; context: CardContext; focus: boolean }) {

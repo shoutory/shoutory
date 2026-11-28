@@ -107,20 +107,16 @@ function channelColumns(): string[] {
   return found[1].split(",").map((column) => column.trim());
 }
 
-async function fulfilHub(page: Page, workspace: string): Promise<void> {
-  const columns = channelColumns();
-  const rows = CHANNEL_CARDS.map((card) => ({
-    ...Object.fromEntries(columns.map((column) => [column, null])),
+const channelRows = () =>
+  CHANNEL_CARDS.map((card) => ({
+    ...Object.fromEntries(channelColumns().map((column) => [column, null])),
     provider_id: "example_network",
     account_kind: "profile",
     capability_epoch: 0,
     ...card,
   }));
-  const reply = (body: unknown) => ({ contentType: "application/json", body: JSON.stringify(body) });
-  await page.addInitScript(() => localStorage.setItem("shoutory.zone", "UTC"));
-  await page.route(`**/api/v1/workspaces/${workspace}/channels`, (route) =>
-    route.fulfill(reply({ data: rows, meta: { next_cursor: null, actions: [] } })),
-  );
+
+async function fulfilProviders(page: Page, workspace: string): Promise<void> {
   await page.route(`**/api/v1/workspaces/${workspace}/providers`, (route) =>
     route.fulfill(
       reply({
@@ -132,11 +128,34 @@ async function fulfilHub(page: Page, workspace: string): Promise<void> {
             auth_kind: "oauth2_pkce",
             connectable: true,
             needs_instance_host: false,
+            capabilities: ["text", "image", "thread"],
           },
         ],
       }),
     ),
   );
+}
+
+async function fulfilHub(page: Page, workspace: string): Promise<void> {
+  await page.addInitScript(() => localStorage.setItem("shoutory.zone", "UTC"));
+  await page.route(`**/api/v1/workspaces/${workspace}/channels`, (route) =>
+    route.fulfill(reply({ data: channelRows(), meta: { next_cursor: null, actions: [] } })),
+  );
+  await fulfilProviders(page, workspace);
+}
+
+// One connected channel the founder may manage, with a fixed end of access.
+const DETAIL_ACTIONS = ["check", "disable", "rename", "disconnect"];
+
+async function fulfilDetail(page: Page, workspace: string): Promise<void> {
+  const [channel] = channelRows();
+  await page.addInitScript(() => localStorage.setItem("shoutory.zone", "UTC"));
+  await page.route(`**/api/v1/workspaces/${workspace}/channels/${channel?.id}`, (route) =>
+    route.fulfill(
+      reply({ data: { ...channel, token_expires_at: "2026-12-20T09:30:00.000Z", actions: DETAIL_ACTIONS } }),
+    ),
+  );
+  await fulfilProviders(page, workspace);
 }
 
 // The image starts with no media, so one file and where it fits are shown from fixed answers. With no ready thumbnail
@@ -258,6 +277,15 @@ export const SCREENS: readonly Screen[] = [
     open: async (page, context) => {
       await fulfilHub(page, context.workspace);
       await visit((c) => `/w/${c.workspace}/channels`)(page, context);
+    },
+  },
+  {
+    id: "channel-detail",
+    pattern: "/w/:ws/channels/:channelId",
+    audience: "founder",
+    open: async (page, context) => {
+      await fulfilDetail(page, context.workspace);
+      await visit((c) => `/w/${c.workspace}/channels/${CHANNEL_CARDS[0]?.id}`)(page, context);
     },
   },
   {

@@ -3,8 +3,6 @@ import { useEffect, useState } from "react";
 import { z } from "zod";
 import { ApiError, request } from "../../http/client";
 import { LocalizedDateTime } from "../../ui/localized";
-import { ReconnectSecret } from "./connect-secret";
-import { Reconnect } from "./connect-start";
 
 export const channelSchema = z.object({
   id: z.uuid(),
@@ -135,28 +133,4 @@ export function ExpiryHint({ row, zone }: { row: Channel; zone: string }) {
       </Trans>
     </span>
   );
-}
-
-// A channel made from a pasted secret is reconnected by pasting it again, never through an authorization.
-export function ReconnectOf(props: {
-  row: Channel;
-  info: ProviderInfo | undefined;
-  ws: string;
-  nameId: string;
-  onConnected: () => void;
-}) {
-  const { row, info, ws, nameId } = props;
-  if (info?.secretKind) {
-    const platform = { id: row.provider_id, display_name: info.name, secret_kind: info.secretKind };
-    return (
-      <ReconnectSecret
-        ws={ws}
-        platform={platform}
-        channelId={row.id}
-        nameId={nameId}
-        onDone={props.onConnected}
-      />
-    );
-  }
-  return <Reconnect ws={ws} providerId={row.provider_id} channelId={row.id} nameId={nameId} />;
 }
