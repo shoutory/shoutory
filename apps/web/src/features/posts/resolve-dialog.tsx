@@ -13,20 +13,20 @@ import { ErrorPanel } from "../../ui/error-panel";
 import { TextField } from "../../ui/text-field";
 import { useSignIn } from "../channels/channels-hub";
 import type { Place } from "./post-effects";
-import { type Flavour, permalinkOf, type Resolution, resolutionsOf, type Target } from "./post-facts";
+import {
+  type Flavour,
+  flavourOf,
+  permalinkOf,
+  RESOLUTIONS,
+  type Resolution,
+  type Target,
+} from "./post-facts";
 import type { Names } from "./post-names";
 import { PostLink, refusalWords } from "./post-words";
 
 const answerSchema = z.looseObject({ operation_id: z.string() });
 const profileSchema = z.object({ default_tz: z.string() });
 
-// The kinds the server takes only after a fresh password check; the others go by the ordinary route.
-const STEPPED_UP: ReadonlySet<Resolution> = new Set([
-  "attest_published",
-  "attest_not_executed",
-  "supersede",
-  "confirm_removed",
-]);
 
 function useSentences() {
   const { t } = useLingui();
@@ -263,7 +263,12 @@ function bodyOf(kind: Resolution, fields: Fields, sentence: string | undefined) 
   };
 }
 
-function useResolve(place: Place, target: Target, onDone: (kind: Resolution) => void) {
+function useResolve(
+  place: Place,
+  target: Target,
+  stepUps: ReadonlySet<Resolution>,
+  onDone: (kind: Resolution) => void,
+) {
   const stepUp = useStepUp();
   const signIn = useSignIn();
   const sentences = useSentences();
@@ -275,13 +280,14 @@ function useResolve(place: Place, target: Target, onDone: (kind: Resolution) => 
     async () => {
       if (kind === "") return;
       const path = `/api/v1/workspaces/${place.ws}/operations/${target.operation?.id}/resolutions`;
+      const stepped = stepUps.has(kind);
       const go = () =>
-        request(answerSchema, STEPPED_UP.has(kind) ? `${path}/confirmed` : path, {
+        request(answerSchema, stepped ? `${path}/confirmed` : path, {
           method: "POST",
           body: bodyOf(kind, fields, sentence),
           idempotencyKey: uuidv7(),
         });
-      await (STEPPED_UP.has(kind) ? stepUp(go) : go());
+      await (stepped ? stepUp(go) : go());
       place.refresh();
       onDone(kind);
     },
@@ -493,8 +499,8 @@ function Submit({ r }: { r: ReturnType<typeof useResolve> }) {
   );
 }
 
-function Body({ place, target, named, flavour, kinds, onDone }: BodyProps) {
-  const r = useResolve(place, target, onDone);
+function Body({ place, target, named, flavour, kinds, stepUps, onDone }: BodyProps) {
+  const r = useResolve(place, target, stepUps, onDone);
   const zone = useZone(place.ws, r.kind === "reschedule");
   const address = permalinkOf(target.evidence);
   return (
@@ -531,6 +537,8 @@ interface BodyProps {
   named: Names;
   flavour: Flavour;
   kinds: Resolution[];
+  /** The kinds the server asks a fresh password for. */
+  stepUps: ReadonlySet<Resolution>;
   onDone: (kind: Resolution) => void;
 }
 
@@ -552,7 +560,12 @@ export function ResolveButton({ place, target, named, done, onDone: setDone }: B
     wasOpen.current = open;
   }, [open]);
   if (target.operation === null) return null;
-  const { flavour, kinds } = resolutionsOf(target.operation);
+  const flavour = flavourOf(target.operation);
+  const listed = target.operation.resolutions.filter(
+    (one): one is { kind: Resolution; step_up: boolean } => RESOLUTIONS.some((kind) => kind === one.kind),
+  );
+  const kinds = listed.map((one) => one.kind);
+  const stepUps = new Set(listed.filter((one) => one.step_up).map((one) => one.kind));
   return (
     <>
       <Button ref={trigger} data-testid="action-resolve" onPress={() => setOpen(true)}>
@@ -574,6 +587,7 @@ export function ResolveButton({ place, target, named, done, onDone: setDone }: B
               named={named}
               flavour={flavour}
               kinds={kinds}
+              stepUps={stepUps}
               onDone={setDone}
             />
           ) : (

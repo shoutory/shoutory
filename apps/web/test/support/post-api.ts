@@ -81,6 +81,7 @@ export const operation = (change: Record<string, unknown> = {}) => ({
   effect: "confirmed",
   reason_code: null,
   part_index: 0,
+  resolutions: [],
   ...change,
 });
 

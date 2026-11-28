@@ -30,6 +30,8 @@ export const operationSchema = z.object({
   effect: z.string(),
   reason_code: z.string().nullable(),
   part_index: z.number().int(),
+  /** What the person may settle, in the order to show, and whether the route asks for a fresh password. */
+  resolutions: z.array(z.object({ kind: z.string(), step_up: z.boolean() })),
 });
 
 const evidenceSchema = z.object({
@@ -146,40 +148,25 @@ export function isFinished(target: Target): boolean {
   return TERMINAL.has(target.operation.state);
 }
 
-export type Resolution =
-  | "attest_published"
-  | "attest_not_executed"
-  | "supersede"
-  | "dismiss"
-  | "publish_late"
-  | "reschedule"
-  | "drop"
-  | "confirm_removed";
+export const RESOLUTIONS = [
+  "attest_published",
+  "attest_not_executed",
+  "supersede",
+  "dismiss",
+  "publish_late",
+  "reschedule",
+  "drop",
+  "confirm_removed",
+] as const;
+export type Resolution = (typeof RESOLUTIONS)[number];
 export type Flavour = "unclear" | "past_due" | "unverified" | "removal";
 
-/**
- * What a person may settle for an operation, derived here because the answer lists only that a resolution exists: the
- * set is the ledger's table of human resolutions by operation state and kind, and the server refuses any other.
- */
-export function resolutionsOf(operation: z.infer<typeof operationSchema>): {
-  flavour: Flavour;
-  kinds: Resolution[];
-} {
+/** Which words a settled operation gets: its title, its introduction and its button. */
+export function flavourOf(operation: z.infer<typeof operationSchema>): Flavour {
   const { state, kind, reason_code: reason } = operation;
-  if (state === "missed") return { flavour: "past_due", kinds: ["publish_late", "reschedule"] };
-  if (state === "unverified") {
-    const kinds: Resolution[] = kind === "delete" ? [] : ["attest_published", "supersede"];
-    return { flavour: kind === "delete" ? "removal" : "unverified", kinds };
-  }
-  if (state !== "needs_human") return { flavour: "unclear", kinds: [] };
-  if (reason === "past_due_after_reconnect") {
-    return { flavour: "past_due", kinds: ["publish_late", "reschedule", "drop"] };
-  }
-  if (kind === "delete") return { flavour: "removal", kinds: ["confirm_removed", "dismiss"] };
-  return {
-    flavour: "unclear",
-    kinds: ["attest_published", "attest_not_executed", "supersede", "dismiss"],
-  };
+  if (state === "missed" || reason === "past_due_after_reconnect") return "past_due";
+  if (kind === "delete") return "removal";
+  return state === "unverified" ? "unverified" : "unclear";
 }
 
 /** What the words and the headline need to know about one target, from a list row or from the detail. */

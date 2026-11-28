@@ -37,15 +37,45 @@ const held = (op: Record<string, unknown>, change: Record<string, unknown> = {})
     operation: operation(op),
     ...change,
   });
-const UNCLEAR = held({ state: "needs_human", effect: "possible" });
-const PAST_DUE = held({ state: "needs_human", effect: "none", reason_code: "past_due_after_reconnect" });
-const UNVERIFIED = held({ state: "unverified", effect: "possible" });
-const MISSED = held({ state: "missed", effect: "none" }, { schedule_state: "settled" });
+// The server lists what may be settled and whether a fresh password is asked; the screen offers exactly that.
+const STEPPED_KINDS = new Set(["attest_published", "attest_not_executed", "supersede", "confirm_removed"]);
+const listed = (...kinds: string[]) => kinds.map((kind) => ({ kind, step_up: STEPPED_KINDS.has(kind) }));
+const UNCLEAR_KINDS = ["attest_published", "attest_not_executed", "supersede", "dismiss"];
+const UNCLEAR = held({
+  state: "needs_human",
+  effect: "possible",
+  resolutions: listed(...UNCLEAR_KINDS),
+});
+const PAST_DUE = held({
+  state: "needs_human",
+  effect: "none",
+  reason_code: "past_due_after_reconnect",
+  resolutions: listed("publish_late", "reschedule", "drop"),
+});
+const UNVERIFIED = held({
+  state: "unverified",
+  effect: "possible",
+  resolutions: listed("attest_published", "supersede"),
+});
+const MISSED = held(
+  { state: "missed", effect: "none", resolutions: listed("publish_late", "reschedule") },
+  { schedule_state: "settled" },
+);
 const DELETE_UNKNOWN = held(
-  { kind: "delete", state: "needs_human", effect: "possible" },
+  {
+    kind: "delete",
+    state: "needs_human",
+    effect: "possible",
+    resolutions: listed("confirm_removed", "dismiss"),
+  },
   { published_at: "2026-11-27T10:00:00.000Z", presence: "removal_unknown" },
 );
-const EDIT_UNCLEAR = held({ kind: "edit", state: "needs_human", effect: "possible" });
+const EDIT_UNCLEAR = held({
+  kind: "edit",
+  state: "needs_human",
+  effect: "possible",
+  resolutions: listed(...UNCLEAR_KINDS),
+});
 
 const done = (kind: string, made: string | null = null) =>
   json({ data: { operation_id: OPERATION, kind, new_operation_id: made } });
@@ -151,6 +181,28 @@ describe("the choices of each state", () => {
     await open(answers(UNCLEAR));
     expect(dialog()?.textContent).toMatch(/Acme Page/);
     expect(dialog()?.textContent).not.toMatch(/unknown|operation|ledger|reconcil/i);
+  });
+
+  it("offers only the kinds the server lists, and sends a kind it marks as needing no password the ordinary way", async () => {
+    const some = held({
+      state: "needs_human",
+      effect: "possible",
+      resolutions: [{ kind: "supersede", step_up: false }],
+    });
+    let sent: unknown;
+    const { stub } = await open({
+      ...answers(some),
+      resolve: ({ confirmed }) => {
+        sent = confirmed;
+        return done("supersede");
+      },
+    });
+    expect(choiceKinds()).toEqual(["supersede"]);
+    choose("supersede");
+    typeInto("resolve-ack", ACK_REPLACE);
+    await submit();
+    expect(sent).toBe(false);
+    expect(posts(stub, "/resolutions/confirmed")).toHaveLength(0);
   });
 
   it("offers nothing to choose for a removal that is only unverified", async () => {
