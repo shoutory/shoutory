@@ -208,6 +208,7 @@ describe("a reader sees only their own notices in their own workspace", () => {
 interface Planted {
   provider: string;
   channel: string;
+  credential: string;
   post: string;
   variant: string;
   operation: string;
@@ -220,6 +221,12 @@ async function plantOperation(state: string, nextAttempt: string): Promise<Plant
     `INSERT INTO app.channels (workspace_id, provider_id, account_kind, provider_account_id, display_name, connection_state)
      VALUES ($1, $2, 'profile', $2, $2, 'connected') RETURNING id`,
     [WA, provider],
+  );
+  const [credential] = await rows(
+    `INSERT INTO app.channel_credentials (workspace_id, channel_id, generation, kind, format_version, key_id, iv,
+       ciphertext, auth_tag, wrap_iv, wrap_tag, wrapped_dek)
+     VALUES ($1, $2, 1, 'channel_token', 1, 'k1', '\\x01', '\\x02', '\\x03', '\\x04', '\\x05', '\\x06') RETURNING id`,
+    [WA, channel?.id],
   );
   return admin(async (client) => {
     const post = (
@@ -254,7 +261,14 @@ async function plantOperation(state: string, nextAttempt: string): Promise<Plant
       [WA, variant, channel?.id, provider, state, nextAttempt, `notice-${randomUUID()}`, version, U.editor],
     );
     await client.query("COMMIT");
-    return { provider, channel: channel?.id, post, variant, operation: made.rows[0].id as string };
+    return {
+      provider,
+      channel: channel?.id,
+      credential: credential?.id as string,
+      post,
+      variant,
+      operation: made.rows[0].id as string,
+    };
   });
 }
 
@@ -284,8 +298,8 @@ describe("who gets a notice, and in which language", () => {
 
   // [kind, which planted id is the subject, users who get it, users who must not]
   const WHO: [string, keyof Planted, string[], string[]][] = [
-    ["token_expiry", "channel", [U.owner, U.admin], [U.editor, U.approver, U.viewer, U.bOwner]],
-    ["reconnect_deadline", "channel", [U.owner, U.admin], [U.editor, U.approver, U.viewer, U.bOwner]],
+    ["token_expiry", "credential", [U.owner, U.admin], [U.editor, U.approver, U.viewer, U.bOwner]],
+    ["reconnect_deadline", "credential", [U.owner, U.admin], [U.editor, U.approver, U.viewer, U.bOwner]],
     ["needs_human", "operation", [U.editor, U.owner, U.admin], [U.approver, U.viewer, U.bOwner]],
     ["unverified", "operation", [U.editor, U.owner, U.admin], [U.approver, U.viewer, U.bOwner]],
     ["held_media", "variant", [U.editor], [U.owner, U.admin, U.approver, U.viewer, U.bOwner]],
@@ -300,7 +314,7 @@ describe("who gets a notice, and in which language", () => {
   });
 
   it("a profile with locale ar reads ar, and no profile or a null locale reads en", async () => {
-    const got = await recipients("token_expiry", planted.channel);
+    const got = await recipients("token_expiry", planted.credential);
     expect(got.find((row) => row.user_id === U.admin)?.locale).toBe("ar");
     expect(got.find((row) => row.user_id === U.owner)?.locale).toBe("en");
   });

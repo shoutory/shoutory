@@ -35,7 +35,7 @@ BEGIN
   PERFORM set_config('app.job_purpose', 'notice_candidates', true);
 
   RETURN QUERY
-    SELECT 'token_expiry'::text, c.workspace_id, c.id, w.days || 'd', 0,
+    SELECT 'token_expiry'::text, c.workspace_id, k.id, 'g' || k.generation || ':' || w.days || 'd', 0,
         jsonb_build_object('name', coalesce(c.nickname, c.display_name), 'provider', c.provider_id, 'days', w.days)
       FROM app.channels AS c
       JOIN app.channel_credentials AS k ON k.workspace_id = c.workspace_id AND k.channel_id = c.id
@@ -45,19 +45,23 @@ BEGIN
         AND k.refresh_token_digest IS NULL AND k.access_expires_at > clock_timestamp()
         AND k.access_expires_at <= clock_timestamp() + interval '14 days'
         AND NOT EXISTS (SELECT 1 FROM app.notifications AS n WHERE n.workspace_id = c.workspace_id
-          AND n.kind = 'token_expiry' AND n.subject_id = c.id AND n.level = w.days || 'd')
+          AND n.kind = 'token_expiry' AND n.subject_id = k.id
+          AND n.level = 'g' || k.generation || ':' || w.days || 'd')
       ORDER BY k.access_expires_at, c.id LIMIT p_limit;
 
   RETURN QUERY
-    SELECT 'reconnect_deadline'::text, c.workspace_id, c.id, w.days || 'd', 0,
+    SELECT 'reconnect_deadline'::text, c.workspace_id, k.id, 'g' || k.generation || ':' || w.days || 'd', 0,
         jsonb_build_object('name', coalesce(c.nickname, c.display_name), 'provider', c.provider_id, 'days', w.days)
       FROM app.channels AS c
+      CROSS JOIN LATERAL (SELECT x.id, x.generation FROM app.channel_credentials AS x
+        WHERE x.workspace_id = c.workspace_id AND x.channel_id = c.id ORDER BY x.generation DESC LIMIT 1) AS k
       CROSS JOIN LATERAL (SELECT CASE WHEN c.reconnect_deadline <= clock_timestamp() + interval '1 day' THEN 1
         WHEN c.reconnect_deadline <= clock_timestamp() + interval '7 days' THEN 7 ELSE 14 END AS days) AS w
       WHERE c.connection_state IN ('needs_reconnect', 'disconnected', 'revoked_by_provider')
         AND c.reconnect_deadline > clock_timestamp() AND c.reconnect_deadline <= clock_timestamp() + interval '14 days'
         AND NOT EXISTS (SELECT 1 FROM app.notifications AS n WHERE n.workspace_id = c.workspace_id
-          AND n.kind = 'reconnect_deadline' AND n.subject_id = c.id AND n.level = w.days || 'd')
+          AND n.kind = 'reconnect_deadline' AND n.subject_id = k.id
+          AND n.level = 'g' || k.generation || ':' || w.days || 'd')
       ORDER BY c.reconnect_deadline, c.id LIMIT p_limit;
 
   RETURN QUERY

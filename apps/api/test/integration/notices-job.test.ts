@@ -72,9 +72,10 @@ interface Channel {
   tokenIn?: string;
   deadlineIn?: string;
   nickname?: string;
+  account?: string;
 }
 async function plantChannel(o: Channel = {}): Promise<string> {
-  const account = `n-${randomUUID().slice(0, 8)}`;
+  const account = o.account ?? `n-${randomUUID().slice(0, 8)}`;
   const channel = await connectChannel(db.pool("worker"), {
     workspace: ws,
     provider: "notice-provider",
@@ -91,6 +92,14 @@ async function plantChannel(o: Channel = {}): Promise<string> {
   );
   return channel;
 }
+// A token or deadline notice belongs to the credential of the cycle, so a reconnect starts its levels again.
+const credentialOf = async (channel: string) =>
+  (
+    await rows(
+      "SELECT id FROM app.channel_credentials WHERE channel_id = $1 ORDER BY generation DESC LIMIT 1",
+      [channel],
+    )
+  )[0]?.id as string;
 const setExpiry = (channel: string, left: string) =>
   rows("UPDATE app.channel_credentials SET access_expires_at = now() + $2::interval WHERE channel_id = $1", [
     channel,
@@ -169,10 +178,10 @@ const asset = async (state: string) => {
 
 // [template, plants its subject and returns the subject id, the people who get it]
 const KINDS: [string, () => Promise<string>, Person[]][] = [
-  ["token_expiry", async () => plantChannel({ tokenIn: "5 days" }), ["owner", "admin"]],
+  ["token_expiry", async () => credentialOf(await plantChannel({ tokenIn: "5 days" })), ["owner", "admin"]],
   [
     "reconnect_deadline",
-    async () => plantChannel({ state: "needs_reconnect", deadlineIn: "5 days" }),
+    async () => credentialOf(await plantChannel({ state: "needs_reconnect", deadlineIn: "5 days" })),
     ["owner", "admin"],
   ],
   [
@@ -230,14 +239,15 @@ describe("who gets each notice, and in which language", () => {
 describe("token expiry notices fire at 14, 7 and 1 days", () => {
   it("one level at each crossing, by card and by mail, to the Owner and the Admin only", async () => {
     const channel = await plantChannel({ tokenIn: "13 days" });
+    const credential = await credentialOf(channel);
     const seen: string[][] = [];
     for (const left of ["13 days", "6 days", "20 hours"]) {
       await setExpiry(channel, left);
       await run();
-      seen.push(await levelsOf(channel));
+      seen.push(await levelsOf(credential));
     }
-    expect(seen).toEqual([["14d"], ["14d", "7d"], ["14d", "7d", "1d"]]);
-    expect(await whoOf(channel)).toEqual(["admin", "owner"]);
+    expect(seen).toEqual([["g1:14d"], ["g1:14d", "g1:7d"], ["g1:14d", "g1:7d", "g1:1d"]]);
+    expect(await whoOf(credential)).toEqual(["admin", "owner"]);
     expect((await mailsFor("token_expiry", "owner")).length).toBeGreaterThanOrEqual(3);
     const mails = await rows(
       `SELECT o.vars FROM app.email_outbox o JOIN auth."user" u ON u.email = o.recipient
@@ -245,24 +255,25 @@ describe("token expiry notices fire at 14, 7 and 1 days", () => {
       [people.owner],
     );
     expect(mails.map((mail) => [mail.vars.level, mail.vars.days, mail.vars.name])).toEqual([
-      ["1d", 1, "Shop page"],
-      ["7d", 7, "Shop page"],
-      ["14d", 14, "Shop page"],
+      ["g1:1d", 1, "Shop page"],
+      ["g1:7d", 7, "Shop page"],
+      ["g1:14d", 14, "Shop page"],
     ]);
   });
 
   it.each([
-    ["5 days", ["7d"]],
-    ["10 hours", ["1d"]],
-    ["12 days", ["14d"]],
+    ["5 days", ["g1:7d"]],
+    ["10 hours", ["g1:1d"]],
+    ["12 days", ["g1:14d"]],
   ])(
     "a token first seen with %s left gets only the smallest crossed level %j, once",
     async (left, levels) => {
       const channel = await plantChannel({ tokenIn: left });
       await run();
       await run();
-      expect(await levelsOf(channel)).toEqual(levels);
-      expect((await noticesOf(channel)).filter((n) => n.who === "owner")).toHaveLength(1);
+      const credential = await credentialOf(channel);
+      expect(await levelsOf(credential)).toEqual(levels);
+      expect((await noticesOf(credential)).filter((n) => n.who === "owner")).toHaveLength(1);
     },
   );
 
@@ -274,7 +285,9 @@ describe("token expiry notices fire at 14, 7 and 1 days", () => {
     const expired = await plantChannel({ tokenIn: "-1 hour" });
     const away = await plantChannel({ tokenIn: "3 days", state: "needs_reconnect" });
     await run();
-    for (const channel of [refreshing, expired, away]) expect(await noticesOf(channel)).toEqual([]);
+    for (const channel of [refreshing, expired, away]) {
+      expect(await noticesOf(await credentialOf(channel))).toEqual([]);
+    }
   });
 });
 
@@ -282,20 +295,38 @@ describe("reconnect deadline reminders fire at 14, 7 and 1 days", () => {
   it("one level at each crossing and none for a connected channel", async () => {
     const channel = await plantChannel({ state: "disconnected", deadlineIn: "13 days" });
     const connected = await plantChannel({ state: "connected", deadlineIn: "3 days" });
+    const credential = await credentialOf(channel);
     const seen: string[][] = [];
     for (const left of ["13 days", "6 days", "10 hours"]) {
       await setDeadline(channel, left);
       await run();
-      seen.push(await levelsOf(channel));
+      seen.push(await levelsOf(credential));
     }
-    expect(seen).toEqual([["14d"], ["14d", "7d"], ["14d", "7d", "1d"]]);
-    expect(await noticesOf(connected)).toEqual([]);
+    expect(seen).toEqual([["g1:14d"], ["g1:14d", "g1:7d"], ["g1:14d", "g1:7d", "g1:1d"]]);
+    expect(await noticesOf(await credentialOf(connected))).toEqual([]);
   });
 
   it("a deadline first seen inside the 7-day window gets only the 7-day reminder", async () => {
     const channel = await plantChannel({ state: "needs_reconnect", deadlineIn: "4 days" });
     await run();
-    expect(await levelsOf(channel)).toEqual(["7d"]);
+    expect(await levelsOf(await credentialOf(channel))).toEqual(["g1:7d"]);
+  });
+
+  it("a reconnect that updates the credential in place raises its generation and starts a new cycle", async () => {
+    const account = `n-cycle-${randomUUID().slice(0, 8)}`;
+    const channel = await plantChannel({ state: "needs_reconnect", deadlineIn: "5 days", account });
+    const first = await credentialOf(channel);
+    await run();
+    await connectChannel(db.pool("worker"), { workspace: ws, provider: "notice-provider", account });
+    const second = await credentialOf(channel);
+    expect(second).toBe(first);
+    await rows(
+      "UPDATE app.channels SET connection_state = 'needs_reconnect', reconnect_deadline = now() + interval '5 days' WHERE id = $1",
+      [channel],
+    );
+    await run();
+    await run();
+    expect(await levelsOf(second)).toEqual(["g1:7d", "g2:7d"]);
   });
 });
 
@@ -398,12 +429,13 @@ describe("what a notice carries", () => {
     });
     await setExpiry(channel, "2 days");
     await run();
-    expect(await levelsOf(channel)).toEqual(["7d"]);
+    const credential = await credentialOf(channel);
+    expect(await levelsOf(credential)).toEqual(["g1:7d"]);
     const stored = await rows(
       `SELECT (SELECT string_agg(n.vars::text, ' ') FROM app.notifications n WHERE n.subject_id = $1) AS notices,
               (SELECT string_agg(o.vars::text || o.recipient, ' ') FROM app.email_outbox o
                 WHERE o.template = 'token_expiry' AND o.vars ->> 'name' = $2) AS mails`,
-      [channel, account],
+      [credential, account],
     );
     const [kept] = stored;
     expect(kept?.notices).toBeTruthy();
@@ -411,7 +443,7 @@ describe("what a notice carries", () => {
     const keys = new Set(
       (
         await rows("SELECT jsonb_object_keys(vars) AS k FROM app.notifications WHERE subject_id = $1", [
-          channel,
+          credential,
         ])
       ).map((row) => row.k),
     );

@@ -66,17 +66,20 @@ async function plantChannel(o: Channel = {}): Promise<string> {
      VALUES ($1, $2, 'profile', $2, $2, 'Shop page', $3, now() + $4::interval) RETURNING id`,
     [WA, provider, o.state ?? "connected", o.deadlineIn ?? null],
   );
-  if (o.tokenIn !== undefined) {
+  if (o.tokenIn !== undefined || o.deadlineIn !== undefined) {
     await rows(
       `INSERT INTO app.channel_credentials (workspace_id, channel_id, generation, kind, format_version, key_id, iv,
          ciphertext, auth_tag, wrap_iv, wrap_tag, wrapped_dek, access_expires_at, refresh_token_digest)
        VALUES ($1, $2, 1, 'channel_token', 1, 'k1', '\\x01', '\\x02', '\\x03', '\\x04', '\\x05', '\\x06',
          now() + $3::interval, $4)`,
-      [WA, channel?.id, o.tokenIn, o.refresh ? "digest-1" : null],
+      [WA, channel?.id, o.tokenIn ?? null, o.refresh ? "digest-1" : null],
     );
   }
   return channel?.id as string;
 }
+// A token or deadline notice belongs to the credential, at the level of its generation.
+const credentialOf = async (channel: string) =>
+  (await rows("SELECT id FROM app.channel_credentials WHERE channel_id = $1", [channel]))[0]?.id as string;
 
 describe("token expiry candidates use the expiry predicate and the smallest crossed level", () => {
   // [time left on a token with no refresh, the one level it gets at first sight]
@@ -89,7 +92,7 @@ describe("token expiry candidates use the expiry predicate and the smallest cros
     ["1 minute", "1d"],
   ])("a token with %s left is first seen at level %s only", async (left, level) => {
     const channel = await plantChannel({ tokenIn: left });
-    expect(await levelsOf(channel)).toEqual([level]);
+    expect(await levelsOf(await credentialOf(channel))).toEqual([`g1:${level}`]);
   });
 
   it.each([
@@ -99,29 +102,30 @@ describe("token expiry candidates use the expiry predicate and the smallest cros
     ["a channel that is not connected", { tokenIn: "2 days", state: "needs_reconnect" }],
     ["no credential", {}],
   ] as [string, Channel][])("gives no candidate for %s", async (_name, o) => {
-    expect(await levelsOf(await plantChannel(o))).toEqual([]);
+    const channel = await plantChannel(o);
+    expect(await levelsOf((await credentialOf(channel)) ?? channel)).toEqual([]);
   });
 
   it("names the channel and the days, and leaves out a level that was already sent", async () => {
-    const channel = await plantChannel({ tokenIn: "5 days" });
-    const [first] = await candidates(channel);
+    const credential = await credentialOf(await plantChannel({ tokenIn: "5 days" }));
+    const [first] = await candidates(credential);
     expect(first).toMatchObject({
       kind: "token_expiry",
       workspace_id: WA,
-      level: "7d",
+      level: "g1:7d",
       vars: { name: "Shop page", days: 7 },
     });
-    await run("SELECT app.notice_create($1, $2, 'token_expiry', $3, '7d', '{}'::jsonb)", [
+    await run("SELECT app.notice_create($1, $2, 'token_expiry', $3, 'g1:7d', '{}'::jsonb)", [
       WA,
       U.admin,
-      channel,
+      credential,
     ]);
-    expect(await levelsOf(channel)).toEqual([]);
+    expect(await levelsOf(credential)).toEqual([]);
     await rows(
-      "UPDATE app.channel_credentials SET access_expires_at = now() + interval '5 hours' WHERE channel_id = $1",
-      [channel],
+      "UPDATE app.channel_credentials SET access_expires_at = now() + interval '5 hours' WHERE id = $1",
+      [credential],
     );
-    expect(await levelsOf(channel)).toEqual(["1d"]);
+    expect(await levelsOf(credential)).toEqual(["g1:1d"]);
   });
 });
 
@@ -131,9 +135,8 @@ describe("reconnect deadline candidates", () => {
     ["5 days", "7d"],
     ["12 hours", "1d"],
   ])("a channel that must reconnect within %s is first seen at level %s only", async (left, level) => {
-    expect(await levelsOf(await plantChannel({ state: "needs_reconnect", deadlineIn: left }))).toEqual([
-      level,
-    ]);
+    const channel = await plantChannel({ state: "needs_reconnect", deadlineIn: left });
+    expect(await levelsOf(await credentialOf(channel))).toEqual([`g1:${level}`]);
   });
 
   it.each([
@@ -141,13 +144,13 @@ describe("reconnect deadline candidates", () => {
     ["a deadline that passed", { state: "disconnected", deadlineIn: "-1 hour" }],
     ["a connected channel with an old deadline", { state: "connected", deadlineIn: "3 days" }],
   ] as [string, Channel][])("gives no candidate for %s", async (_name, o) => {
-    expect(await levelsOf(await plantChannel(o))).toEqual([]);
+    expect(await levelsOf(await credentialOf(await plantChannel(o)))).toEqual([]);
   });
 
   it("a disconnected channel counts like one that needs a reconnect", async () => {
     const channel = await plantChannel({ state: "disconnected", deadlineIn: "2 days" });
-    expect((await candidates(channel)).map((row) => [row.kind, row.level])).toEqual([
-      ["reconnect_deadline", "7d"],
+    expect((await candidates(await credentialOf(channel))).map((row) => [row.kind, row.level])).toEqual([
+      ["reconnect_deadline", "g1:7d"],
     ]);
   });
 });

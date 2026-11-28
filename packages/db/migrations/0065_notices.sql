@@ -42,7 +42,7 @@ $$;
 CALL app.grant_purposes('notifications', 'SELECT', ARRAY['notice_create']);
 CALL app.grant_purposes('notifications', 'INSERT', ARRAY['notice_create']);
 CALL app.grant_purposes('email_outbox', 'INSERT', ARRAY['notice_create']);
-CALL app.grant_purposes('channels', 'SELECT', ARRAY['notice_recipients']);
+CALL app.grant_purposes('channel_credentials', 'SELECT', ARRAY['notice_recipients']);
 CALL app.grant_purposes('posts', 'SELECT', ARRAY['notice_recipients']);
 CALL app.grant_purposes('post_variants', 'SELECT', ARRAY['notice_recipients']);
 CALL app.grant_purposes('operations', 'SELECT', ARRAY['notice_recipients']);
@@ -118,8 +118,8 @@ BEGIN
     RAISE EXCEPTION 'notice_recipients: the kind is not known' USING ERRCODE = '22023';
   END IF;
   IF notice_recipients.kind IN ('token_expiry', 'reconnect_deadline') THEN
-    SELECT true INTO channel_known FROM app.channels AS c
-      WHERE c.workspace_id = notice_recipients.workspace_id AND c.id = notice_recipients.subject_id;
+    SELECT true INTO channel_known FROM app.channel_credentials AS k
+      WHERE k.workspace_id = notice_recipients.workspace_id AND k.id = notice_recipients.subject_id;
   ELSIF notice_recipients.kind IN ('needs_human', 'unverified') THEN
     SELECT v.post_id INTO post FROM app.operations AS o
       JOIN app.post_variants AS v ON v.workspace_id = o.workspace_id AND v.id = o.variant_id
