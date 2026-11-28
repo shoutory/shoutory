@@ -167,46 +167,46 @@ const asset = async (state: string) => {
   return id;
 };
 
-describe("who gets each notice, and in which language", () => {
-  // [template, plants its subject and returns the subject id, the people who get it]
-  const KINDS: [string, () => Promise<string>, Person[]][] = [
-    ["token_expiry", async () => plantChannel({ tokenIn: "5 days" }), ["owner", "admin"]],
-    [
-      "reconnect_deadline",
-      async () => plantChannel({ state: "needs_reconnect", deadlineIn: "5 days" }),
-      ["owner", "admin"],
-    ],
-    [
-      "needs_human",
-      async () => (await plantTarget({ state: "needs_human" })).operation,
-      ["editor", "owner", "admin"],
-    ],
-    [
-      "unverified",
-      async () => (await plantTarget({ state: "unverified" })).operation,
-      ["editor", "owner", "admin"],
-    ],
-    [
-      "held_media",
-      async () =>
-        (await plantTarget({ schedule: "scheduled", dueAgo: "1 minute", media: await asset("processing") }))
-          .variant,
-      ["editor"],
-    ],
-    [
-      "drafts_day_30",
-      async () => {
-        const planted = await plantTarget({ state: "cancelled" });
-        await rows(
-          "UPDATE app.channels SET connection_state = 'disconnected', reconnect_deadline = now() - interval '1 hour' WHERE id = $1",
-          [planted.channel],
-        );
-        return planted.post;
-      },
-      ["editor"],
-    ],
-  ];
+// [template, plants its subject and returns the subject id, the people who get it]
+const KINDS: [string, () => Promise<string>, Person[]][] = [
+  ["token_expiry", async () => plantChannel({ tokenIn: "5 days" }), ["owner", "admin"]],
+  [
+    "reconnect_deadline",
+    async () => plantChannel({ state: "needs_reconnect", deadlineIn: "5 days" }),
+    ["owner", "admin"],
+  ],
+  [
+    "needs_human",
+    async () => (await plantTarget({ state: "needs_human" })).operation,
+    ["editor", "owner", "admin"],
+  ],
+  [
+    "unverified",
+    async () => (await plantTarget({ state: "unverified" })).operation,
+    ["editor", "owner", "admin"],
+  ],
+  [
+    "held_media",
+    async () =>
+      (await plantTarget({ schedule: "scheduled", dueAgo: "1 minute", media: await asset("processing") }))
+        .variant,
+    ["editor"],
+  ],
+  [
+    "drafts_day_30",
+    async () => {
+      const planted = await plantTarget({ state: "cancelled" });
+      await rows(
+        "UPDATE app.channels SET connection_state = 'disconnected', reconnect_deadline = now() - interval '1 hour' WHERE id = $1",
+        [planted.channel],
+      );
+      return planted.post;
+    },
+    ["editor"],
+  ],
+];
 
+describe("who gets each notice, and in which language", () => {
   it.each(KINDS)(
     "%s goes to its recipients once, each mail in their language, and never again",
     async (kind, plant, expected) => {

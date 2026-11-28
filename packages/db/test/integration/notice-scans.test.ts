@@ -211,17 +211,17 @@ async function plantTarget(
   });
 }
 
-describe("escalation candidates follow the schedule of entry, 1 day, 3 days, 7 days and then weekly", () => {
-  const advance = (planted: Planted, step: number) =>
-    run("SELECT app.notice_escalation_advance($1, $2, $3) AS moved", [WA, planted.operation, step]);
-  const nextIn = async (planted: Planted) =>
-    (
-      await rows(
-        "SELECT extract(epoch FROM next_escalation_at - clock_timestamp()) / 86400 AS days FROM app.operations WHERE id = $1",
-        [planted.operation],
-      )
-    )[0]?.days as number;
+const advance = (planted: Planted, step: number) =>
+  run("SELECT app.notice_escalation_advance($1, $2, $3) AS moved", [WA, planted.operation, step]);
+const nextIn = async (planted: Planted) =>
+  (
+    await rows(
+      "SELECT extract(epoch FROM next_escalation_at - clock_timestamp()) / 86400 AS days FROM app.operations WHERE id = $1",
+      [planted.operation],
+    )
+  )[0]?.days as number;
 
+describe("escalation candidates follow the schedule of entry, 1 day, 3 days, 7 days and then weekly", () => {
   it.each(["needs_human", "unverified"])(
     "an operation in %s is a candidate at step 0 at its entry",
     async (state) => {
@@ -247,7 +247,9 @@ describe("escalation candidates follow the schedule of entry, 1 day, 3 days, 7 d
       expect(await candidates(planted.operation)).toEqual([]);
     },
   );
+});
 
+describe("the step of an escalation and when it stops", () => {
   it("the step after a sent one comes from the notices already written", async () => {
     const planted = await plantTarget();
     await run("SELECT app.notice_create($1, $2, 'needs_human', $3, 'escalation_0', '{}'::jsonb)", [

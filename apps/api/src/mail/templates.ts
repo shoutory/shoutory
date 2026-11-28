@@ -124,7 +124,7 @@ const REMINDER: Record<MailLocale, string> = { en: "Reminder: ", ar: "تذكير
 const reminderOf = (locale: MailLocale, vars: NoticeVars): string =>
   isReminder(vars) ? REMINDER[locale] : "";
 
-export const NOTICE_TEMPLATES = {
+const NOTICE_TEMPLATES = {
   token_expiry: notice({
     en: {
       subject: (v) => `Access to ${channelOf("en", v)} expires in ${daysOf("en", v)}`,

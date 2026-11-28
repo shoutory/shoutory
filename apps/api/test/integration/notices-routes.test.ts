@@ -96,7 +96,9 @@ describe("GET /api/v1/workspaces/{workspace_id}/notifications", () => {
     expect(row?.vars).toEqual({ name: "Shop page" });
     expect(JSON.stringify(row)).not.toContain("list-token-1");
   });
+});
 
+describe("the pages of the notices list and who may ask for them", () => {
   it("pages newest first by cursor, with no row twice and none lost", async () => {
     const reader = as("editor");
     const made: string[] = [];

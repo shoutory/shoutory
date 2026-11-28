@@ -7,7 +7,7 @@ import type { StorageDriver } from "@shoutory/core/storage";
 import type { AppPool } from "@shoutory/db/pool";
 import type { AdapterContext } from "@shoutory/provider-sdk/adapter";
 import type { Manifest } from "@shoutory/provider-sdk/manifest";
-import type { MiddlewareHandler } from "hono";
+import type { ErrorHandler, MiddlewareHandler } from "hono";
 import { secureHeaders } from "hono/secure-headers";
 import type { AuthService } from "./auth/auth.js";
 import { registerAuthRoutes } from "./auth/mount.js";
@@ -177,6 +177,19 @@ function clientContext(trusted: readonly string[]): MiddlewareHandler<AppEnv> {
   };
 }
 
+const failureHandler =
+  (logger: Logger): ErrorHandler<AppEnv> =>
+  (error, c) => {
+    const refusal = toRefusal(error);
+    if (refusal.code === "internal_error" || refusal.code === "service_unavailable") {
+      logger.error(
+        { requestId: c.get("requestId"), code: refusal.code, details: refusal.details, err: error },
+        "request failed",
+      );
+    }
+    return errorResponse(c, refusal);
+  };
+
 function registerAdminRoutes(app: App, options: AppOptions): void {
   registerAdmin(app, options.auth);
   registerAdminMe(app);
@@ -205,16 +218,7 @@ export function createApp(options: AppOptions): App {
   sandboxDownloads(app); // before secureHeaders: it sets the page policy after the handler, this must come after it
   app.use("*", secureHeaders({ contentSecurityPolicy: cspFor(scriptSources) }));
   app.use("*", clientContext(options.trustedProxies));
-  app.onError((error, c) => {
-    const refusal = toRefusal(error);
-    if (refusal.code === "internal_error" || refusal.code === "service_unavailable") {
-      options.logger.error(
-        { requestId: c.get("requestId"), code: refusal.code, details: refusal.details, err: error },
-        "request failed",
-      );
-    }
-    return errorResponse(c, refusal);
-  });
+  app.onError(failureHandler(options.logger));
   registerHealth(app, options.pool, options.keys);
   registerAuthRoutes(app, options.auth);
   registerOrganizations(app, options.auth);
