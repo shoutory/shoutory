@@ -2204,6 +2204,90 @@ msgid "channels.disconnect.cancel"
 msgstr "إلغاء"
 
 #. js-lingui-explicit-id
+msgid "shell.nav.notifications"
+msgstr "الإشعارات"
+
+#. js-lingui-explicit-id
+msgid "notices.title"
+msgstr "الإشعارات"
+
+#. js-lingui-explicit-id
+msgid "notices.loading"
+msgstr "جارٍ تحميل إشعاراتك"
+
+#. js-lingui-explicit-id
+msgid "notices.failed.what"
+msgstr "تعذّر تحميل إشعاراتك"
+
+#. js-lingui-explicit-id
+msgid "notices.failed.meaning"
+msgstr "لم يتغيّر شيء. حاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "notices.empty.title"
+msgstr "لا شيء جديد عندك"
+
+#. js-lingui-explicit-id
+msgid "notices.empty.meaning"
+msgstr "تظهر هنا الإشعارات الجديدة عن قنواتك ومنشوراتك."
+
+#. js-lingui-explicit-id
+msgid "notices.more"
+msgstr "عرض المزيد"
+
+#. js-lingui-explicit-id
+msgid "notices.more_failed"
+msgstr "تعذّر تحميل الإشعارات الأقدم. ما فوقها ما زال محدّثًا. حاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "notices.a_channel"
+msgstr "قناة"
+
+#. js-lingui-explicit-id
+msgid "notices.reminder"
+msgstr "تذكير: "
+
+#. js-lingui-explicit-id
+msgid "notices.token_expiry"
+msgstr "{days, plural, zero {ينتهي الوصول إلى {who} خلال {shown} يوم. أعد ربطها قبل ذلك.} one {ينتهي الوصول إلى {who} خلال يوم واحد. أعد ربطها قبل ذلك.} two {ينتهي الوصول إلى {who} خلال يومين. أعد ربطها قبل ذلك.} few {ينتهي الوصول إلى {who} خلال {shown} أيام. أعد ربطها قبل ذلك.} many {ينتهي الوصول إلى {who} خلال {shown} يومًا. أعد ربطها قبل ذلك.} other {ينتهي الوصول إلى {who} خلال {shown} يوم. أعد ربطها قبل ذلك.}}"
+
+#. js-lingui-explicit-id
+msgid "notices.reconnect_deadline"
+msgstr "{days, plural, zero {{who} غير متصلة. تُحفظ منشوراتها المنتظرة {shown} يوم آخر.} one {{who} غير متصلة. تُحفظ منشوراتها المنتظرة يومًا واحدًا آخر.} two {{who} غير متصلة. تُحفظ منشوراتها المنتظرة يومين آخرين.} few {{who} غير متصلة. تُحفظ منشوراتها المنتظرة {shown} أيام أخرى.} many {{who} غير متصلة. تُحفظ منشوراتها المنتظرة {shown} يومًا آخر.} other {{who} غير متصلة. تُحفظ منشوراتها المنتظرة {shown} يوم آخر.}}"
+
+#. js-lingui-explicit-id
+msgid "notices.needs_human"
+msgstr "منشور على {who} ينتظر قرارك."
+
+#. js-lingui-explicit-id
+msgid "notices.unverified"
+msgstr "لم يتأكد نشر منشور على {who}. تحقّق من القناة ثم أخبرنا بما وجدته."
+
+#. js-lingui-explicit-id
+msgid "notices.held_media"
+msgstr "منشور على {who} ينتظر وسائطه."
+
+#. js-lingui-explicit-id
+msgid "notices.drafts_day_30"
+msgstr "عادت المنشورات المنتظرة لـ {who} إلى مسوداتك. لم يُحذف شيء."
+
+#. js-lingui-explicit-id
+msgid "notices.unknown"
+msgstr "هناك أمر يحتاج إلى انتباهك."
+
+#. js-lingui-explicit-id
+msgid "notices.open_channels"
+msgstr "فتح القنوات"
+
+#. js-lingui-explicit-id
+msgid "notices.open_posts"
+msgstr "فتح المنشورات"
+
+#. js-lingui-explicit-id
+msgid "notices.open_post"
+msgstr "فتح المنشور"
+
+#. js-lingui-explicit-id
 msgid "connect.wizard.title"
 msgstr "ربط قناة"
 

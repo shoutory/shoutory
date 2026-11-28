@@ -27,6 +27,7 @@ import { ChannelsHubPage } from "./features/channels/channels-hub";
 import { ConnectResultPage } from "./features/channels/connect-result";
 import { MediaDetailPage } from "./features/media/media-detail";
 import { MediaLibraryPage } from "./features/media/media-library";
+import { NotificationsPage } from "./features/notifications/notifications";
 import { ApiError } from "./http/client";
 import { ClientsPage } from "./org/clients";
 import { type PageHandle, usePageTitleAndFocus } from "./page-title";
@@ -69,6 +70,7 @@ const TITLES = {
   workspace: msg({ id: "shell.workspace.title", message: "Workspace" }),
   channels: msg({ id: "channels.hub.title", message: "Channels" }),
   channel: msg({ id: "channels.detail.title", message: "Channel" }),
+  notices: msg({ id: "notices.title", message: "Notifications" }),
   media: msg({ id: "media.title", message: "Media" }),
   connectResult: msg({ id: "connect.result.title", message: "Connection result" }),
   clients: msg({ id: "org.clients.title", message: "Clients" }),
@@ -230,6 +232,11 @@ export const routes: RouteObject[] = [
                 path: "w/:ws/channels/:channelId",
                 handle: titled(TITLES.channel, (shell, params) => isUnknownWorkspace(shell, params.ws)),
                 element: <ChannelDetailPage />,
+              },
+              {
+                path: "w/:ws/notifications",
+                handle: titled(TITLES.notices, (shell, params) => isUnknownWorkspace(shell, params.ws)),
+                element: <NotificationsPage />,
               },
               {
                 path: "w/:ws/media",

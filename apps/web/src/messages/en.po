@@ -2206,6 +2206,90 @@ msgid "channels.disconnect.cancel"
 msgstr "Cancel"
 
 #. js-lingui-explicit-id
+msgid "shell.nav.notifications"
+msgstr "Notifications"
+
+#. js-lingui-explicit-id
+msgid "notices.title"
+msgstr "Notifications"
+
+#. js-lingui-explicit-id
+msgid "notices.loading"
+msgstr "Loading your notices"
+
+#. js-lingui-explicit-id
+msgid "notices.failed.what"
+msgstr "We could not load your notices"
+
+#. js-lingui-explicit-id
+msgid "notices.failed.meaning"
+msgstr "Nothing was changed. Try again."
+
+#. js-lingui-explicit-id
+msgid "notices.empty.title"
+msgstr "You are all caught up"
+
+#. js-lingui-explicit-id
+msgid "notices.empty.meaning"
+msgstr "New notices about your channels and posts show here."
+
+#. js-lingui-explicit-id
+msgid "notices.more"
+msgstr "Show more"
+
+#. js-lingui-explicit-id
+msgid "notices.more_failed"
+msgstr "We could not load older notices. The ones above are still current. Try again."
+
+#. js-lingui-explicit-id
+msgid "notices.a_channel"
+msgstr "a channel"
+
+#. js-lingui-explicit-id
+msgid "notices.reminder"
+msgstr "Reminder: "
+
+#. js-lingui-explicit-id
+msgid "notices.token_expiry"
+msgstr "{days, plural, one {Access to {who} ends in 1 day. Reconnect it before then.} other {Access to {who} ends in {shown} days. Reconnect it before then.}}"
+
+#. js-lingui-explicit-id
+msgid "notices.reconnect_deadline"
+msgstr "{days, plural, one {{who} is not connected. Its waiting posts are kept for 1 more day.} other {{who} is not connected. Its waiting posts are kept for {shown} more days.}}"
+
+#. js-lingui-explicit-id
+msgid "notices.needs_human"
+msgstr "A post to {who} needs your decision."
+
+#. js-lingui-explicit-id
+msgid "notices.unverified"
+msgstr "A post to {who} is not confirmed. Check the channel, then tell us what you found."
+
+#. js-lingui-explicit-id
+msgid "notices.held_media"
+msgstr "A post to {who} is waiting for its media."
+
+#. js-lingui-explicit-id
+msgid "notices.drafts_day_30"
+msgstr "Posts held for {who} are back in your drafts. Nothing was deleted."
+
+#. js-lingui-explicit-id
+msgid "notices.unknown"
+msgstr "Something needs your attention."
+
+#. js-lingui-explicit-id
+msgid "notices.open_channels"
+msgstr "Open channels"
+
+#. js-lingui-explicit-id
+msgid "notices.open_posts"
+msgstr "Open posts"
+
+#. js-lingui-explicit-id
+msgid "notices.open_post"
+msgstr "Open the post"
+
+#. js-lingui-explicit-id
 msgid "connect.wizard.title"
 msgstr "Connect a channel"
 

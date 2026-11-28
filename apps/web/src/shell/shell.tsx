@@ -88,6 +88,11 @@ function Rail() {
         </NavLink>
       ) : null}
       {ws ? (
+        <NavLink to={`/w/${ws}/notifications`} className={NAV_LINK}>
+          <Trans id="shell.nav.notifications">Notifications</Trans>
+        </NavLink>
+      ) : null}
+      {ws ? (
         <NavLink to={`/w/${ws}/media`} className={NAV_LINK}>
           <Trans id="shell.nav.media">Media</Trans>
         </NavLink>

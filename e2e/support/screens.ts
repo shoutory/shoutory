@@ -158,6 +158,31 @@ async function fulfilDetail(page: Page, workspace: string): Promise<void> {
   await fulfilProviders(page, workspace);
 }
 
+// The image has no notices, so two are shown from fixed answers: a channel one and a post one.
+async function fulfilNotices(page: Page, workspace: string): Promise<void> {
+  const notice = (n: number, kind: string, level: string, vars: object) => ({
+    id: `0190a000-0000-7000-8000-0000000004c${n}`,
+    kind,
+    subject_id: `0190a000-0000-7000-8000-0000000004d${n}`,
+    level,
+    vars,
+    created_at: "2026-11-27T10:00:00.000Z",
+    read_at: null,
+  });
+  await page.addInitScript(() => localStorage.setItem("shoutory.zone", "UTC"));
+  await page.route(`**/api/v1/workspaces/${workspace}/notifications`, (route) =>
+    route.fulfill(
+      reply({
+        data: [
+          notice(1, "token_expiry", "7d", { name: "Acme Page", days: 7 }),
+          notice(2, "needs_human", "escalation_1", { name: "Acme Shop" }),
+        ],
+        meta: { next_cursor: null },
+      }),
+    ),
+  );
+}
+
 // The image starts with no media, so one file and where it fits are shown from fixed answers. With no ready thumbnail
 // the page asks for no image, and the picture is the same on every run.
 const MEDIUM_ID = "0190a000-0000-7000-8000-0000000002b1";
@@ -286,6 +311,15 @@ export const SCREENS: readonly Screen[] = [
     open: async (page, context) => {
       await fulfilDetail(page, context.workspace);
       await visit((c) => `/w/${c.workspace}/channels/${CHANNEL_CARDS[0]?.id}`)(page, context);
+    },
+  },
+  {
+    id: "notifications",
+    pattern: "/w/:ws/notifications",
+    audience: "founder",
+    open: async (page, context) => {
+      await fulfilNotices(page, context.workspace);
+      await visit((c) => `/w/${c.workspace}/notifications`)(page, context);
     },
   },
   {
