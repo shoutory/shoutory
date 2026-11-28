@@ -1,9 +1,9 @@
 import type { Context } from "hono";
 import { Refusal } from "../errors/refusal.js";
 
-// 1 to 255 printable ASCII characters. The key is checked and nothing more: the store and the replay of an answer come
-// with the API keys.
-const KEY = /^[\x20-\x7e]{1,255}$/;
+// 1 to 255 visible ASCII characters (no space). The key is checked and nothing more: the store and the replay of an
+// answer come with the API keys.
+const KEY = /^[\x21-\x7e]{1,255}$/;
 
 export function requireIdempotencyKey(c: Context): string {
   const key = c.req.header("idempotency-key");

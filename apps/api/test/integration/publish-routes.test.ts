@@ -469,6 +469,8 @@ describe("the Idempotency-Key check", () => {
     ["a key of 256 characters", { "idempotency-key": "k".repeat(256) }],
     ["a key with a character beyond ASCII", { "idempotency-key": "café" }],
     ["a key with a control character", { "idempotency-key": "a\u007fb" }],
+    ["a key of spaces only", { "idempotency-key": "   " }],
+    ["a key with a space inside", { "idempotency-key": "two words" }],
   ];
   const withoutKey = (route: Route, p: Planted, headers: Record<string, string>) =>
     send(user("owner"), route.method, route.path(p), route.body?.(p), { ...route.headers?.(p), ...headers });
