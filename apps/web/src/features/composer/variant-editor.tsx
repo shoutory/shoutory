@@ -84,6 +84,10 @@ function BaseTab(props: EditorProps) {
         onBlur={onBlur}
         isReadOnly={readOnly}
         rows={6}
+        aria-describedby={shared
+          .filter((variant) => channels.providerOf(variant.channelId))
+          .map((variant) => `counter-${variant.channelId}`)
+          .join(" ")}
         {...(error === "" ? {} : { errorMessage: error })}
       />
       <div className="flex flex-col gap-1 text-sm text-text-muted">
@@ -145,6 +149,7 @@ function ChannelTab({ variant, props }: { variant: VariantDoc; props: EditorProp
         onChange={(override) => onDoc(withVariant(doc, variant.channelId, { override }))}
         onBlur={onBlur}
         isReadOnly={readOnly}
+        {...(provider ? { "aria-describedby": "variant-counter" } : {})}
         {...(error === "" ? {} : { errorMessage: error })}
       />
       {provider ? (

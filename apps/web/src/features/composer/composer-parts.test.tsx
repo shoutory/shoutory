@@ -108,6 +108,18 @@ describe("deleting parts", () => {
   });
 });
 
+describe("the counters of a thread and of the first comment", () => {
+  it("each part and the first comment are described by their own counter", async () => {
+    await open(CH.thread, { parts: parts("one", "two") });
+    const described = (element: Element | null) =>
+      (element?.getAttribute("aria-describedby") ?? "")
+        .split(" ")
+        .map((id) => document.getElementById(id)?.getAttribute("data-testid"));
+    expect(allById("part-text").map(described)).toEqual([["part-counter-0"], ["part-counter-1"]]);
+    expect(described(byId("first-comment"))).toEqual(["comment-counter"]);
+  });
+});
+
 describe("the ends and the limit of a thread", () => {
   it("the first part cannot move up and the last cannot move down", async () => {
     await open(CH.thread, { parts: parts("one", "two") });

@@ -42,13 +42,11 @@ function useFocusAfterChange() {
   };
 }
 
-/** Ordered parts of a thread; each one is its own field, so each reads in its own direction. */
-export function PartsBuilder({ variant, provider, readOnly, onChange, onBlur }: Props) {
+// A move says where the part is now and keeps focus on it; a delete hands focus to the part before it.
+function usePartEdits(parts: readonly string[], set: (next: string[]) => void) {
   const { t } = useLingui();
-  const parts = variant.threadParts;
   const [said, say] = useState("");
   const { root, focusAfter } = useFocusAfterChange();
-  const set = (next: string[]) => onChange({ threadParts: next });
   const move = (at: number, by: -1 | 1) => {
     set(moved(parts, at, by));
     focusAfter({ control: by < 0 ? "part-up" : "part-down", at: at + by });
@@ -63,6 +61,15 @@ export function PartsBuilder({ variant, provider, readOnly, onChange, onBlur }: 
     );
     say("");
   };
+  return { root, said, move, remove };
+}
+
+/** Ordered parts of a thread; each one is its own field, so each reads in its own direction. */
+export function PartsBuilder({ variant, provider, readOnly, onChange, onBlur }: Props) {
+  const { t } = useLingui();
+  const parts = variant.threadParts;
+  const set = (next: string[]) => onChange({ threadParts: next });
+  const { root, said, move, remove } = usePartEdits(parts, set);
   const full = parts.length >= MAX_PARTS;
   return (
     <section ref={root} aria-labelledby={`parts-${variant.channelId}`} className="flex flex-col gap-3">
@@ -86,6 +93,7 @@ export function PartsBuilder({ variant, provider, readOnly, onChange, onBlur }: 
               value={text}
               rows={3}
               isReadOnly={readOnly}
+              aria-describedby={`part-counter-${at}`}
               onBlur={onBlur}
               onChange={(value) => set(parts.map((one, place) => (place === at ? value : one)))}
             />
@@ -145,6 +153,7 @@ export function FirstComment({ variant, provider, readOnly, onChange, onBlur }: 
         value={variant.firstComment}
         rows={3}
         isReadOnly={readOnly}
+        aria-describedby="comment-counter"
         onBlur={onBlur}
         onChange={(firstComment) => onChange({ firstComment })}
       />

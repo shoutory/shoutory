@@ -101,6 +101,27 @@ describe("variants", () => {
   });
 });
 
+describe("a counter and the text it counts", () => {
+  const describedBy = (element: Element | null) =>
+    (element?.getAttribute("aria-describedby") ?? "")
+      .split(" ")
+      .map((id) => document.getElementById(id)?.getAttribute("data-testid"));
+
+  it("the shared text is described by the counter of each channel that uses it", async () => {
+    await open();
+    await pick(CH.short, CH.bytes);
+    expect(describedBy(field("composer-base"))).toEqual([`counter-${CH.short}`, `counter-${CH.bytes}`]);
+  });
+
+  it("the text of one channel is described by its own counter", async () => {
+    await open();
+    await pick(CH.short);
+    await click(byId("tab-channel") as HTMLElement);
+    await settle();
+    expect(describedBy(field("composer-variant-text"))).toContain("variant-counter");
+  });
+});
+
 describe("the picker", () => {
   it("a channel that needs reconnecting says so and can still be picked for a draft", async () => {
     await open({ channelList: () => channelPage([...CHANNELS, BROKEN], null, []) });

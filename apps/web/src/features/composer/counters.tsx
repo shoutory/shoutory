@@ -16,7 +16,12 @@ export function CounterLine({ counters, testId }: { counters: readonly Counter[]
   if (counters.length === 0) return null;
   const over = overBy(counters);
   return (
-    <span data-testid={testId} data-over={over > 0} className="flex flex-wrap items-center gap-x-4 gap-y-1">
+    <span
+      id={testId}
+      data-testid={testId}
+      data-over={over > 0}
+      className="flex flex-wrap items-center gap-x-4 gap-y-1"
+    >
       {counters.map((counter) => (
         <span key={counter.kind}>
           {counter.kind === "length" ? (
