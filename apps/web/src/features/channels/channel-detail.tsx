@@ -1,6 +1,6 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import { CONNECTION_STATES } from "@shoutory/core/channels/state";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Form } from "react-aria-components";
 import { Link, useParams } from "react-router";
 import { z } from "zod";
@@ -14,6 +14,7 @@ import { DirText } from "../../ui/dir-text";
 import { ErrorPanel } from "../../ui/error-panel";
 import { LocalizedDateTime } from "../../ui/localized";
 import { TextField } from "../../ui/text-field";
+import { DisconnectButton } from "./channel-disconnect";
 import {
   CapabilityChips,
   type Channel,
@@ -56,8 +57,10 @@ function useChannel(base: string) {
     setState({ status: "loading" });
     setAttempt((now) => now + 1);
   };
+  // The page stays on screen while the fresh answer is read.
+  const refresh = () => setAttempt((now) => now + 1);
   const replace = (row: Channel) => setState({ status: "ready", row });
-  return { state, retry, replace };
+  return { state, retry, refresh, replace };
 }
 
 // Every refusal says nothing was changed: a call that fails changes no field of the page.
@@ -197,10 +200,16 @@ interface BodyProps {
 // A control shows only when the server's answer lists its action; none is derived from the state.
 function Body({ ws, base, row, info, onChange, onReload }: BodyProps) {
   const nameId = useId();
+  const heading = useRef<HTMLHeadingElement>(null);
   const has = (action: string) => row.actions.includes(action);
+  // The control that held focus is gone (disconnected): focus moves to the page's heading, not to nothing.
+  const canDisconnect = has("disconnect");
+  useEffect(() => {
+    if (!canDisconnect && document.activeElement === document.body) heading.current?.focus();
+  }, [canDisconnect]);
   return (
     <>
-      <h1 id={nameId} className="font-heading text-2xl">
+      <h1 ref={heading} tabIndex={-1} id={nameId} className="font-heading text-2xl outline-none">
         <DirText>{row.display_name}</DirText>
       </h1>
       <Facts row={row} info={info} zone={readZone()} />
@@ -210,6 +219,9 @@ function Body({ ws, base, row, info, onChange, onReload }: BodyProps) {
         {has("enable") ? <Move move="enable" base={base} onChange={onChange} /> : null}
         {has("reconnect") ? (
           <ReconnectOf row={row} info={info} ws={ws} nameId={nameId} onConnected={onReload} />
+        ) : null}
+        {canDisconnect ? (
+          <DisconnectButton ws={ws} base={base} provider={info?.name ?? row.provider_id} onDone={onReload} />
         ) : null}
       </div>
     </>
@@ -233,7 +245,7 @@ function Failed({ error, retry }: { error: ApiError; retry: () => void }) {
 
 function ChannelDetail({ ws, id }: { ws: string; id: string }) {
   const base = `/api/v1/workspaces/${ws}/channels/${id}`;
-  const { state, retry, replace } = useChannel(base);
+  const { state, retry, refresh, replace } = useChannel(base);
   const info = useProviderNames(ws);
   if (state.status === "failed" && state.error.state === "not_found") return <NotFoundPage />;
   if (state.status === "failed" && state.error.state === "forbidden") return <ForbiddenPage />;
@@ -258,7 +270,7 @@ function ChannelDetail({ ws, id }: { ws: string; id: string }) {
           row={state.row}
           info={info.get(state.row.provider_id)}
           onChange={replace}
-          onReload={retry}
+          onReload={refresh}
         />
       ) : null}
     </div>

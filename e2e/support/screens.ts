@@ -464,6 +464,37 @@ export const DIALOGS: readonly Dialog[] = [
     },
   },
   {
+    // The impact is read before the button of the dialog is offered, so one scheduled post is answered to show a list.
+    id: "disconnect",
+    screen: "channel-detail",
+    titleId: "channels.disconnect.title",
+    role: "alertdialog",
+    open: async (page, context) => {
+      const [channel] = channelRows();
+      await page.route(
+        `**/api/v1/workspaces/${context.workspace}/channels/${channel?.id}/disconnect-impact`,
+        (route) =>
+          route.fulfill(
+            reply({
+              data: {
+                scheduled: [
+                  {
+                    variantId: "0190a000-0000-7000-8000-0000000003a1",
+                    postId: "0190a000-0000-7000-8000-0000000003b1",
+                    dueAt: "2026-12-01T09:00:00.000Z",
+                  },
+                ],
+                blocking: [],
+                canDisconnect: true,
+              },
+            }),
+          ),
+      );
+      await page.getByTestId("detail-disconnect").click();
+      await page.getByRole("alertdialog").waitFor();
+    },
+  },
+  {
     // The password check appears when the server says a recent check is needed: the first override call is answered so.
     id: "step-up",
     screen: "flags",

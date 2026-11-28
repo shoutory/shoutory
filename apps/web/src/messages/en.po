@@ -2106,6 +2106,106 @@ msgid "channels.detail.deadline"
 msgstr "Reconnect by <0/>; after that these posts become drafts"
 
 #. js-lingui-explicit-id
+msgid "channels.disconnect.open"
+msgstr "Disconnect"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.title"
+msgstr "Disconnect this channel?"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.done_title"
+msgstr "Channel disconnected"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.loading"
+msgstr "Checking what this channel is used for"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.unreadable.what"
+msgstr "We could not check what this channel is used for"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.unreadable.meaning"
+msgstr "Nothing was changed. Try again."
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.scheduled"
+msgstr "{count, plural, =0 {No posts are scheduled for this channel.} one {1 post is scheduled for this channel.} other {{shown} posts are scheduled for this channel.}}"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.post_due"
+msgstr "Post due <0/>"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.post_no_time"
+msgstr "Post with no time set"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.show_all"
+msgstr "Show all posts"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.waiting"
+msgstr "{count, plural, one {Disconnect waits while 1 post is being sent} other {Disconnect waits while {shown} posts are being sent}}"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.waiting_hint"
+msgstr "Wait for these to finish or resolve them."
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.open_posts"
+msgstr "Open posts"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.window"
+msgstr "You can reconnect for 30 days. Posts waiting for this channel are held, not deleted; after 30 days they become drafts. Your data is kept."
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.revoke_preview"
+msgstr "We will also ask the platform to end this access where it supports that."
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.forbidden"
+msgstr "You cannot disconnect channels in this workspace. Ask an owner or admin of this workspace."
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.step_up"
+msgstr "Disconnecting needs your password again. Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.unconfirmed"
+msgstr "We could not confirm that the channel was disconnected. Reload the page to see its state before you try again."
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.revoke_done"
+msgstr "The platform confirmed that Shoutory's access was removed."
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.revoke_failed"
+msgstr "The platform did not confirm that Shoutory's access was removed. Shoutory's own copy is deleted. Remove Shoutory's access in your account settings on <0>{provider}</0>."
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.revoke_unsupported"
+msgstr "<0>{provider}</0> gives Shoutory no way to remove access. Shoutory's own copy is deleted. Remove Shoutory's access in your account settings on <1>{provider}</1>."
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.done"
+msgstr "Disconnected"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.close"
+msgstr "Close"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.confirm"
+msgstr "Disconnect"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.cancel"
+msgstr "Cancel"
+
+#. js-lingui-explicit-id
 msgid "connect.wizard.title"
 msgstr "Connect a channel"
 

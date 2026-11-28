@@ -2104,6 +2104,106 @@ msgid "channels.detail.deadline"
 msgstr "أعد الربط قبل <0/>؛ وبعده تتحول هذه المنشورات إلى مسودات"
 
 #. js-lingui-explicit-id
+msgid "channels.disconnect.open"
+msgstr "فصل القناة"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.title"
+msgstr "فصل هذه القناة؟"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.done_title"
+msgstr "فُصلت القناة"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.loading"
+msgstr "جارٍ التحقق مما تُستخدم فيه هذه القناة"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.unreadable.what"
+msgstr "تعذّر التحقق مما تُستخدم فيه هذه القناة"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.unreadable.meaning"
+msgstr "لم يتغيّر شيء. حاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.scheduled"
+msgstr "{count, plural, =0 {لا توجد منشورات مجدولة لهذه القناة.} zero {يوجد {shown} منشور مجدول لهذه القناة.} one {يوجد منشور واحد مجدول لهذه القناة.} two {يوجد منشوران مجدولان لهذه القناة.} few {توجد {shown} منشورات مجدولة لهذه القناة.} many {يوجد {shown} منشورًا مجدولًا لهذه القناة.} other {يوجد {shown} منشور مجدول لهذه القناة.}}"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.post_due"
+msgstr "منشور موعده <0/>"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.post_no_time"
+msgstr "منشور بلا موعد محدد"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.show_all"
+msgstr "عرض كل المنشورات"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.waiting"
+msgstr "{count, plural, zero {الفصل ينتظر حتى يُرسَل {shown} منشور} one {الفصل ينتظر حتى يُرسَل منشور واحد} two {الفصل ينتظر حتى يُرسَل منشوران} few {الفصل ينتظر حتى تُرسَل {shown} منشورات} many {الفصل ينتظر حتى يُرسَل {shown} منشورًا} other {الفصل ينتظر حتى يُرسَل {shown} منشور}}"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.waiting_hint"
+msgstr "انتظر حتى تنتهي أو عالجها بنفسك."
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.open_posts"
+msgstr "فتح المنشورات"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.window"
+msgstr "يمكنك إعادة الربط خلال 30 يومًا. المنشورات المنتظرة لهذه القناة تُحجز ولا تُحذف، وبعد 30 يومًا تتحول إلى مسودات. بياناتك تبقى محفوظة."
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.revoke_preview"
+msgstr "سنطلب أيضًا من المنصة إنهاء هذا الوصول حيثما تدعم ذلك."
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.forbidden"
+msgstr "لا يمكنك فصل القنوات في مساحة العمل هذه. اطلب ذلك من مالك مساحة العمل أو مديرها."
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.step_up"
+msgstr "الفصل يحتاج إلى كلمة مرورك مرة أخرى. لم يتغيّر شيء."
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.unconfirmed"
+msgstr "تعذّر التأكد من فصل القناة. أعد تحميل الصفحة لترى حالتها قبل أن تحاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.revoke_done"
+msgstr "أكّدت المنصة أن وصول Shoutory قد أُزيل."
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.revoke_failed"
+msgstr "لم تؤكد المنصة أن وصول Shoutory قد أُزيل. حُذفت نسخة Shoutory الخاصة. أزل وصول Shoutory من إعدادات حسابك في <0>{provider}</0>."
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.revoke_unsupported"
+msgstr "لا توفّر <0>{provider}</0> لـ Shoutory طريقة لإزالة الوصول. حُذفت نسخة Shoutory الخاصة. أزل وصول Shoutory من إعدادات حسابك في <1>{provider}</1>."
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.done"
+msgstr "تم الفصل"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.close"
+msgstr "إغلاق"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.confirm"
+msgstr "فصل القناة"
+
+#. js-lingui-explicit-id
+msgid "channels.disconnect.cancel"
+msgstr "إلغاء"
+
+#. js-lingui-explicit-id
 msgid "connect.wizard.title"
 msgstr "ربط قناة"
 
