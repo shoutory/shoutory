@@ -4769,3 +4769,7 @@ msgstr "أُلغي. لم يُنشر شيء."
 #. js-lingui-explicit-id
 msgid "posts.result.unscheduled"
 msgstr "أُلغيت الجدولة. عاد المنشور مسودة."
+
+#. js-lingui-explicit-id
+msgid "composer.conflict.failed"
+msgstr "تعذّر تحميل نسختهم. لم يتغيّر شيء."

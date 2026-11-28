@@ -152,9 +152,10 @@ describe("a draft changed elsewhere", () => {
       },
     });
 
-  async function stale() {
+  async function stale(theirReads: (read: number) => Response = theirs) {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     let patches = 0;
+    let reads = 0;
     const opened = await open((call) => {
       if (call.method === "PATCH") {
         patches += 1;
@@ -162,7 +163,7 @@ describe("a draft changed elsewhere", () => {
           ? refusal("precondition_failed", 412, { current_version_id: VERSION_3 })
           : patched();
       }
-      if (call.method === "GET" && call.path.endsWith(`versions/${VERSION_3}`)) return theirs();
+      if (call.method === "GET" && call.path.endsWith(`versions/${VERSION_3}`)) return theirReads(reads++);
       if (call.method === "GET" && call.path === `posts/${POST}`) return detailOf(SAVED);
       return undefined;
     }, `/w/w1/posts/${POST}/edit`);
@@ -183,6 +184,21 @@ describe("a draft changed elsewhere", () => {
     expect(patches).toHaveLength(2);
     expect(patches[1]?.headers["If-Match"]).toBe(`"${VERSION_3}"`);
     expect(byId("conflict-dialog")).toBeNull();
+  });
+
+  it("says their version could not be read, offers Try again and keeps Keep mine off until it is read", async () => {
+    const { stub } = await stale((read) => (read === 0 ? refusal("internal_error", 500) : theirs()));
+    const dialog = byId("conflict-dialog");
+    expect(dialog?.textContent).toContain("We could not load their version");
+    expect(byId("conflict-mine")?.getAttribute("aria-disabled")).toBe("true");
+    expect(byId("conflict-theirs")?.getAttribute("aria-disabled")).toBe("true");
+    await click(byId("conflict-mine") as HTMLElement);
+    await settle();
+    expect(callsOf(stub, "PATCH", `/posts/${POST}`)).toHaveLength(1);
+    await click(byId("conflict-retry") as HTMLElement);
+    await settle();
+    expect(byId("conflict-dialog")?.textContent).toContain("Their words");
+    expect(byId("conflict-mine")?.getAttribute("aria-disabled")).not.toBe("true");
   });
 
   it("using theirs replaces the text and sends nothing", async () => {

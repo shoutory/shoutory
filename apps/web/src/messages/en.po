@@ -4769,3 +4769,7 @@ msgstr "Cancelled. Nothing was posted."
 #. js-lingui-explicit-id
 msgid "posts.result.unscheduled"
 msgstr "Unscheduled. It is a draft again."
+
+#. js-lingui-explicit-id
+msgid "composer.conflict.failed"
+msgstr "We could not load their version. Nothing was changed."

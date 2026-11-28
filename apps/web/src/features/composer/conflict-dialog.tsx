@@ -64,7 +64,7 @@ export function ConflictDialog({
   onUseTheirs: (doc: Doc) => void;
 }) {
   const [busy, setBusy] = useState(false);
-  const { state } = useLoad(versionSchema, `${base}/posts/${postId}/versions/${theirs}`);
+  const { state, reload } = useLoad(versionSchema, `${base}/posts/${postId}/versions/${theirs}`);
   const theirDoc = useMemo(() => (state.status === "done" ? fromDraft(state.data.draft) : null), [state]);
   return (
     <Dialog
@@ -93,6 +93,15 @@ export function ConflictDialog({
             doc={theirDoc}
             nameOf={nameOf}
           />
+        ) : state.status === "failed" ? (
+          <div data-testid="conflict-failed" role="alert" className="flex flex-col items-start gap-2">
+            <p>
+              <Trans id="composer.conflict.failed">We could not load their version. Nothing was changed.</Trans>
+            </p>
+            <Button data-testid="conflict-retry" onPress={reload}>
+              <Trans id="posts.retry">Try again</Trans>
+            </Button>
+          </div>
         ) : (
           <p role="status">
             <Trans id="system.loading">Loading</Trans>
@@ -102,8 +111,9 @@ export function ConflictDialog({
           <Button
             data-testid="conflict-mine"
             busy={busy}
-            aria-disabled={busy}
+            aria-disabled={busy || theirDoc === null}
             onPress={() => {
+              if (theirDoc === null) return;
               setBusy(true);
               void onKeepMine().finally(() => setBusy(false));
             }}
