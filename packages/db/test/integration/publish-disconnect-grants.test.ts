@@ -26,6 +26,8 @@ const DEFINERS = [
   "post_delete",
   "notice_create",
   "notice_recipients",
+  "notice_candidates",
+  "notice_escalation_advance",
   "channel_disconnect",
   "credential_destroy",
   "credential_open_revoking",

@@ -347,6 +347,12 @@ const DEFINERS: Definer[] = [
     args: "workspace_id uuid, kind text, subject_id uuid",
     callers: ["shoutory_worker"],
   },
+  { name: "notice_candidates", args: "p_limit integer", callers: ["shoutory_worker"] },
+  {
+    name: "notice_escalation_advance",
+    args: "p_workspace_id uuid, p_operation_id uuid, p_step integer",
+    callers: ["shoutory_worker"],
+  },
   { name: "credential_caller", args: "workspace_id uuid", callers: [], helper: true },
   { name: "workspace_salt_ensure", args: "workspace_id uuid, salt bytea", callers: APP_WORKER },
   {
