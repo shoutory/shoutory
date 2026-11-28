@@ -3224,3 +3224,319 @@ msgstr "This word can no longer be used here. Close this and connect again."
 #. js-lingui-explicit-id
 msgid "connect.secret.reconnect.title"
 msgstr "Reconnect this channel"
+
+#. js-lingui-explicit-id
+msgid "posts.title"
+msgstr "Posts"
+
+#. js-lingui-explicit-id
+msgid "posts.new"
+msgstr "New post"
+
+#. js-lingui-explicit-id
+msgid "posts.loading"
+msgstr "Loading your posts"
+
+#. js-lingui-explicit-id
+msgid "posts.retry"
+msgstr "Try again"
+
+#. js-lingui-explicit-id
+msgid "posts.failed.what"
+msgstr "We could not load your posts"
+
+#. js-lingui-explicit-id
+msgid "posts.failed.meaning"
+msgstr "Nothing was changed. Try again."
+
+#. js-lingui-explicit-id
+msgid "posts.more"
+msgstr "Show more"
+
+#. js-lingui-explicit-id
+msgid "posts.more_failed"
+msgstr "We could not load more posts. The ones above are still current. Try again."
+
+#. js-lingui-explicit-id
+msgid "posts.checked_note"
+msgstr "Only the newest <0/> posts were checked for this view."
+
+#. js-lingui-explicit-id
+msgid "posts.empty.first"
+msgstr "No posts yet"
+
+#. js-lingui-explicit-id
+msgid "posts.empty.first_meaning"
+msgstr "Posts you write for your channels show here."
+
+#. js-lingui-explicit-id
+msgid "posts.empty.filtered"
+msgstr "No posts match these filters"
+
+#. js-lingui-explicit-id
+msgid "posts.empty.cleared"
+msgstr "Nothing needs you"
+
+#. js-lingui-explicit-id
+msgid "posts.empty.cleared_meaning"
+msgstr "No post is waiting for your check right now."
+
+#. js-lingui-explicit-id
+msgid "posts.filter.label"
+msgstr "Show"
+
+#. js-lingui-explicit-id
+msgid "posts.filter.all"
+msgstr "All posts"
+
+#. js-lingui-explicit-id
+msgid "posts.filter.attention"
+msgstr "Needs attention"
+
+#. js-lingui-explicit-id
+msgid "posts.row.no_text"
+msgstr "No text yet"
+
+#. js-lingui-explicit-id
+msgid "posts.row.attention"
+msgstr "Needs you"
+
+#. js-lingui-explicit-id
+msgid "posts.row.goes_out"
+msgstr "Goes out <0/>"
+
+#. js-lingui-explicit-id
+msgid "posts.row.published_at"
+msgstr "Published <0/>"
+
+#. js-lingui-explicit-id
+msgid "posts.row.updated"
+msgstr "Updated <0/>"
+
+#. js-lingui-explicit-id
+msgid "posts.author.member"
+msgstr "Member"
+
+#. js-lingui-explicit-id
+msgid "posts.author.service"
+msgstr "Automation"
+
+#. js-lingui-explicit-id
+msgid "posts.a_channel"
+msgstr "a channel"
+
+#. js-lingui-explicit-id
+msgid "posts.the_platform"
+msgstr "the platform"
+
+#. js-lingui-explicit-id
+msgid "posts.summary"
+msgstr "{n} of {m} published"
+
+#. js-lingui-explicit-id
+msgid "posts.summary_not_live"
+msgstr "{n} of {m} published, <0/> not live"
+
+#. js-lingui-explicit-id
+msgid "posts.pause.quota"
+msgstr "quota reached"
+
+#. js-lingui-explicit-id
+msgid "posts.pause.entitlement"
+msgstr "plan limit"
+
+#. js-lingui-explicit-id
+msgid "posts.pause.cooldown"
+msgstr "{provider} cooldown"
+
+#. js-lingui-explicit-id
+msgid "posts.pause.withdrawn"
+msgstr "this type was removed by {provider}"
+
+#. js-lingui-explicit-id
+msgid "posts.pause.sunset"
+msgstr "the API version expired"
+
+#. js-lingui-explicit-id
+msgid "posts.pause.disabled"
+msgstr "the channel is turned off"
+
+#. js-lingui-explicit-id
+msgid "posts.target.draft"
+msgstr "Draft"
+
+#. js-lingui-explicit-id
+msgid "posts.target.pending"
+msgstr "Waiting for its time"
+
+#. js-lingui-explicit-id
+msgid "posts.target.claimed"
+msgstr "Getting ready"
+
+#. js-lingui-explicit-id
+msgid "posts.target.processing"
+msgstr "{platform} is preparing the media"
+
+#. js-lingui-explicit-id
+msgid "posts.target.dispatching"
+msgstr "Sending"
+
+#. js-lingui-explicit-id
+msgid "posts.target.accepted"
+msgstr "Accepted by {platform}, finishing"
+
+#. js-lingui-explicit-id
+msgid "posts.target.retry_wait"
+msgstr "Will retry"
+
+#. js-lingui-explicit-id
+msgid "posts.target.paused"
+msgstr "Paused"
+
+#. js-lingui-explicit-id
+msgid "posts.target.paused_reason"
+msgstr "Paused: {pauseReason}"
+
+#. js-lingui-explicit-id
+msgid "posts.target.held"
+msgstr "Held: reconnect {place}"
+
+#. js-lingui-explicit-id
+msgid "posts.target.checking"
+msgstr "Checking whether it was posted"
+
+#. js-lingui-explicit-id
+msgid "posts.target.reconciling"
+msgstr "Checking {platform} now"
+
+#. js-lingui-explicit-id
+msgid "posts.target.needs_check"
+msgstr "Needs your check"
+
+#. js-lingui-explicit-id
+msgid "posts.target.past_due"
+msgstr "Nothing was posted; its time passed"
+
+#. js-lingui-explicit-id
+msgid "posts.target.unverified"
+msgstr "Could not be confirmed"
+
+#. js-lingui-explicit-id
+msgid "posts.target.published"
+msgstr "Published"
+
+#. js-lingui-explicit-id
+msgid "posts.target.draft_delivered"
+msgstr "Delivered as a draft on {platform}"
+
+#. js-lingui-explicit-id
+msgid "posts.target.scheduled_there"
+msgstr "Scheduled on {platform}, not live yet"
+
+#. js-lingui-explicit-id
+msgid "posts.target.failed"
+msgstr "Failed"
+
+#. js-lingui-explicit-id
+msgid "posts.target.cancelled"
+msgstr "Cancelled"
+
+#. js-lingui-explicit-id
+msgid "posts.target.missed"
+msgstr "Missed"
+
+#. js-lingui-explicit-id
+msgid "posts.target.replaced"
+msgstr "Replaced after an unclear result"
+
+#. js-lingui-explicit-id
+msgid "posts.target.edit_pending"
+msgstr "Applying your edit"
+
+#. js-lingui-explicit-id
+msgid "posts.target.edit_failed"
+msgstr "Edit not applied"
+
+#. js-lingui-explicit-id
+msgid "posts.target.removal_pending"
+msgstr "Removing from {platform}"
+
+#. js-lingui-explicit-id
+msgid "posts.target.removed"
+msgstr "Removed from {platform}"
+
+#. js-lingui-explicit-id
+msgid "posts.target.removal_unknown"
+msgstr "We could not confirm it was removed"
+
+#. js-lingui-explicit-id
+msgid "posts.target.removal_reported"
+msgstr "You confirmed it was removed"
+
+#. js-lingui-explicit-id
+msgid "posts.target.unknown"
+msgstr "Status not available"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.needs_attention"
+msgstr "Needs attention"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.publishing"
+msgstr "Publishing"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.scheduled"
+msgstr "Scheduled"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.published"
+msgstr "Published"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.not_live"
+msgstr "Published, <0/> not live"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.partly"
+msgstr "Partly published"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.failed"
+msgstr "Failed"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.missed"
+msgstr "Missed"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.removing"
+msgstr "Removing"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.removed"
+msgstr "Removed"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.draft"
+msgstr "Draft"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.in_review"
+msgstr "In review"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.changes_requested"
+msgstr "Changes requested"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.approved"
+msgstr "Approved"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.archived"
+msgstr "Archived"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.unknown"
+msgstr "Status not available"

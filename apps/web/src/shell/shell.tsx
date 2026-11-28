@@ -1,4 +1,5 @@
 import { Trans, useLingui } from "@lingui/react/macro";
+import { ROLE_PERMISSIONS } from "@shoutory/core/authz";
 import { useEffect } from "react";
 import { Link as AriaLink } from "react-aria-components";
 import { Link, Navigate, NavLink, Outlet, useParams, useRevalidator, useSearchParams } from "react-router";
@@ -62,6 +63,24 @@ function TopBar() {
 
 const NAV_LINK = "min-h-6 pointer-coarse:min-h-11 text-link underline";
 
+// New post is offered only to a role that may edit posts.
+function PostLinks({ ws, role }: { ws: string; role: string | undefined }) {
+  const permissions: Readonly<Record<string, readonly string[] | undefined>> = ROLE_PERMISSIONS;
+  const canCompose = role !== undefined && (permissions[role]?.includes("posts.edit") ?? false);
+  return (
+    <>
+      <NavLink to={`/w/${ws}/posts`} end className={NAV_LINK}>
+        <Trans id="posts.title">Posts</Trans>
+      </NavLink>
+      {canCompose ? (
+        <NavLink to={`/w/${ws}/posts/new`} end className={NAV_LINK}>
+          <Trans id="posts.new">New post</Trans>
+        </NavLink>
+      ) : null}
+    </>
+  );
+}
+
 function Rail() {
   const { ws, org } = useParams();
   const { t } = useLingui();
@@ -87,6 +106,7 @@ function Rail() {
           <Trans id="shell.nav.channels">Channels</Trans>
         </NavLink>
       ) : null}
+      {ws ? <PostLinks ws={ws} role={current?.role} /> : null}
       {ws ? (
         <NavLink to={`/w/${ws}/notifications`} className={NAV_LINK}>
           <Trans id="shell.nav.notifications">Notifications</Trans>

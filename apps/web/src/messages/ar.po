@@ -3222,3 +3222,319 @@ msgstr "لم يعد بالإمكان استخدام هذه الكلمة هنا. 
 #. js-lingui-explicit-id
 msgid "connect.secret.reconnect.title"
 msgstr "إعادة ربط هذه القناة"
+
+#. js-lingui-explicit-id
+msgid "posts.title"
+msgstr "المنشورات"
+
+#. js-lingui-explicit-id
+msgid "posts.new"
+msgstr "منشور جديد"
+
+#. js-lingui-explicit-id
+msgid "posts.loading"
+msgstr "نحمّل منشوراتك"
+
+#. js-lingui-explicit-id
+msgid "posts.retry"
+msgstr "حاول مرة أخرى"
+
+#. js-lingui-explicit-id
+msgid "posts.failed.what"
+msgstr "تعذّر تحميل منشوراتك"
+
+#. js-lingui-explicit-id
+msgid "posts.failed.meaning"
+msgstr "لم يتغير شيء. حاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "posts.more"
+msgstr "عرض المزيد"
+
+#. js-lingui-explicit-id
+msgid "posts.more_failed"
+msgstr "تعذّر تحميل مزيد من المنشورات. ما فوق لا يزال حديثًا. حاول مرة أخرى."
+
+#. js-lingui-explicit-id
+msgid "posts.checked_note"
+msgstr "فُحصت أحدث <0/> من المنشورات فقط لهذا العرض."
+
+#. js-lingui-explicit-id
+msgid "posts.empty.first"
+msgstr "لا توجد منشورات بعد"
+
+#. js-lingui-explicit-id
+msgid "posts.empty.first_meaning"
+msgstr "المنشورات التي تكتبها لقنواتك تظهر هنا."
+
+#. js-lingui-explicit-id
+msgid "posts.empty.filtered"
+msgstr "لا توجد منشورات تطابق هذه المرشحات"
+
+#. js-lingui-explicit-id
+msgid "posts.empty.cleared"
+msgstr "لا شيء يحتاج إليك"
+
+#. js-lingui-explicit-id
+msgid "posts.empty.cleared_meaning"
+msgstr "لا يوجد منشور ينتظر تحققك الآن."
+
+#. js-lingui-explicit-id
+msgid "posts.filter.label"
+msgstr "عرض"
+
+#. js-lingui-explicit-id
+msgid "posts.filter.all"
+msgstr "كل المنشورات"
+
+#. js-lingui-explicit-id
+msgid "posts.filter.attention"
+msgstr "يحتاج إلى انتباهك"
+
+#. js-lingui-explicit-id
+msgid "posts.row.no_text"
+msgstr "لا يوجد نص بعد"
+
+#. js-lingui-explicit-id
+msgid "posts.row.attention"
+msgstr "يحتاج إليك"
+
+#. js-lingui-explicit-id
+msgid "posts.row.goes_out"
+msgstr "سيُنشر في <0/>"
+
+#. js-lingui-explicit-id
+msgid "posts.row.published_at"
+msgstr "نُشر في <0/>"
+
+#. js-lingui-explicit-id
+msgid "posts.row.updated"
+msgstr "حُدّث في <0/>"
+
+#. js-lingui-explicit-id
+msgid "posts.author.member"
+msgstr "عضو"
+
+#. js-lingui-explicit-id
+msgid "posts.author.service"
+msgstr "تلقائي"
+
+#. js-lingui-explicit-id
+msgid "posts.a_channel"
+msgstr "قناة"
+
+#. js-lingui-explicit-id
+msgid "posts.the_platform"
+msgstr "المنصة"
+
+#. js-lingui-explicit-id
+msgid "posts.summary"
+msgstr "نُشر {n} من {m}"
+
+#. js-lingui-explicit-id
+msgid "posts.summary_not_live"
+msgstr "نُشر {n} من {m}، و<0/> غير ظاهر بعد"
+
+#. js-lingui-explicit-id
+msgid "posts.pause.quota"
+msgstr "بلوغ الحصة"
+
+#. js-lingui-explicit-id
+msgid "posts.pause.entitlement"
+msgstr "حد الخطة"
+
+#. js-lingui-explicit-id
+msgid "posts.pause.cooldown"
+msgstr "فترة انتظار {provider}"
+
+#. js-lingui-explicit-id
+msgid "posts.pause.withdrawn"
+msgstr "أزالت {provider} هذا النوع"
+
+#. js-lingui-explicit-id
+msgid "posts.pause.sunset"
+msgstr "انتهت صلاحية إصدار الواجهة"
+
+#. js-lingui-explicit-id
+msgid "posts.pause.disabled"
+msgstr "القناة متوقفة"
+
+#. js-lingui-explicit-id
+msgid "posts.target.draft"
+msgstr "مسودة"
+
+#. js-lingui-explicit-id
+msgid "posts.target.pending"
+msgstr "بانتظار موعده"
+
+#. js-lingui-explicit-id
+msgid "posts.target.claimed"
+msgstr "جارٍ التحضير"
+
+#. js-lingui-explicit-id
+msgid "posts.target.processing"
+msgstr "{platform} تجهّز الوسائط"
+
+#. js-lingui-explicit-id
+msgid "posts.target.dispatching"
+msgstr "جارٍ الإرسال"
+
+#. js-lingui-explicit-id
+msgid "posts.target.accepted"
+msgstr "قبلته {platform} وتُنهيه الآن"
+
+#. js-lingui-explicit-id
+msgid "posts.target.retry_wait"
+msgstr "ستُعاد المحاولة"
+
+#. js-lingui-explicit-id
+msgid "posts.target.paused"
+msgstr "متوقف مؤقتًا"
+
+#. js-lingui-explicit-id
+msgid "posts.target.paused_reason"
+msgstr "متوقف مؤقتًا: {pauseReason}"
+
+#. js-lingui-explicit-id
+msgid "posts.target.held"
+msgstr "محجوز: أعد ربط {place}"
+
+#. js-lingui-explicit-id
+msgid "posts.target.checking"
+msgstr "نتحقق مما إذا كان قد نُشر"
+
+#. js-lingui-explicit-id
+msgid "posts.target.reconciling"
+msgstr "نراجع {platform} الآن"
+
+#. js-lingui-explicit-id
+msgid "posts.target.needs_check"
+msgstr "يحتاج إلى تحققك"
+
+#. js-lingui-explicit-id
+msgid "posts.target.past_due"
+msgstr "لم يُنشر شيء؛ فات موعده"
+
+#. js-lingui-explicit-id
+msgid "posts.target.unverified"
+msgstr "تعذّر التأكد"
+
+#. js-lingui-explicit-id
+msgid "posts.target.published"
+msgstr "نُشر"
+
+#. js-lingui-explicit-id
+msgid "posts.target.draft_delivered"
+msgstr "سُلّم كمسودة على {platform}"
+
+#. js-lingui-explicit-id
+msgid "posts.target.scheduled_there"
+msgstr "مجدول على {platform} ولم يُنشر بعد"
+
+#. js-lingui-explicit-id
+msgid "posts.target.failed"
+msgstr "فشل"
+
+#. js-lingui-explicit-id
+msgid "posts.target.cancelled"
+msgstr "أُلغي"
+
+#. js-lingui-explicit-id
+msgid "posts.target.missed"
+msgstr "فات موعده"
+
+#. js-lingui-explicit-id
+msgid "posts.target.replaced"
+msgstr "استُبدل بعد نتيجة غير واضحة"
+
+#. js-lingui-explicit-id
+msgid "posts.target.edit_pending"
+msgstr "جارٍ تطبيق تعديلك"
+
+#. js-lingui-explicit-id
+msgid "posts.target.edit_failed"
+msgstr "لم يُطبَّق التعديل"
+
+#. js-lingui-explicit-id
+msgid "posts.target.removal_pending"
+msgstr "جارٍ الحذف من {platform}"
+
+#. js-lingui-explicit-id
+msgid "posts.target.removed"
+msgstr "حُذف من {platform}"
+
+#. js-lingui-explicit-id
+msgid "posts.target.removal_unknown"
+msgstr "لم نتأكد من الحذف"
+
+#. js-lingui-explicit-id
+msgid "posts.target.removal_reported"
+msgstr "أكدتَ أنه حُذف"
+
+#. js-lingui-explicit-id
+msgid "posts.target.unknown"
+msgstr "الحالة غير متاحة"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.needs_attention"
+msgstr "يحتاج إلى انتباهك"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.publishing"
+msgstr "قيد النشر"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.scheduled"
+msgstr "مجدول"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.published"
+msgstr "منشور"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.not_live"
+msgstr "منشور، و<0/> غير ظاهر بعد"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.partly"
+msgstr "نُشر جزئيًا"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.failed"
+msgstr "فشل النشر"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.missed"
+msgstr "فات موعده"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.removing"
+msgstr "جارٍ الحذف"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.removed"
+msgstr "تم الحذف"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.draft"
+msgstr "مسودة"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.in_review"
+msgstr "قيد المراجعة"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.changes_requested"
+msgstr "مطلوب تعديل"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.approved"
+msgstr "تمت الموافقة"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.archived"
+msgstr "مؤرشف"
+
+#. js-lingui-explicit-id
+msgid "posts.headline.unknown"
+msgstr "الحالة غير متاحة"

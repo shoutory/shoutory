@@ -183,6 +183,67 @@ async function fulfilNotices(page: Page, workspace: string): Promise<void> {
   );
 }
 
+// The image has no posts, so a list of three in different states is shown from fixed answers.
+const POST_ID = (n: number) => `0190a000-0000-7000-8000-0000000005a${n}`;
+const VARIANT_ID = (n: number) => `0190a000-0000-7000-8000-0000000005e${n}`;
+const listTarget = (n: number, change: object) => ({
+  variant_id: VARIANT_ID(n),
+  channel_id: CHANNEL_CARDS[0]?.id,
+  schedule_state: "settled",
+  due_at: null,
+  due_tz: null,
+  published_at: "2026-11-27T10:00:00.000Z",
+  presence: "present",
+  hold_reason: null,
+  operation_state: "published",
+  ...change,
+});
+const listPost = (n: number, status: string, excerpt: string, targets: object[]) => ({
+  id: POST_ID(n),
+  status,
+  author_kind: "user",
+  author_id: "0190a000-0000-7000-8000-0000000005f1",
+  updated_at: "2026-11-27T10:00:00.000Z",
+  current_version_id: "0190a000-0000-7000-8000-0000000005d1",
+  excerpt,
+  targets,
+  published_count: targets.length,
+  target_count: targets.length,
+});
+
+async function fulfilPosts(page: Page, workspace: string): Promise<void> {
+  await page.addInitScript(() => localStorage.setItem("shoutory.zone", "UTC"));
+  await page.route(
+    (url) => url.pathname.endsWith(`/workspaces/${workspace}/posts`),
+    (route) =>
+      route.fulfill(
+        reply({
+          data: [
+            listPost(1, "published", "Launch day is here", [listTarget(1, {})]),
+            listPost(2, "scheduled", "Next week we open the shop", [
+              listTarget(2, {
+                operation_state: "pending",
+                published_at: null,
+                schedule_state: "scheduled",
+                due_at: "2026-12-01T09:00:00.000Z",
+                due_tz: "UTC",
+              }),
+            ]),
+            listPost(3, "needs_attention", "Photos from the team day", [
+              listTarget(3, {}),
+              listTarget(4, { operation_state: "needs_human", published_at: null }),
+            ]),
+          ],
+          meta: { next_cursor: null },
+        }),
+      ),
+  );
+  await page.route(`**/api/v1/workspaces/${workspace}/channels`, (route) =>
+    route.fulfill(reply({ data: channelRows(), meta: { next_cursor: null, actions: [] } })),
+  );
+  await fulfilProviders(page, workspace);
+}
+
 // The image starts with no media, so one file and where it fits are shown from fixed answers. With no ready thumbnail
 // the page asks for no image, and the picture is the same on every run.
 const MEDIUM_ID = "0190a000-0000-7000-8000-0000000002b1";
@@ -311,6 +372,15 @@ export const SCREENS: readonly Screen[] = [
     open: async (page, context) => {
       await fulfilDetail(page, context.workspace);
       await visit((c) => `/w/${c.workspace}/channels/${CHANNEL_CARDS[0]?.id}`)(page, context);
+    },
+  },
+  {
+    id: "posts",
+    pattern: "/w/:ws/posts",
+    audience: "founder",
+    open: async (page, context) => {
+      await fulfilPosts(page, context.workspace);
+      await visit((c) => `/w/${c.workspace}/posts`)(page, context);
     },
   },
   {
