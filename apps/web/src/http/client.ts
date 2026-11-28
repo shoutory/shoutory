@@ -9,12 +9,18 @@ export class ApiError extends Error {
   readonly status: number;
   readonly requestId: string | undefined;
   readonly details: Readonly<Record<string, string>> | undefined;
+  /** The list-valued parts of the details (the issues of a refused draft, the work blocking a disconnect). */
+  readonly lists: Readonly<Record<string, readonly unknown[]>> | undefined;
 
   constructor(
     code: ApiError["code"],
     status: number,
     requestId?: string,
-    options?: { cause?: unknown; details?: Readonly<Record<string, string>> },
+    options?: {
+      cause?: unknown;
+      details?: Readonly<Record<string, string>>;
+      lists?: Readonly<Record<string, readonly unknown[]>>;
+    },
   ) {
     super(`api call failed: ${code}`, options?.cause === undefined ? undefined : { cause: options.cause });
     this.name = "ApiError";
@@ -22,6 +28,7 @@ export class ApiError extends Error {
     this.status = status;
     this.requestId = requestId;
     this.details = options?.details;
+    this.lists = options?.lists;
     this.state = stateOf(code, status);
   }
 }
@@ -39,10 +46,21 @@ const errorEnvelope = z.object({
   error: z.object({
     code: errorCodeSchema,
     requestId: z.string().optional(),
-    // Anything but a map of text is no details: the refusal itself still counts.
-    details: z.record(z.string(), z.string()).optional().catch(undefined),
+    // Anything but a map is no details: the refusal itself still counts.
+    details: z.record(z.string(), z.unknown()).optional().catch(undefined),
   }),
 });
+
+// The text entries are the details, the list entries the lists; any other value (a flag) is not shown to a person.
+function partsOf(raw: Record<string, unknown> | undefined) {
+  if (raw === undefined) return {};
+  const text = Object.entries(raw).filter((entry): entry is [string, string] => typeof entry[1] === "string");
+  const lists = Object.entries(raw).filter((entry): entry is [string, unknown[]] => Array.isArray(entry[1]));
+  return {
+    ...(text.length > 0 ? { details: Object.fromEntries(text) } : {}),
+    ...(lists.length > 0 ? { lists: Object.fromEntries(lists) } : {}),
+  };
+}
 
 const TIMEOUT_MS = 15_000;
 
@@ -107,7 +125,7 @@ export async function request<T>(schema: ZodType<T>, path: string, init: Request
     const failure = errorEnvelope.safeParse(body);
     if (failure.success) {
       const { code, requestId, details } = failure.data.error;
-      throw new ApiError(code, response.status, requestId, details ? { details } : {});
+      throw new ApiError(code, response.status, requestId, partsOf(details));
     }
     throw new ApiError("invalid_response", response.status);
   }

@@ -95,6 +95,20 @@ describe("the details of a refusal", () => {
   });
 });
 
+describe("the lists in the details of a refusal", () => {
+  it("keeps the text of the details and hands the lists apart, so an issue list never hides the reason", async () => {
+    const issues = [{ variant: 0, key: "text", reason: "too_long" }];
+    const details = { reason: "variant_invalid", issues, truncated: true };
+    stubFetch(json({ error: { code: "unprocessable_content", details } }, 422));
+    const failure = (await request(answer, "/api/v1/x").catch((caught: unknown) => caught)) as {
+      details?: unknown;
+      lists?: unknown;
+    };
+    expect(failure.details).toEqual({ reason: "variant_invalid" });
+    expect(failure.lists).toEqual({ issues });
+  });
+});
+
 describe("the api client while it reads the body", () => {
   it.each([
     ["a dropped stream", () => new TypeError("terminated")],
