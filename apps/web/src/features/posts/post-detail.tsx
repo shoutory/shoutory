@@ -20,8 +20,8 @@ import {
   evidenceLine,
   factsOfDetail,
   headlineOf,
-  isFinished,
   permalinkOf,
+  pollDelayMs,
   type Target,
   wordOf,
 } from "./post-facts";
@@ -38,8 +38,6 @@ import {
   usePauseReason,
 } from "./post-words";
 
-const POLL_MS = 5000;
-
 interface Ready {
   status: "ready";
   detail: Detail;
@@ -49,8 +47,9 @@ interface Ready {
 }
 type DetailState = { status: "loading" } | { status: "failed"; error: ApiError } | Ready;
 
-// Reads the post, and again every few seconds while a target is not finished. A tab that is hidden does not read, and
-// reads at once when it shows again; a read never starts while another is running; a failed read keeps what is shown.
+// Reads the post, and again every few seconds while something is moving and every minute otherwise. A tab that is hidden
+// does not read, and reads at once when it shows again; a read never starts while another is running; a failed read keeps
+// what is shown.
 function usePostDetail(ws: string, postId: string) {
   const [state, setState] = useState<DetailState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
@@ -92,14 +91,15 @@ function usePostDetail(ws: string, postId: string) {
     void read();
   }, [read, attempt]);
 
-  const polling = state.status === "ready" && !state.detail.targets.every(isFinished);
+  const ready = state.status === "ready";
+  const targets = state.status === "ready" ? state.detail.targets : null;
   const reads = state.status === "ready" ? state.reads : 0;
   // biome-ignore lint/correctness/useExhaustiveDependencies: each finished read (`reads`) arms the next one.
   useEffect(() => {
-    if (!polling) return;
+    if (!ready || targets === null) return;
     const timer = setTimeout(() => {
       if (!document.hidden) void read();
-    }, POLL_MS);
+    }, pollDelayMs(targets, Date.now()));
     const shown = () => {
       if (!document.hidden) void read();
     };
@@ -108,7 +108,7 @@ function usePostDetail(ws: string, postId: string) {
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", shown);
     };
-  }, [polling, reads, read]);
+  }, [ready, reads, read]);
 
   return { state, refresh: () => void read(), retry: () => setAttempt((now) => now + 1) };
 }

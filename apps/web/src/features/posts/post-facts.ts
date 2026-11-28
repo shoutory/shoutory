@@ -139,14 +139,22 @@ export const factsOfDetail = (target: Target): Facts => ({
   holdReason: target.hold_reason,
 });
 
-// A draft target is idle; a target with no operation yet that is waiting for admission is not finished.
-const IDLE_SCHEDULE: ReadonlySet<string> = new Set(["draft", "archived", "settled"]);
+const SOON_MS = 60_000;
+const AWAITING_ADMISSION: ReadonlySet<string> = new Set(["scheduled", "approved", "needs_approval"]);
 
-export function isFinished(target: Target): boolean {
-  if (target.presence === "removal_pending") return false;
-  if (target.operation === null) return IDLE_SCHEDULE.has(target.schedule_state);
-  return TERMINAL.has(target.operation.state);
+// Something is moving: an operation that is neither finished nor waiting for a person, a removal under way, or a
+// target that has no operation yet and is due within a minute.
+function isBusy(target: Target, now: number): boolean {
+  if (target.presence === "removal_pending") return true;
+  const operation = target.operation;
+  if (operation !== null) return !TERMINAL.has(operation.state) && !NEEDS_A_PERSON.has(operation.state);
+  const due = target.due_at === null ? Number.NaN : Date.parse(target.due_at);
+  return AWAITING_ADMISSION.has(target.schedule_state) && due <= now + SOON_MS;
 }
+
+/** How long to wait before reading the post again: soon while something moves, a minute otherwise. */
+export const pollDelayMs = (targets: readonly Target[], now: number): number =>
+  targets.some((target) => isBusy(target, now)) ? 5000 : 60_000;
 
 export const RESOLUTIONS = [
   "attest_published",

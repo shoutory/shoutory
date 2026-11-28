@@ -411,8 +411,16 @@ async function tick(ms: number) {
   });
 }
 
-describe("polling while a target is not finished", () => {
-  it("reads again every 5 seconds while a target is sending, and stops when every target is finished", async () => {
+const dueIn = (seconds: number) => ({
+  published_at: null,
+  schedule_state: "scheduled",
+  operation: null,
+  due_at: new Date(Date.now() + seconds * 1000).toISOString(),
+  due_tz: "UTC",
+});
+
+describe("how often the post is read again", () => {
+  it("reads every 5 seconds while a target is sending, then every 60 seconds once it is finished", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     let reads = 0;
     const { stub } = await visit({
@@ -427,6 +435,8 @@ describe("polling while a target is not finished", () => {
     expect(detailCalls(stub)).toHaveLength(3);
     await tick(30000);
     expect(detailCalls(stub)).toHaveLength(3);
+    await tick(30000);
+    expect(detailCalls(stub)).toHaveLength(4);
   });
 
   it.each<[string, Record<string, unknown>]>([
@@ -436,23 +446,30 @@ describe("polling while a target is not finished", () => {
     ["missed", inState("missed")],
     ["replaced", inState("superseded_after_unknown_outcome")],
     ["a draft", { published_at: null, schedule_state: "draft", operation: null }],
-  ])("does not poll when the only target is %s", async (_name, change) => {
+    ["scheduled for later", dueIn(3600)],
+    ["needing a check", inState("needs_human", {}, "possible")],
+    ["not confirmed", inState("unverified", {}, "possible")],
+    ["held", inState("blocked_reconnect")],
+    ["paused", inState("paused")],
+  ])("reads only every 60 seconds when the target is %s", async (_name, change) => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const { stub } = await visit(showing(target(1, change)));
     await tick(30000);
     expect(detailCalls(stub)).toHaveLength(1);
+    await tick(31000);
+    expect(detailCalls(stub)).toHaveLength(2);
   });
 
   it.each<[string, Record<string, unknown>]>([
-    ["waiting", waiting],
-    ["needing a check", inState("needs_human", {}, "possible")],
-    ["not confirmed", inState("unverified", {}, "possible")],
-    ["held", inState("blocked_reconnect")],
+    ["waiting to be sent", waiting],
+    ["claimed", inState("claimed")],
+    ["due in half a minute", dueIn(30)],
+    ["already due and not yet taken", dueIn(-5)],
     [
       "being removed",
       { presence: "removal_pending", operation: operation({ kind: "delete", state: "published" }) },
     ],
-  ])("keeps polling while the target is %s", async (_name, change) => {
+  ])("reads every 5 seconds while the target is %s", async (_name, change) => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const { stub } = await visit(showing(target(1, change)));
     await tick(5100);
