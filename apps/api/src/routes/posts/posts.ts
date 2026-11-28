@@ -10,7 +10,7 @@ import { Refusal } from "../../errors/refusal.js";
 import { type App, type AppEnv, defineRoute } from "../define-route.js";
 import { definerRefusal } from "../definer-refusal.js";
 import { pageAnswer, pageQuery } from "../input.js";
-import { TARGETS_COLUMN, targetsWithActions } from "./post-detail.js";
+import { HOLD_REASON, TARGETS_COLUMN, targetsWithActions } from "./post-detail.js";
 import { expectedVersion, livePost, staleRefusal } from "./preconditions.js";
 import { registerPublish } from "./publish.js";
 import { resolveDraft } from "./resolve.js";
@@ -85,6 +85,86 @@ const READ_POST = `
       FROM app.post_variants AS s WHERE s.workspace_id = p.workspace_id AND s.post_id = p.id) AS v), '[]'::json) AS variants,
     ${TARGETS_COLUMN}
   FROM app.posts AS p WHERE p.workspace_id = $1 AND p.id = $2 AND p.deleted_at IS NULL`;
+
+const POST_STATUSES = [
+  "draft",
+  "in_review",
+  "changes_requested",
+  "approved",
+  "scheduled",
+  "publishing",
+  "published",
+  "partially_published",
+  "needs_attention",
+  "failed",
+  "missed",
+  "archived",
+] as const;
+const listQuery = pageQuery.extend({ status: z.enum(POST_STATUSES).optional() });
+
+// One row per post: the excerpt comes from the current version's draft, and a target carries only its schedule facts,
+// the held reason and the state of its latest operation, never an operation's code or a provider's words. The cursor is a
+// post id resolved to its position, so a foreign or unknown id resolves to nothing and the page is empty.
+const LIST_POSTS = `
+  SELECT p.id, p.status, p.author_kind, p.author_id, p.updated_at, p.current_version_id,
+    (SELECT left(v.snapshot -> 'draft' -> 'variants' -> 0 ->> 'text', 140) FROM app.post_versions AS v
+      WHERE v.workspace_id = p.workspace_id AND v.id = p.current_version_id) AS excerpt,
+    t.targets, t.published_count, t.target_count
+  FROM app.posts AS p
+  LEFT JOIN app.posts AS c ON c.workspace_id = $1 AND c.id = $3
+  CROSS JOIN LATERAL (
+    SELECT coalesce(jsonb_agg(jsonb_build_object(
+        'variant_id', s.id, 'channel_id', s.channel_id, 'schedule_state', s.schedule_state, 'due_at', s.due_at,
+        'due_tz', s.due_tz, 'published_at', s.published_at, 'presence', s.presence, 'hold_reason', ${HOLD_REASON},
+        'operation_state', (SELECT o.state FROM app.operations AS o
+          WHERE o.workspace_id = s.workspace_id AND o.variant_id = s.id ORDER BY o.created_at DESC, o.id DESC LIMIT 1))
+      ORDER BY s.id), '[]'::jsonb) AS targets,
+      count(*)::int AS target_count, count(s.published_at)::int AS published_count
+    FROM app.post_variants AS s WHERE s.workspace_id = p.workspace_id AND s.post_id = p.id) AS t
+  WHERE p.workspace_id = $1 AND p.deleted_at IS NULL AND ($4::text IS NULL OR p.status = $4)
+    AND ($3::uuid IS NULL OR (p.updated_at <= c.updated_at AND (p.updated_at < c.updated_at OR p.id < c.id)))
+  ORDER BY p.updated_at DESC, p.id DESC
+  LIMIT $2`;
+
+function registerList(app: App): void {
+  defineRoute(app, {
+    method: "get",
+    path: BASE,
+    policy: "session",
+    access: VIEW,
+    params: workspaceParams,
+    query: listQuery,
+    handler: async ({ c, tx, scope, query }) => {
+      const found = await tx.query(LIST_POSTS, [
+        scope.workspaceId,
+        query.limit,
+        query.cursor ?? null,
+        query.status ?? null,
+      ]);
+      return pageAnswer(c, found.rows, query.limit);
+    },
+  });
+}
+
+function registerVersion(app: App): void {
+  defineRoute(app, {
+    method: "get",
+    path: `${BASE}/{post_id}/versions/{version_id}`,
+    policy: "session",
+    access: VIEW,
+    params: versionParams,
+    handler: async ({ tx, scope, params }) => {
+      const found = await tx.query(
+        `SELECT v.id, v.version_no, v.kind, v.created_by, v.created_at, v.snapshot -> 'draft' AS draft
+         FROM app.post_versions AS v JOIN app.posts AS p ON p.workspace_id = v.workspace_id AND p.id = v.post_id
+         WHERE v.workspace_id = $1 AND v.post_id = $2 AND v.id = $3 AND p.deleted_at IS NULL`,
+        [scope.workspaceId, params.post_id, params.version_id],
+      );
+      if (!found.rows[0]) throw new Refusal("not_found", "version row not visible");
+      return found.rows[0];
+    },
+  });
+}
 
 function registerGet(app: App, providers: Providers, now: () => Date): void {
   defineRoute(app, {
@@ -232,8 +312,10 @@ export function registerPosts(
   const now = () => new Date(options.now?.() ?? Date.now());
   const { throttle } = options.auth;
   registerCreate(app, providers, now);
+  registerList(app);
   registerGet(app, providers, now);
   registerVersions(app);
+  registerVersion(app);
   registerChange(app, providers, now, "autosave", throttle);
   registerChange(app, providers, now, "save", throttle);
   registerRestore(app, providers, now);

@@ -5,14 +5,18 @@ import { type TargetAction, targetActions } from "./actions.js";
 // The targets of a post as one column of the post's own statement, so the ETag names the state shown. $3 says whether
 // the caller may see the evidence line and $4 the attempts: a field the caller may not see is left out, never null.
 // A provider's words (the code and the excerpt of an attempt) are never selected.
+
+// The one reading of why a scheduled target waits: its media is not ready. `s` is the variant row.
+export const HOLD_REASON = `CASE WHEN s.schedule_state = 'scheduled' AND app.media_held(s.workspace_id, s.frozen_version_id)
+            THEN 'held_media' END`;
+
 export const TARGETS_COLUMN = `
     coalesce((SELECT jsonb_agg(t.obj ORDER BY t.id) FROM (
       SELECT s.id, jsonb_build_object(
           'variant_id', s.id, 'channel_id', s.channel_id, 'provider_id', c.provider_id,
           'schedule_state', s.schedule_state, 'presence', s.presence, 'published_at', s.published_at,
           'due_at', s.due_at, 'due_tz', s.due_tz, 'settings', s.settings,
-          'hold_reason', CASE WHEN s.schedule_state = 'scheduled' AND app.media_held(s.workspace_id, s.frozen_version_id)
-            THEN 'held_media' END,
+          'hold_reason', ${HOLD_REASON},
           'operation', (SELECT jsonb_build_object('id', o.id, 'kind', o.kind, 'state', o.state, 'effect', o.effect,
               'reason_code', o.reason_code, 'part_index', o.part_index)
             FROM app.operations AS o WHERE o.workspace_id = s.workspace_id AND o.variant_id = s.id
