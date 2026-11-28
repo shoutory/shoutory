@@ -4777,3 +4777,75 @@ msgstr "تعذّر تحميل نسختهم. لم يتغيّر شيء."
 #. js-lingui-explicit-id
 msgid "composer.parts.moved"
 msgstr "نُقل الجزء إلى الموضع {position} من {total}"
+
+#. js-lingui-explicit-id
+msgid "posts.setting.visibility"
+msgstr "الظهور"
+
+#. js-lingui-explicit-id
+msgid "posts.setting.sensitive"
+msgstr "محتوى حساس"
+
+#. js-lingui-explicit-id
+msgid "posts.setting.spoiler_text"
+msgstr "تنبيه المحتوى"
+
+#. js-lingui-explicit-id
+msgid "posts.setting.other"
+msgstr "إعداد آخر"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.step.prepare"
+msgstr "جارٍ التحضير"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.step.commit"
+msgstr "جارٍ الإرسال"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.step.poll"
+msgstr "فحص التقدم"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.step.read_back"
+msgstr "القراءة للتأكد"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.effect.none"
+msgstr "لم يُرسل شيء"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.effect.possible"
+msgstr "ربما أُرسل"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.effect.confirmed"
+msgstr "أُرسل"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.error.retryable_before_send"
+msgstr "فشل قبل الإرسال وستُعاد المحاولة"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.error.retryable_after_send"
+msgstr "فشل بعد الإرسال وستُعاد المحاولة"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.error.rate_limited"
+msgstr "بلوغ حد الطلبات"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.error.auth_revoked"
+msgstr "سُحب الإذن"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.error.permanent"
+msgstr "رُفض"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.error.unknown"
+msgstr "فشل غير معروف"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.other"
+msgstr "أخرى"

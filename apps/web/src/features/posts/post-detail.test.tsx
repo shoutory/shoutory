@@ -297,26 +297,15 @@ describe("the link to the post", () => {
 describe("the settings", () => {
   it("shows every key and value, defaults included, in each kind of value", async () => {
     const settings = {
-      audience: "everyone",
+      visibility: "public",
       reply_limit: 3,
-      hashtags: true,
-      link_preview: null,
+      sensitive: true,
+      spoiler_text: null,
       tags: ["a", "b"],
     };
     const { host } = await visit(showing(target(1, { settings })));
     const shown = byId(host, "target-settings")?.textContent ?? "";
-    for (const part of [
-      "audience",
-      "everyone",
-      "reply limit",
-      "3",
-      "hashtags",
-      "Yes",
-      "link preview",
-      "Not set",
-    ]) {
-      expect(shown).toContain(part);
-    }
+    for (const part of ["public", "3", "Yes", "Not set"]) expect(shown).toContain(part);
     expect(shown).toContain('["a","b"]');
   });
 

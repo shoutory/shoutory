@@ -4777,3 +4777,75 @@ msgstr "We could not load their version. Nothing was changed."
 #. js-lingui-explicit-id
 msgid "composer.parts.moved"
 msgstr "Part moved to position {position} of {total}"
+
+#. js-lingui-explicit-id
+msgid "posts.setting.visibility"
+msgstr "Visibility"
+
+#. js-lingui-explicit-id
+msgid "posts.setting.sensitive"
+msgstr "Sensitive content"
+
+#. js-lingui-explicit-id
+msgid "posts.setting.spoiler_text"
+msgstr "Content warning"
+
+#. js-lingui-explicit-id
+msgid "posts.setting.other"
+msgstr "Other setting"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.step.prepare"
+msgstr "Preparing"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.step.commit"
+msgstr "Sending"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.step.poll"
+msgstr "Checking progress"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.step.read_back"
+msgstr "Reading it back"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.effect.none"
+msgstr "nothing was sent"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.effect.possible"
+msgstr "may have been sent"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.effect.confirmed"
+msgstr "sent"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.error.retryable_before_send"
+msgstr "failed before sending, will retry"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.error.retryable_after_send"
+msgstr "failed after sending, will retry"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.error.rate_limited"
+msgstr "rate limited"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.error.auth_revoked"
+msgstr "access was withdrawn"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.error.permanent"
+msgstr "refused"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.error.unknown"
+msgstr "unknown failure"
+
+#. js-lingui-explicit-id
+msgid "posts.attempt.other"
+msgstr "Other"

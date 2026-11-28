@@ -25,6 +25,7 @@ import {
   type Target,
   wordOf,
 } from "./post-facts";
+import { useAttemptWords, useSettingLabel } from "./post-labels";
 import { type Names, useNames } from "./post-names";
 import {
   EvidenceWords,
@@ -152,6 +153,7 @@ function SettingValue({ value }: { value: unknown }) {
 
 // Every key the answer has, with its value: the stored settings already hold the channel's defaults.
 function Settings({ settings }: { settings: Readonly<Record<string, unknown>> }) {
+  const label = useSettingLabel();
   const entries = Object.entries(settings);
   return (
     <div data-testid="target-settings" className="text-sm">
@@ -166,9 +168,7 @@ function Settings({ settings }: { settings: Readonly<Record<string, unknown>> })
         <dl className="grid grid-cols-[auto_1fr] gap-x-3">
           {entries.map(([key, value]) => (
             <div key={key} className="contents">
-              <dt className="text-text-muted">
-                <DirText>{key.replaceAll("_", " ")}</DirText>
-              </dt>
+              <dt className="text-text-muted">{label(key)}</dt>
               <dd>
                 <SettingValue value={value} />
               </dd>
@@ -181,6 +181,7 @@ function Settings({ settings }: { settings: Readonly<Record<string, unknown>> })
 }
 
 function Attempts({ attempts }: { attempts: NonNullable<Target["attempts"]> }) {
+  const wordsOf = useAttemptWords();
   return (
     <details data-testid="target-attempts" className="text-sm">
       <summary>
@@ -193,11 +194,7 @@ function Attempts({ attempts }: { attempts: NonNullable<Target["attempts"]> }) {
             <li key={one.attempt_no} data-testid="attempt">
               <Trans id="posts.attempts.number">Attempt {one.attempt_no}</Trans>
               {": "}
-              <DirText>
-                {[one.step, one.effect, one.http_status, one.error_class]
-                  .filter((x) => x !== null)
-                  .join(" · ")}
-              </DirText>
+              {wordsOf(one).join(" · ")}
               {started === null ? null : (
                 <>
                   {" · "}
