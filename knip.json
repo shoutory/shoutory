@@ -1,9 +1,10 @@
 {
   "workspaces": {
     ".": {
-      "entry": ["scripts/*.mjs", "e2e/support/screens.ts"],
+      "entry": ["scripts/*.mjs", "e2e/support/screens.ts", "e2e/fixtures/simulators-server.ts"],
       "project": ["scripts/**", "e2e/**"],
-      "ignoreDependencies": ["@commitlint/cli", "turbo"]
+      "ignoreDependencies": ["@commitlint/cli", "turbo"],
+      "ignoreBinaries": ["openssl"]
     },
     "packages/testkit": {
       "entry": ["test/*/*.test.mjs", "scripts/*.mjs"],

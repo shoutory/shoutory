@@ -14,6 +14,8 @@ const STACK_TIMEOUT_MS = 600_000;
 export interface Stack {
   readonly project: string;
   readonly mailUrl: string;
+  // The host port the simulators container's 443 is published on.
+  readonly simulatorPort: number;
   // Secrets included; only the restore drill hands it on, to run compose itself.
   readonly env: NodeJS.ProcessEnv;
   down(): void;
@@ -22,7 +24,7 @@ export interface Stack {
 const secret = () => randomBytes(24).toString("hex");
 
 // Secrets go to compose through its process environment only.
-function runEnvironment(image: string): NodeJS.ProcessEnv {
+function runEnvironment(image: string, folders: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const passwords = Object.fromEntries(ROLES.map((role) => [role, secret()]));
   const roleVariables = ROLES.flatMap((role) => {
     const name = role.toUpperCase();
@@ -35,6 +37,7 @@ function runEnvironment(image: string): NodeJS.ProcessEnv {
   return {
     ...process.env,
     ...Object.fromEntries(roleVariables),
+    ...folders,
     SHOUTORY_IMAGE: image,
     SHOUTORY_POSTGRES_PASSWORD: secret(),
     SHOUTORY_PUBLIC_ORIGIN: APP_ORIGIN,
@@ -132,22 +135,29 @@ function startSidecar(project: string, env: NodeJS.ProcessEnv): NodeJS.ProcessEn
   return { ...env, SHOUTORY_E2E_DNS_IP: address };
 }
 
-export function startStack(removeBy: string): Stack {
+const publishedPort = (project: string, env: NodeJS.ProcessEnv, service: string, inside: string): number => {
+  const port = compose(project, env, ["port", service, inside]).stdout.trim().split(":").at(-1);
+  if (!port) throw new Error(`${service} has no published port`);
+  return Number(port);
+};
+
+/** `folders` are the simulators' certificate and bundle folders (compose reads them from the environment). */
+export function startStack(removeBy: string, folders: NodeJS.ProcessEnv): Stack {
   removeStale();
   const project = `${PREFIX}${randomBytes(4).toString("hex")}`;
   const image = `${project}:local`;
   const down = () => {
-    compose(project, runEnvironment(image), ["down", "--volumes", "--remove-orphans"], true);
+    compose(project, runEnvironment(image, folders), ["down", "--volumes", "--remove-orphans"], true);
     spawnSync("docker", ["image", "rm", "--force", image], { stdio: "ignore" });
     rmSync(STATE_DIR, { recursive: true, force: true });
   };
   try {
-    const env = startSidecar(project, runEnvironment(image));
+    const env = startSidecar(project, runEnvironment(image, folders));
     compose(project, env, ["up", "--detach", "--build", "--wait", "--wait-timeout", "300"]);
-    const port = compose(project, env, ["port", "mail", "8025"]).stdout.trim().split(":").at(-1);
-    if (!port) throw new Error("the mail catcher has no published port");
+    const mailPort = publishedPort(project, env, "mail", "8025");
+    const simulatorPort = publishedPort(project, env, "simulators", "443");
     plantFlags(project, env, removeBy);
-    return { project, mailUrl: `http://127.0.0.1:${port}`, env, down };
+    return { project, mailUrl: `http://127.0.0.1:${mailPort}`, simulatorPort, env, down };
   } catch (error) {
     down();
     throw error;

@@ -22,6 +22,18 @@ services:
       # A published port reaches the app from the Docker network's gateway, so the private ranges Docker hands out are the
       # proxy. Each test project and each member then sends its own X-Forwarded-For and is counted as its own client.
       SHOUTORY_TRUSTED_PROXIES: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+      # The provider simulators answer from this network, whose addresses are private, so the operator's allowlist (the
+      # setting a self-host has) names it; the image itself stays as it ships. Node reads the extra root at start-up, and the
+      # app's outbound client passes no roots of its own, so the test CA is trusted beside the system's.
+      SHOUTORY_EGRESS_ALLOW_CIDRS: 172.30.77.0/24
+      NODE_EXTRA_CA_CERTS: /e2e-ca/ca.pem
+    # The CA's certificate only: the server key is mounted in the simulators container alone. The folders are made by the
+    # run's setup; the default only lets `down` read this file without them.
+    volumes:
+      - type: bind
+        source: ${SHOUTORY_E2E_CA_DIR:-/nonexistent}
+        target: /e2e-ca
+        read_only: true
     # Only the app is pointed at the sidecar: Docker's own resolver still answers the names of this stack, and every
     # other name goes to the sidecar, which records it and refuses it. The address is read after the sidecar starts.
     dns:
@@ -31,6 +43,43 @@ services:
         condition: service_healthy
       dns:
         condition: service_started
+
+  simulators:
+    # The app's own image brings a Node to run the bundle in /sim; the image's code is not used. The four provider simulators
+    # listen behind one https server on 443, which answers by the Host header, and the aliases are every name the adapters
+    # call (the list is tested against the setup's plan). The published port is for the browser, which cannot see the
+    # network; it is mapped to this name through the browser's own resolver rules.
+    image: ${SHOUTORY_IMAGE:?set SHOUTORY_IMAGE}
+    # The key's folder is private to the run's user, and root alone reads it whoever started the run.
+    user: "0:0"
+    entrypoint: ["/nodejs/bin/node"]
+    command: ["/sim/simulators.mjs"]
+    volumes:
+      - type: bind
+        source: ${SHOUTORY_E2E_SIM_DIR:-/nonexistent}
+        target: /sim
+    networks:
+      default:
+        aliases:
+          - api.telegram.org
+          - discord.com
+          - social.test
+          - alice.example
+          - bob.example
+          - pds.example
+          - auth.example
+          - plc.directory
+    ports:
+      - "127.0.0.1::443"
+    healthcheck:
+      test:
+        - CMD
+        - /nodejs/bin/node
+        - -e
+        - "require('node:fs').accessSync('/sim/ready.json')"
+      interval: 2s
+      timeout: 5s
+      retries: 30
 
   dns:
     # CoreDNS 1.15.0 (Apache-2.0) logs every query and has no plugin that forwards or answers from data, so an outside
@@ -54,6 +103,13 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
+
+# Pinned, so the app's operator allowlist can name it.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.77.0/24
 
 configs:
   corefile:
