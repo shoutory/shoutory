@@ -21,7 +21,6 @@ import {
   headlineOf,
   isFinished,
   permalinkOf,
-  safeLink,
   type Target,
   wordOf,
 } from "./post-facts";
@@ -31,6 +30,7 @@ import {
   HeadlineMeaning,
   HeadlineWord,
   HeldMediaWords,
+  PostLink,
   Summary,
   TargetLabel,
   TargetMeaning,
@@ -186,30 +186,6 @@ function Attempts({ attempts }: { attempts: NonNullable<Target["attempts"]> }) {
   );
 }
 
-function PostLink({ address, provider }: { address: string; provider: string }) {
-  const href = safeLink(address);
-  if (href === null) {
-    return (
-      <span data-testid="target-link">
-        <DirText>{address}</DirText>
-      </span>
-    );
-  }
-  return (
-    <a
-      data-testid="target-link"
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="min-h-6 pointer-coarse:min-h-11 text-link underline"
-    >
-      <Trans id="posts.link.open">
-        Open the post on <DirText>{provider}</DirText> (opens in a new tab)
-      </Trans>
-    </a>
-  );
-}
-
 function TargetTimes({ target }: { target: Target }) {
   const published = dateOf(target.published_at);
   const due = dateOf(target.due_at);
@@ -251,7 +227,7 @@ function TargetRow({ target, text, named, place }: RowProps) {
       </p>
       <Settings settings={target.settings} />
       {target.attempts === undefined ? null : <Attempts attempts={target.attempts} />}
-      <TargetActions place={place} target={target} />
+      <TargetActions place={place} target={target} named={named} />
     </li>
   );
 }

@@ -644,6 +644,15 @@ const selectAllFiles = async (page: Page) => {
 
 export const DIALOGS: readonly Dialog[] = [
   {
+    id: "post-resolve",
+    screen: "post-detail",
+    titleId: "posts.resolve.title_unclear",
+    open: async (page) => {
+      await page.getByTestId("action-resolve").click();
+      await dialog(page);
+    },
+  },
+  {
     id: "media-bulk-tag",
     screen: "media",
     titleId: "media.bulk.tag_title",

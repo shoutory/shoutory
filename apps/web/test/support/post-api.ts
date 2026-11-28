@@ -10,6 +10,7 @@ interface Call {
 
 /** The answers of the posts pages, laid over the channel and shared stubs. */
 export interface PostApi extends ChannelApi {
+  workspace?: () => Answer;
   postList?: (query: URLSearchParams) => Answer;
   postDetail?: () => Answer;
   postVersion?: () => Answer;
@@ -162,7 +163,11 @@ export function stubPostApi(api: PostApi = {}) {
   const inner = globalThis.fetch;
   const stub = vi.fn((path: string, init?: RequestInit) => {
     const url = new URL(path, "http://same-origin.invalid");
-    const answer = postAnswers(api, url, init) ?? operationAnswers(api, url, init);
+    const profile = url.pathname === `/api/v1/workspaces/${POST_WS}` && (init?.method ?? "GET") === "GET";
+    const answer =
+      postAnswers(api, url, init) ??
+      operationAnswers(api, url, init) ??
+      (profile ? (api.workspace?.() ?? json({ data: { default_tz: "Africa/Cairo" } })) : undefined);
     return answer === undefined ? inner(path, init) : Promise.resolve(answer);
   });
   vi.stubGlobal("fetch", stub);

@@ -1,10 +1,11 @@
 import { plural } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { ReactNode } from "react";
+import type { ApiError } from "../../http/client";
 import { formatNumber } from "../../i18n/i18n";
 import { DirText } from "../../ui/dir-text";
 import { LocalizedDateTime, LocalizedNumber, useFormatPrefs } from "../../ui/localized";
-import type { EvidenceLine, Headline, HeadlineKey, WordKey } from "./post-facts";
+import { type EvidenceLine, type Headline, type HeadlineKey, safeLink, type WordKey } from "./post-facts";
 
 const PAUSE_REASONS = [
   "quota",
@@ -408,6 +409,69 @@ export function EvidenceWords({ line, provider }: { line: EvidenceLine; provider
     <Trans id="posts.evidence.answer">
       Confirmed by <DirText>{provider}</DirText>'s answer
     </Trans>
+  );
+}
+
+/** What a refused write says: what happened and what it means for the post, never the server's own words. */
+export function refusalWords(error: ApiError): { what: ReactNode; meaning: ReactNode } {
+  if (error.details?.reason === "post_in_flight") {
+    return {
+      what: <Trans id="posts.refused.in_flight.what">This channel is being posted right now</Trans>,
+      meaning: (
+        <Trans id="posts.refused.in_flight.meaning">
+          Wait until it finishes, then try again. Nothing was changed.
+        </Trans>
+      ),
+    };
+  }
+  if (error.state === "forbidden") {
+    return {
+      what: <Trans id="posts.refused.forbidden.what">You cannot do this</Trans>,
+      meaning: (
+        <Trans id="posts.refused.forbidden.meaning">
+          Only the author of the post, an admin or the owner can. Nothing was changed.
+        </Trans>
+      ),
+    };
+  }
+  if (error.status === 409 || error.status === 412 || error.status === 428) {
+    return {
+      what: <Trans id="posts.refused.moved.what">This post changed while you were looking</Trans>,
+      meaning: (
+        <Trans id="posts.refused.moved.meaning">
+          The page now shows the latest state. Check it, then try again. Nothing was changed.
+        </Trans>
+      ),
+    };
+  }
+  return {
+    what: <Trans id="posts.refused.failed.what">We could not do that</Trans>,
+    meaning: <Trans id="posts.refused.failed.meaning">Nothing was changed. Try again.</Trans>,
+  };
+}
+
+/** The stored address of a post: a link only for http and https, text for anything else. */
+export function PostLink({ address, provider }: { address: string; provider: string }) {
+  const href = safeLink(address);
+  if (href === null) {
+    return (
+      <span data-testid="target-link">
+        <DirText>{address}</DirText>
+      </span>
+    );
+  }
+  return (
+    <a
+      data-testid="target-link"
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="min-h-6 pointer-coarse:min-h-11 text-link underline"
+    >
+      <Trans id="posts.link.open">
+        Open the post on <DirText>{provider}</DirText> (opens in a new tab)
+      </Trans>
+    </a>
   );
 }
 

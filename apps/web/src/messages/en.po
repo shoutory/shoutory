@@ -4224,3 +4224,247 @@ msgstr "Earlier"
 #. js-lingui-explicit-id
 msgid "composer.schedule.later"
 msgstr "Later"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.open_unclear"
+msgstr "Check and resolve"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.open_past_due"
+msgstr "Choose what to do"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.open_unverified"
+msgstr "Resolve"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.open_removal"
+msgstr "Confirm it was removed"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.title_unclear"
+msgstr "We could not confirm whether this was posted"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.title_past_due"
+msgstr "Nothing was posted; its time passed"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.title_removal"
+msgstr "We could not confirm it was removed"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.title_unverified"
+msgstr "Could not be confirmed"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.intro.unclear"
+msgstr "We could not confirm whether this was posted to {place}. To avoid a duplicate we have not posted again. Open {place} and look for the post before you choose."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.intro.past_due"
+msgstr "{place} was disconnected when this was due. Posting it now would be late."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.intro.missed"
+msgstr "Its time passed and we never send late."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.intro.unverified"
+msgstr "We stopped checking whether this was posted to {place}. It still blocks new posts to that channel."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.intro.removal"
+msgstr "We could not confirm it was removed from {platform}. Open {platform} and look before you choose."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.choose"
+msgstr "What happened?"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.none"
+msgstr "There is nothing to choose for this one right now. We keep checking."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.published.label"
+msgstr "It was posted"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.published.line"
+msgstr "It shows as published, confirmed by you. You can add the link."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.again.label"
+msgstr "It was not posted, post it again"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.again.line"
+msgstr "We post it again. If it did go out, you would get a duplicate."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.replace.label"
+msgstr "Replace it"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.replace.line"
+msgstr "We make a new post for this channel and keep watching for the first one. If it appears later you will be told."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.leave.label"
+msgstr "Leave it unconfirmed for now"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.leave.line"
+msgstr "This channel stays blocked for new posts to it, and we remind you every week."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.late.label"
+msgstr "Publish now"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.late.line"
+msgstr "We send it now, with a new deadline."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.reschedule.label"
+msgstr "Reschedule"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.reschedule.line"
+msgstr "Pick a new time. The post goes back to scheduled."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.drop.label"
+msgstr "Drop it"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.drop.line"
+msgstr "The post goes back to a draft. Nothing is deleted."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.removed.label"
+msgstr "Confirm it was removed"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.removed.line"
+msgstr "Look at the channel first. This records that it is gone."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.ack.not_there"
+msgstr "I checked and it is not there; I understand posting again could create a duplicate"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.ack.replace"
+msgstr "I understand the first post may still appear and I may get a duplicate"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.ack.label"
+msgstr "Type that sentence to confirm"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.ack.error"
+msgstr "Type the sentence exactly as shown."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.link.label"
+msgstr "Link to the post (optional)"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.link.error"
+msgstr "Use an address that starts with https://"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.zone"
+msgstr "Times use the time zone of this workspace: <0>{0}</0>"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.date"
+msgstr "Date"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.time"
+msgstr "Time"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.time.missing"
+msgstr "Enter a date and a time."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.time.gap"
+msgstr "That time does not exist on that day, because the clocks skip it. Pick another time."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.time.fold"
+msgstr "That time happens twice that day. Pick the earlier or the later one."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.time.past"
+msgstr "Pick a time in the future."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.fold.label"
+msgstr "Which of the two times?"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.fold.earlier"
+msgstr "The earlier one"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.fold.later"
+msgstr "The later one"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.submit"
+msgstr "Continue"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.close"
+msgstr "Close"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.done.published"
+msgstr "Recorded as published. It shows as confirmed by you."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.done.again"
+msgstr "Sending it again. The channel shows its state as it changes."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.done.replace"
+msgstr "A new post was made. We keep watching for the first one and will tell you if it appears."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.done.leave"
+msgstr "Kept as could not be confirmed. This channel stays blocked for new posts and we remind you every week."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.done.late"
+msgstr "Sending it now."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.done.reschedule"
+msgstr "Rescheduled."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.done.drop"
+msgstr "Moved back to a draft. Nothing was deleted."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.done.removed"
+msgstr "Recorded as removed. It shows as confirmed by you."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.step_up.what"
+msgstr "This choice needs your password again"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.step_up.meaning"
+msgstr "Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.not_connected.what"
+msgstr "Reconnect <0>{channel}</0> first"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.not_connected.meaning"
+msgstr "This choice would send the post, and the channel is not connected. Nothing was changed."

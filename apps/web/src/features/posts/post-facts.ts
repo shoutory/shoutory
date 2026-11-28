@@ -146,6 +146,42 @@ export function isFinished(target: Target): boolean {
   return TERMINAL.has(target.operation.state);
 }
 
+export type Resolution =
+  | "attest_published"
+  | "attest_not_executed"
+  | "supersede"
+  | "dismiss"
+  | "publish_late"
+  | "reschedule"
+  | "drop"
+  | "confirm_removed";
+export type Flavour = "unclear" | "past_due" | "unverified" | "removal";
+
+/**
+ * What a person may settle for an operation, derived here because the answer lists only that a resolution exists: the
+ * set is the ledger's table of human resolutions by operation state and kind, and the server refuses any other.
+ */
+export function resolutionsOf(operation: z.infer<typeof operationSchema>): {
+  flavour: Flavour;
+  kinds: Resolution[];
+} {
+  const { state, kind, reason_code: reason } = operation;
+  if (state === "missed") return { flavour: "past_due", kinds: ["publish_late", "reschedule"] };
+  if (state === "unverified") {
+    const kinds: Resolution[] = kind === "delete" ? [] : ["attest_published", "supersede"];
+    return { flavour: kind === "delete" ? "removal" : "unverified", kinds };
+  }
+  if (state !== "needs_human") return { flavour: "unclear", kinds: [] };
+  if (reason === "past_due_after_reconnect") {
+    return { flavour: "past_due", kinds: ["publish_late", "reschedule", "drop"] };
+  }
+  if (kind === "delete") return { flavour: "removal", kinds: ["confirm_removed", "dismiss"] };
+  return {
+    flavour: "unclear",
+    kinds: ["attest_published", "attest_not_executed", "supersede", "dismiss"],
+  };
+}
+
 /** What the words and the headline need to know about one target, from a list row or from the detail. */
 export interface Facts {
   readonly scheduleState: string;

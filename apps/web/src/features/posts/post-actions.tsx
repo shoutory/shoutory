@@ -1,6 +1,6 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import { draftSchema } from "@shoutory/core/content";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { z } from "zod";
 import { useAction } from "../../auth/auth-frame";
@@ -8,7 +8,10 @@ import { type ApiError, request, uuidv7 } from "../../http/client";
 import { Button } from "../../ui/button";
 import { ErrorPanel } from "../../ui/error-panel";
 import { useSignIn } from "../channels/channels-hub";
-import type { Target } from "./post-facts";
+import type { Resolution, Target } from "./post-facts";
+import type { Names } from "./post-names";
+import { refusalWords } from "./post-words";
+import { ResolveButton } from "./resolve-dialog";
 
 const accepted = z.looseObject({});
 const created = z.object({ id: z.string() });
@@ -66,44 +69,6 @@ export function EffectButton({ call, testId, children }: EffectProps) {
 const LINK =
   "inline-flex min-h-10 pointer-coarse:min-h-11 items-center rounded-md border border-border-control px-5 text-md text-link underline";
 
-function copyOf(error: ApiError): { what: ReactNode; meaning: ReactNode } {
-  const reason = error.details?.reason;
-  if (reason === "post_in_flight") {
-    return {
-      what: <Trans id="posts.refused.in_flight.what">This channel is being posted right now</Trans>,
-      meaning: (
-        <Trans id="posts.refused.in_flight.meaning">
-          Wait until it finishes, then try again. Nothing was changed.
-        </Trans>
-      ),
-    };
-  }
-  if (error.state === "forbidden") {
-    return {
-      what: <Trans id="posts.refused.forbidden.what">You cannot do this</Trans>,
-      meaning: (
-        <Trans id="posts.refused.forbidden.meaning">
-          Only the author of the post, an admin or the owner can. Nothing was changed.
-        </Trans>
-      ),
-    };
-  }
-  if (error.status === 409 || error.status === 412 || error.status === 428) {
-    return {
-      what: <Trans id="posts.refused.moved.what">This post changed while you were looking</Trans>,
-      meaning: (
-        <Trans id="posts.refused.moved.meaning">
-          The page now shows the latest state. Check it, then try again. Nothing was changed.
-        </Trans>
-      ),
-    };
-  }
-  return {
-    what: <Trans id="posts.refused.failed.what">We could not do that</Trans>,
-    meaning: <Trans id="posts.refused.failed.meaning">Nothing was changed. Try again.</Trans>,
-  };
-}
-
 /** A refusal, with the next steps the server listed (copy to a draft, edit) beside it. */
 export function Refusal({
   error,
@@ -115,7 +80,7 @@ export function Refusal({
   words?: { what: ReactNode; meaning: ReactNode };
 }) {
   const next = (error.lists?.actions ?? []).filter((one): one is string => typeof one === "string");
-  const shown = words ?? copyOf(error);
+  const shown = words ?? refusalWords(error);
   return (
     <div data-testid="post-refusal" className="flex flex-col items-start gap-3">
       <ErrorPanel focusOnMount what={shown.what} meaning={shown.meaning} error={error} />
@@ -198,7 +163,8 @@ const COMPOSER_LINKS: Readonly<Record<string, ReactNode>> = {
 };
 
 /** The buttons of one target, exactly the ones the server listed for it. */
-export function TargetActions({ place, target }: { place: Place; target: Target }) {
+export function TargetActions({ place, target, named }: { place: Place; target: Target; named: Names }) {
+  const [resolved, setResolved] = useState<Resolution | null>(null);
   const listed = (name: string) => target.actions.includes(name);
   return (
     <div data-testid="target-actions" className="flex flex-wrap items-start gap-3">
@@ -216,6 +182,9 @@ export function TargetActions({ place, target }: { place: Place; target: Target 
       )}
       {listed("unschedule") ? <UnscheduleButton place={place} target={target} /> : null}
       {listed("cancel") && target.operation !== null ? <CancelButton place={place} target={target} /> : null}
+      {listed("resolve") || resolved !== null ? (
+        <ResolveButton place={place} target={target} named={named} done={resolved} onDone={setResolved} />
+      ) : null}
     </div>
   );
 }

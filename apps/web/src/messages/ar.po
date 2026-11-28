@@ -4222,3 +4222,247 @@ msgstr "الأولى"
 #. js-lingui-explicit-id
 msgid "composer.schedule.later"
 msgstr "الثانية"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.open_unclear"
+msgstr "تحقق وحدد الحل"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.open_past_due"
+msgstr "اختر ما تريد فعله"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.open_unverified"
+msgstr "حل الحالة"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.open_removal"
+msgstr "تأكيد أنه حُذف"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.title_unclear"
+msgstr "لم نتمكن من التأكد مما إذا كان قد نُشر"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.title_past_due"
+msgstr "لم يُنشر شيء؛ فات موعده"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.title_removal"
+msgstr "لم نتأكد من الحذف"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.title_unverified"
+msgstr "تعذّر التأكد"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.intro.unclear"
+msgstr "لم نتمكن من التأكد مما إذا كان قد نُشر على {place}. لتجنب النشر المكرر لم نعد النشر. افتح {place} وابحث عن المنشور قبل أن تختار."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.intro.past_due"
+msgstr "كانت {place} غير متصلة عند موعده. النشر الآن سيكون متأخرًا."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.intro.missed"
+msgstr "مضى وقته ولا نرسل متأخرًا أبدًا."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.intro.unverified"
+msgstr "توقفنا عن فحص ما إذا كان قد نُشر على {place}. ولا يزال يمنع منشورات جديدة على تلك القناة."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.intro.removal"
+msgstr "لم نتأكد من حذفه من {platform}. افتح {platform} وانظر قبل أن تختار."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.choose"
+msgstr "ماذا حدث؟"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.none"
+msgstr "لا شيء لتختاره في هذه الحالة الآن. نواصل الفحص."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.published.label"
+msgstr "نُشر"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.published.line"
+msgstr "يظهر كمنشور بتأكيد منك. يمكنك إضافة الرابط."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.again.label"
+msgstr "لم يُنشر، انشره مرة أخرى"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.again.line"
+msgstr "ننشره مرة أخرى. إن كان قد نُشر فعلًا فسيظهر مكررًا."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.replace.label"
+msgstr "استبدله"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.replace.line"
+msgstr "ننشئ منشورًا جديدًا لهذه القناة ونواصل مراقبة الأول. إن ظهر لاحقًا سنخبرك."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.leave.label"
+msgstr "اتركه دون تأكيد الآن"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.leave.line"
+msgstr "تظل هذه القناة محجوبة عن المنشورات الجديدة إليها، ونذكّرك كل أسبوع."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.late.label"
+msgstr "انشر الآن"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.late.line"
+msgstr "نرسله الآن بمهلة جديدة."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.reschedule.label"
+msgstr "غيّر الموعد"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.reschedule.line"
+msgstr "اختر وقتًا جديدًا. يعود المنشور إلى الجدولة."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.drop.label"
+msgstr "ألغه وأعده مسودة"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.drop.line"
+msgstr "يعود المنشور إلى مسودة. لا يُحذف شيء."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.removed.label"
+msgstr "تأكيد أنه حُذف"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.removed.line"
+msgstr "انظر إلى القناة أولًا. هذا يسجّل أنه حُذف."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.ack.not_there"
+msgstr "تحققت وهو غير موجود، وأدرك أن النشر مرة أخرى قد يسبب منشورًا مكررًا"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.ack.replace"
+msgstr "أدرك أن المنشور الأول قد يظهر لاحقًا وأنني قد أحصل على منشور مكرر"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.ack.label"
+msgstr "اكتب هذه الجملة للتأكيد"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.ack.error"
+msgstr "اكتب الجملة كما هي تمامًا."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.link.label"
+msgstr "رابط المنشور (اختياري)"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.link.error"
+msgstr "استخدم عنوانًا يبدأ بـ https://"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.zone"
+msgstr "تستخدم الأوقات المنطقة الزمنية لمساحة العمل هذه: <0>{0}</0>"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.date"
+msgstr "التاريخ"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.time"
+msgstr "الوقت"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.time.missing"
+msgstr "أدخل التاريخ والوقت."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.time.gap"
+msgstr "هذا الوقت غير موجود في ذلك اليوم لأن الساعة تتخطاه. اختر وقتًا آخر."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.time.fold"
+msgstr "هذا الوقت يتكرر في ذلك اليوم. اختر الأول أو الثاني."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.time.past"
+msgstr "اختر وقتًا في المستقبل."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.fold.label"
+msgstr "أي الوقتين؟"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.fold.earlier"
+msgstr "الأول"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.fold.later"
+msgstr "الثاني"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.submit"
+msgstr "متابعة"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.close"
+msgstr "إغلاق"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.done.published"
+msgstr "سُجّل كمنشور. يظهر بتأكيد منك."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.done.again"
+msgstr "نرسله مرة أخرى. تعرض القناة حالته أثناء تغيّرها."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.done.replace"
+msgstr "أُنشئ منشور جديد. نواصل مراقبة المنشور الأول وسنخبرك إن ظهر."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.done.leave"
+msgstr "بقي «تعذّر التأكد». تظل هذه القناة محجوبة عن المنشورات الجديدة ونذكّرك كل أسبوع."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.done.late"
+msgstr "نرسله الآن."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.done.reschedule"
+msgstr "تمت إعادة الجدولة."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.done.drop"
+msgstr "أُعيد إلى مسودة. لم يُحذف شيء."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.done.removed"
+msgstr "سُجّل كمحذوف. يظهر بتأكيد منك."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.step_up.what"
+msgstr "هذا الاختيار يحتاج إلى كلمة مرورك مرة أخرى"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.step_up.meaning"
+msgstr "لم يتغير شيء."
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.not_connected.what"
+msgstr "أعد ربط <0>{channel}</0> أولًا"
+
+#. js-lingui-explicit-id
+msgid "posts.resolve.not_connected.meaning"
+msgstr "هذا الاختيار سيرسل المنشور والقناة غير متصلة. لم يتغير شيء."
