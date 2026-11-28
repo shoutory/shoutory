@@ -34,6 +34,7 @@ import { registerUserAvatar } from "./routes/me/avatar.js";
 import type { ImportFetch } from "./routes/media/import.js";
 import { registerMedia, sandboxDownloads } from "./routes/media/media.js";
 import { registerMembers } from "./routes/members/members.js";
+import { registerNotices } from "./routes/notices/notices.js";
 import { registerOperations } from "./routes/operations/operations.js";
 import { registerOrganizations } from "./routes/organizations/organization.js";
 import { registerPosts } from "./routes/posts/posts.js";
@@ -233,6 +234,7 @@ export function createApp(options: AppOptions): App {
   registerMembers(app, options.auth.ipHmac);
   registerOperations(app, options.auth.ipHmac);
   registerAudit(app);
+  registerNotices(app);
   registerUnsubscribe(app, options.auth, options.pool);
   registerInstance(app, options.pool, options.now ?? Date.now);
   registerAdminRoutes(app, options);
