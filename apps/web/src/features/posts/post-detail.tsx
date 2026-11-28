@@ -60,9 +60,7 @@ function usePostDetail(ws: string, postId: string) {
   expiredRef.current = signIn;
   const path = `/api/v1/workspaces/${ws}/posts/${postId}`;
 
-  const read = useCallback(async () => {
-    if (running.current) return;
-    running.current = true;
+  const readOnce = useCallback(async () => {
     try {
       const detail = await request(detailSchema, path);
       setState((now) => ({
@@ -80,10 +78,29 @@ function usePostDetail(ws: string, postId: string) {
           ? { ...now, reads: now.reads + 1, refreshFailed: error }
           : { status: "failed", error },
       );
-    } finally {
-      running.current = false;
     }
   }, [path]);
+
+  // A read asked for after an action that finds another running is kept, and runs as soon as that one ends.
+  const again = useRef(false);
+  const read = useCallback(
+    async (afterAction = false) => {
+      if (running.current) {
+        again.current ||= afterAction;
+        return;
+      }
+      running.current = true;
+      try {
+        do {
+          again.current = false;
+          await readOnce();
+        } while (again.current);
+      } finally {
+        running.current = false;
+      }
+    },
+    [readOnce],
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` is the retry counter.
   useEffect(() => {
@@ -93,7 +110,7 @@ function usePostDetail(ws: string, postId: string) {
 
   useReadAgain(state, read);
 
-  return { state, refresh: () => void read(), retry: () => setAttempt((now) => now + 1) };
+  return { state, refresh: () => void read(true), retry: () => setAttempt((now) => now + 1) };
 }
 
 // Arms the next read after each finished one, and reads at once when a hidden tab shows again.

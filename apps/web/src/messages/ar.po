@@ -4773,3 +4773,7 @@ msgstr "أُلغيت الجدولة. عاد المنشور مسودة."
 #. js-lingui-explicit-id
 msgid "composer.conflict.failed"
 msgstr "تعذّر تحميل نسختهم. لم يتغيّر شيء."
+
+#. js-lingui-explicit-id
+msgid "composer.parts.moved"
+msgstr "نُقل الجزء إلى الموضع {position} من {total}"

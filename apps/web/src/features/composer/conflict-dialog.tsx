@@ -96,7 +96,9 @@ export function ConflictDialog({
         ) : state.status === "failed" ? (
           <div data-testid="conflict-failed" role="alert" className="flex flex-col items-start gap-2">
             <p>
-              <Trans id="composer.conflict.failed">We could not load their version. Nothing was changed.</Trans>
+              <Trans id="composer.conflict.failed">
+                We could not load their version. Nothing was changed.
+              </Trans>
             </p>
             <Button data-testid="conflict-retry" onPress={reload}>
               <Trans id="posts.retry">Try again</Trans>

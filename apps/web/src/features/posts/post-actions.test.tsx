@@ -1,3 +1,4 @@
+import { act } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { click, closeApp, json, openApp, refusal, settle, uuidWorkspaces } from "../../../test/support/app";
 import {
@@ -188,6 +189,33 @@ describe("what is announced and where focus goes after an action", () => {
     await settle();
     expect(byId(host, "action-cancel")).not.toBeNull();
     expect(byId(host, "post-refusal")?.contains(document.activeElement)).toBe(true);
+  });
+});
+
+describe("reading the post again after an action", () => {
+  it("reads once more when the action finished while another read was still running", async () => {
+    let reads = 0;
+    let release: (answer: Response) => void = () => undefined;
+    const { host } = await visit({
+      postDetail: () => {
+        reads += 1;
+        if (reads === 1) return detailAnswer([target(["cancel"])]);
+        if (reads === 2) return new Promise<Response>((done) => (release = done));
+        return detailAnswer([target([], { operation: operation({ state: "cancelled", effect: "none" }) })]);
+      },
+      cancel: () => json({ data: { operation_id: OPERATION, state: "cancelled" } }),
+    });
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    click(byId(host, "action-cancel") as HTMLElement);
+    await settle();
+    expect(reads).toBe(2);
+    release(detailAnswer([target(["cancel"])]));
+    await settle();
+    expect(reads).toBe(3);
+    expect(byId(host, "action-cancel")).toBeNull();
+    expect(byId(host, "target-word")?.textContent).toBe("Cancelled");
   });
 });
 

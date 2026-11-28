@@ -67,6 +67,48 @@ describe("the parts of a thread", () => {
     expect(texts()).toEqual(["two", "one", ""]);
   });
 
+  it.each<[string, string, number, string, number]>([
+    ["down", "part-down", 0, "part-down", 1],
+    ["up", "part-up", 2, "part-up", 1],
+  ])(
+    "moving a part %s says where it is now and keeps focus on it",
+    async (_name, button, from, again, to) => {
+      await open(CH.thread, { parts: parts("one", "two", "three") });
+      const live = byId("parts-live");
+      expect(live?.getAttribute("role")).toBe("status");
+      const pressed = allById(button)[from] as HTMLElement;
+      pressed.focus();
+      await click(pressed);
+      await settle();
+      expect(byId("parts-live")).toBe(live);
+      expect(live?.textContent).toBe(`Part moved to position ${to + 1} of 3`);
+      expect(document.activeElement).toBe(allById(again)[to]);
+    },
+  );
+});
+
+describe("deleting parts", () => {
+  it.each<[string, number, string[], number]>([
+    ["a middle part", 1, ["one", "three"], 0],
+    ["the first part", 0, ["two", "three"], 0],
+    ["the last part", 2, ["one", "two"], 1],
+  ])("deleting %s moves focus to the part before it", async (_name, at, left, focused) => {
+    await open(CH.thread, { parts: parts("one", "two", "three") });
+    await click(allById("part-delete")[at] as HTMLElement);
+    await settle();
+    expect(texts()).toEqual(left);
+    expect(document.activeElement).toBe(allById("part-text")[focused]);
+  });
+
+  it("deleting the only part moves focus to Add part", async () => {
+    await open(CH.thread, { parts: parts("one") });
+    await click(allById("part-delete")[0] as HTMLElement);
+    await settle();
+    expect(document.activeElement).toBe(byId("part-add"));
+  });
+});
+
+describe("the ends and the limit of a thread", () => {
   it("the first part cannot move up and the last cannot move down", async () => {
     await open(CH.thread, { parts: parts("one", "two") });
     expect(allById("part-up")[0]?.getAttribute("aria-disabled")).toBe("true");

@@ -345,7 +345,9 @@ describe("reading the list", () => {
     expect(listCalls(stub)).toHaveLength(2);
     expect(listCalls(stub)[1]?.searchParams.get("cursor")).toBe("cursor-1");
   });
+});
 
+describe("an answer that comes too late", () => {
   it("drops the answer of Show more that arrives after the filter changed", async () => {
     let release: (answer: Response) => void = () => undefined;
     const { host } = await visit({
@@ -363,7 +365,9 @@ describe("reading the list", () => {
     await settle();
     expect(all(host, "post-row").map((one) => one.dataset.postId)).toEqual([postId(7)]);
   });
+});
 
+describe("a read that fails", () => {
   it("a failed Show more keeps the rows and says so", async () => {
     let read = 0;
     const { host } = await visit({

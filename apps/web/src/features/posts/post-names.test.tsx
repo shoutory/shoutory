@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { channelPage, channelRow, closeApp, openApp, settle, uuidWorkspaces } from "../../../test/support/app";
+import {
+  channelPage,
+  channelRow,
+  closeApp,
+  openApp,
+  settle,
+  uuidWorkspaces,
+} from "../../../test/support/app";
 import {
   CHANNEL_ONE,
   CHANNEL_TWO,

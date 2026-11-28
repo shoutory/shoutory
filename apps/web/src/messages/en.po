@@ -4773,3 +4773,7 @@ msgstr "Unscheduled. It is a draft again."
 #. js-lingui-explicit-id
 msgid "composer.conflict.failed"
 msgstr "We could not load their version. Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "composer.parts.moved"
+msgstr "Part moved to position {position} of {total}"

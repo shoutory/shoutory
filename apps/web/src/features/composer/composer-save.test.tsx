@@ -139,40 +139,40 @@ describe("offline", () => {
   });
 });
 
+const theirs = () =>
+  json({
+    data: {
+      id: VERSION_3,
+      version_no: 3,
+      kind: "save",
+      created_by: "u2",
+      created_at: "2026-11-28T10:00:00.000Z",
+      draft: { variants: [variantRow(CH.short, "Their words")] },
+    },
+  });
+
+async function stale(theirReads: (read: number) => Response = theirs) {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  let patches = 0;
+  let reads = 0;
+  const opened = await open((call) => {
+    if (call.method === "PATCH") {
+      patches += 1;
+      return patches === 1
+        ? refusal("precondition_failed", 412, { current_version_id: VERSION_3 })
+        : patched();
+    }
+    if (call.method === "GET" && call.path.endsWith(`versions/${VERSION_3}`)) return theirReads(reads++);
+    if (call.method === "GET" && call.path === `posts/${POST}`) return detailOf(SAVED);
+    return undefined;
+  }, `/w/w1/posts/${POST}/edit`);
+  await write("Mine, a bit changed");
+  await after(2000);
+  await settle();
+  return opened;
+}
+
 describe("a draft changed elsewhere", () => {
-  const theirs = () =>
-    json({
-      data: {
-        id: VERSION_3,
-        version_no: 3,
-        kind: "save",
-        created_by: "u2",
-        created_at: "2026-11-28T10:00:00.000Z",
-        draft: { variants: [variantRow(CH.short, "Their words")] },
-      },
-    });
-
-  async function stale(theirReads: (read: number) => Response = theirs) {
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    let patches = 0;
-    let reads = 0;
-    const opened = await open((call) => {
-      if (call.method === "PATCH") {
-        patches += 1;
-        return patches === 1
-          ? refusal("precondition_failed", 412, { current_version_id: VERSION_3 })
-          : patched();
-      }
-      if (call.method === "GET" && call.path.endsWith(`versions/${VERSION_3}`)) return theirReads(reads++);
-      if (call.method === "GET" && call.path === `posts/${POST}`) return detailOf(SAVED);
-      return undefined;
-    }, `/w/w1/posts/${POST}/edit`);
-    await write("Mine, a bit changed");
-    await after(2000);
-    await settle();
-    return opened;
-  }
-
   it("shows both versions and keeping mine saves again against the newer version", async () => {
     const { stub } = await stale();
     const dialog = byId("conflict-dialog");
@@ -186,7 +186,17 @@ describe("a draft changed elsewhere", () => {
     expect(byId("conflict-dialog")).toBeNull();
   });
 
-  it("says their version could not be read, offers Try again and keeps Keep mine off until it is read", async () => {
+  it("using theirs replaces the text and sends nothing", async () => {
+    const { stub } = await stale();
+    await click(byId("conflict-theirs") as HTMLElement);
+    await settle();
+    expect(field("composer-base").value).toBe("Their words");
+    expect(callsOf(stub, "PATCH", `/posts/${POST}`)).toHaveLength(1);
+  });
+});
+
+describe("a conflicted draft whose other version cannot be read", () => {
+  it("says so, offers Try again and keeps Keep mine off until it is read", async () => {
     const { stub } = await stale((read) => (read === 0 ? refusal("internal_error", 500) : theirs()));
     const dialog = byId("conflict-dialog");
     expect(dialog?.textContent).toContain("We could not load their version");
@@ -199,13 +209,5 @@ describe("a draft changed elsewhere", () => {
     await settle();
     expect(byId("conflict-dialog")?.textContent).toContain("Their words");
     expect(byId("conflict-mine")?.getAttribute("aria-disabled")).not.toBe("true");
-  });
-
-  it("using theirs replaces the text and sends nothing", async () => {
-    const { stub } = await stale();
-    await click(byId("conflict-theirs") as HTMLElement);
-    await settle();
-    expect(field("composer-base").value).toBe("Their words");
-    expect(callsOf(stub, "PATCH", `/posts/${POST}`)).toHaveLength(1);
   });
 });
