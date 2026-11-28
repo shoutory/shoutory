@@ -9,6 +9,7 @@ const channelsSchema = z.array(
     id: z.string(),
     provider_id: z.string(),
     display_name: z.string(),
+    nickname: z.string().nullable().default(null),
     reconnect_deadline: z.string().nullable().default(null),
     actions: z.array(z.string()).default([]),
   }),
@@ -50,7 +51,7 @@ export function useNames(ws: string): (channelId: string) => Names {
   return (channelId) => {
     const row = channels.get(channelId);
     return {
-      channel: row?.display_name ?? aChannel,
+      channel: row?.nickname ?? row?.display_name ?? aChannel,
       provider: (row && providers.get(row.provider_id)?.name) ?? aPlatform,
       row,
     };

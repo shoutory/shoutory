@@ -92,11 +92,15 @@ function useList(ws: string, show: Show) {
   const [state, setState] = useState<ListState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
   const moreBusy = useRef(false);
+  // Each first read starts a new generation; the answer of a Show more from an earlier one is dropped.
+  const generation = useRef(0);
   const expired = useSignIn();
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` is the retry counter; `expired` follows the location.
   useEffect(() => {
     let live = true;
+    generation.current += 1;
+    moreBusy.current = false;
     setState({ status: "loading" });
     readFirst(ws, show).then(
       (ready) => live && setState(ready),
@@ -116,10 +120,12 @@ function useList(ws: string, show: Show) {
     if (state.status !== "ready" || state.next === null || moreBusy.current) return;
     moreBusy.current = true;
     setState({ ...state, more: "busy" });
+    const mine = generation.current;
     const query = new URLSearchParams({ cursor: state.next });
     if (show !== "all") query.set("status", show);
     readPage(ws, query).then(
       (page) => {
+        if (mine !== generation.current) return;
         moreBusy.current = false;
         setState((now) => {
           if (now.status !== "ready") return now;
@@ -129,6 +135,7 @@ function useList(ws: string, show: Show) {
         });
       },
       (error: unknown) => {
+        if (mine !== generation.current) return;
         moreBusy.current = false;
         setState((now) => (now.status === "ready" ? { ...now, more: "failed" } : now));
         if (!(error instanceof ApiError)) throw error;
@@ -141,7 +148,7 @@ function useList(ws: string, show: Show) {
 
 function RowTime({ row }: { row: ListRow }) {
   const waiting = row.targets
-    .filter((one) => one.published_at === null && one.due_at !== null && one.operation_state !== "failed")
+    .filter((one) => one.due_at !== null && wordOf(factsOfList(one)) === "pending")
     .flatMap((one) => {
       const at = dateOf(one.due_at);
       return at === null ? [] : [{ at, zone: one.due_tz ?? readZone() }];

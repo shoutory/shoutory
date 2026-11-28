@@ -214,6 +214,26 @@ describe("the time and the attention badge of a row", () => {
     expect(second?.textContent).toMatch(/Published .*2026/);
   });
 
+  // [the target, whether the row says "Goes out"]: only a target that waits for its time goes out by itself.
+  it.each<[string, Record<string, unknown>, boolean]>([
+    ["waiting to be sent", { operation_state: "pending", schedule_state: "scheduled" }, true],
+    ["scheduled with no operation yet", { operation_state: null, schedule_state: "scheduled" }, true],
+    ["cancelled", { operation_state: "cancelled", schedule_state: "settled" }, false],
+    ["missed", { operation_state: "missed", schedule_state: "settled" }, false],
+    ["needing a check", { operation_state: "needs_human", schedule_state: "held" }, false],
+    ["replaced", { operation_state: "superseded_after_unknown_outcome", schedule_state: "settled" }, false],
+    ["being sent", { operation_state: "dispatching", schedule_state: "in_progress" }, false],
+  ])("a target %s: the row says Goes out: %s", async (_name, change, goesOut) => {
+    const waiting = target(1, {
+      published_at: null,
+      due_at: "2026-12-01T07:00:00.000Z",
+      due_tz: "Africa/Cairo",
+      ...change,
+    });
+    const { host } = await visit({ postList: () => page([listRow(1, { targets: [waiting] })]) });
+    expect(byId(host, "post-row")?.textContent?.includes("Goes out")).toBe(goesOut);
+  });
+
   it.each<[string, Record<string, unknown>[], boolean]>([
     ["a target needing a check", [{ operation_state: "needs_human", published_at: null }], true],
     ["a target that could not be confirmed", [{ operation_state: "unverified", published_at: null }], true],
@@ -324,6 +344,24 @@ describe("reading the list", () => {
     expect(byId(host, "posts-more")).toBeNull();
     expect(listCalls(stub)).toHaveLength(2);
     expect(listCalls(stub)[1]?.searchParams.get("cursor")).toBe("cursor-1");
+  });
+
+  it("drops the answer of Show more that arrives after the filter changed", async () => {
+    let release: (answer: Response) => void = () => undefined;
+    const { host } = await visit({
+      postList: (query) => {
+        if (query.get("cursor") === "cursor-1") return new Promise<Response>((done) => (release = done));
+        return query.get("status") === "missed" ? page([listRow(7)]) : page([listRow(1)], "cursor-1");
+      },
+    });
+    click(byId(host, "posts-more") as HTMLElement);
+    await settle();
+    pick(host, "Show", "Missed");
+    await settle();
+    expect(all(host, "post-row").map((one) => one.dataset.postId)).toEqual([postId(7)]);
+    release(page([listRow(2), listRow(3)]));
+    await settle();
+    expect(all(host, "post-row").map((one) => one.dataset.postId)).toEqual([postId(7)]);
   });
 
   it("a failed Show more keeps the rows and says so", async () => {
