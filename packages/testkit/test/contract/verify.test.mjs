@@ -48,6 +48,19 @@ test("a failing step prints its files and fails the run", () => {
   assert.match(output, /src[\\/]a\.txt/);
 });
 
+test("a step that appends its files runs in batches, so a long list never overflows the command line", () => {
+  const files = Object.fromEntries(
+    Array.from({ length: 1000 }, (_, n) => [`src/${String(n).padStart(4, "0")}-${"x".repeat(90)}.txt`, "a"]),
+  );
+  // The command fails when one call gets more than 250 files, which a single call of all 1000 would.
+  const command = [process.execPath, "-e", "process.exit(process.argv.length - 1 > 250 ? 3 : 0)"];
+  const { status, output } = run([{ name: "gamma", globs: ["src/*.txt"], command, appendFiles: true }], {
+    files,
+  });
+  assert.equal(status, 0);
+  assert.match(output, /gamma: 1000 file/);
+});
+
 test("a step that ran nothing fails unless it is a listed placeholder", () => {
   const steps = [{ name: "beta", globs: ["none/*.txt"], command: ok }];
   const failing = run(steps);

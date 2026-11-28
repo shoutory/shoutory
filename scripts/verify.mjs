@@ -276,7 +276,10 @@ const dockerRuns = () => spawnSync("docker", ["info"], { stdio: "ignore" }).stat
 
 function skippedTests(step, stdout, cwd) {
   if (step.skips === "node-test") {
-    const count = (key) => Number(new RegExp(`^# ${key} (\\d+)\\s*$`, "m").exec(stdout)?.[1]);
+    const count = (key) => {
+      const found = [...stdout.matchAll(new RegExp(`^# ${key} (\\d+)\\s*$`, "gm"))];
+      return found.length === 0 ? Number.NaN : found.reduce((sum, match) => sum + Number(match[1]), 0);
+    };
     return count("skipped") + count("todo");
   }
   const file = join(cwd, step.skips.json);
@@ -294,26 +297,56 @@ function missingEnv(step) {
     : null;
 }
 
+// Windows refuses a command line of more than 32767 characters, so the files go to the command in batches under it.
+const BATCH_CHARS = 20_000;
+function fileBatches(files) {
+  const batches = [[]];
+  let size = 0;
+  for (const file of files) {
+    if (size + file.length + 1 > BATCH_CHARS && batches.at(-1).length > 0) {
+      batches.push([]);
+      size = 0;
+    }
+    batches.at(-1).push(file);
+    size += file.length + 1;
+  }
+  return batches;
+}
+
+// Runs the command once per batch of files; the first failure ends it. Returns the failure text or the printed output.
+function runBatches(step, files, cwd) {
+  const [bin, ...args] = step.command;
+  const input = step.input?.();
+  const capture = step.skips === "node-test";
+  const stdio = [input === undefined ? "inherit" : "pipe", capture ? "pipe" : "inherit", "inherit"];
+  const batches = step.appendFiles ? fileBatches(files) : [[]];
+  let stdout = "";
+  for (const batch of batches) {
+    const run = spawnSync(bin, [...args, ...batch], {
+      cwd,
+      stdio,
+      input,
+      encoding: "utf8",
+      maxBuffer: 256 * 1024 * 1024,
+    });
+    const printed = run.stdout ?? "";
+    if (capture) process.stdout.write(printed);
+    if (run.error) return { error: `command could not start: ${run.error.message}` };
+    if (run.status !== 0) return { error: `command exited with ${run.status ?? run.signal}` };
+    stdout += printed;
+  }
+  return { stdout };
+}
+
 function execute(step, files, cwd) {
   if (step.docker && !dockerRuns()) return "Docker is not running; start it, this step runs a container";
   const unset = missingEnv(step);
   if (unset) return unset;
   if (step.skips?.json) rmSync(join(cwd, step.skips.json), { force: true }); // a stale report proves nothing
-  const [bin, ...args] = step.command;
-  const input = step.input?.();
-  const capture = step.skips === "node-test";
-  const run = spawnSync(bin, step.appendFiles ? [...args, ...files] : args, {
-    cwd,
-    stdio: [input === undefined ? "inherit" : "pipe", capture ? "pipe" : "inherit", "inherit"],
-    input,
-    encoding: "utf8",
-    maxBuffer: 256 * 1024 * 1024,
-  });
-  if (capture) process.stdout.write(run.stdout ?? "");
-  if (run.error) return `command could not start: ${run.error.message}`;
-  if (run.status !== 0) return `command exited with ${run.status ?? run.signal}`;
+  const { error, stdout } = runBatches(step, files, cwd);
+  if (error) return error;
   if (!step.skips) return null;
-  const skipped = skippedTests(step, run.stdout, cwd);
+  const skipped = skippedTests(step, stdout, cwd);
   if (Number.isNaN(skipped)) return "the test run printed no skip count";
   return skipped === 0 ? null : `${skipped} skipped or todo test(s) reported; a skipped test is a failure`;
 }
