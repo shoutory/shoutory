@@ -119,7 +119,7 @@ const GONE: [string, string, string][] = [
     "the channel was disabled",
     `UPDATE app.channels c SET connection_state = 'disabled' FROM app.operations o
       WHERE o.channel_id = c.id AND o.id = $1`,
-    "paused",
+    "pending",
   ],
 ];
 describe("a resend after an unknown outcome", () => {

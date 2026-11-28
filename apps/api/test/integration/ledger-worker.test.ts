@@ -359,38 +359,35 @@ const CASES: [string, Scenario, string, Record<string, unknown>, number | null][
     { state: "published", lease_owner: null },
     null,
   ],
-  [
-    "a disabled channel",
-    { channelState: "disabled" },
-    "moved",
-    { state: "paused", reason_code: "channel_disabled" },
-    null,
-  ],
-  [
-    "a channel that needs a reconnect",
-    { channelState: "needs_reconnect" },
-    "moved",
-    { state: "blocked_reconnect", reason_code: "pending" },
-    null,
-  ],
-  [
-    "a channel revoked by the provider",
-    { channelState: "revoked_by_provider" },
-    "moved",
-    { state: "blocked_reconnect", reason_code: "pending" },
-    null,
-  ],
-  [
-    "a channel the worker cannot see",
-    { extra: { channel_id: randomUUID() } },
-    "moved",
-    { state: "failed", reason_code: null },
-    null,
-  ],
   ["a deleted post", { deleted: true }, "moved", { state: "failed", reason_code: null }, null],
   ["an archived post", { postStatus: "archived" }, "moved", { state: "failed", reason_code: null }, null],
   ["a settled variant", { scheduleState: "settled" }, "moved", { state: "failed", reason_code: null }, null],
 ];
+// The claim leaves a row whose channel is not connected where it is; a disconnect or the sweeps move it.
+const UNCLAIMED: [string, Scenario][] = [
+  ["a disabled channel", { channelState: "disabled" }],
+  ["a channel that needs a reconnect", { channelState: "needs_reconnect" }],
+  ["a channel revoked by the provider", { channelState: "revoked_by_provider" }],
+  ["a channel the worker cannot see", { extra: { channel_id: randomUUID() } }],
+];
+describe("a channel that is not connected", () => {
+  it.each(UNCLAIMED)("%s: its operation is never claimed", async (_name, scenario) => {
+    const planted = await plant(scenario);
+    const result = await runTurn({
+      pool: db.pool("worker"),
+      logger,
+      registry,
+      ...wiring,
+      queue: planted.queue,
+      owner: "owner-w",
+      closing: new AbortController().signal,
+    });
+    expect(result).toMatchObject({ kind: "idle" });
+    expect(await opOf(planted.id)).toMatchObject({ state: "pending", lease_owner: null, effect: "none" });
+    expect(await attempts(planted.id)).toBe(0);
+  });
+});
+
 describe("the re-read after the claim", () => {
   it.each(CASES)("%s", async (_name, scenario, kind, after, wait) => {
     const planted = await plant(scenario);

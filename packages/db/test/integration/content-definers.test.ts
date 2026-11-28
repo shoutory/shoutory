@@ -394,8 +394,9 @@ describe("restore refusals", () => {
           await client.query("BEGIN");
           await client.query(`SET LOCAL ROLE ${role}`);
           await client.query("SELECT set_config('app.job_purpose', 'post_restore', true)");
-          // The purge needs DELETE on the table, so for it the row policy is what keeps every other purpose out.
-          if (role === "shoutory_definer" && statement.startsWith("DELETE")) {
+          // The definer may delete (the purge) and relabel a version (a schedule), so for it the row policy is what
+          // keeps every other purpose out.
+          if (role === "shoutory_definer") {
             expect((await client.query(statement, [post])).rowCount).toBe(0);
           } else {
             await expect(client.query(statement, [post])).rejects.toMatchObject({ code: "42501" });

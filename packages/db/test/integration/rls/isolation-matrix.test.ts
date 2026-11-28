@@ -416,6 +416,16 @@ REGISTRY["app.operation_resolutions"] = {
   seed: [resolutionRow(OPA, WA), resolutionRow(OPB, WB)],
   insertForB: () => resolutionRow(OPB, WB),
 };
+const noticeRow = (workspace: string) =>
+  `INSERT INTO app.notifications (workspace_id, user_id, kind, subject_id, level)
+   VALUES ('${workspace}', '${UA}', 'token_expiry', '${randomUUID()}', '7d')`;
+REGISTRY["app.notifications"] = {
+  key: "workspace_id",
+  a: WA,
+  b: WB,
+  seed: [noticeRow(WA), noticeRow(WB)],
+  insertForB: () => noticeRow(WB),
+};
 const LEDGER_PARENTS = new Set(["app.channels", "app.posts", "app.post_variants", "app.media_assets"]);
 const TABLES = Object.keys(REGISTRY);
 const WRITABLE = TABLES.filter((table) => REGISTRY[table]?.write);
@@ -498,6 +508,7 @@ async function seed(admin: Client): Promise<void> {
     "app.operation_attempts",
     "app.operation_evidence",
     "app.operation_resolutions",
+    "app.notifications",
   ];
   for (const table of order) for (const sql of REGISTRY[table]?.seed ?? []) await admin.query(sql);
   const viewer = await admin.query("SELECT id FROM app.roles WHERE workspace_id IS NULL AND key = 'viewer'");
