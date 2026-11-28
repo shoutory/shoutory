@@ -121,7 +121,10 @@ function Scheduled({ ws, impact }: { ws: string; impact: Impact }) {
           const due = dateOf(row.dueAt);
           return (
             <li key={row.variantId}>
-              <Link to={`/w/${ws}/posts/${row.postId}`} className="text-link underline">
+              <Link
+                to={`/w/${ws}/posts/${row.postId}`}
+                className="inline-flex min-h-6 pointer-coarse:min-h-11 items-center text-link underline"
+              >
                 {due === null ? (
                   <Trans id="channels.disconnect.post_no_time">Post with no time set</Trans>
                 ) : (
@@ -162,7 +165,10 @@ function Waiting({ ws, count }: { ws: string; count: number }) {
       <p>
         <Trans id="channels.disconnect.waiting_hint">Wait for these to finish or resolve them.</Trans>
       </p>
-      <Link to={`/w/${ws}/posts`} className="text-link underline">
+      <Link
+        to={`/w/${ws}/posts`}
+        className="inline-flex min-h-6 pointer-coarse:min-h-11 items-center text-link underline"
+      >
         <Trans id="channels.disconnect.open_posts">Open posts</Trans>
       </Link>
     </div>

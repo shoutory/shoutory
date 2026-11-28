@@ -316,7 +316,10 @@ function Names({ row, context, nameId }: { row: Channel; context: CardContext; n
   return (
     <>
       <span id={nameId} data-testid="card-display-name" className="text-md font-medium">
-        <Link to={`/w/${context.ws}/channels/${row.id}`} className="text-link underline">
+        <Link
+          to={`/w/${context.ws}/channels/${row.id}`}
+          className="inline-flex min-h-6 pointer-coarse:min-h-11 items-center text-link underline"
+        >
           <DirText>{row.display_name}</DirText>
         </Link>
       </span>

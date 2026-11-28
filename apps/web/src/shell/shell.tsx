@@ -94,7 +94,7 @@ function Rail() {
   return (
     <nav
       aria-label={t({ id: "shell.nav_label", message: "Main navigation" })}
-      className="fixed inset-x-0 bottom-0 z-30 flex gap-3 border-t border-border bg-surface px-5 py-3 md:static md:flex-col md:border-t-0 md:border-e"
+      className="fixed inset-x-0 bottom-0 z-30 flex flex-wrap gap-x-4 gap-y-1 border-t border-border bg-surface px-5 py-3 md:static md:flex-col md:border-t-0 md:border-e"
     >
       {ws ? (
         <NavLink to={`/w/${ws}`} end className={NAV_LINK}>
