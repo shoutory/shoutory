@@ -678,6 +678,7 @@ describe("refusals of an edit and a delete", () => {
         "conflict",
         "post_in_flight",
       ]);
+      expect(error?.details?.actions).toEqual(["duplicate"]);
       expect(await stateOf(p)).toEqual(before);
     },
   );

@@ -19,16 +19,6 @@ const MAPPED: [string, string, string | undefined, string, Record<string, string
   ["SH422", "post: media_unavailable", undefined, "unprocessable_content", { reason: "media_unavailable" }],
   ["SH422", "media_register: storage_full", undefined, "unprocessable_content", { reason: "storage_full" }],
   ["SH422", "media_mark_uploaded: too_large", undefined, "unprocessable_content", { reason: "too_large" }],
-  ...["post_in_flight", "use_edit", "variant_has_history", "post_archived"].map(
-    (reason) =>
-      ["SH409", `post: ${reason}`, undefined, "conflict", { reason }] as [
-        string,
-        string,
-        undefined,
-        string,
-        Record<string, string>,
-      ],
-  ),
   ["42501", "resolve_operation: refused", undefined, "not_found", undefined],
   [
     "22023",
@@ -50,6 +40,21 @@ const MAPPED: [string, string, string | undefined, string, Record<string, string
   ["SH410", `${ACCEPT}: expired`, DETAIL, UNUSABLE, { reason: "expired", expires_at: EXPIRES }],
   ["SH410", `${ACCEPT}: expired`, "expires soon", UNUSABLE, { reason: "expired" }],
 ];
+
+// [the refusal, the actions the server lists beside it: the copy to a draft is always one]
+const WRITE_REFUSALS: [string, string[]][] = [
+  ["post_in_flight", ["duplicate"]],
+  ["use_edit", ["edit", "duplicate"]],
+  ["variant_has_history", ["duplicate"]],
+  ["post_archived", ["duplicate"]],
+];
+
+describe("the four write refusals of a post", () => {
+  it.each(WRITE_REFUSALS)("%s carries its reason and the actions %j", (reason, actions) => {
+    const refusal = definerRefusal(raised("SH409", `post: ${reason}`));
+    expect([refusal?.code, refusal?.details]).toEqual(["conflict", { reason, actions }]);
+  });
+});
 
 describe("definerRefusal", () => {
   it.each(MAPPED)("%s %s maps to %s", (state, message, detail, code, details) => {

@@ -1,5 +1,5 @@
 import type { ErrorCode } from "@shoutory/core/errors";
-import { Refusal } from "../errors/refusal.js";
+import { Refusal, type RefusalDetails } from "../errors/refusal.js";
 
 // Their RAISE messages start with `<name> ` or `<name>:`.
 const DEFINERS = [
@@ -110,12 +110,25 @@ function expiryOf(detail: unknown): string | undefined {
   return Number.isNaN(at.getTime()) ? undefined : at.toISOString();
 }
 
-function detailsOf(state: string, message: string, detail: unknown): Record<string, string> | undefined {
+// What a person may do next after a post write is refused, by the reason: the copy to a draft is always one.
+const NEXT_ACTIONS: Readonly<Record<string, readonly string[]>> = {
+  post_in_flight: ["duplicate"],
+  use_edit: ["edit", "duplicate"],
+  variant_has_history: ["duplicate"],
+  post_archived: ["duplicate"],
+};
+
+function detailsOf(state: string, message: string, detail: unknown): RefusalDetails | undefined {
   const said = message.split(": ")[1];
   const reason = said === undefined ? undefined : (SENTENCES[said] ?? said);
   if (!state.startsWith("SH") || reason === undefined || !REASONS.has(reason)) return undefined;
   const expires = state === "SH410" && reason === "expired" ? expiryOf(detail) : undefined;
-  return expires === undefined ? { reason } : { reason, expires_at: expires };
+  const actions = Object.hasOwn(NEXT_ACTIONS, reason) ? NEXT_ACTIONS[reason] : undefined;
+  return {
+    reason,
+    ...(expires === undefined ? {} : { expires_at: expires }),
+    ...(actions === undefined ? {} : { actions }),
+  };
 }
 
 // Only the invitation, member, channel, resolution, creation and archive definers raise the SH states, and the post writes for
