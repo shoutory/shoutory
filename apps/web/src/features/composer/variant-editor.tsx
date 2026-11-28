@@ -16,6 +16,7 @@ import {
   withVariant,
 } from "./composer-data";
 import { CounterLine, useIssueWords } from "./counters";
+import { MediaSection } from "./media-picker";
 
 export interface Channels {
   nameOf: (channelId: string) => string;
@@ -34,6 +35,9 @@ export interface EditorProps {
   refused: readonly Issue[];
   readOnly: boolean;
   onBlur: () => void;
+  workspace: string;
+  /** A change made on the newest document, for work that ends later (an upload). */
+  onUpdate: (change: (doc: Doc) => Doc) => void;
 }
 
 function usePostTypeWords(): Record<string, string> {
@@ -57,7 +61,8 @@ const inlineText = (
     .map((issue) => words(issue, name(issue.channelId)))
     .join(" ");
 
-function BaseTab({ doc, onDoc, channels, refused, readOnly, onBlur }: EditorProps) {
+function BaseTab(props: EditorProps) {
+  const { doc, onDoc, channels, refused, readOnly, onBlur } = props;
   const { t } = useLingui();
   const words = useIssueWords();
   const shared = doc.variants.filter((variant) => variant.override === null);
@@ -96,6 +101,14 @@ function BaseTab({ doc, onDoc, channels, refused, readOnly, onBlur }: EditorProp
           );
         })}
       </div>
+      <MediaSection
+        workspace={props.workspace}
+        doc={doc}
+        onUpdate={props.onUpdate}
+        tab="all"
+        channels={channels}
+        readOnly={readOnly}
+      />
     </div>
   );
 }
@@ -155,6 +168,14 @@ function ChannelTab({ variant, props }: { variant: VariantDoc; props: EditorProp
           onDoc(withVariant(doc, variant.channelId, { postType: postType as PostType }))
         }
         unavailable={readOnly}
+      />
+      <MediaSection
+        workspace={props.workspace}
+        doc={doc}
+        onUpdate={props.onUpdate}
+        tab={variant.channelId}
+        channels={channels}
+        readOnly={readOnly}
       />
     </div>
   );

@@ -4468,3 +4468,83 @@ msgstr "Reconnect <0>{channel}</0> first"
 #. js-lingui-explicit-id
 msgid "posts.resolve.not_connected.meaning"
 msgstr "This choice would send the post, and the channel is not connected. Nothing was changed."
+
+#. js-lingui-explicit-id
+msgid "composer.media.title"
+msgstr "Files"
+
+#. js-lingui-explicit-id
+msgid "composer.media.same"
+msgstr "Same files as the base"
+
+#. js-lingui-explicit-id
+msgid "composer.media.remove"
+msgstr "Remove"
+
+#. js-lingui-explicit-id
+msgid "composer.media.alt"
+msgstr "Alt text"
+
+#. js-lingui-explicit-id
+msgid "composer.media.fit"
+msgstr "{name}: {0}"
+
+#. js-lingui-explicit-id
+msgid "composer.media.full"
+msgstr "This channel takes up to {0} files."
+
+#. js-lingui-explicit-id
+msgid "composer.media.library"
+msgstr "Add from your files"
+
+#. js-lingui-explicit-id
+msgid "composer.media.upload"
+msgstr "Upload files"
+
+#. js-lingui-explicit-id
+msgid "composer.media.reset"
+msgstr "Use the base files"
+
+#. js-lingui-explicit-id
+msgid "composer.upload.percent"
+msgstr "{0}% sent"
+
+#. js-lingui-explicit-id
+msgid "composer.upload.duplicate"
+msgstr "Already in your library"
+
+#. js-lingui-explicit-id
+msgid "composer.upload.failed"
+msgstr "This file was not sent. Nothing was added."
+
+#. js-lingui-explicit-id
+msgid "composer.upload.retry"
+msgstr "Try again"
+
+#. js-lingui-explicit-id
+msgid "composer.library.title"
+msgstr "Choose from your files"
+
+#. js-lingui-explicit-id
+msgid "composer.library.add"
+msgstr "Add"
+
+#. js-lingui-explicit-id
+msgid "composer.library.more"
+msgstr "Show more"
+
+#. js-lingui-explicit-id
+msgid "composer.library.close"
+msgstr "Close"
+
+#. js-lingui-explicit-id
+msgid "composer.library.empty"
+msgstr "There are no files yet. Upload one first."
+
+#. js-lingui-explicit-id
+msgid "composer.library.failed.what"
+msgstr "We could not load your files"
+
+#. js-lingui-explicit-id
+msgid "composer.library.failed.meaning"
+msgstr "Nothing was changed."

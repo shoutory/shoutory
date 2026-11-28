@@ -95,7 +95,7 @@ export interface Doc {
 export const EMPTY_DOC: Doc = { base: "", baseMedia: [], variants: [] };
 
 export const textOf = (doc: Doc, variant: VariantDoc): string => variant.override ?? doc.base;
-const mediaOf = (doc: Doc, variant: VariantDoc): Medium[] => variant.mediaOverride ?? doc.baseMedia;
+export const mediaOf = (doc: Doc, variant: VariantDoc): Medium[] => variant.mediaOverride ?? doc.baseMedia;
 
 export function toDraft(doc: Doc): Draft {
   return {
@@ -181,6 +181,54 @@ export function withChannels(doc: Doc, channelIds: readonly string[]): Doc {
     .filter((id) => !kept.some((variant) => variant.channelId === id))
     .map((id) => newVariant(id));
   return { ...doc, variants: [...kept, ...added] };
+}
+
+export type MediaRef = Medium;
+type MediaKind = "image" | "video";
+
+// The type that follows from the files, shown in the type field; a provider that does not take it keeps what was chosen.
+function typeFor(media: readonly Medium[], kindOf: (mediaId: string) => MediaKind): PostType {
+  if (media.length === 0) return "text";
+  if (media.some((one) => kindOf(one.media_id) === "video")) return "video";
+  return media.length > 1 ? "multi_image" : "image";
+}
+
+function retyped(
+  variant: VariantDoc,
+  media: readonly Medium[],
+  kindOf: (id: string) => MediaKind,
+  provider: Provider | undefined,
+) {
+  const next = typeFor(media, kindOf);
+  return provider && postTypesOf(provider).includes(next) ? { ...variant, postType: next } : variant;
+}
+
+/** The files of one channel's variant (or, on the first tab, of the base) replaced by `media`. */
+export function withMedia(
+  doc: Doc,
+  tab: string,
+  media: Medium[],
+  how: { kindOf: (mediaId: string) => MediaKind; providerOf: (channelId: string) => Provider | undefined },
+): Doc {
+  if (tab === "all") {
+    return {
+      ...doc,
+      baseMedia: media,
+      variants: doc.variants.map((variant) =>
+        variant.mediaOverride === null
+          ? retyped(variant, media, how.kindOf, how.providerOf(variant.channelId))
+          : variant,
+      ),
+    };
+  }
+  return {
+    ...doc,
+    variants: doc.variants.map((variant) =>
+      variant.channelId === tab
+        ? { ...retyped(variant, media, how.kindOf, how.providerOf(tab)), mediaOverride: media }
+        : variant,
+    ),
+  };
 }
 
 export function withVariant(doc: Doc, channelId: string, change: Partial<VariantDoc>): Doc {

@@ -4466,3 +4466,83 @@ msgstr "أعد ربط <0>{channel}</0> أولًا"
 #. js-lingui-explicit-id
 msgid "posts.resolve.not_connected.meaning"
 msgstr "هذا الاختيار سيرسل المنشور والقناة غير متصلة. لم يتغير شيء."
+
+#. js-lingui-explicit-id
+msgid "composer.media.title"
+msgstr "الملفات"
+
+#. js-lingui-explicit-id
+msgid "composer.media.same"
+msgstr "نفس ملفات النص الأساسي"
+
+#. js-lingui-explicit-id
+msgid "composer.media.remove"
+msgstr "إزالة"
+
+#. js-lingui-explicit-id
+msgid "composer.media.alt"
+msgstr "النص البديل"
+
+#. js-lingui-explicit-id
+msgid "composer.media.fit"
+msgstr "{name}: {0}"
+
+#. js-lingui-explicit-id
+msgid "composer.media.full"
+msgstr "تقبل هذه القناة حتى {0} ملفات."
+
+#. js-lingui-explicit-id
+msgid "composer.media.library"
+msgstr "إضافة من ملفاتك"
+
+#. js-lingui-explicit-id
+msgid "composer.media.upload"
+msgstr "رفع ملفات"
+
+#. js-lingui-explicit-id
+msgid "composer.media.reset"
+msgstr "استخدام الملفات الأساسية"
+
+#. js-lingui-explicit-id
+msgid "composer.upload.percent"
+msgstr "أُرسل {0}%"
+
+#. js-lingui-explicit-id
+msgid "composer.upload.duplicate"
+msgstr "موجود بالفعل في مكتبتك"
+
+#. js-lingui-explicit-id
+msgid "composer.upload.failed"
+msgstr "لم يُرسل هذا الملف. لم تتم إضافة شيء."
+
+#. js-lingui-explicit-id
+msgid "composer.upload.retry"
+msgstr "حاول مرة أخرى"
+
+#. js-lingui-explicit-id
+msgid "composer.library.title"
+msgstr "اختر من ملفاتك"
+
+#. js-lingui-explicit-id
+msgid "composer.library.add"
+msgstr "إضافة"
+
+#. js-lingui-explicit-id
+msgid "composer.library.more"
+msgstr "عرض المزيد"
+
+#. js-lingui-explicit-id
+msgid "composer.library.close"
+msgstr "إغلاق"
+
+#. js-lingui-explicit-id
+msgid "composer.library.empty"
+msgstr "لا توجد ملفات بعد. ارفع ملفًا أولًا."
+
+#. js-lingui-explicit-id
+msgid "composer.library.failed.what"
+msgstr "تعذّر تحميل ملفاتك"
+
+#. js-lingui-explicit-id
+msgid "composer.library.failed.meaning"
+msgstr "لم يتغير شيء."

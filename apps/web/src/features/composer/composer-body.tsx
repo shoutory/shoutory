@@ -163,6 +163,7 @@ function Fields({
   refs,
   doc,
   onDoc,
+  onUpdate,
   onChannels,
   channels,
   view,
@@ -175,6 +176,7 @@ function Fields({
   refs: Refs;
   doc: Doc;
   onDoc: (doc: Doc) => void;
+  onUpdate: (change: (doc: Doc) => Doc) => void;
   onChannels: (ids: string[]) => void;
   channels: Channels;
   view: { tab: string; setTab: (tab: string) => void; go: (issue: Issue) => void };
@@ -197,6 +199,8 @@ function Fields({
         <VariantEditor
           doc={doc}
           onDoc={onDoc}
+          onUpdate={onUpdate}
+          workspace={workspace}
           channels={channels}
           tab={view.tab}
           onTab={view.setTab}
@@ -208,6 +212,15 @@ function Fields({
       </div>
       <Preview doc={doc} nameOf={channels.nameOf} tab={view.tab} />
     </div>
+  );
+}
+
+function ReadOnlyNote({ reason }: { reason: string | null }) {
+  if (reason === null) return null;
+  return (
+    <Banner tone="info">
+      <span data-testid="composer-readonly">{reason}</span>
+    </Banner>
   );
 }
 
@@ -253,14 +266,9 @@ export function Composer({
   const issues = useMemo(() => issuesOf(doc, channels.providerOf), [doc, channels]);
   const selected = doc.variants.map((variant) => variant.channelId);
   const { tab: activeTab, setTab, go } = useFields(doc, selected);
-
   return (
     <div className="flex flex-col gap-6">
-      {reason === null ? null : (
-        <Banner tone="info">
-          <span data-testid="composer-readonly">{reason}</span>
-        </Banner>
-      )}
+      <ReadOnlyNote reason={reason} />
       <SaveSurface saver={saver} workspace={workspace.id} doc={doc} nameOf={channels.nameOf} />
       <Fields
         workspace={workspace.id}
@@ -268,6 +276,10 @@ export function Composer({
         doc={doc}
         onDoc={(next) => {
           setDoc(next);
+          setRefused([]);
+        }}
+        onUpdate={(change) => {
+          setDoc(change);
           setRefused([]);
         }}
         onChannels={(ids) => setDoc((now) => withChannels(now, ids))}
