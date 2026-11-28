@@ -158,6 +158,46 @@ describe("the mail sender", () => {
   });
 });
 
+describe("a notice mail that has no link", () => {
+  // The notice definer writes the row with no sealed link; the sender sends it in the language the row names.
+  const plant = (locale: string, template = "token_expiry") =>
+    withAdminClient(env, db.name, async (admin) => {
+      const made = await admin.query(
+        `INSERT INTO app.email_outbox (id, workspace_id, recipient, template, locale, vars)
+         VALUES (uuidv7(), NULL, $1, $2, $3, $4::jsonb) RETURNING id`,
+        [
+          `notice-${++counter}@example.test`,
+          template,
+          locale,
+          JSON.stringify({ level: "7d", name: "Shop Page 1", days: 7 }),
+        ],
+      );
+      return made.rows[0].id as string;
+    });
+
+  it.each([
+    ["en", "expires in 7 days"],
+    ["ar", "7 أيام"],
+  ])("is sent in %s with no link, and ends sent", async (locale, words) => {
+    const id = await plant(locale);
+    expect(await sender().tick()).toBe(1);
+    const message = sink.messages[0] ?? "";
+    expect(message).toMatch(/^From: .*noreply@mail\.example\.test/im);
+    expect(message).not.toMatch(/^List-Unsubscribe/im);
+    expect(`${subjectOf(message)}${message}`).toContain(words);
+    expect(message).not.toMatch(/https?:\/\//);
+    const after = await row(id);
+    expect([after.state, after.attempts]).toEqual(["sent", 1]);
+  });
+
+  it("a mail whose template needs a link and has none still fails and is not sent", async () => {
+    const id = await plant("en", "verify_email");
+    expect(await sender().tick()).toBe(0);
+    expect(sink.messages).toHaveLength(0);
+    expect((await row(id)).state).toBe("pending");
+  });
+});
+
 describe("STARTTLS for smtp: URLs", () => {
   it.each(["smtp://", "SMTP://", "Smtp://"])(
     "a %s URL to a server without STARTTLS is not delivered",

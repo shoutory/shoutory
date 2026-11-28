@@ -117,9 +117,10 @@ describe("token expiry candidates use the expiry predicate and the smallest cros
       channel,
     ]);
     expect(await levelsOf(channel)).toEqual([]);
-    await rows("UPDATE app.channel_credentials SET access_expires_at = now() + interval '5 hours' WHERE channel_id = $1", [
-      channel,
-    ]);
+    await rows(
+      "UPDATE app.channel_credentials SET access_expires_at = now() + interval '5 hours' WHERE channel_id = $1",
+      [channel],
+    );
     expect(await levelsOf(channel)).toEqual(["1d"]);
   });
 });
@@ -221,11 +222,14 @@ describe("escalation candidates follow the schedule of entry, 1 day, 3 days, 7 d
       )
     )[0]?.days as number;
 
-  it.each(["needs_human", "unverified"])("an operation in %s is a candidate at step 0 at its entry", async (state) => {
-    const planted = await plantTarget({ state });
-    const [only] = await candidates(planted.operation);
-    expect(only).toMatchObject({ kind: state, level: "escalation_0", step: 0, workspace_id: WA });
-  });
+  it.each(["needs_human", "unverified"])(
+    "an operation in %s is a candidate at step 0 at its entry",
+    async (state) => {
+      const planted = await plantTarget({ state });
+      const [only] = await candidates(planted.operation);
+      expect(only).toMatchObject({ kind: state, level: "escalation_0", step: 0, workspace_id: WA });
+    },
+  );
 
   // [step just sent, days until the next one]
   it.each([
@@ -234,12 +238,15 @@ describe("escalation candidates follow the schedule of entry, 1 day, 3 days, 7 d
     [2, 4],
     [3, 7],
     [9, 7],
-  ])("after step %i the next one is %i days away, and it is not a candidate before then", async (step, days) => {
-    const planted = await plantTarget();
-    expect((await advance(planted, step))[0]?.moved).toBe(true);
-    expect(await nextIn(planted)).toBeCloseTo(days, 2);
-    expect(await candidates(planted.operation)).toEqual([]);
-  });
+  ])(
+    "after step %i the next one is %i days away, and it is not a candidate before then",
+    async (step, days) => {
+      const planted = await plantTarget();
+      expect((await advance(planted, step))[0]?.moved).toBe(true);
+      expect(await nextIn(planted)).toBeCloseTo(days, 2);
+      expect(await candidates(planted.operation)).toEqual([]);
+    },
+  );
 
   it("the step after a sent one comes from the notices already written", async () => {
     const planted = await plantTarget();
@@ -253,10 +260,13 @@ describe("escalation candidates follow the schedule of entry, 1 day, 3 days, 7 d
     ]);
   });
 
-  it.each(["cancelled", "published", "pending"])("an operation that moved on to %s stops escalating", async (state) => {
-    const planted = await plantTarget({ state });
-    expect(await candidates(planted.operation)).toEqual([]);
-  });
+  it.each(["cancelled", "published", "pending"])(
+    "an operation that moved on to %s stops escalating",
+    async (state) => {
+      const planted = await plantTarget({ state });
+      expect(await candidates(planted.operation)).toEqual([]);
+    },
+  );
 
   it("an operation of a state that does not escalate cannot be advanced", async () => {
     const planted = await plantTarget({ state: "pending" });

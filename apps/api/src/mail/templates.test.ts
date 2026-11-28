@@ -32,6 +32,60 @@ describe("the Arabic copy", () => {
   );
 });
 
+describe("the notice mail copy", () => {
+  const VARS = { name: "Shop Page 1", days: 7 };
+  // [template, the level of its mail, the words that must differ in meaning between the levels]
+  const CASES = [
+    ["token_expiry", "7d"],
+    ["reconnect_deadline", "7d"],
+    ["needs_human", "escalation_0"],
+    ["unverified", "escalation_2"],
+    ["held_media", "held"],
+    ["drafts_day_30", "30d"],
+  ] as const;
+
+  it.each(CASES)("%s is its own text in both languages, has no link and names the channel", (name, level) => {
+    const vars = { ...VARS, level };
+    const en = TEMPLATES[name].render("en", "", vars);
+    const ar = TEMPLATES[name].render("ar", "", vars);
+    expect(TEMPLATES[name].sealedLink).toBe(false);
+    expect([ar.subject === en.subject, ar.text === en.text]).toEqual([false, false]);
+    expect(`${ar.subject}${ar.text}`).toMatch(/\p{Script=Arabic}/u);
+    expect(`${en.subject}${en.text}`).not.toMatch(/\p{Script=Arabic}/u);
+    for (const part of [en.subject, en.text, ar.subject, ar.text]) expect(part).not.toMatch(/https?:/);
+    for (const text of [en.text, ar.text]) expect(text).toContain(`${FSI}Shop Page 1${PDI}`);
+    expect(en.subject).not.toMatch(/^\p{Bidi_Control}/u);
+  });
+
+  it.each([
+    ["token_expiry", 14, "14 days", "14 يوماً"],
+    ["token_expiry", 1, "1 day", "يوم واحد"],
+    ["reconnect_deadline", 7, "7 days", "7 أيام"],
+  ] as const)("%s with %i days says the number in both languages", (name, days, en, ar) => {
+    const vars = { name: "Shop Page 1", days, level: `${days}d` };
+    expect(TEMPLATES[name].render("en", "", vars).text).toContain(en);
+    expect(TEMPLATES[name].render("ar", "", vars).text).toContain(ar);
+  });
+
+  it.each(CASES)("%s refuses a token, a link or any key the copy does not know", (name, level) => {
+    const schema = TEMPLATES[name].vars;
+    expect(schema.safeParse({ level, name: "Shop" }).success).toBe(true);
+    expect(schema.safeParse({ level, name: "Shop", access_token: "copy-token-1" }).success).toBe(false);
+    expect(schema.safeParse({ level, link: "https://app.example.test/x" }).success).toBe(false);
+    expect(schema.safeParse({ name: "Shop" }).success).toBe(false);
+  });
+
+  it("the escalation says it is a reminder after the first step and the first notice does not", () => {
+    const first = TEMPLATES.needs_human.render("en", "", { level: "escalation_0", name: "Shop" });
+    const later = TEMPLATES.needs_human.render("en", "", { level: "escalation_3", name: "Shop" });
+    expect([
+      first.subject === later.subject,
+      /reminder/i.test(first.subject),
+      /reminder/i.test(later.subject),
+    ]).toEqual([false, false, true]);
+  });
+});
+
 describe("the invitation", () => {
   const render = (locale: "en" | "ar", role: string) =>
     TEMPLATES.invitation.render(locale, LINK, { workspaceName: "Copy Room 1", role });

@@ -23,6 +23,8 @@ export function requestLocale(headers: Headers | undefined): MailLocale {
 
 export interface MailTemplate {
   readonly class: MailClass;
+  // A mail with no sealed link is sent as it is; its copy has no link to show.
+  readonly sealedLink: boolean;
   // A secret never goes in vars, and every schema is strict.
   readonly vars: z.ZodType;
   render(
@@ -39,11 +41,13 @@ interface Copy<V> {
 
 function template<S extends z.ZodType>(spec: {
   class: MailClass;
+  sealedLink?: boolean;
   vars: S;
   copy: Record<MailLocale, Copy<z.infer<S>>>;
 }): MailTemplate {
   return {
     class: spec.class,
+    sealedLink: spec.sealedLink ?? true,
     vars: spec.vars,
     render(locale, link, raw) {
       const vars = spec.vars.parse(raw);
@@ -75,7 +79,127 @@ const invitationVars = z.strictObject({
   role: z.string().min(1).max(32),
 });
 
-export const TEMPLATES = {
+const noticeVars = z.strictObject({
+  level: z.string().min(1).max(16),
+  name: z.string().min(1).max(128).optional(),
+  provider: z.string().min(1).max(128).optional(),
+  days: z.number().int().min(1).max(365).optional(),
+  reason: z.string().min(1).max(128).optional(),
+});
+type NoticeVars = z.infer<typeof noticeVars>;
+
+const daysIn = (locale: MailLocale, count: number): string => {
+  if (locale === "en") return count === 1 ? "1 day" : `${count} days`;
+  if (count === 1) return "يوم واحد";
+  return count <= 10 ? `${count} أيام` : `${count} يوماً`;
+};
+// The days come from the mail's own variable, else from its level (`7d`).
+const daysOf = (locale: MailLocale, vars: NoticeVars): string =>
+  daysIn(locale, vars.days ?? (Number.parseInt(vars.level, 10) || 1));
+const channelOf = (locale: MailLocale, vars: NoticeVars): string =>
+  vars.name === undefined ? (locale === "en" ? "a channel" : "قناة") : isolate(vars.name);
+// The first reminder of an unclear post carries no prefix; each later step is a reminder.
+const isReminder = (vars: NoticeVars): boolean => {
+  const step = /^escalation_(\d+)$/.exec(vars.level)?.[1];
+  return step !== undefined && Number(step) > 0;
+};
+
+// A notice is a few plain sentences with no link; the screen it points to is named in words.
+function notice(spec: {
+  en: { subject: (vars: NoticeVars) => string; text: (vars: NoticeVars) => string };
+  ar: { subject: (vars: NoticeVars) => string; text: (vars: NoticeVars) => string };
+}): MailTemplate {
+  return template({
+    class: "transactional",
+    sealedLink: false,
+    vars: noticeVars,
+    copy: {
+      en: { subject: spec.en.subject, text: ({ vars }) => `${spec.en.text(vars)}\n` },
+      ar: { subject: spec.ar.subject, text: ({ vars }) => `${spec.ar.text(vars)}\n` },
+    },
+  });
+}
+
+const REMINDER: Record<MailLocale, string> = { en: "Reminder: ", ar: "تذكير: " };
+const reminderOf = (locale: MailLocale, vars: NoticeVars): string =>
+  isReminder(vars) ? REMINDER[locale] : "";
+
+export const NOTICE_TEMPLATES = {
+  token_expiry: notice({
+    en: {
+      subject: (v) => `Access to ${channelOf("en", v)} expires in ${daysOf("en", v)}`,
+      text: (v) =>
+        `The connection to ${channelOf("en", v)} expires in ${daysOf("en", v)}. Reconnect it from the Channels page before then, or posts to it will wait until you do.`,
+    },
+    ar: {
+      subject: (v) => `ينتهي الاتصال بالقناة ${channelOf("ar", v)} خلال ${daysOf("ar", v)}`,
+      text: (v) =>
+        `ينتهي الاتصال بالقناة ${channelOf("ar", v)} خلال ${daysOf("ar", v)}. أعد ربطها من صفحة القنوات قبل ذلك، وإلا ستنتظر المنشورات الموجّهة إليها حتى تفعل.`,
+    },
+  }),
+  reconnect_deadline: notice({
+    en: {
+      subject: (v) => `Reconnect ${channelOf("en", v)} within ${daysOf("en", v)}`,
+      text: (v) =>
+        `${channelOf("en", v)} is not connected. Its waiting posts are kept for ${daysOf("en", v)} more. Reconnect it from the Channels page to send them; after that they go back to your drafts.`,
+    },
+    ar: {
+      subject: (v) => `أعد ربط القناة ${channelOf("ar", v)} خلال ${daysOf("ar", v)}`,
+      text: (v) =>
+        `القناة ${channelOf("ar", v)} غير متصلة. تُحفظ منشوراتها المنتظرة ${daysOf("ar", v)} أخرى. أعد ربطها من صفحة القنوات لإرسالها، وبعد ذلك تعود إلى مسوداتك.`,
+    },
+  }),
+  needs_human: notice({
+    en: {
+      subject: (v) => `${reminderOf("en", v)}A post to ${channelOf("en", v)} needs your decision`,
+      text: (v) =>
+        `A post to ${channelOf("en", v)} could not be settled on its own. Open the post to see what happened and choose what comes next.`,
+    },
+    ar: {
+      subject: (v) => `${reminderOf("ar", v)}منشور على القناة ${channelOf("ar", v)} ينتظر قرارك`,
+      text: (v) =>
+        `تعذّر حسم منشور على القناة ${channelOf("ar", v)} تلقائياً. افتح المنشور لترى ما حدث واختر الخطوة التالية.`,
+    },
+  }),
+  unverified: notice({
+    en: {
+      subject: (v) => `${reminderOf("en", v)}A post to ${channelOf("en", v)} is not confirmed`,
+      text: (v) =>
+        `We still could not confirm that a post to ${channelOf("en", v)} went out. Check the channel, then open the post and tell us what you found.`,
+    },
+    ar: {
+      subject: (v) => `${reminderOf("ar", v)}منشور على القناة ${channelOf("ar", v)} لم يتأكد نشره`,
+      text: (v) =>
+        `ما زلنا لم نتمكن من التأكد من نشر منشور على القناة ${channelOf("ar", v)}. تحقّق من القناة ثم افتح المنشور وأخبرنا بما وجدته.`,
+    },
+  }),
+  held_media: notice({
+    en: {
+      subject: (v) => `A post to ${channelOf("en", v)} is waiting for its media`,
+      text: (v) =>
+        `A post to ${channelOf("en", v)} is due, but its media is not ready. It goes out as soon as the media is ready. Open the post to check the media.`,
+    },
+    ar: {
+      subject: (v) => `منشور على القناة ${channelOf("ar", v)} ينتظر وسائطه`,
+      text: (v) =>
+        `حان موعد منشور على القناة ${channelOf("ar", v)} لكن وسائطه ليست جاهزة. سيُنشر حالما تجهز الوسائط. افتح المنشور لتتحقق منها.`,
+    },
+  }),
+  drafts_day_30: notice({
+    en: {
+      subject: (v) => `Posts held for ${channelOf("en", v)} are back in your drafts`,
+      text: (v) =>
+        `${channelOf("en", v)} was not reconnected within 30 days, so the posts waiting for it are back in your drafts. Nothing was deleted. Choose another channel, or reconnect it and schedule them again.`,
+    },
+    ar: {
+      subject: (v) => `عادت المنشورات المنتظرة للقناة ${channelOf("ar", v)} إلى مسوداتك`,
+      text: (v) =>
+        `لم تُعد ربط القناة ${channelOf("ar", v)} خلال 30 يوماً، فعادت المنشورات المنتظرة لها إلى مسوداتك. لم يُحذف شيء. اختر قناة أخرى، أو أعد ربطها وجدول المنشورات من جديد.`,
+    },
+  }),
+} as const;
+
+const LINK_TEMPLATES = {
   verify_email: template({
     class: "transactional",
     vars: NO_VARS,
@@ -172,5 +296,8 @@ export const TEMPLATES = {
   }),
 } as const;
 
-export type TemplateName = keyof typeof TEMPLATES;
-export const TEMPLATE_NAMES = Object.keys(TEMPLATES) as [TemplateName, ...TemplateName[]];
+export const TEMPLATES = { ...LINK_TEMPLATES, ...NOTICE_TEMPLATES } as const;
+
+// The templates that carry a sealed link; the notices have none and are queued by their own definer.
+export type TemplateName = keyof typeof LINK_TEMPLATES;
+export const TEMPLATE_NAMES = Object.keys(LINK_TEMPLATES) as [TemplateName, ...TemplateName[]];

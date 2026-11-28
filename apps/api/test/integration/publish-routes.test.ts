@@ -687,17 +687,14 @@ describe("refusals of an edit and a delete", () => {
   it.each([
     ["edit", "edit_window_closed"],
     ["delete", "delete_window_closed"],
-  ])(
-    "%s after the provider's window answers 409 %s and changes nothing",
-    async (name, reason) => {
-      const p = await plant("published", { ageSeconds: 7200 });
-      const before = await stateOf(p);
-      const answered = await call(user("owner"), routeNamed(name), p);
-      const error = await errorOf(answered);
-      expect([answered.status, error?.code, error?.details?.reason]).toEqual([409, "conflict", reason]);
-      expect(await stateOf(p)).toEqual(before);
-    },
-  );
+  ])("%s after the provider's window answers 409 %s and changes nothing", async (name, reason) => {
+    const p = await plant("published", { ageSeconds: 7200 });
+    const before = await stateOf(p);
+    const answered = await call(user("owner"), routeNamed(name), p);
+    const error = await errorOf(answered);
+    expect([answered.status, error?.code, error?.details?.reason]).toEqual([409, "conflict", reason]);
+    expect(await stateOf(p)).toEqual(before);
+  });
 });
 
 describe("an edit of a published post", () => {

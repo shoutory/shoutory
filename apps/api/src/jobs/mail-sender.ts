@@ -151,7 +151,8 @@ async function send(ctx: Sending, row: Claimed): Promise<void> {
   if (!found) throw new Error("the mail template is not registered");
   // The guard runs before the link is opened: a refused mail never touches the sealed link or the network.
   const envelope = envelopeOf(ctx.options, found, row.recipient);
-  const { subject, text } = found.render(mailLocale(row.locale), openLink(row, ctx.options.keys), row.vars);
+  const link = found.sealedLink ? openLink(row, ctx.options.keys) : "";
+  const { subject, text } = found.render(mailLocale(row.locale), link, row.vars);
   await within(
     ctx.transport().sendMail({ ...envelope, to: row.recipient, subject, text }),
     ctx.sendTimeoutMs,
