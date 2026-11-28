@@ -85,6 +85,7 @@ const RETAINED = [
   ["app.connect_challenges", "app.connect_challenges"],
   ["app.rate_buckets", "app.rate_buckets"],
   ["app.worker_heartbeats", "app.worker_heartbeats"],
+  ["app.notifications", "app.notifications"],
   ["auth.user", "auth.user_unverified"],
 ] as const;
 

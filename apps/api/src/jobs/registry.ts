@@ -40,6 +40,7 @@ export const RETENTION_CLASSES = [
   "app.provider_quota_ledger",
   "app.rate_buckets",
   "app.worker_heartbeats",
+  "app.notifications",
   "auth.user_unverified",
 ] as const;
 

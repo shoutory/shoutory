@@ -350,6 +350,24 @@ describe("what a notice mail may carry", () => {
   });
 });
 
+describe("how long a notification is kept", () => {
+  it("purge_expired removes a notification older than 90 days and keeps a younger one", async () => {
+    const plant = (level: string, age: string) =>
+      rows(
+        `INSERT INTO app.notifications (workspace_id, user_id, kind, subject_id, level, created_at)
+         VALUES ($1, $2, 'token_expiry', $3, $4, now() - $5::interval)`,
+        [WA, U.admin, randomUUID(), level, age],
+      );
+    await plant("retained-old", "91 days");
+    await plant("retained-young", "89 days");
+    const [purged] = (await db.pool("worker").query("SELECT removed FROM app.purge_expired('app.notifications')"))
+      .rows;
+    expect(Number(purged?.removed)).toBeGreaterThanOrEqual(1);
+    const left = await rows("SELECT level FROM app.notifications WHERE level LIKE 'retained-%'");
+    expect(left.map((row) => row.level)).toEqual(["retained-young"]);
+  });
+});
+
 describe("the language of a notice", () => {
   beforeAll(arabicAdmin);
 
