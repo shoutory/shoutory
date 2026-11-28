@@ -12,7 +12,7 @@ import { requireIdempotencyKey } from "../idempotency-key.js";
 const uuid = z.uuid().transform((id) => id.toLowerCase());
 const params = z.strictObject({ workspace_id: uuid, operation_id: uuid });
 
-const STEP_UP_KINDS = ["attest_published", "attest_not_executed", "supersede", "confirm_removed"] as const;
+export const STEP_UP_KINDS = ["attest_published", "attest_not_executed", "supersede", "confirm_removed"] as const;
 const SESSION_KINDS = ["publish_late", "reschedule", "drop", "dismiss"] as const;
 const NEEDS_ACK: readonly string[] = ["attest_not_executed", "supersede"];
 

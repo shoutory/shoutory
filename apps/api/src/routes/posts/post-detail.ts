@@ -1,6 +1,6 @@
 import type { AuthorizedScope } from "@shoutory/core/authz/scope";
 import type { HealthProvider } from "../../channels/health.js";
-import { type TargetAction, targetActions } from "./actions.js";
+import { mayResolve, type Resolution, resolutionsOf, type TargetAction, targetActions } from "./actions.js";
 
 // The targets of a post as one column of the post's own statement, so the ETag names the state shown. $3 says whether
 // the caller may see the evidence line and $4 the attempts: a field the caller may not see is left out, never null.
@@ -44,7 +44,9 @@ interface RawTarget {
   schedule_state: string;
   presence: string;
   published_at: string | null;
-  operation: { state: string; effect: string } | null;
+  operation:
+    | ({ state: string; kind: string; reason_code: string | null; effect: string } & Record<string, unknown>)
+    | null;
   [key: string]: unknown;
 }
 
@@ -59,28 +61,38 @@ export interface DetailFacts {
 export function targetsWithActions(
   targets: readonly RawTarget[],
   facts: DetailFacts,
-): (Omit<RawTarget, "provider_id"> & { actions: TargetAction[] })[] {
+): (Omit<RawTarget, "provider_id" | "operation"> & {
+  operation: (NonNullable<RawTarget["operation"]> & { resolutions: Resolution[] }) | null;
+  actions: TargetAction[];
+})[] {
   return targets.map(({ provider_id: providerId, ...target }) => {
     const manifest = Object.hasOwn(facts.providers, providerId)
       ? facts.providers[providerId]?.manifest
       : undefined;
-    const window = manifest?.actionWindows.edit;
+    const editWindow = manifest?.actionWindows.edit;
+    const deleteWindow = manifest?.actionWindows.delete;
+    const person = {
+      postAuthorId: facts.authorId,
+      principalId: facts.scope.principalId,
+      permissions: facts.scope.permissions,
+    };
     const actions = targetActions({
       scheduleState: target.schedule_state,
       presence: target.presence,
       publishedAt: target.published_at === null ? null : new Date(target.published_at),
       operation: target.operation,
-      postAuthorId: facts.authorId,
-      principalId: facts.scope.principalId,
-      permissions: facts.scope.permissions,
+      ...person,
       provider: manifest
         ? {
             capabilities: manifest.capabilities,
-            ...(window === undefined ? {} : { editWindowSeconds: window }),
+            ...(editWindow === undefined ? {} : { editWindowSeconds: editWindow }),
+            ...(deleteWindow === undefined ? {} : { deleteWindowSeconds: deleteWindow }),
           }
         : undefined,
       now: facts.now,
     });
-    return { ...target, actions };
+    const op = target.operation;
+    const operation = op === null ? null : { ...op, resolutions: resolutionsOf(op, mayResolve(person)) };
+    return { ...target, operation, actions };
   });
 }

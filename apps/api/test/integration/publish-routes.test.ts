@@ -1009,6 +1009,36 @@ describe("the time of a schedule in the workspace zone", () => {
   });
 });
 
+describe("the resolutions of an unclear operation come from the server", () => {
+  const ALL = [
+    { kind: "attest_published", step_up: true },
+    { kind: "attest_not_executed", step_up: true },
+    { kind: "supersede", step_up: true },
+    { kind: "dismiss", step_up: false },
+  ];
+  // [seat, the resolutions the server lists]: the Owner, an Admin and the author may settle it; another Editor may not.
+  const SEATS_AND_KINDS: [string, typeof ALL][] = [
+    ["owner", ALL],
+    ["admin", ALL],
+    ["author", ALL],
+    ["editor", []],
+    ["viewer", []],
+  ];
+  it.each(SEATS_AND_KINDS)("%s sees %j", async (seat, expected) => {
+    const p = await plant("in_flight");
+    await fx.admin(async (client) => {
+      await client.query("BEGIN");
+      await client.query("SET LOCAL session_replication_role = replica");
+      await client.query("UPDATE app.operations SET state = 'needs_human' WHERE id = $1", [p.op]);
+      await client.query("COMMIT");
+    });
+    const targets = (await dataOf(await send(user(seat), "GET", `${base(ws)}/${p.post}`))).targets as {
+      operation: { resolutions: unknown };
+    }[];
+    expect(targets[0]?.operation.resolutions).toEqual(expected);
+  });
+});
+
 describe("the actions of the post detail come from the server", () => {
   // [stage, seat, the actions the server lists]
   const ACTIONS: [Stage, string, string[]][] = [
