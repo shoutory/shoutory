@@ -116,13 +116,19 @@ describe("limits and fit", () => {
 });
 
 describe("uploading from the composer", () => {
-  async function send(file: File) {
+  // The file is hashed by the platform's own digest, which finishes outside the microtask queue, so the test waits for
+  // the line the upload ends in instead of a fixed number of turns.
+  async function send(file: File, endsIn: string) {
     const input = document.querySelector<HTMLInputElement>('input[type="file"]') as HTMLInputElement;
     Object.defineProperty(input, "files", { value: [file], configurable: true });
     await act(async () => {
       input.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    await settle();
+    for (let turn = 0; turn < 500 && byId(endsIn) === null; turn += 1) {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+    }
   }
 
   it("a file the workspace already has says so and is attached once", async () => {
@@ -132,7 +138,7 @@ describe("uploading from the composer", () => {
           ? json({ data: { id: ID_1, duplicate: true } }, 201)
           : undefined,
     });
-    await send(new File([new Uint8Array([1, 2, 3])], "photo.png", { type: "image/png" }));
+    await send(new File([new Uint8Array([1, 2, 3])], "photo.png", { type: "image/png" }), "upload-duplicate");
     expect(byId("upload-duplicate")?.textContent).toContain("Already in your library");
     expect(allById("media-item")).toHaveLength(1);
   });
@@ -144,7 +150,7 @@ describe("uploading from the composer", () => {
           ? json({ error: { code: "service_unavailable", message: "x", requestId: "r" } }, 503)
           : undefined,
     });
-    await send(new File([new Uint8Array([1])], "photo.png", { type: "image/png" }));
+    await send(new File([new Uint8Array([1])], "photo.png", { type: "image/png" }), "upload-retry");
     expect(byId("upload-retry")).not.toBeNull();
     expect(allById("media-item")).toHaveLength(0);
   });
