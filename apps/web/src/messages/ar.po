@@ -1299,11 +1299,11 @@ msgstr "أدخل بريدًا إلكترونيًا صالحًا."
 
 #. js-lingui-explicit-id
 msgid "settings.general.lateness_bad"
-msgstr "أدخل عددًا صحيحًا من الدقائق من 5 إلى 1440."
+msgstr "أدخل عددًا صحيحًا من الدقائق من {min} إلى {max}."
 
 #. js-lingui-explicit-id
 msgid "settings.general.lateness_refused.meaning"
-msgstr "أدخل عددًا صحيحًا من الدقائق من 5 إلى 1440. لم يتغير شيء."
+msgstr "أدخل عددًا صحيحًا من الدقائق من {min} إلى {max}. لم يتغير شيء."
 
 #. js-lingui-explicit-id
 msgid "auth.step_up.title_code"
@@ -3466,7 +3466,7 @@ msgstr "محتوى الملف لا يطابق نوعه."
 
 #. js-lingui-explicit-id
 msgid "settings.general.lateness_hint"
-msgstr "القيمة الافتراضية 120 دقيقة (ساعتان). المنشور الذي يتأخر أكثر من ذلك يُوسم «فات موعده» ولا يُرسل متأخرًا أبدًا."
+msgstr "دقائق كاملة، من {min} إلى {max}. القيمة الافتراضية 120 دقيقة (ساعتان). المنشور الذي يتأخر أكثر من ذلك يُوسم «فات موعده» ولا يُرسل متأخرًا أبدًا."
 
 #. js-lingui-explicit-id
 msgid "posts.resolve.fold.earlier"

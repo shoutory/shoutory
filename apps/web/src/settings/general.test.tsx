@@ -206,6 +206,36 @@ describe("the late publish window", () => {
     expect(host.textContent).toMatch(/default is 120 minutes \(2 hours\)/i);
     expect(host.textContent).toMatch(/marked Missed, never sent late/);
   });
+});
+
+describe("how the late publish window is explained and typed", () => {
+  it("states the bounds in the hint, in both languages", async () => {
+    stubApi();
+    const english = await openApp(PATH);
+    expect(english.host.querySelector('[data-testid="lateness-hint"]')?.textContent).toMatch(
+      /from 5 to 1440/,
+    );
+    closeApp();
+    stubApi();
+    const arabic = await openApp(PATH, "ar");
+    expect(arabic.host.querySelector('[data-testid="lateness-hint"]')?.textContent).toContain(
+      "من 5 إلى 1440",
+    );
+  });
+
+  it.each([["٣٠"], ["۳۰"], ["  ٣٠  "]])("takes the Arabic-Indic digits %s as 30 minutes", async (value) => {
+    const { stub } = await change({}, { lateness: value });
+    expect(JSON.parse(String(patches(stub)[0]?.[1]?.body))).toEqual({ lateness_tolerance_minutes: 30 });
+  });
+
+  it("takes Arabic-Indic digits of the saved value as no change", async () => {
+    const { stub } = await change({}, { lateness: "١٢٠" });
+    expect(patches(stub)).toHaveLength(0);
+  });
+});
+
+describe("the late publish window, sent and refused", () => {
+  const late = (host: ParentNode) => input(host, "lateness");
 
   it.each([["5"], ["1440"], ["120"], ["  30  "]])("sends %s as a number of minutes", async (value) => {
     const { stub } = await change({}, { lateness: value });

@@ -49,9 +49,12 @@ const draftOf = (profile: Profile): Draft => ({
 
 const LATENESS_MIN = 5;
 const LATENESS_MAX = 1440;
+// Arabic-Indic and Persian digits count as the digits they are.
+const latinDigits = (text: string) =>
+  text.replaceAll(/[٠-٩۰-۹]/g, (digit) => String((digit.codePointAt(0) ?? 0) & 0xf));
 const latenessOf = (text: string): number | null => {
-  const value = text.trim();
-  if (!/^\d+$/.test(value)) return null;
+  const value = latinDigits(text).trim();
+  if (!/^[0-9]+$/.test(value)) return null;
   const minutes = Number(value);
   return minutes >= LATENESS_MIN && minutes <= LATENESS_MAX ? minutes : null;
 };
@@ -70,6 +73,7 @@ function changesOf(draft: Draft, saved: Profile) {
 }
 
 function saveCopy(error: ApiError) {
+  const [min, max] = [LATENESS_MIN, LATENESS_MAX];
   if (error.details?.reason === "lateness_out_of_range")
     return {
       what: (
@@ -77,7 +81,7 @@ function saveCopy(error: ApiError) {
       ),
       meaning: (
         <Trans id="settings.general.lateness_refused.meaning">
-          Enter a whole number of minutes from 5 to 1440. Nothing was changed.
+          Enter a whole number of minutes from {min} to {max}. Nothing was changed.
         </Trans>
       ),
     };
@@ -177,7 +181,7 @@ function useGeneral(profile: Profile) {
   // A lateness text that is not a valid number is a change too: it must show as unsaved and be checked on submit.
   const dirty =
     Object.keys(changesOf(draft, saved)).length > 0 ||
-    draft.lateness.trim() !== String(saved.lateness_tolerance_minutes);
+    latinDigits(draft.lateness).trim() !== String(saved.lateness_tolerance_minutes);
   return { draft, edit, dirty, done, save, saved };
 }
 
@@ -195,9 +199,10 @@ function LatenessField({
   onValid: () => void;
 }) {
   const { t } = useLingui();
+  const [min, max] = [LATENESS_MIN, LATENESS_MAX];
   const bad = t({
     id: "settings.general.lateness_bad",
-    message: "Enter a whole number of minutes from 5 to 1440.",
+    message: `Enter a whole number of minutes from ${min} to ${max}.`,
   });
   return (
     <div className="flex flex-col gap-2">
@@ -213,9 +218,10 @@ function LatenessField({
         }}
         {...(invalid ? { errorMessage: bad } : {})}
       />
-      <p className="text-sm text-text-muted">
+      <p data-testid="lateness-hint" className="text-sm text-text-muted">
         <Trans id="settings.general.lateness_hint">
-          The default is 120 minutes (2 hours). A post later than this is marked Missed, never sent late.
+          Whole minutes, from {min} to {max}. The default is 120 minutes (2 hours). A post later than this is
+          marked Missed, never sent late.
         </Trans>
       </p>
     </div>
