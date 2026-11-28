@@ -82,9 +82,7 @@ const invitationVars = z.strictObject({
 const noticeVars = z.strictObject({
   level: z.string().min(1).max(16),
   name: z.string().min(1).max(128).optional(),
-  provider: z.string().min(1).max(128).optional(),
   days: z.number().int().min(1).max(365).optional(),
-  reason: z.string().min(1).max(128).optional(),
 });
 type NoticeVars = z.infer<typeof noticeVars>;
 

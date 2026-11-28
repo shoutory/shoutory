@@ -113,8 +113,8 @@ describe("token expiry candidates use the expiry predicate and the smallest cros
       kind: "token_expiry",
       workspace_id: WA,
       level: "g1:7d",
-      vars: { name: "Shop page", days: 7 },
     });
+    expect(first?.vars).toEqual({ name: "Shop page", days: 7 });
     await run("SELECT app.notice_create($1, $2, 'token_expiry', $3, 'g1:7d', '{}'::jsonb)", [
       WA,
       U.admin,
@@ -163,14 +163,21 @@ interface Planted {
   operation: string;
 }
 async function plantTarget(
-  o: { state?: string; schedule?: string; dueAgo?: string; media?: string; asset?: string } = {},
+  o: {
+    state?: string;
+    schedule?: string;
+    dueAgo?: string;
+    media?: string;
+    asset?: string;
+    author?: [kind: string, id: string];
+  } = {},
 ): Promise<Planted> {
   const channel = await plantChannel();
   return admin(async (client) => {
     const post = (
       await client.query(
-        "INSERT INTO app.posts (workspace_id, author_kind, author_id, status) VALUES ($1, 'user', $2, 'scheduled') RETURNING id",
-        [WA, U.editor],
+        "INSERT INTO app.posts (workspace_id, author_kind, author_id, status) VALUES ($1, $2, $3, 'scheduled') RETURNING id",
+        [WA, ...(o.author ?? ["user", U.editor])],
       )
     ).rows[0].id as string;
     const snapshot = { version: 1, resolved: { media: o.media ? { [o.media]: "ab" } : {} } };
@@ -301,6 +308,19 @@ describe("held media candidates use the one held-media predicate", () => {
     const planted = await plantTarget({ schedule: "scheduled", dueAgo: ago, media: await asset(state) });
     const found = await candidates(planted.variant);
     expect(found.map((row) => [row.kind, row.level])).toEqual(held ? [["held_media", "held"]] : []);
+  });
+
+  it.each([
+    ["a service", ["service", randomUUID()]],
+    ["a person who is no member of the workspace", ["user", U.bOwner]],
+  ] as [string, [string, string]][])("a held variant of a post written by %s has no recipient and is not listed", async (_name, author) => {
+    const planted = await plantTarget({
+      schedule: "scheduled",
+      dueAgo: "1 minute",
+      media: await asset("processing"),
+      author,
+    });
+    expect(await levelsOf(planted.variant)).toEqual([]);
   });
 
   it("a medium that does not exist holds the variant, and a variant already in progress is not listed", async () => {

@@ -447,8 +447,6 @@ describe("what a notice carries", () => {
         ])
       ).map((row) => row.k),
     );
-    expect([...keys].every((key) => ["name", "provider", "days", "reason"].includes(key as string))).toBe(
-      true,
-    );
+    expect([...keys].every((key) => ["name", "days"].includes(key as string))).toBe(true);
   });
 });

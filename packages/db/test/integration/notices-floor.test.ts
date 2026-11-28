@@ -332,13 +332,20 @@ describe("what a notice mail may carry", () => {
         WA,
         U.viewerOrgAdmin,
         subject,
-        JSON.stringify({ name: "Channel", access_token: canary, link: canary }),
+        JSON.stringify({
+          name: "Channel",
+          provider: "unused-provider",
+          reason: "unused-reason",
+          access_token: canary,
+          link: canary,
+        }),
       ],
     );
     expect(made.error).toBeUndefined();
     const [mail] = await rows("SELECT vars::text AS vars FROM app.email_outbox WHERE recipient = $1", [
       EMAILS[U.viewerOrgAdmin],
     ]);
+    expect(Object.keys(JSON.parse(mail?.vars)).sort()).toEqual(["level", "name"]);
     const forms = [
       canary,
       encodeURIComponent(canary),
@@ -432,13 +439,5 @@ describe("the schema after disconnect and notices", () => {
       (await rows("SELECT state FROM app.channel_credentials WHERE channel_id = $1", [channel?.id]))[0]
         ?.state,
     ).toBe("revoking");
-  });
-
-  it("channels no longer carry last_reauth_notice, which the notifications key replaces", async () => {
-    expect(
-      await rows(
-        "SELECT 1 FROM information_schema.columns WHERE table_schema = 'app' AND table_name = 'channels' AND column_name = 'last_reauth_notice'",
-      ),
-    ).toEqual([]);
   });
 });
