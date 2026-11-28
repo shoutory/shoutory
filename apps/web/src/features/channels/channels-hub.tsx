@@ -472,9 +472,11 @@ interface LoadedProps {
   onClearFilter: () => void;
 }
 
-// The server's own words decide: a channel that is not connected, or that offers a reconnect.
+// The server's own words decide: a channel that is not connected, or that offers a reconnect. A channel the person
+// turned off is where they left it, not something that needs them.
 const needsAttention = (row: Channel) =>
-  row.connection_state !== "connected" || row.actions.includes("reconnect");
+  (row.connection_state !== "connected" && row.connection_state !== "disabled") ||
+  row.actions.includes("reconnect");
 
 interface Group {
   readonly key: string;

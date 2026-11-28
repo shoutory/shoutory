@@ -78,11 +78,11 @@ describe("the Needs attention filter", () => {
       row(4, { actions: ["check", "reconnect"] }),
     );
 
-  it("shows only the cards that are not connected or that list reconnect, and Clear filters restores all", async () => {
+  it("shows only the cards that are broken or that list reconnect, never one that was turned off, and Clear filters restores all", async () => {
     const host = await visit(mixed());
     expect(ids(host)).toHaveLength(4);
     click(toggle(host) as HTMLElement);
-    expect(ids(host)).toEqual([idOf(2), idOf(3), idOf(4)]);
+    expect(ids(host)).toEqual([idOf(2), idOf(4)]);
     click(toggle(host) as HTMLElement);
     expect(ids(host)).toHaveLength(4);
   });
