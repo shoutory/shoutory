@@ -4,8 +4,10 @@ import type { HealthProvider } from "../../channels/health.js";
 import { asAdmin } from "../admin/admin.js";
 import { type App, defineRoute } from "../define-route.js";
 
-// The answers are allowlists: nothing of a manifest's scopes, hosts or limits, and nothing of the adapter, leaves the
-// server.
+// The answers are allowlists: nothing of a manifest's scopes, hosts, limit sources or quotas, and nothing of the adapter,
+// leaves the server. The workspace answer carries what the composer needs to count and check text and media: the
+// capabilities, the counting rule, three limits as plain numbers (a limit the manifest lacks is left out) and the
+// follow-up roles.
 
 type Providers = Readonly<Record<string, HealthProvider>>;
 
@@ -18,6 +20,15 @@ const needsInstanceHost = ({ manifest }: HealthProvider) => manifest.egressHostS
 
 // Accounts on servers a person names are found from the account typed, not from a host.
 const needsLoginHint = ({ manifest }: HealthProvider) => manifest.egressHostSource === "open";
+
+function composerLimits({ manifest }: HealthProvider) {
+  const { textLength, textBytes, mediaMaxCount } = manifest.limits;
+  return {
+    ...(textLength && { text_length: textLength.value }),
+    ...(textBytes && { text_bytes: textBytes.value }),
+    ...(mediaMaxCount && { media_max_count: mediaMaxCount.value }),
+  };
+}
 
 // What a person pastes instead of authorizing, for the providers whose credential is a secret they hold.
 const secretKind = ({ manifest }: HealthProvider) =>
@@ -60,6 +71,10 @@ export function registerProviders(app: App, providers: Providers, publicOrigin: 
         needs_login_hint: needsLoginHint(provider),
         secret_kind: secretKind(provider),
         needs_public_origin: needsPublicOrigin(provider, publicOrigin),
+        capabilities: provider.manifest.capabilities,
+        counting: provider.manifest.counting,
+        limits: composerLimits(provider),
+        follow_up_roles: provider.manifest.followUpRoles,
       })),
   });
   defineRoute(app, {

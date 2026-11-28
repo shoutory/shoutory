@@ -22,16 +22,27 @@ const SEATS = ["owner", "admin", "editor", "approver", "viewer"] as const;
 const MISSING = "019a0000-0000-7000-8000-000000000000";
 const ALLOWLIST = [
   "auth_kind",
+  "capabilities",
   "connectable",
+  "counting",
   "display_name",
+  "follow_up_roles",
   "id",
   "lifecycle",
+  "limits",
   "needs_instance_host",
   "needs_login_hint",
   "needs_public_origin",
   "secret_kind",
 ];
 const NO_STEPS = { needs_login_hint: false, needs_public_origin: false, secret_kind: null };
+const COMPOSER = {
+  capabilities: [...fixtureOAuthManifest.capabilities],
+  counting: fixtureOAuthManifest.counting,
+  follow_up_roles: [...fixtureOAuthManifest.followUpRoles],
+  limits: { text_length: 500, media_max_count: 4 },
+};
+const { textLength: _length, ...limitsWithoutLength } = fixtureOAuthManifest.limits;
 const manifestOf = (id: string, displayName: string, lifecycle: "beta" | "ga") =>
   manifestSchema.parse({ ...fixtureOAuthManifest, id, displayName, lifecycle });
 // A provider whose host is the one each channel stores (an instance network) needs the host typed at the start.
@@ -63,6 +74,10 @@ beforeAll(async () => {
             id: "fixture_secret",
             displayName: "Secret Network",
             auth: { method: "bot_token" },
+            limits: {
+              ...limitsWithoutLength,
+              textBytes: { ...fixtureOAuthManifest.limits.textLength, value: 1000 },
+            },
           }),
         },
         fixture_docs: documentsProvider(),
@@ -141,6 +156,7 @@ describe("what the providers route answers", () => {
         connectable: true,
         needs_instance_host: false,
         ...NO_STEPS,
+        ...COMPOSER,
       },
       {
         id: "fixture_beta",
@@ -150,12 +166,26 @@ describe("what the providers route answers", () => {
         connectable: false,
         needs_instance_host: true,
         ...NO_STEPS,
+        ...COMPOSER,
       },
     ]);
-    // Nothing of the manifest's internals or of the adapter reaches the answer: scopes, hosts, capabilities, limits.
+    // Nothing of the manifest's internals or of the adapter reaches the answer: scopes, hosts, limit sources.
     for (const internal of fixtureOAuthManifest.scopes) expect(text).not.toContain(internal);
+    for (const internal of [
+      ...fixtureOAuthManifest.egressHosts,
+      "docs.fixture.example",
+      "scopes",
+      "source",
+    ]) {
+      expect(text).not.toContain(internal);
+    }
     expect(text).not.toContain(new URL(sim.url).host);
-    expect(text).not.toContain("capabilities");
+  });
+
+  it("states a limit as a number only where the manifest has it, and leaves any other limit out", async () => {
+    const body = (await (await providers(user("admin"))).json()) as { data: Array<Record<string, unknown>> };
+    const secret = body.data.find((row) => row.id === "fixture_secret");
+    expect(secret?.limits).toEqual({ text_bytes: 1000, media_max_count: 4 });
   });
 });
 
