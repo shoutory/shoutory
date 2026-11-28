@@ -4163,7 +4163,7 @@ msgstr "Sent to the queue"
 
 #. js-lingui-explicit-id
 msgid "composer.publish.undo"
-msgstr "Undo (ends in {left} s)"
+msgstr "Undo (ends in {seconds} s)"
 
 #. js-lingui-explicit-id
 msgid "composer.publish.scheduled"
@@ -4487,7 +4487,7 @@ msgstr "Alt text"
 
 #. js-lingui-explicit-id
 msgid "composer.media.fit"
-msgstr "{name}: {0}"
+msgstr "{name} cannot use this file: {0}"
 
 #. js-lingui-explicit-id
 msgid "composer.media.full"

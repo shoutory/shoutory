@@ -160,7 +160,12 @@ function useFiles({ workspace, doc, onUpdate, tab, channels }: FilesArgs) {
       const fit = fits.get(id)?.get(channel);
       const name = channels.nameOf(channel);
       return fit && !fit.ok
-        ? [t({ id: "composer.media.fit", message: `${name}: ${i18n._(fitWords(fit.reason))}` })]
+        ? [
+            t({
+              id: "composer.media.fit",
+              message: `${name} cannot use this file: ${i18n._(fitWords(fit.reason))}`,
+            }),
+          ]
         : [];
     });
   return {

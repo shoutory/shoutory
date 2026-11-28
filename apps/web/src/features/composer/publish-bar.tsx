@@ -154,17 +154,17 @@ function problemOf(passed: boolean, reason: string): string | null {
   return INLINE.has(reason) ? reason : null;
 }
 
-type Sent = { ids: string[]; left: number } | null;
+type Sent = { ids: string[]; seconds: number } | null;
 
 // Six seconds to undo a publish; when they end the post's own page opens.
 function useCountdown(sent: Sent, setSent: Dispatch<SetStateAction<Sent>>, open: () => void) {
   const running = sent !== null;
   useEffect(() => {
     if (!running) return;
-    const timer = setInterval(() => setSent((now) => now && { ...now, left: now.left - 1 }), 1000);
+    const timer = setInterval(() => setSent((now) => now && { ...now, seconds: now.seconds - 1 }), 1000);
     return () => clearInterval(timer);
   }, [running, setSent]);
-  const over = sent !== null && sent.left <= 0;
+  const over = sent !== null && sent.seconds <= 0;
   useEffect(() => {
     if (!over) return;
     setSent(null);
@@ -247,7 +247,7 @@ function useActions(props: PublishProps, setSent: Dispatch<SetStateAction<Sent>>
       if (!(await props.saveNow())) return;
       const body = { variant_ids: availability("publish_now").ids };
       const done = await post(idsSchema, `${base}/publish`, body);
-      setSent({ ids: done.variant_ids, left: UNDO_SECONDS });
+      setSent({ ids: done.variant_ids, seconds: UNDO_SECONDS });
     });
 
   const undo = () =>
@@ -279,7 +279,7 @@ function Result({ scheduled, open }: { scheduled: Scheduled; open: () => void })
   );
 }
 
-function Sending({ left, busy, onUndo }: { left: number; busy: boolean; onUndo: () => void }) {
+function Sending({ seconds, busy, onUndo }: { seconds: number; busy: boolean; onUndo: () => void }) {
   return (
     <Banner tone="info">
       <div data-testid="publish-sent" className="flex flex-wrap items-center gap-3">
@@ -287,7 +287,7 @@ function Sending({ left, busy, onUndo }: { left: number; busy: boolean; onUndo: 
           <Trans id="composer.publish.sent">Sent to the queue</Trans>
         </span>
         <Button data-testid="publish-undo" busy={busy} onPress={onUndo}>
-          <Trans id="composer.publish.undo">Undo (ends in {left} s)</Trans>
+          <Trans id="composer.publish.undo">Undo (ends in {seconds} s)</Trans>
         </Button>
       </div>
     </Banner>
@@ -380,7 +380,7 @@ export function PublishBar(props: PublishProps) {
       </h2>
       {scheduled !== null ? <Result scheduled={scheduled} open={open} /> : null}
       {scheduled === null && sent !== null ? (
-        <Sending left={sent.left} busy={call.busy === "undo"} onUndo={() => void actions.undo()} />
+        <Sending seconds={sent.seconds} busy={call.busy === "undo"} onUndo={() => void actions.undo()} />
       ) : null}
       {scheduled === null && sent === null ? (
         <>

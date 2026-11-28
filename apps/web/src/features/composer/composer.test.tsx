@@ -140,6 +140,8 @@ describe("Arabic", () => {
     await write("مرحبا");
     expect(field("composer-base").getAttribute("dir")).toBe("auto");
     expect(byId(`counter-${CH.weighted}`)?.textContent).toContain("10");
-    expect(byId("composer-base")).not.toBeNull();
+    expect(document.body.textContent).toContain("نص المنشور");
+    expect(document.body.textContent).not.toContain("Post text");
+    expect(byId(`counter-${CH.weighted}-over`)).toBeNull();
   });
 });
