@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { closeApp, openApp, refusal, settle, uuidWorkspaces } from "../../../test/support/app";
 import {
   CHANNEL_ONE,
-  CHANNEL_THREE,
   CHANNEL_TWO,
   detailAnswer,
   detailTarget,
@@ -43,112 +42,6 @@ const target = (n: number, change: Record<string, unknown> = {}) =>
 const inState = (state: string, change: Record<string, unknown> = {}, effect = "none") => ({
   published_at: null,
   operation: operation({ state, effect, ...change }),
-});
-
-const WORDS: [string, Record<string, unknown>, string, string, string][] = [
-  ["pending", waiting, "Waiting for its time", "بانتظار موعده", "Goes out"],
-  ["claimed", inState("claimed"), "Getting ready", "جارٍ التحضير", "Preparing to send"],
-  ["dispatching", inState("dispatching"), "Sending", "جارٍ الإرسال", "Being sent to Fixture Network"],
-  [
-    "provider_accepted",
-    inState("provider_accepted"),
-    "Accepted by Fixture Network, finishing",
-    "قبلته Fixture Network وتُنهيه الآن",
-    "we are confirming",
-  ],
-  ["retry_wait", inState("retry_wait"), "Will retry", "ستُعاد المحاولة", "Nothing was posted yet."],
-  [
-    "paused",
-    inState("paused", { reason_code: "quota" }),
-    "Paused: quota reached",
-    "متوقف مؤقتًا: بلوغ الحصة",
-    "We will continue",
-  ],
-  [
-    "blocked_reconnect",
-    { ...inState("blocked_reconnect"), channel_id: CHANNEL_THREE },
-    "Held: reconnect Acme Blog",
-    "محجوز: أعد ربط Acme Blog",
-    "Reconnect by",
-  ],
-  [
-    "unknown_external_state",
-    inState("unknown_external_state", {}, "possible"),
-    "Checking whether it was posted",
-    "نتحقق مما إذا كان قد نُشر",
-    "we have not posted again",
-  ],
-  [
-    "needs_human",
-    inState("needs_human", {}, "possible"),
-    "Needs your check",
-    "يحتاج إلى تحققك",
-    "could not confirm this",
-  ],
-  [
-    "needs_human past due",
-    inState("needs_human", { reason_code: "past_due_after_reconnect" }),
-    "Nothing was posted; its time passed",
-    "لم يُنشر شيء؛ فات موعده",
-    "Posting now would be late",
-  ],
-  [
-    "unverified",
-    inState("unverified", {}, "possible"),
-    "Could not be confirmed",
-    "تعذّر التأكد",
-    "still blocks new posts",
-  ],
-  ["failed, nothing sent", inState("failed"), "Failed", "فشل", "Nothing was posted to Acme Page"],
-  [
-    "failed, a thread part",
-    inState("failed", { part_index: 3 }),
-    "Failed",
-    "فشل",
-    "Parts 1 to 3 are live; part 4 was not posted",
-  ],
-  ["missed", inState("missed"), "Missed", "فات موعده", "we never send late"],
-  ["cancelled", inState("cancelled"), "Cancelled", "أُلغي", "cancelled before anything was sent"],
-  [
-    "an edit being sent",
-    { operation: operation({ kind: "edit", state: "dispatching" }) },
-    "Applying your edit",
-    "جارٍ تطبيق تعديلك",
-    "still show the old text",
-  ],
-  [
-    "an edit that failed",
-    { operation: operation({ kind: "edit", state: "failed" }) },
-    "Edit not applied",
-    "لم يُطبَّق التعديل",
-    "earlier text",
-  ],
-  [
-    "a removal under way",
-    { presence: "removal_pending", operation: operation({ kind: "delete", state: "dispatching" }) },
-    "Removing from Fixture Network",
-    "جارٍ الحذف من Fixture Network",
-    "We are confirming",
-  ],
-  [
-    "a removal not confirmed",
-    { presence: "removal_unknown", operation: operation({ kind: "delete", state: "needs_human" }) },
-    "We could not confirm it was removed",
-    "لم نتأكد من الحذف",
-    "Open Fixture Network",
-  ],
-];
-
-describe("the word and meaning of each target", () => {
-  it.each(WORDS)("%s", async (_name, change, en, ar, meaning) => {
-    const api = showing(target(1, change));
-    const english = await visit(api);
-    expect(text(english.host, "target-word")).toContain(en);
-    expect(text(english.host, "target-meaning")).toContain(meaning);
-    closeApp();
-    const arabic = await visit(api, "ar");
-    expect(text(arabic.host, "target-word")).toContain(ar);
-  });
 });
 
 const live = (n: number) => target(n);

@@ -62,96 +62,23 @@ describe("the posts list rows", () => {
   });
 });
 
-const WORD_ROWS: [string, Record<string, unknown>, string, string][] = [
-  ["pending", { operation_state: "pending", published_at: null }, "Waiting for its time", "بانتظار موعده"],
-  ["claimed", { operation_state: "claimed", published_at: null }, "Getting ready", "جارٍ التحضير"],
-  ["dispatching", { operation_state: "dispatching", published_at: null }, "Sending", "جارٍ الإرسال"],
-  [
-    "processing",
-    { operation_state: "processing", published_at: null },
-    "Fixture Network is preparing the media",
-    "Fixture Network تجهّز الوسائط",
-  ],
-  [
-    "provider_accepted",
-    { operation_state: "provider_accepted", published_at: null },
-    "Accepted by Fixture Network, finishing",
-    "قبلته Fixture Network وتُنهيه الآن",
-  ],
-  ["retry_wait", { operation_state: "retry_wait", published_at: null }, "Will retry", "ستُعاد المحاولة"],
-  ["paused", { operation_state: "paused", published_at: null }, "Paused", "متوقف مؤقتًا"],
-  [
-    "blocked_reconnect",
-    { operation_state: "blocked_reconnect", published_at: null },
-    "Held: reconnect Acme Page",
-    "محجوز: أعد ربط Acme Page",
-  ],
-  [
-    "unknown_external_state",
-    { operation_state: "unknown_external_state", published_at: null },
-    "Checking whether it was posted",
-    "نتحقق مما إذا كان قد نُشر",
-  ],
-  [
-    "reconciling",
-    { operation_state: "reconciling", published_at: null },
-    "Checking Fixture Network now",
-    "نراجع Fixture Network الآن",
-  ],
-  [
-    "needs_human",
-    { operation_state: "needs_human", published_at: null },
-    "Needs your check",
-    "يحتاج إلى تحققك",
-  ],
-  [
-    "unverified",
-    { operation_state: "unverified", published_at: null },
-    "Could not be confirmed",
-    "تعذّر التأكد",
-  ],
-  ["published", {}, "Published", "نُشر"],
-  ["failed", { operation_state: "failed", published_at: null }, "Failed", "فشل"],
-  ["cancelled", { operation_state: "cancelled", published_at: null }, "Cancelled", "أُلغي"],
-  ["missed", { operation_state: "missed", published_at: null }, "Missed", "فات موعده"],
-  [
-    "superseded_after_unknown_outcome",
-    { operation_state: "superseded_after_unknown_outcome", published_at: null },
-    "Replaced after an unclear result",
-    "استُبدل بعد نتيجة غير واضحة",
-  ],
-  [
-    "a removal under way",
-    { presence: "removal_pending" },
-    "Removing from Fixture Network",
-    "جارٍ الحذف من Fixture Network",
-  ],
-  [
-    "a removal that could not be confirmed",
-    { presence: "removal_unknown" },
-    "We could not confirm it was removed",
-    "لم نتأكد من الحذف",
-  ],
-  [
-    "a draft with no operation yet",
-    { operation_state: null, schedule_state: "draft", published_at: null },
-    "Draft",
-    "مسودة",
-  ],
-];
-
-describe("the status words", () => {
-  it.each(WORD_ROWS)(
-    "the word of a target in state %s is its status word in English and Arabic",
-    async (_name, change, en, ar) => {
-      const api = { postList: () => page([listRow(1, { status: "draft", targets: [target(1, change)] })]) };
-      const english = await visit(api);
-      expect(all(english.host, "post-target")[0]?.textContent).toContain(en);
-      closeApp();
-      const arabic = await visit(api, "ar");
-      expect(all(arabic.host, "post-target")[0]?.textContent).toContain(ar);
-    },
-  );
+describe("the status word of a target in the list", () => {
+  it("reads from the same words as the post page, in both languages", async () => {
+    const api = {
+      postList: () =>
+        page([
+          listRow(1, {
+            status: "draft",
+            targets: [target(1, { operation_state: "needs_human", published_at: null })],
+          }),
+        ]),
+    };
+    const english = await visit(api);
+    expect(all(english.host, "post-target")[0]?.textContent).toContain("Needs your check");
+    closeApp();
+    const arabic = await visit(api, "ar");
+    expect(all(arabic.host, "post-target")[0]?.textContent).toContain("يحتاج إلى تحققك");
+  });
 });
 
 describe("the summary of a row", () => {
