@@ -410,9 +410,13 @@ describe("the notices of the tick", () => {
       await queue.stop({ graceful: true });
     }
     const cards = await admin((a) =>
-      a.query("SELECT kind, level FROM app.notifications WHERE subject_id = $1", [channel]),
+      a.query(
+        `SELECT n.kind, n.level FROM app.notifications n
+         JOIN app.channel_credentials k ON k.id = n.subject_id WHERE k.channel_id = $1`,
+        [channel],
+      ),
     );
-    expect(cards.rows).toEqual([{ kind: "token_expiry", level: "7d" }]);
+    expect(cards.rows).toEqual([{ kind: "token_expiry", level: "g1:7d" }]);
   });
 });
 
