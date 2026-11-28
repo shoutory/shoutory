@@ -75,6 +75,7 @@ describe("saving as the person writes", () => {
     const [changed] = callsOf(stub, "PATCH", `/posts/${POST}`);
     expect(changed?.headers["If-Match"]).toBe(`"${VERSION_1}"`);
     expect(byId("save-indicator")?.textContent).toContain("Saved");
+    expect(byId("save-announce")?.textContent).toBe("");
   });
 
   it("nothing is sent for a post with no channel, and the indicator says so", async () => {
@@ -84,6 +85,28 @@ describe("saving as the person writes", () => {
     await after(5000);
     expect(callsOf(stub, "POST", "/posts")).toHaveLength(0);
     expect(byId("save-indicator")?.textContent).toContain("Unsaved");
+  });
+});
+
+describe("a save that has to wait", () => {
+  it("is tried again after the pause, and not at all once the composer is gone", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { stub, router } = await open((call) => {
+      if (call.method === "PATCH") return refusal("too_many_requests", 429);
+      if (call.method === "GET" && call.path === `posts/${POST}`) return detailOf(SAVED);
+      return undefined;
+    }, `/w/w1/posts/${POST}/edit`);
+    await write("Changed words");
+    await after(2000);
+    await settle();
+    expect(byId("save-indicator")?.getAttribute("data-state")).toBe("paused");
+    expect(callsOf(stub, "PATCH", `/posts/${POST}`)).toHaveLength(1);
+    await act(async () => {
+      await router.navigate("/w/w1/posts");
+    });
+    expect(byId("save-indicator")).toBeNull();
+    await after(10_000);
+    expect(callsOf(stub, "PATCH", `/posts/${POST}`)).toHaveLength(1);
   });
 });
 
@@ -99,6 +122,7 @@ describe("offline", () => {
     await after(3000);
     expect(callsOf(stub, "POST", "/posts")).toHaveLength(0);
     expect(byId("save-indicator")?.textContent).toContain("Not saved to the server");
+    expect(byId("save-announce")?.textContent).toContain("Not saved to the server");
     expect(JSON.parse(localStorage.getItem(BUFFER) ?? "{}").doc.base).toBe("Written offline");
   });
 
@@ -136,6 +160,33 @@ describe("offline", () => {
     await pickShort();
     await write("Still works");
     expect(field("composer-base").value).toBe("Still works");
+  });
+});
+
+describe("what is announced about saving", () => {
+  it("says so when saving works again after it did not", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    await open((call) => {
+      if (call.method === "POST" && call.path === "posts") return created();
+      if (call.method === "PATCH") return patched();
+      if (call.method === "GET" && call.path === `posts/${POST}`) return detailOf(SAVED);
+      return undefined;
+    });
+    await pickShort();
+    await write("Written offline");
+    await after(3000);
+    const live = byId("save-announce");
+    expect(live?.textContent).toContain("Not saved to the server");
+    onLine.mockReturnValue(true);
+    await act(async () => {
+      window.dispatchEvent(new Event("online"));
+    });
+    await after(2000);
+    await settle();
+    expect(byId("save-indicator")?.textContent).toContain("Saved");
+    expect(byId("save-announce")).toBe(live);
+    expect(live?.textContent).toContain("Saved again");
   });
 });
 

@@ -1,4 +1,5 @@
 import { Trans } from "@lingui/react/macro";
+import { useEffect, useState } from "react";
 import { readZone } from "../../account/prefs";
 import type { ApiError } from "../../http/client";
 import { Banner } from "../../ui/banner";
@@ -17,22 +18,47 @@ export function SaveIndicator({
   online: boolean;
 }) {
   const shown = online ? state : "offline";
+  // Only trouble and the end of it are announced; an ordinary save is not said aloud each time.
+  const [trouble, setTrouble] = useState<"offline" | "paused" | null>(null);
+  const [recovered, setRecovered] = useState(false);
+  useEffect(() => {
+    if (shown === "offline" || shown === "paused") {
+      setTrouble(shown);
+      setRecovered(false);
+    } else if (shown === "saved" && trouble !== null) {
+      setTrouble(null);
+      setRecovered(true);
+    }
+  }, [shown, trouble]);
   return (
-    <p role="status" data-testid="save-indicator" data-state={shown}>
-      {shown === "offline" ? <Trans id="composer.save.offline">Not saved to the server</Trans> : null}
-      {shown === "saving" ? <Trans id="composer.save.saving">Saving</Trans> : null}
-      {shown === "unsaved" ? <Trans id="composer.save.unsaved">Unsaved changes</Trans> : null}
-      {shown === "paused" ? (
-        <Trans id="composer.save.paused">
-          Saving paused for a moment. Your changes are kept on this device.
-        </Trans>
-      ) : null}
-      {shown === "saved" && savedAt ? (
-        <Trans id="composer.save.saved">
-          Saved (<LocalizedDateTime value={savedAt} timeZone={readZone()} />)
-        </Trans>
-      ) : null}
-    </p>
+    <>
+      <p data-testid="save-indicator" data-state={shown}>
+        {shown === "offline" ? <Trans id="composer.save.offline">Not saved to the server</Trans> : null}
+        {shown === "saving" ? <Trans id="composer.save.saving">Saving</Trans> : null}
+        {shown === "unsaved" ? <Trans id="composer.save.unsaved">Unsaved changes</Trans> : null}
+        {shown === "paused" ? (
+          <Trans id="composer.save.paused">
+            Saving paused for a moment. Your changes are kept on this device.
+          </Trans>
+        ) : null}
+        {shown === "saved" && savedAt ? (
+          <Trans id="composer.save.saved">
+            Saved (<LocalizedDateTime value={savedAt} timeZone={readZone()} />)
+          </Trans>
+        ) : null}
+      </p>
+      <p role="status" data-testid="save-announce" className="sr-only">
+        {trouble === "offline" ? <Trans id="composer.save.offline">Not saved to the server</Trans> : null}
+        {trouble === "paused" ? (
+          <Trans id="composer.save.paused">
+            Saving paused for a moment. Your changes are kept on this device.
+          </Trans>
+        ) : null}
+        {trouble === null && recovered ? (
+          <Trans id="composer.save.recovered">Saved again. Your changes are on the server.</Trans>
+        ) : null}
+      </p>
+    </>
   );
 }
 

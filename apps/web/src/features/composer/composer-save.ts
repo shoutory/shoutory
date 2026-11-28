@@ -105,6 +105,9 @@ function send(base: string, now: Baseline, doc: Doc): Promise<Answer> {
 // What each refusal of a save does to the screen: a conflict waits for a choice, a fast pace waits a moment, a lost
 // network waits for the network, and anything else is shown.
 function useRefusal({ held, patch }: Core, signIn: () => void, retry: () => void) {
+  // The wait before trying again is dropped with the composer, so a page that was left never saves.
+  const waiting = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(waiting.current), []);
   return useCallback(
     (error: ApiError) => {
       patch({ state: "unsaved" });
@@ -114,7 +117,8 @@ function useRefusal({ held, patch }: Core, signIn: () => void, retry: () => void
       } else if (error.state === "session_expired") signIn();
       else if (error.code === "too_many_requests") {
         patch({ state: "paused" });
-        setTimeout(retry, PAUSE_MS);
+        clearTimeout(waiting.current);
+        waiting.current = setTimeout(retry, PAUSE_MS);
       } else if (error.code !== "network") patch({ failure: error });
     },
     [held, patch, signIn, retry],

@@ -4849,3 +4849,7 @@ msgstr "unknown failure"
 #. js-lingui-explicit-id
 msgid "posts.attempt.other"
 msgstr "Other"
+
+#. js-lingui-explicit-id
+msgid "composer.save.recovered"
+msgstr "Saved again. Your changes are on the server."

@@ -4849,3 +4849,7 @@ msgstr "فشل غير معروف"
 #. js-lingui-explicit-id
 msgid "posts.attempt.other"
 msgstr "أخرى"
+
+#. js-lingui-explicit-id
+msgid "composer.save.recovered"
+msgstr "حُفظت التغييرات مرة أخرى وهي الآن على الخادم."

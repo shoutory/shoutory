@@ -92,23 +92,6 @@ describe("version history", () => {
     expect(callsOf(stub, "GET", `versions?limit=20&cursor=${VERSION_2}`)).toHaveLength(1);
   });
 
-  it("sends a cursor with characters of a query as one value", async () => {
-    const cursor = "a+b/c d&e=1#f";
-    let asked: string | null = null;
-    await open({
-      list: (call) => {
-        if (call.query.get("cursor") === null) {
-          return json({ data: [row(VERSION_2, 2, "save")], meta: { next_cursor: cursor } });
-        }
-        asked = call.query.get("cursor");
-        return json({ data: [row(VERSION_1, 1, "autosave")], meta: { next_cursor: null } });
-      },
-    });
-    await click(byId("versions-more") as HTMLElement);
-    await settle();
-    expect(asked).toBe(cursor);
-  });
-
   it("previews one version's text without changing the draft", async () => {
     await open();
     await click(allById("version-preview")[1] as HTMLElement);
@@ -132,5 +115,24 @@ describe("version history", () => {
     await settle();
     expect(byId("version-failure")?.textContent).toContain("Nothing was changed");
     expect(field("composer-base").value).toBe("Current words");
+  });
+});
+
+describe("the cursor of the version list", () => {
+  it("sends a cursor with characters of a query as one value", async () => {
+    const cursor = "a+b/c d&e=1#f";
+    let asked: string | null = null;
+    await open({
+      list: (call) => {
+        if (call.query.get("cursor") === null) {
+          return json({ data: [row(VERSION_2, 2, "save")], meta: { next_cursor: cursor } });
+        }
+        asked = call.query.get("cursor");
+        return json({ data: [row(VERSION_1, 1, "autosave")], meta: { next_cursor: null } });
+      },
+    });
+    await click(byId("versions-more") as HTMLElement);
+    await settle();
+    expect(asked).toBe(cursor);
   });
 });

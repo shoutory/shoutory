@@ -57,9 +57,8 @@ function useVersions(base: string) {
   const [loading, setLoading] = useState(true);
   const read = (cursor?: string) => {
     setLoading(true);
-    request(pageSchema, `${base}/versions?limit=${PAGE}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`, {
-      envelope: false,
-    }).then(
+    const after = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
+    request(pageSchema, `${base}/versions?limit=${PAGE}${after}`, { envelope: false }).then(
       (page) => {
         setRows((now) => [...now, ...page.data]);
         setNext(page.meta.next_cursor);
