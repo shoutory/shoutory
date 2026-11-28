@@ -17,7 +17,7 @@ import { runTurn } from "../../src/jobs/ledger/turn.js";
 import { startWorker } from "../../src/jobs/worker.js";
 import { createLogger } from "../../src/logging/logger.js";
 import { createFsDriver } from "../../src/storage/fs-driver.js";
-import { ledgerCredentials } from "../support/ledger-credentials.js";
+import { connectChannel, ledgerCredentials } from "../support/ledger-credentials.js";
 import { connectThrough, seedDueTarget, seedWorkspace } from "../support/ledger-seed.js";
 
 const env = readTestEnv();
@@ -378,6 +378,41 @@ describe("a post held while its channel is away", () => {
     } finally {
       await queue.stop({ graceful: true });
     }
+  });
+});
+
+describe("the notices of the tick", () => {
+  it("a token that expires in five days gets its card and mail on a tick, and not again on the next", async () => {
+    const channel = await connectChannel(db.pool("worker"), {
+      workspace: ws,
+      provider: fixtureManifest.id,
+      account: "tick-notice-account",
+    });
+    await admin((a) =>
+      a.query(
+        "UPDATE app.channel_credentials SET access_expires_at = now() + interval '5 days' WHERE channel_id = $1",
+        [channel],
+      ),
+    );
+    const queue = boss();
+    await queue.start();
+    try {
+      const tick = createLedgerTick({
+        pool: db.pool("worker"),
+        boss: queue,
+        registry,
+        logger,
+        credentials: credentials(),
+      });
+      await tick.tick();
+      await tick.tick();
+    } finally {
+      await queue.stop({ graceful: true });
+    }
+    const cards = await admin((a) =>
+      a.query("SELECT kind, level FROM app.notifications WHERE subject_id = $1", [channel]),
+    );
+    expect(cards.rows).toEqual([{ kind: "token_expiry", level: "7d" }]);
   });
 });
 

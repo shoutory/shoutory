@@ -11,6 +11,7 @@ import { pastSunset } from "@shoutory/provider-sdk/snapshot";
 import type { PgBoss } from "pg-boss";
 import { type CredentialService, channelProvidersOf } from "../../channels/credentials.js";
 import type { Logger } from "../../logging/logger.js";
+import { sendDueNotices } from "../notices/notices.js";
 import { type IntervalLoop, intervalLoop } from "../outbox-relay.js";
 import { refuseEgress } from "./held.js";
 import { pollStep } from "./poll.js";
@@ -190,6 +191,7 @@ export function createLedgerTick({
     await step("revoking credentials", () =>
       finishRevoking({ pool, credentials, providers: channelProvidersOf(registry, adapters), logger }),
     );
+    await step("notices", () => sendDueNotices({ pool, logger }));
     await step("admission", admitBacklog);
     // A post is admitted before it is due, so the wake-up of admission can come early: waking the queues at the end of
     // every tick sends it when it falls due, and covers a wake-up that was lost.
