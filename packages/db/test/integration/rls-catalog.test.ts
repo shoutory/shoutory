@@ -325,6 +325,16 @@ const DEFINERS: Definer[] = [
     args: "workspace_id uuid, post_id uuid, variant_ids uuid[]",
     callers: ["shoutory_app"],
   },
+  {
+    name: "post_edit",
+    args: "workspace_id uuid, post_id uuid, expected_version uuid, snapshot jsonb, snapshot_hash bytea, providers jsonb, request_id text, ip_hmac bytea",
+    callers: ["shoutory_app"],
+  },
+  {
+    name: "post_delete",
+    args: "workspace_id uuid, post_id uuid, expected_version uuid, variant_ids uuid[], providers jsonb, request_id text, ip_hmac bytea",
+    callers: ["shoutory_app"],
+  },
   { name: "credential_open_revoking", args: "workspace_id uuid, channel_id uuid", callers: APP_WORKER },
   { name: "credentials_revoking_stale", args: "p_age interval", callers: ["shoutory_worker"] },
   {
@@ -566,6 +576,14 @@ const DEFINERS: Definer[] = [
     callers: [],
     helper: true,
   },
+  {
+    name: "ledger_admit_target",
+    args: "p_ws uuid, p_variant uuid, p_channel uuid, p_provider text, p_kind text, p_part integer, p_parent uuid, p_due timestamp with time zone, p_missed boolean, p_requested_by uuid, p_lease integer, p_version uuid, p_marker text, p_pin boolean, p_reserve boolean, p_audit text, p_request text, p_ip bytea",
+    callers: [],
+    helper: true,
+  },
+  { name: "media_held", args: "p_ws uuid, p_version uuid", callers: APP_WORKER, helper: true },
+  { name: "operations_priority", args: "", callers: [], helper: true },
   { name: "operations_rollup", args: "", callers: [] },
   { name: "operations_usage", args: "", callers: [] },
   {

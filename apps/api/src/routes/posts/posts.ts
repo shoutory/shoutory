@@ -9,6 +9,7 @@ import { Refusal } from "../../errors/refusal.js";
 import { type App, type AppEnv, defineRoute } from "../define-route.js";
 import { definerRefusal } from "../definer-refusal.js";
 import { pageAnswer, pageQuery } from "../input.js";
+import { expectedVersion, livePost, staleRefusal } from "./preconditions.js";
 import { registerPublish } from "./publish.js";
 import { resolveDraft } from "./resolve.js";
 
@@ -70,17 +71,6 @@ function registerCreate(app: App, providers: Providers, now: () => Date): void {
   });
 }
 
-const POST = `SELECT id, status, current_version_id, author_kind, author_id, created_at, updated_at
-  FROM app.posts WHERE workspace_id = $1 AND id = $2 AND deleted_at IS NULL`;
-
-// Row security does not hide a deleted post, so every read and write path says so itself.
-async function livePost(tx: TenantTx, scope: AuthorizedScope, postId: string) {
-  const found = await tx.query(POST, [scope.workspaceId, postId]);
-  const row = found.rows[0];
-  if (!row) throw new Refusal("not_found", "post row not visible");
-  return row as Record<string, unknown> & { current_version_id: string };
-}
-
 // The post, its variants and their media in one statement: one snapshot, so the ETag (the current version) always names
 // the content shown, whatever a concurrent autosave does between two reads.
 const READ_POST = `
@@ -133,29 +123,10 @@ function registerVersions(app: App): void {
   });
 }
 
-const QUOTED_VERSION = /^"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"$/i;
-
-function expectedVersion(c: Context<AppEnv>): string {
-  const header = c.req.header("if-match");
-  if (header === undefined) throw new Refusal("precondition_required", "If-Match is missing");
-  const found = QUOTED_VERSION.exec(header);
-  if (!found) {
-    throw new Refusal("validation_failed", "If-Match is not one quoted version id", {
-      details: { target: "if-match" },
-    });
-  }
-  return (found[1] as string).toLowerCase();
-}
-
 // The pending variants are scheduled or approved ones whose change publishes only once they are scheduled again.
 function settled(outcome: Record<string, unknown>, c: Context<AppEnv>, status: 200 | 201, postId: string) {
   const version = outcome.version_id as string;
-  if (outcome.outcome === "stale") {
-    throw new Refusal("precondition_failed", "the post has moved on", {
-      details: { current_version_id: version },
-      etag: `"${version}"`,
-    });
-  }
+  if (outcome.outcome === "stale") throw staleRefusal(version);
   const data = { id: postId, version_id: version, pending_changes: outcome.pending_changes };
   return answer(c, status, data, version);
 }
@@ -250,5 +221,5 @@ export function registerPosts(
   registerChange(app, providers, now, "autosave", throttle);
   registerChange(app, providers, now, "save", throttle);
   registerRestore(app, providers, now);
-  registerPublish(app, options.auth.ipHmac);
+  registerPublish(app, options.auth.ipHmac, { providers, now });
 }

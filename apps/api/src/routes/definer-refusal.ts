@@ -78,6 +78,9 @@ const REASONS: ReadonlySet<string> = new Set([
   "use_edit",
   "variant_has_history",
   "post_archived",
+  "not_published",
+  "edit_window_closed",
+  "capability_missing",
   "storage_full",
   "too_large",
   "in_use",
@@ -118,7 +121,7 @@ function detailsOf(state: string, message: string, detail: unknown): Record<stri
 // Only the invitation, member, channel, resolution, creation and archive definers raise the SH states, and the post writes for
 // their named reasons; the same state under another definer's name is a defect.
 const SH_DEFINERS =
-  /^(invitation|member|channel)_|^connect_challenge_(put|renew):|^(resolve_operation|operation_cancel):|^(workspace|organization)_create:|^workspace_(archive|unarchive|avatar_set|guard):|^media_(register|mark_uploaded|set_multipart|delete|set_metadata):|^post: (media_unavailable|post_in_flight|use_edit|variant_has_history|post_archived|channel_not_connected)$/;
+  /^(invitation|member|channel)_|^connect_challenge_(put|renew):|^(resolve_operation|operation_cancel):|^(workspace|organization)_create:|^workspace_(archive|unarchive|avatar_set|guard):|^media_(register|mark_uploaded|set_multipart|delete|set_metadata):|^post: (media_unavailable|post_in_flight|use_edit|variant_has_history|post_archived|channel_not_connected|not_published|edit_window_closed|capability_missing)$/;
 const LIMIT_DEFINERS = /^(workspace|organization)_create:/;
 
 // A creation definer's SH429 puts "retry after N seconds" in DETAIL; anything else gives the default Retry-After.

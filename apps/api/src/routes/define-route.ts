@@ -86,6 +86,8 @@ export interface RouteSpec<
   readonly policy: Policy;
   readonly access: A;
   readonly body?: B;
+  /** The body may be left out (a DELETE that can name targets); a request that has none reads as `{}`, so every field of `body` is optional. */
+  readonly optionalBody?: boolean;
   // The request must declare its `content-length` and no `transfer-encoding`, so the limit rests on the declared
   // length and nothing is buffered here; the handler bounds the stream it reads at that length, since a body can lie.
   readonly rawBody?: { readonly maxBytes: number };
@@ -150,6 +152,15 @@ const requireJson: MiddlewareHandler = async (c, next) => {
   if (!JSON_TYPE.test(c.req.header("content-type") ?? "")) {
     throw new Refusal("unsupported_media_type", "the body is not application/json");
   }
+  await next();
+};
+
+// A client that names a JSON type but sends no body sends nothing: the type is dropped, so the optional body reads as
+// absent. A body that is sent still has to be JSON, which the validator checks.
+const dropTypeOfEmptyBody: MiddlewareHandler = async (c, next) => {
+  const length = c.req.header("content-length");
+  const empty = (length === undefined || length === "0") && c.req.header("transfer-encoding") === undefined;
+  if (empty) c.req.raw.headers.delete("content-type");
   await next();
 };
 
@@ -323,6 +334,16 @@ function withPolicyHeaders(response: Response, policy: Policy, cookies: readonly
   return response;
 }
 
+const jsonBodyGuards = (optional: boolean): MiddlewareHandler[] => [
+  bodyLimit({ maxSize: MAX_BODY_BYTES, onError: tooLarge }),
+  optional ? dropTypeOfEmptyBody : requireJson,
+];
+
+const jsonBodyOf = (schema: Shape, optional: boolean) => ({
+  required: !optional,
+  content: { "application/json": { schema: schema as never } },
+});
+
 export function defineRoute<
   B extends Shape | undefined = undefined,
   Q extends Shape = typeof noInput,
@@ -339,7 +360,7 @@ export function defineRoute<
     ...(spec.cookieOnly ? [refuseAuthorization] : []),
     ...(spec.csrf === "token" ? [] : [csrf(state.publicOrigin)]),
   ];
-  if (spec.body) middleware.push(bodyLimit({ maxSize: MAX_BODY_BYTES, onError: tooLarge }), requireJson);
+  if (spec.body) middleware.push(...jsonBodyGuards(spec.optionalBody === true));
   if (spec.rawBody)
     middleware.push(
       cancelUnreadBody(state.logger),
@@ -353,9 +374,7 @@ export function defineRoute<
     request: {
       query: (spec.query ?? noInput) as never,
       ...(spec.params ? { params: spec.params as never } : {}),
-      ...(spec.body
-        ? { body: { required: true, content: { "application/json": { schema: spec.body as never } } } }
-        : {}),
+      ...(spec.body ? { body: jsonBodyOf(spec.body, spec.optionalBody === true) } : {}),
     },
     responses: { [spec.status ?? 200]: { description: "OK" } },
   });
@@ -364,7 +383,7 @@ export function defineRoute<
     (async (c: Context<AppEnv>) => {
       const cookies = spec.policy === "public" ? [] : await authenticate(state.auth, c, spec.policy);
       const base = {
-        body: spec.body ? validated(c, "json") : undefined,
+        body: spec.body ? (validated(c, "json") ?? (spec.optionalBody ? {} : undefined)) : undefined,
         query: validated(c, "query"),
         params: spec.params ? validated(c, "param") : undefined,
         clientAddress: c.get("clientAddress"),

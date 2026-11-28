@@ -110,7 +110,14 @@ interface Planted {
 }
 type Admin = Parameters<Parameters<Fixture["admin"]>[0]>[0];
 
-async function plantOperation(client: Admin, p: Planted, state: string, effect: string, kind = "publish") {
+async function plantOperation(
+  client: Admin,
+  p: Planted,
+  state: string,
+  effect: string,
+  kind = "publish",
+  part = 0,
+) {
   const frozen = (
     await client.query("SELECT frozen_version_id AS id FROM app.post_variants WHERE id = $1", [p.variant])
   ).rows[0].id as string;
@@ -119,12 +126,12 @@ async function plantOperation(client: Admin, p: Planted, state: string, effect: 
   const made = await client.query(
     `INSERT INTO app.operations (workspace_id, variant_id, channel_id, provider_id, queue, kind, state, effect,
        last_actor, due_at, next_attempt_at, lateness_deadline, idempotency_marker, frozen_version_id,
-       frozen_snapshot_hash, requested_by, lease_seconds, fencing_token)
+       frozen_snapshot_hash, requested_by, lease_seconds, fencing_token, part_index)
      VALUES ($1, $2, $3, 'fixture_oauth', 'publish.fixture_oauth', $4, $5, $6, 'S', now() - interval '2 minutes',
        now() - interval '1 minute', now() + interval '2 hours', $7, $8, decode(repeat('ab', 32), 'hex'),
-       (SELECT author_id FROM app.posts WHERE id = $9), 60, 1)
+       (SELECT author_id FROM app.posts WHERE id = $9), 60, 1, $10)
      RETURNING id`,
-    [p.workspace, p.variant, p.channel, kind, state, effect, `pub-${randomUUID()}`, frozen, p.post],
+    [p.workspace, p.variant, p.channel, kind, state, effect, `pub-${randomUUID()}`, frozen, p.post, part],
   );
   await client.query("COMMIT");
   return made.rows[0].id as string;
@@ -651,5 +658,147 @@ describe("the post detail never shows a provider's words or a token", () => {
       expect(text).toContain("targets");
       expect(leaks(text, CANARIES)).toEqual([]);
     }
+  });
+});
+
+const rowsOf = (sql: string, params: unknown[]) =>
+  fx.admin(async (client) => (await client.query(sql, params)).rows);
+
+describe("refusals of an edit and a delete", () => {
+  it.each(["edit", "delete"])(
+    "%s while an operation is in flight answers 409 post_in_flight",
+    async (name) => {
+      const route = routeNamed(name);
+      const p = await plant("in_flight");
+      const before = await stateOf(p);
+      const answered = await call(user("owner"), route, p);
+      const error = await errorOf(answered);
+      expect([answered.status, error?.code, error?.details?.reason]).toEqual([
+        409,
+        "conflict",
+        "post_in_flight",
+      ]);
+      expect(await stateOf(p)).toEqual(before);
+    },
+  );
+
+  it("an edit after the provider's edit window answers 409 edit_window_closed and changes nothing", async () => {
+    const p = await plant("published", { ageSeconds: 7200 });
+    const before = await stateOf(p);
+    const answered = await call(user("owner"), routeNamed("edit"), p);
+    const error = await errorOf(answered);
+    expect([answered.status, error?.code, error?.details?.reason]).toEqual([
+      409,
+      "conflict",
+      "edit_window_closed",
+    ]);
+    expect(await stateOf(p)).toEqual(before);
+  });
+});
+
+describe("an edit of a published post", () => {
+  it("an edit writes the new version, the new text and one edit operation of the requester", async () => {
+    const p = await plant("published");
+    const answered = await call(user("author"), routeNamed("edit"), p);
+    expect(answered.status).toBe(200);
+    const version = (await dataOf(answered)).version_id as string;
+    expect(version).not.toBe(p.version);
+    const [post] = await rowsOf("SELECT current_version_id FROM app.posts WHERE id = $1", [p.post]);
+    expect(post.current_version_id).toBe(version);
+    const [variant] = await rowsOf('SELECT "text" FROM app.post_variants WHERE id = $1', [p.variant]);
+    expect(variant.text).toBe("edited");
+    const ops = await rowsOf(
+      `SELECT o.state, o.queue, o.lease_seconds, o.frozen_version_id, o.requested_by, o.priority
+         FROM app.operations o WHERE o.variant_id = $1 AND o.kind = 'edit'`,
+      [p.variant],
+    );
+    expect(ops).toEqual([
+      {
+        state: "pending",
+        queue: "publish.fixture_oauth",
+        lease_seconds: 120,
+        frozen_version_id: version,
+        requested_by: user("author").id,
+        priority: false,
+      },
+    ]);
+    const events = await rowsOf(
+      `SELECT 1 FROM app.outbox WHERE workspace_id = $1 AND type = 'operation.admitted'
+         AND payload ->> 'operation_id' IN (SELECT id::text FROM app.operations WHERE variant_id = $2 AND kind = 'edit')`,
+      [ws, p.variant],
+    );
+    expect(events).toHaveLength(1);
+  });
+
+  it("an edit that changes nothing is refused and writes no version", async () => {
+    const p = await plant("published");
+    const answered = await send(
+      user("owner"),
+      "POST",
+      routeNamed("edit").path(p),
+      { draft: { variants: [variantOf(p.channel, "hello")] } },
+      { "idempotency-key": key(), ...ifMatch(p) },
+    );
+    expect(answered.status).toBe(400);
+    expect((await stateOf(p)).versions).toHaveLength(1);
+  });
+
+  it("an edit with a stale If-Match answers 412 and changes nothing", async () => {
+    const p = await plant("published");
+    expect((await call(user("owner"), routeNamed("edit"), p)).status).toBe(200);
+    const stale = await call(user("owner"), routeNamed("edit"), p);
+    expect(stale.status).toBe(412);
+    expect((await operationsOf(p, "edit")).length).toBe(1);
+  });
+});
+
+describe("a delete of a published post", () => {
+  it("delete takes one operation per published target and marks the target as removal pending", async () => {
+    const p = await plant("published");
+    const answered = await call(user("owner"), routeNamed("delete"), p);
+    expect(answered.status).toBe(200);
+    const [row] = await rowsOf(
+      `SELECT o.state, o.lease_seconds, o.part_index, o.priority, v.presence
+         FROM app.operations o JOIN app.post_variants v ON v.id = o.variant_id
+        WHERE o.variant_id = $1 AND o.kind = 'delete'`,
+      [p.variant],
+    );
+    expect(row).toEqual({
+      state: "pending",
+      lease_seconds: 60,
+      part_index: 0,
+      priority: false,
+      presence: "removal_pending",
+    });
+  });
+
+  it("delete names its targets: a listed target is deleted and a foreign one is a 404", async () => {
+    const [mine, theirs] = [await plant("published"), await plant("published")];
+    const route = routeNamed("delete");
+    const withBody = (target: Planted): [unknown, Record<string, string>] => {
+      const body = { variant_ids: [target.variant] };
+      return [
+        body,
+        { "idempotency-key": key(), "content-length": String(JSON.stringify(body).length), ...ifMatch(mine) },
+      ];
+    };
+    const foreign = await send(user("owner"), "DELETE", route.path(mine), ...withBody(theirs));
+    expect(foreign.status).toBe(404);
+    expect((await operationsOf(theirs, "delete")).length).toBe(0);
+    const own = await send(user("owner"), "DELETE", route.path(mine), ...withBody(mine));
+    expect(own.status).toBe(200);
+    expect((await operationsOf(mine, "delete")).length).toBe(1);
+  });
+
+  it("a thread delete starts with the highest published part", async () => {
+    const p = await plant("published");
+    await fx.admin((client) => plantOperation(client, p, "published", "confirmed", "publish", 1));
+    await fx.admin((client) => plantOperation(client, p, "published", "confirmed", "publish", 2));
+    expect((await call(user("owner"), routeNamed("delete"), p)).status).toBe(200);
+    const parts = await rowsOf(
+      "SELECT part_index FROM app.operations WHERE variant_id = $1 AND kind = 'delete'",
+      [p.variant],
+    );
+    expect(parts).toEqual([{ part_index: 2 }]);
   });
 });

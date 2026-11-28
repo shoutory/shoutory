@@ -661,6 +661,7 @@ const POLICIES = [
   "operation_cancel_select on post_variants",
   "operation_cancel_update on operations",
   "operation_insert_insert on operations",
+  "operation_insert_select on post_variants",
   "operation_transition_select on ledger_transitions",
   "operation_transition_select on operations",
   "operation_transition_update on operations",

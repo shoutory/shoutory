@@ -822,12 +822,13 @@ describe("every ledger definer writes its outbox row", () => {
 });
 
 const WRITERS = [
-  "admit_due_targets",
+  "channel_disconnect",
   "claim_operations",
   "claim_polls",
   "claim_reconciles",
   "heartbeat",
   "ledger_add_evidence",
+  "ledger_admit_target",
   "ledger_due_move",
   "ledger_skip",
   "operation_attempt_finish",

@@ -54,13 +54,15 @@ interface ProviderFacts {
   id: string;
   dispatchMarginSeconds: number;
   leaseSeconds: { prepare: number; commit: number; edit?: number | undefined; delete?: number | undefined };
+  actionWindows?: { edit?: number | undefined } | undefined;
 }
 export function providersArgument(facts: readonly ProviderFacts[]): Record<string, unknown> {
   return Object.fromEntries(
-    facts.map(({ id, dispatchMarginSeconds, leaseSeconds: lease }) => [
+    facts.map(({ id, dispatchMarginSeconds, leaseSeconds: lease, actionWindows }) => [
       id,
       {
         margin_seconds: dispatchMarginSeconds,
+        ...(actionWindows?.edit === undefined ? {} : { edit_window_seconds: actionWindows.edit }),
         lease_seconds: {
           publish: publishLeaseSeconds(lease),
           ...(lease.edit === undefined ? {} : { edit: lease.edit }),

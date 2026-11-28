@@ -1,5 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { bucketKey, callTimeoutMs, denialMove, rereadOutcome, sweepArguments } from "./client.js";
+import {
+  bucketKey,
+  callTimeoutMs,
+  denialMove,
+  providersArgument,
+  rereadOutcome,
+  sweepArguments,
+} from "./client.js";
+
+describe("providersArgument", () => {
+  const lease = { prepare: 60, commit: 120, edit: 90 };
+  it("carries the edit window only for a provider that declares one", () => {
+    const given = providersArgument([
+      { id: "a", dispatchMarginSeconds: 300, leaseSeconds: lease, actionWindows: { edit: 3600 } },
+      { id: "b", dispatchMarginSeconds: 300, leaseSeconds: { prepare: 60, commit: 60 }, actionWindows: {} },
+    ]);
+    expect(given).toEqual({
+      a: { margin_seconds: 300, edit_window_seconds: 3600, lease_seconds: { publish: 120, edit: 90 } },
+      b: { margin_seconds: 300, lease_seconds: { publish: 60 } },
+    });
+  });
+});
 
 describe("callTimeoutMs", () => {
   // [the call's own timeout ms, ms until the lease end the heartbeat last renewed, the timeout or null for no call]
